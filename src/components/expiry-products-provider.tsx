@@ -1,9 +1,8 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type LotEntry, type MovementRecord, type MovementType, type User, type StockCount, type StockCountItem } from '@/types';
+import { type LotEntry, type MovementRecord, type MovementType, type User, type StockAuditSession } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -31,7 +30,7 @@ type MoveOptions = {
 export type ConsumeLotParams = {
   lotId: string;
   quantityToConsume: number;
-  type: 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO';
+  type: MovementType;
   notes?: string;
 };
 
@@ -45,7 +44,7 @@ export interface ExpiryProductsContextType {
   moveMultipleLots: (params: MoveLotParams[], user: User, options?: MoveOptions) => Promise<{lotId: string, requested: number, moved: number, pending: number}[]>;
   consumeFromLot: (params: ConsumeLotParams, user: User) => Promise<void>;
   adjustLotQuantity: (
-    count: StockCount,
+    session: StockAuditSession,
     approvedBy: User
   ) => Promise<void>;
   revertMovement: (movement: MovementRecord) => Promise<void>;
@@ -341,90 +340,57 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const adjustLotQuantity = useCallback(async (
-    count: StockCount,
+    session: StockAuditSession,
     approvedBy: User
   ) => {
     if (!approvedBy) throw new Error("Usuário de aprovação não autenticado.");
     
-    const itemsToAdjust = count.items.filter(item => item.difference !== 0);
-    if (itemsToAdjust.length === 0) {
-      const countRef = doc(db, "stockCounts", count.id);
-      await updateDoc(countRef, {
-        status: 'approved',
-        reviewedBy: { userId: approvedBy.id, username: approvedBy.username },
-        reviewedAt: new Date().toISOString(),
-      });
-      return;
-    }
-  
     await runTransaction(db, async (transaction) => {
-      // For each item with a difference, find all corresponding lots.
-      for (const item of itemsToAdjust) {
-        const lotsQuery = query(collection(db, 'lots'),
-          where('productId', '==', item.productId),
-          where('lotNumber', '==', item.lotNumber),
-          where('expiryDate', '==', item.expiryDate || null),
-          where('kioskId', '==', count.kioskId) // Explicitly filter by kioskId
-        );
-        
-        const lotDocs = (await getDocs(lotsQuery)).docs;
+      // 1. Handle Adjustments (Reconciliation)
+      const adjustmentItems = session.items.filter(item => item.adjustment && item.adjustment.quantity > 0);
+      for (const item of adjustmentItems) {
+        const lotRef = doc(db, 'lots', item.lotId);
+        const change = item.adjustment!.type === 'positive' ? item.adjustment!.quantity : -item.adjustment!.quantity;
+        transaction.update(lotRef, { quantity: increment(change) });
   
-        // Delete all old lots for this item.
-        lotDocs.forEach(lotDoc => transaction.delete(lotDoc.ref));
-        
-        // Create a new consolidated lot if the counted quantity is > 0.
-        if (item.countedQuantity > 0) {
-          const firstOldLot = lotDocs.length > 0 ? (lotDocs[0].data() as LotEntry) : null;
-          const newLotData: Omit<LotEntry, 'id'> = {
+        const movementType: MovementType = item.adjustment!.type === 'positive' ? 'ENTRADA_AJUSTE_CONTAGEM' : 'SAIDA_AJUSTE_CONTAGEM';
+        addMovementRecord(transaction, {
+          lotId: item.lotId,
+          productId: item.productId,
+          productName: item.productName,
+          lotNumber: item.lotNumber,
+          type: movementType,
+          quantityChange: item.adjustment!.quantity,
+          fromKioskId: session.kioskId,
+          userId: approvedBy.id,
+          username: approvedBy.username,
+          timestamp: new Date().toISOString(),
+          notes: `Reconciliação de turno. ${item.adjustment?.notes || ''}`.trim(),
+        });
+      }
+      
+      // 2. Handle Divergences (turn's exits)
+      const divergenceItems = session.items.filter(item => item.divergences && item.divergences.length > 0);
+      for (const item of divergenceItems) {
+        for (const divergence of item.divergences) {
+          const lotRef = doc(db, 'lots', item.lotId);
+          transaction.update(lotRef, { quantity: increment(-divergence.quantity) });
+  
+          addMovementRecord(transaction, {
+            lotId: item.lotId,
             productId: item.productId,
             productName: item.productName,
             lotNumber: item.lotNumber,
-            expiryDate: item.expiryDate || null,
-            kioskId: count.kioskId,
-            quantity: item.countedQuantity,
-            reservedQuantity: 0,
-            imageUrl: firstOldLot?.imageUrl,
-            locationId: firstOldLot?.locationId,
-            locationName: firstOldLot?.locationName,
-            locationCode: firstOldLot?.locationCode,
-          };
-
-          const newLotId = destLotIdKey({
-            productId: newLotData.productId,
-            kioskId: newLotData.kioskId,
-            lotNumber: newLotData.lotNumber,
-            expiryDate: newLotData.expiryDate,
+            type: divergence.reason as MovementType,
+            quantityChange: divergence.quantity,
+            fromKioskId: session.kioskId,
+            userId: session.auditedBy.userId, 
+            username: session.auditedBy.username,
+            timestamp: new Date().toISOString(),
+            notes: `Auditoria. Aprovado por ${approvedBy.username}. Obs: ${divergence.notes || ''}`.trim(),
           });
-
-          const newLotRef = doc(db, 'lots', newLotId);
-          transaction.set(newLotRef, { ...newLotData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-
-          // Create history record.
-          const movementType: MovementType = item.difference > 0 ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
-          const movementRecord: Omit<MovementRecord, 'id'> = {
-              lotId: newLotRef.id,
-              productId: item.productId,
-              productName: item.productName,
-              lotNumber: item.lotNumber,
-              type: movementType,
-              quantityChange: Math.abs(item.difference),
-              fromKioskId: count.kioskId,
-              userId: approvedBy.id,
-              username: approvedBy.username,
-              timestamp: new Date().toISOString(),
-              notes: `Ajuste via contagem. Contado por ${count.countedBy.username}. Observações: ${item.notes || ''}`.trim(),
-          };
-          addMovementRecord(transaction, movementRecord);
         }
       }
-      
-      // Finally, update the count status.
-      const countRef = doc(db, "stockCounts", count.id);
-      transaction.update(countRef, {
-        status: 'approved',
-        reviewedBy: { userId: approvedBy.id, username: approvedBy.username },
-        reviewedAt: new Date().toISOString(),
-      });
     });
   }, []);
 
