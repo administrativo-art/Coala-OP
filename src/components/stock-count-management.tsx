@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
@@ -31,7 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
 
-// --- Esquemas de Validação ---
+
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
     { value: 'SAIDA_CONSUMO', label: 'Consumo / Venda' },
     { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por Vencimento' },
@@ -73,8 +74,6 @@ const auditFormSchema = z.object({
 }, { message: 'O cálculo do estoque final não corresponde às saídas e ajustes.' });
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
-
-// --- Componentes Internos do Formulário ---
 
 function JustificationSection({ itemIndex, control }: { itemIndex: number, control: any }) {
   const { fields, append, remove } = useFieldArray({ control, name: `items.${itemIndex}.divergences` });
@@ -135,46 +134,37 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
     return <div className="text-center p-2"><Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setShowForm(true)}>Identificou divergência do turno anterior?</Button></div>
 }
 
-// --- Formulário de Auditoria ---
-
 function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAuditSession, onSave: (items: StockAuditItem[]) => Promise<void>, onFinalize: (items: StockAuditItem[]) => Promise<void>, onCancel: () => Promise<void> }) {
   const { products, getProductFullName } = useProducts();
   const { user } = useAuth();
   const { toast } = useToast();
+  
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState(false);
   const [isConfirmCancelOpen, setIsConfirmCancelOpen] = useState(false);
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
+  
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
-    defaultValues: {
-      items: session.items.map(i => ({
-        productId: i.productId,
-        lotId: i.lotId,
-        systemQuantity: i.systemQuantity,
-        finalQuantity: i.finalQuantity,
-        adjustment: i.adjustment,
-        divergences: i.divergences || [],
-      })),
-    },
+    defaultValues: { items: [] },
   });
 
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
   const watchedItems = useWatch({ control: form.control, name: 'items' });
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const getUpdatedItems = useCallback((values: AuditFormValues): StockAuditItem[] => {
-    return session.items.map((originalItem, index) => ({
-      ...originalItem,
-      finalQuantity: values.items[index]?.finalQuantity ?? originalItem.systemQuantity,
-      adjustment: values.items[index]?.adjustment,
-      divergences: values.items[index]?.divergences || [],
-    }));
-  }, [session.items]);
-  
-  // Recálculo automático do Estoque Final
+  useEffect(() => {
+    if (session?.id) {
+        form.reset({
+            items: session.items.map(i => ({
+                productId: i.productId, lotId: i.lotId, systemQuantity: i.systemQuantity,
+                finalQuantity: i.finalQuantity, adjustment: i.adjustment, divergences: i.divergences || [],
+            })),
+        });
+    }
+  }, [session?.id]);
+
   useEffect(() => {
     if (!watchedItems) return;
     watchedItems.forEach((item, index) => {
@@ -187,6 +177,15 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
         }
     });
   }, [watchedItems, form]);
+
+  const getUpdatedItems = useCallback((values: AuditFormValues): StockAuditItem[] => {
+    return session.items.map((originalItem, index) => ({
+      ...originalItem,
+      finalQuantity: values.items[index]?.finalQuantity ?? originalItem.systemQuantity,
+      adjustment: values.items[index]?.adjustment,
+      divergences: values.items[index]?.divergences || [],
+    }));
+  }, [session.items]);
 
   const handleSaveAndExit = async () => {
     setIsSaving(true);
@@ -218,45 +217,55 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
 
   return (
     <>
-      <Card className="border-none shadow-none lg:border lg:shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl">Contagem em {session.kioskName}</CardTitle>
-            <CardDescription>Iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
-          </CardHeader>
+      <Card>
+        <CardHeader>
+          <CardTitle>Contagem em {session.kioskName}</CardTitle>
+          <CardDescription>Contagem iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
+        </CardHeader>
           <Form {...form}><form>
               <CardContent>
                   <Button variant="outline" className="mb-4" onClick={() => setIsRequestModalOpen(true)}>
                       <PackagePlus className="mr-2 h-4 w-4" />
                       Solicitar Cadastro de Insumo
                   </Button>
-                  <ScrollArea className="h-[calc(100vh-280px)] pr-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <ScrollArea className="h-[calc(80vh-320px)] pr-2">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           {fields.map((field, index) => {
                               const item = session.items[index];
                               const product = products.find(p => p.id === item.productId);
+                              const finalQty = watchedItems[index]?.finalQuantity;
+
                               return (
-                                  <Card key={item.lotId} className="overflow-hidden">
-                                      <div className="p-4 flex gap-4 bg-muted/30">
-                                          <div className="w-16 h-16 shrink-0 bg-background rounded-md border flex items-center justify-center overflow-hidden">
-                                              {product?.imageUrl ? <Image src={product.imageUrl} alt="" width={64} height={64} className="object-cover" /> : <ListOrdered className="text-muted-foreground/40" />}
+                                  <Card key={item.lotId} className="flex flex-col">
+                                      <div className="p-4 flex gap-4 items-center">
+                                          <div className="w-20 h-20 shrink-0">
+                                              {product?.imageUrl ? (
+                                                  <Image src={product.imageUrl} alt={item.productName} width={80} height={80} className="w-20 h-20 rounded-md object-cover" />
+                                              ) : (
+                                                  <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center"><ListOrdered className="h-8 w-8 text-muted-foreground" /></div>
+                                              )}
                                           </div>
-                                          <div className="space-y-0.5 overflow-hidden">
-                                              <p className="font-bold text-sm truncate">{product ? getProductFullName(product) : item.productName}</p>
-                                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Lote: {item.lotNumber} • Val: {item.expiryDate ? format(parseISO(item.expiryDate), 'dd/MM/yy') : 'N/A'}</p>
+                                          <div className="space-y-1">
+                                              <p className="font-semibold leading-tight">{product ? getProductFullName(product) : item.productName}</p>
+                                              <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
+                                              <p className="text-sm text-muted-foreground">Val: {item.expiryDate ? format(parseISO(item.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
                                           </div>
                                       </div>
-                                      <div className="p-4 space-y-4">
-                                          <div className="grid grid-cols-2 gap-3">
-                                              <div className="p-2 bg-muted/20 rounded border border-dashed flex flex-col items-center">
-                                                  <span className="text-[10px] uppercase text-muted-foreground font-bold">Sistema</span>
-                                                  <span className="text-xl font-black">{item.systemQuantity}</span>
+                                      <Separator />
+                                      <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                                          <div className="grid grid-cols-2 gap-4">
+                                              <div className="p-2 border rounded-md">
+                                                  <Label className="text-xs text-muted-foreground">Estoque Sistema</Label>
+                                                  <p className="text-lg font-bold">{item.systemQuantity}</p>
                                               </div>
-                                              <div className="p-2 bg-primary/5 rounded border border-primary/20 flex flex-col items-center">
-                                                  <span className="text-[10px] uppercase text-primary font-bold">Estoque Final</span>
-                                                  <span className="text-xl font-black text-primary">{watchedItems[index]?.finalQuantity ?? 0}</span>
+                                              <div className="p-2 border rounded-md">
+                                                  <Label className="text-xs text-muted-foreground">Estoque Final</Label>
+                                                  <p className="text-lg font-bold">{finalQty}</p>
                                               </div>
                                           </div>
+                                          
                                           <ReconciliationSection itemIndex={index} control={form.control} form={form} />
+
                                           <JustificationSection itemIndex={index} control={form.control} />
                                       </div>
                                   </Card>
@@ -265,18 +274,18 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
                       </div>
                   </ScrollArea>
               </CardContent>
-              <CardContent className="border-t pt-4 flex justify-between">
-                <Button type="button" variant="ghost" onClick={handleCancelClick} className="text-destructive">Cancelar</Button>
-                <div className="flex gap-2">
-                    <Button type="button" variant="secondary" onClick={handleSaveAndExit} disabled={isSaving || isFinalizing}>
-                      {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4"/>}
-                      Salvar e Sair
-                    </Button>
-                    <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving} className="bg-pink-600 hover:bg-pink-700">
-                      {isFinalizing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4"/>}
-                      Concluir contagem
-                    </Button>
-                </div>
+              <CardContent>
+                  <div className="flex justify-between items-center pt-4 border-t">
+                  <Button type="button" variant="ghost" className="text-destructive" onClick={handleCancelClick} disabled={isSaving || isFinalizing}>
+                      Cancelar
+                  </Button>
+                  <div className="flex gap-2">
+                       <Button type="button" variant="secondary" onClick={handleSaveAndExit} disabled={isSaving || isFinalizing}>
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />} Salvar e Sair
+                       </Button>
+                       <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving} className="bg-pink-600 hover:bg-pink-700"><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
+                  </div>
+                  </div>
               </CardContent>
           </form></Form>
       </Card>
@@ -302,7 +311,7 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
             confirmButtonText="Salvar e sair"
             onConfirm={() => { setIsConfirmCancelOpen(false); handleSaveAndExit(); }}
             cancelButtonText="Descartar e sair"
-            onCancel={() => { setIsConfirmCancelOpen(false); onCancel(); }}
+            onCancel={onCancel}
         />
     </>
   )
@@ -390,9 +399,8 @@ function KioskSelectionModal({ open, onOpenChange, kiosks, onSelectKiosk }: { op
   );
 }
 
-// --- Componente Principal ---
 export function StockCountManagement({ showExportButton = false }: { showExportButton?: boolean }) {
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
   const { products, getProductFullName } = useProducts();
@@ -428,7 +436,6 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     });
 
     if (newId) {
-      // Wait for the next render cycle for the new session to be in state
       setTimeout(() => {
         const newSession = auditSessions.find(s => s.id === newId) || { id: newId, items: auditItems, kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review', auditedBy: { userId: user.id, username: user.username }, startedAt: new Date().toISOString() };
         setActiveSession(newSession);
@@ -438,12 +445,15 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
 
   const handleFinalize = async (items: StockAuditItem[]) => {
     if (!activeSession || !user) return;
+    
     await adjustLotQuantity({ ...activeSession, items }, user);
+    
     await updateAuditSession(activeSession.id, {
         items,
         status: 'completed',
         completedAt: new Date().toISOString(),
     });
+    
     setActiveSession(null); 
     toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
   };
@@ -452,7 +462,6 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     if (!activeSession) return;
     await deleteAuditSession(activeSession.id);
     setActiveSession(null);
-    toast({ variant: 'destructive', title: 'Contagem cancelada.' });
   };
 
   if (activeSession) {
