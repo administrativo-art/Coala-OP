@@ -14,7 +14,7 @@ import { type Kiosk, type LotEntry, type Product, type Location, type BaseProduc
 import { useMemo, useState } from 'react';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { labelSizes } from '@/lib/label-sizes';
-import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';

@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';

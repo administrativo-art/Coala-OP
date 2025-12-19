@@ -19,7 +19,7 @@ import { convertValue, units } from '@/lib/conversion';
 import { Label } from '@/components/ui/label';
 
 import { useProducts } from '@/hooks/use-products';
-import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, type UnitCategory, type RepositionSuggestedLot } from '@/types';
 
 interface SuggestedLot {
