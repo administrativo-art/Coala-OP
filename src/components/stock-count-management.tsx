@@ -23,7 +23,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
-import { ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, PackagePlus } from 'lucide-react';
+import { ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History, PackagePlus } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -33,7 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
 
-// --- Esquemas de Validação ---
+
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
     { value: 'SAIDA_CONSUMO', label: 'Consumo / Venda' },
     { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por Vencimento' },
@@ -75,8 +75,6 @@ const auditFormSchema = z.object({
 }, { message: 'O cálculo do estoque final não corresponde às saídas e ajustes.' });
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
-
-// --- Componentes Internos do Formulário ---
 
 function JustificationSection({ itemIndex, control }: { itemIndex: number, control: any }) {
   const { fields, append, remove } = useFieldArray({ control, name: `items.${itemIndex}.divergences` });
@@ -137,8 +135,6 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
     return <div className="text-center p-2"><Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setShowForm(true)}>Identificou divergência do turno anterior?</Button></div>
 }
 
-// --- Formulário de Auditoria ---
-
 function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAuditSession, onSave: (items: StockAuditItem[]) => Promise<void>, onFinalize: (items: StockAuditItem[]) => Promise<void>, onCancel: () => Promise<void> }) {
   const { products, getProductFullName } = useProducts();
   const { toast } = useToast();
@@ -163,7 +159,6 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
     }));
   }, [session]);
 
-  // Reset apenas quando mudar a sessão (ID)
   useEffect(() => {
     if (session?.id) {
         form.reset({
@@ -175,7 +170,6 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
     }
   }, [session.id, form.reset]);
   
-  // Lógica de Auto-save (Debounce 2s)
   useEffect(() => {
     const subscription = form.watch((values) => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -194,9 +188,8 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
       subscription.unsubscribe();
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [form, onSave, getUpdatedItems]);
+  }, [form.watch, onSave, getUpdatedItems]);
 
-  // Recálculo automático do Estoque Final
   useEffect(() => {
     if (!watchedItems) return;
     watchedItems.forEach((item, index) => {
@@ -278,65 +271,66 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
 }
 
 function AuditHistory() {
-    const { auditSessions, deleteAuditSession, loading } = useStockAudit();
-    const { permissions } = useAuth();
-    const [sessionToDelete, setSessionToDelete] = useState<StockAuditSession | null>(null);
+  const { auditSessions, deleteAuditSession, loading } = useStockAudit();
+  const { permissions } = useAuth();
+  const [sessionToDelete, setSessionToDelete] = useState<StockAuditSession | null>(null);
 
-    const completedAudits = useMemo(() => {
-        return auditSessions.filter(s => s.status === 'completed');
-    }, [auditSessions]);
-    
-    const handleDeleteConfirm = () => {
-        if(sessionToDelete) {
-            deleteAuditSession(sessionToDelete.id);
-            setSessionToDelete(null);
-        }
+  const completedAudits = useMemo(() => {
+    return auditSessions.filter(s => s.status === 'completed');
+  }, [auditSessions]);
+
+  const handleDeleteConfirm = () => {
+    if (sessionToDelete) {
+      deleteAuditSession(sessionToDelete.id);
+      setSessionToDelete(null);
     }
+  };
 
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Histórico de contagens</CardTitle>
-                <CardDescription>Visualize todas as contagens que foram concluídas.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {loading ? <Skeleton className="h-40 w-full" /> : completedAudits.length === 0 ? (
-                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                        <Inbox className="h-12 w-12 mx-auto mb-4" />
-                        <p className="font-semibold">Nenhuma contagem concluída.</p>
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        {completedAudits.map(session => (
-                            <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
-                                <div>
-                                    <p className="font-medium">{session.kioskName}</p>
-                                    <p className="text-xs text-muted-foreground">Concluída por {session.auditedBy.username} em {session.completedAt ? format(parseISO(session.completedAt), 'dd/MM/yy HH:mm') : '-'}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Badge>Concluída</Badge>
-                                    {permissions.stock.audit.approve && (
-                                        <DeleteConfirmationDialog 
-                                            open={false}
-                                            onOpenChange={() => {}}
-                                            onConfirm={handleDeleteConfirm}
-                                            itemName={`a contagem de "${session.kioskName}"`}
-                                            triggerButton={
-                                                <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => setSessionToDelete(session)}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            }
-                                        />
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Histórico de contagens</CardTitle>
+        <CardDescription>Visualize todas as contagens que foram concluídas.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? <Skeleton className="h-40 w-full" /> : completedAudits.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+            <Inbox className="h-12 w-12 mx-auto mb-4" />
+            <p className="font-semibold">Nenhuma contagem concluída.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {completedAudits.map(session => (
+              <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
+                <div>
+                  <p className="font-medium">{session.kioskName}</p>
+                  <p className="text-xs text-muted-foreground">Concluída por {session.auditedBy.username} em {session.completedAt ? format(parseISO(session.completedAt), 'dd/MM/yy HH:mm') : '-'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge>Concluída</Badge>
+                  {permissions.stock.audit.approve && (
+                    <DeleteConfirmationDialog 
+                      open={false}
+                      onOpenChange={()=>{}}
+                      onConfirm={handleDeleteConfirm}
+                      itemName={`a contagem de "${sessionToDelete?.kioskName}"`}
+                      triggerButton={
+                          <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => setSessionToDelete(session)}>
+                              <Trash2 className="h-4 w-4" />
+                          </Button>
+                      }
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
+
 
 function KioskSelectionModal({ open, onOpenChange, kiosks, onSelectKiosk }: { open: boolean, onOpenChange: (open: boolean) => void, kiosks: any[], onSelectKiosk: (kioskId: string) => void }) {
   return (
@@ -360,10 +354,8 @@ function KioskSelectionModal({ open, onOpenChange, kiosks, onSelectKiosk }: { op
   );
 }
 
-// --- Componente Principal ---
-
 export function StockCountManagement({ showExportButton = false }: { showExportButton?: boolean }) {
-  const { user, permissions } = useAuth();
+  const { user } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
   const { products, getProductFullName } = useProducts();
@@ -372,7 +364,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
   const { toast } = useToast();
   
   const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
-
+  
   const pendingAudits = useMemo(() => auditSessions.filter(s => s.status === 'pending_review'), [auditSessions]);
 
   const handleStartSession = async (kioskId: string) => {
@@ -394,14 +386,16 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
       auditedBy: { userId: user.id, username: user.username },
       startedAt: new Date().toISOString(), items: auditItems,
     });
-    if (newId) setActiveSession({ id: newId, items: auditItems, kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review', auditedBy: { userId: user.id, username: user.username }, startedAt: new Date().toISOString() } as StockAuditSession);
+    const newSession = { id: newId!, items: auditItems, kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review' as const, auditedBy: { userId: user.id, username: user.username }, startedAt: new Date().toISOString() };
+    setActiveSession(newSession);
   };
-
+  
   const handleFinalize = async (items: StockAuditItem[]) => {
     if (!activeSession || !user) return;
     await adjustLotQuantity({ ...activeSession, items }, user);
     await updateAuditSession(activeSession.id, { items, status: 'completed', completedAt: new Date().toISOString() });
-    setActiveSession(null);
+    toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
+    setActiveSession(null); 
   };
   
   const handleCancelAudit = async () => {
@@ -409,8 +403,8 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     await deleteAuditSession(activeSession.id);
     toast({ variant: 'destructive', title: 'Contagem cancelada' });
     setActiveSession(null);
-  }
-
+  };
+  
   if (activeSession) {
     return <AuditForm session={activeSession} onSave={(items) => updateAuditSession(activeSession.id, { items })} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
   }
