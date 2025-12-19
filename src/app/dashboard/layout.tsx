@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@/hooks/use-auth';
-import { Sidebar } from '@/components/sidebar';
+import { GlassSidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -65,10 +66,11 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen w-full">
-      <Sidebar />
-      <div className="flex flex-col flex-1 pl-72">
-        <Header tasks={legacyTasks} />
+    <div className="flex min-h-screen w-full flex-col bg-[#f8fafc] dark:bg-[#0f172a]">
+       <div className="fixed inset-0 bg-[radial-gradient(at_0%_0%,rgba(124,58,237,0.03)_0,transparent_50%),radial-gradient(at_100%_100%,rgba(236,72,153,0.03)_0,transparent_50%)] pointer-events-none" />
+      <GlassSidebar open={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
+      <div className="flex flex-col flex-1">
+        <Header tasks={legacyTasks} onMenuClick={() => setIsSidebarOpen(true)} />
         {originalUser && (
           <div className="flex items-center justify-center gap-4 bg-yellow-400 text-black font-bold text-center py-2 px-4 shadow-md">
             <span>Você está navegando como <strong>{user?.username}</strong>.</span>
