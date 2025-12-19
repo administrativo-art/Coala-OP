@@ -69,7 +69,9 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
   const updateAuditSession = useCallback(async (sessionId: string, updates: Partial<StockAuditSession>) => {
     const sessionRef = doc(db, "stockAuditSessions", sessionId);
     try {
-        await updateDoc(sessionRef, updates);
+        // Clean the updates object to remove any `undefined` fields
+        const cleanData = JSON.parse(JSON.stringify(updates));
+        await updateDoc(sessionRef, cleanData);
     } catch(error) {
         console.error("Error updating audit session:", error);
     }
@@ -99,3 +101,4 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
 
   return <StockAuditContext.Provider value={value}>{children}</StockAuditContext.Provider>;
 }
+
