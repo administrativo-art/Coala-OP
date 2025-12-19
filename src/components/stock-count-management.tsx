@@ -70,7 +70,7 @@ const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
 }).refine(data => {
     for (const item of data.items) {
-        const adjustmentQty = item.adjustment?.type === 'negative' ? -(item.adjustment.quantity || 0) : (item.adjustment?.quantity || 0);
+        const adjustmentQty = item.adjustment?.type === 'negative' ? -(Number(item.adjustment?.quantity) || 0) : (Number(item.adjustment?.quantity) || 0);
         const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
         const calculatedFinal = item.systemQuantity + adjustmentQty - totalDivergenceQty;
         
@@ -183,6 +183,7 @@ function AuditForm({
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState(false);
+  const [isConfirmCancelOpen, setIsConfirmCancelOpen] = useState(false);
   const { toast } = useToast();
   
   const form = useForm<AuditFormValues>({
@@ -228,9 +229,9 @@ function AuditForm({
     }));
   };
 
-  const handleSave = async (values: AuditFormValues) => {
+  const handleSaveAndExit = async () => {
     setIsSaving(true);
-    await onSave(getUpdatedItems(values));
+    await onSave(getUpdatedItems(form.getValues()));
     setIsSaving(false);
   };
   
@@ -256,6 +257,14 @@ function AuditForm({
   }
 
   const handleCancelClick = async () => {
+      if (form.formState.isDirty) {
+          setIsConfirmCancelOpen(true);
+      } else {
+          handleDiscardAndExit();
+      }
+  }
+
+  const handleDiscardAndExit = async () => {
       setIsCancelling(true);
       await onCancel();
       setIsCancelling(false);
@@ -330,10 +339,7 @@ function AuditForm({
                           <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Cancelando...' : 'Cancelar Contagem'}
                       </Button>
                       <div className="flex gap-2">
-                          <Button type="button" variant="outline" onClick={form.handleSubmit(handleSave)} disabled={isSaving || isCancelling || isFinalizing}>
-                              <Save className="mr-2 h-4 w-4"/> {isSaving ? 'Salvando...' : 'Salvar'}
-                          </Button>
-                           <Button type="button" onClick={handleFinalizeClick}><Check className="mr-2 h-4 w-4"/> Efetivar contagem</Button>
+                           <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving}><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
                       </div>
                       </div>
                   </CardContent>
@@ -350,9 +356,19 @@ function AuditForm({
             onOpenChange={setIsConfirmFinalizeOpen}
             onConfirm={handleFinalizeConfirm}
             isDeleting={isFinalizing}
-            title="Tem certeza que quer efetivar?"
+            title="Tem certeza que quer concluir?"
             description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída. Deseja continuar?"
-            confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar contagem'}
+            confirmButtonText={isFinalizing ? 'Concluindo...' : 'Sim, concluir contagem'}
+        />
+        <DeleteConfirmationDialog 
+            open={isConfirmCancelOpen}
+            onOpenChange={setIsConfirmCancelOpen}
+            title="Sair da contagem?"
+            description="Você tem alterações não salvas. O que você gostaria de fazer?"
+            confirmButtonText="Salvar e sair"
+            onConfirm={() => { setIsConfirmCancelOpen(false); handleSaveAndExit(); }}
+            cancelButtonText="Descartar e sair"
+            onCancel={() => { setIsConfirmCancelOpen(false); handleDiscardAndExit(); }}
         />
     </>
   )
@@ -561,7 +577,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
         completedAt: new Date().toISOString(),
     });
     
-    toast({ title: 'Contagem efetivada!', description: 'O estoque foi ajustado com sucesso.' });
+    toast({ title: 'Contagem concluída!', description: 'O estoque foi ajustado com sucesso.' });
     setActiveSession(null);
   };
   
@@ -645,3 +661,4 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     </>
   );
 }
+
