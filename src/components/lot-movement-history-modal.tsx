@@ -161,3 +161,5 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
     </>
   );
 }
+
+    

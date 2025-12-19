@@ -231,3 +231,5 @@ export function StockTransfer() {
     </Card>
   );
 }
+
+    
