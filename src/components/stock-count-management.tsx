@@ -66,7 +66,7 @@ const auditFormSchema = z.object({
 }).refine(data => {
     for (const item of data.items) {
         const adjQty = item.adjustment?.type === 'negative' ? -(Number(item.adjustment?.quantity) || 0) : (Number(item.adjustment?.quantity) || 0);
-        const totalDiv = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
+        const totalDiv = (item.divergences || []).reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
         const calcFinal = item.systemQuantity + adjQty - totalDiv;
         if (Math.abs(calcFinal - item.finalQuantity) > 0.001) return false;
     }
@@ -134,31 +134,37 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
     return <div className="text-center p-2"><Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setShowForm(true)}>Identificou divergência do turno anterior?</Button></div>
 }
 
-function AuditForm({ session, onFinalize, onCancel }: { session: StockAuditSession, onFinalize: (items: StockAuditItem[]) => Promise<void>, onCancel: () => Promise<void> }) {
+function AuditForm({
+  session,
+  onSaveAndExit,
+  onFinalize,
+  onCancel,
+}: {
+  session: StockAuditSession,
+  onSaveAndExit: (items: StockAuditItem[]) => Promise<void>,
+  onFinalize: (items: StockAuditItem[]) => Promise<void>,
+  onCancel: () => Promise<void>,
+}) {
   const { products, getProductFullName } = useProducts();
   const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState(false);
   const [isConfirmCancelOpen, setIsConfirmCancelOpen] = useState(false);
 
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
-    defaultValues: { items: [] },
+    defaultValues: {
+      items: session.items.map(i => ({
+        productId: i.productId, lotId: i.lotId, systemQuantity: i.systemQuantity,
+        finalQuantity: i.finalQuantity, adjustment: i.adjustment, divergences: i.divergences || [],
+      })),
+    },
   });
 
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
   const watchedItems = useWatch({ control: form.control, name: 'items' });
-  
-  useEffect(() => {
-    if (session?.id) {
-        form.reset({
-            items: session.items.map(i => ({
-                productId: i.productId, lotId: i.lotId, systemQuantity: i.systemQuantity,
-                finalQuantity: i.finalQuantity, adjustment: i.adjustment, divergences: i.divergences || [],
-            })),
-        });
-    }
-  }, [session.id, form]);
 
   useEffect(() => {
     if (!watchedItems) return;
@@ -173,6 +179,21 @@ function AuditForm({ session, onFinalize, onCancel }: { session: StockAuditSessi
     });
   }, [watchedItems, form]);
 
+  const getUpdatedItems = (values: AuditFormValues): StockAuditItem[] => {
+    return session.items.map((originalItem, index) => ({
+      ...originalItem,
+      finalQuantity: values.items[index]?.finalQuantity ?? originalItem.systemQuantity,
+      adjustment: values.items[index]?.adjustment,
+      divergences: values.items[index]?.divergences || [],
+    }));
+  };
+
+  const handleSaveClick = async () => {
+    setIsSaving(true);
+    await onSaveAndExit(getUpdatedItems(form.getValues()));
+    setIsSaving(false);
+  };
+
   const handleFinalizeClick = async () => {
     const isValid = await form.trigger();
     if (!isValid) {
@@ -185,21 +206,29 @@ function AuditForm({ session, onFinalize, onCancel }: { session: StockAuditSessi
   const handleFinalizeConfirm = async () => {
     setIsConfirmFinalizeOpen(false);
     setIsFinalizing(true);
-    await onFinalize(getUpdatedItems(form.getValues()));
-    setIsFinalizing(false);
-  }
+    try {
+        await onFinalize(getUpdatedItems(form.getValues()));
+    } finally {
+        setIsFinalizing(false);
+    }
+  };
 
   const handleCancelClick = async () => {
-      onCancel();
-  }
-  
-  const getUpdatedItems = (values: AuditFormValues): StockAuditItem[] => {
-    return session.items.map((originalItem, index) => ({
-      ...originalItem,
-      finalQuantity: values.items[index]?.finalQuantity ?? originalItem.systemQuantity,
-      adjustment: values.items[index]?.adjustment,
-      divergences: values.items[index]?.divergences || [],
-    }));
+    if (form.formState.isDirty) {
+        setIsConfirmCancelOpen(true);
+    } else {
+        await onCancel();
+    }
+  };
+
+  const handleDiscardAndExit = async () => {
+    setIsCancelling(true);
+    try {
+        await onCancel();
+    } finally {
+        setIsCancelling(false);
+        setIsConfirmCancelOpen(false);
+    }
   };
 
   return (
@@ -257,17 +286,20 @@ function AuditForm({ session, onFinalize, onCancel }: { session: StockAuditSessi
               </CardContent>
               <CardContent>
                   <div className="flex justify-between items-center pt-4 border-t">
-                  <Button type="button" variant="ghost" className="text-destructive" onClick={handleCancelClick} disabled={isFinalizing}>
-                      Cancelar
+                  <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
+                      Cancelar Contagem
                   </Button>
                   <div className="flex gap-2">
-                       <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing} className="bg-pink-600 hover:bg-pink-700"><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
+                       <Button type="button" variant="secondary" onClick={handleSaveClick} disabled={isSaving || isFinalizing}>
+                           {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Salvar e Sair
+                       </Button>
+                       <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving} className="bg-pink-600 hover:bg-pink-700"><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
                   </div>
                   </div>
               </CardContent>
           </form></Form>
       </Card>
-       <DeleteConfirmationDialog 
+      <DeleteConfirmationDialog 
             open={isConfirmFinalizeOpen}
             onOpenChange={setIsConfirmFinalizeOpen}
             onConfirm={handleFinalizeConfirm}
@@ -275,6 +307,16 @@ function AuditForm({ session, onFinalize, onCancel }: { session: StockAuditSessi
             title="Tem certeza que quer concluir?"
             description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída. Deseja continuar?"
             confirmButtonText={isFinalizing ? 'Concluindo...' : 'Sim, concluir contagem'}
+        />
+        <DeleteConfirmationDialog 
+            open={isConfirmCancelOpen}
+            onOpenChange={setIsConfirmCancelOpen}
+            title="Sair da contagem?"
+            description="Você tem alterações não salvas. O que você gostaria de fazer?"
+            confirmButtonText="Salvar e sair"
+            onConfirm={() => { setIsConfirmCancelOpen(false); handleSaveClick(); }}
+            cancelButtonText="Descartar e sair"
+            onCancel={handleDiscardAndExit}
         />
     </>
   )
@@ -372,6 +414,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
   const { toast } = useToast();
   
   const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
   const pendingAudits = useMemo(() => auditSessions.filter(s => s.status === 'pending_review'), [auditSessions]);
   
@@ -398,7 +441,6 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     };
 
     const newId = await addAuditSession(newSessionData);
-
     if (newId) {
         setActiveSession({ id: newId, ...newSessionData });
     }
@@ -409,19 +451,13 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     try {
         await adjustLotQuantity({ ...activeSession, items }, user);
         await updateAuditSession(activeSession.id, {
-            items,
-            status: 'completed',
-            completedAt: new Date().toISOString(),
+            items, status: 'completed', completedAt: new Date().toISOString(),
         });
         setActiveSession(null);
         toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
     } catch (error) {
         console.error("Erro ao finalizar contagem:", error);
-        toast({ 
-          variant: "destructive", 
-          title: "Erro ao finalizar", 
-          description: "Não foi possível salvar a conclusão no servidor. Tente novamente." 
-        });
+        toast({ variant: "destructive", title: "Erro ao finalizar", description: "Não foi possível salvar a conclusão no servidor." });
     }
   };
   
@@ -430,9 +466,16 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     await deleteAuditSession(activeSession.id);
     setActiveSession(null);
   };
+  
+   const handleSaveAndExit = async (items: StockAuditItem[]) => {
+    if (!activeSession) return;
+    await updateAuditSession(activeSession.id, { items });
+    toast({ title: 'Progresso salvo!', description: 'Sua contagem foi salva para continuar depois.' });
+    setActiveSession(null);
+  };
 
   if (activeSession) {
-    return <AuditForm session={activeSession} onSave={(items) => updateAuditSession(activeSession.id, { items })} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
+    return <AuditForm session={activeSession} onSaveAndExit={handleSaveAndExit} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
   }
 
   return (
@@ -444,6 +487,10 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
                     <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
                         <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Nova contagem</Button>
+                        <Button variant="outline" className="ml-2" onClick={() => setIsRequestModalOpen(true)}>
+                            <PackagePlus className="mr-2 h-4 w-4" />
+                            Solicitar Cadastro de Insumo
+                        </Button>
                         <div className="space-y-3 pt-4 border-t">
                             <h3 className="text-sm font-bold uppercase text-muted-foreground">Contagens em aberto</h3>
                             {loading ? <Skeleton className="h-24 w-full" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
@@ -463,6 +510,11 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
             </TabsContent>
         </Tabs>
       <KioskSelectionModal open={isKioskSelectionOpen} onOpenChange={setIsKioskSelectionOpen} kiosks={kiosks} onSelectKiosk={handleStartSession} />
+       <RequestItemAdditionModal
+        open={isRequestModalOpen}
+        onOpenChange={setIsRequestModalOpen}
+        kioskId={activeSession?.kioskId || ''}
+      />
     </>
   );
 }
