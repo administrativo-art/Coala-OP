@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from 'react';
@@ -58,8 +57,14 @@ export function UserProfile() {
     }
   };
 
-  const handlePhotoCaptured = (dataUrl: string) => {
-    handlePhotoUpdate(dataUrl);
+  const handlePhotoCaptured = async (dataUrl: string) => {
+      try {
+          const resized = await resizeImage(dataUrl, 512, 512);
+          handlePhotoUpdate(resized);
+      } catch (e) {
+          toast({ variant: 'destructive', title: 'Erro ao processar imagem' });
+      }
+      setIsPhotoModalOpen(false);
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
