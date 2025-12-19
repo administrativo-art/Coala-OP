@@ -54,7 +54,7 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
     });
 
     return () => unsubscribe();
-  }, [activeSession]);
+  }, []); // Removed activeSession dependency to prevent loops
 
   const addAuditSession = useCallback(async (session: Omit<StockAuditSession, 'id'>): Promise<string | null> => {
     try {
@@ -69,20 +69,35 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
   const updateAuditSession = useCallback(async (sessionId: string, updates: Partial<StockAuditSession>) => {
     const sessionRef = doc(db, "stockAuditSessions", sessionId);
     try {
+        // Update local state immediately for faster UI response
+        setAuditSessions(prevSessions => 
+            prevSessions.map(session => 
+                session.id === sessionId ? { ...session, ...updates } : session
+            )
+        );
+        if (activeSession?.id === sessionId) {
+            setActiveSession(prevActive => prevActive ? { ...prevActive, ...updates } : null);
+        }
+        
         await updateDoc(sessionRef, updates);
     } catch(error) {
         console.error("Error updating audit session:", error);
+        // Optionally revert state on error
+        // (For now, we rely on the next onSnapshot update to correct it)
     }
-  }, []);
+  }, [activeSession]);
 
   const deleteAuditSession = useCallback(async (sessionId: string) => {
     const sessionRef = doc(db, "stockAuditSessions", sessionId);
     try {
       await deleteDoc(sessionRef);
+      if (activeSession?.id === sessionId) {
+          setActiveSession(null);
+      }
     } catch (error) {
       console.error("Error deleting audit session:", error);
     }
-  }, []);
+  }, [activeSession]);
 
   const value: StockAuditContextType = useMemo(() => ({
     auditSessions,
