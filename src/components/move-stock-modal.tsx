@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState } from 'react';
@@ -14,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { type LotEntry, type Kiosk, type Product, type User } from '@/types';
-import { type MoveLotParams } from './expiry-products-provider';
+import { type MoveLotParams } from '@/hooks/use-expiry-products';
 
 type MoveStockModalProps = {
   open: boolean;

@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -10,7 +9,7 @@ import Image from 'next/image';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useStockAudit } from '@/hooks/use-stock-audit';
 import { useToast } from '@/hooks/use-toast';
@@ -42,6 +41,7 @@ const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
     { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por Vencimento' },
     { value: 'SAIDA_DESCARTE_AVARIA', label: 'Descarte por Avaria/Quebra' },
     { value: 'SAIDA_DESCARTE_PERDA', label: 'Descarte por Perda/Extravio' },
+    { value: 'SAIDA_DESCARTE_OUTROS', label: 'Outros (especificar)'},
 ];
 
 const divergenceSchema = z.object({
