@@ -167,19 +167,16 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
 
 function AuditForm({
   session,
-  onSave,
   onFinalize,
   onCancel,
 }: {
   session: StockAuditSession,
-  onSave: (items: StockAuditItem[]) => Promise<void>,
   onFinalize: (items: StockAuditItem[]) => Promise<void>,
   onCancel: () => Promise<void>,
 }) {
   const { products, getProductFullName } = useProducts();
   const { user } = useAuth();
   const [isCancelling, setIsCancelling] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState(false);
@@ -270,7 +267,7 @@ function AuditForm({
           <Form {...form}>
               <form>
                   <CardContent>
-                      <Button variant="outline" className="mb-4" onClick={() => setIsRequestModalOpen(true)}>
+                      <Button type="button" variant="outline" className="mb-4" onClick={() => setIsRequestModalOpen(true)}>
                           <PackagePlus className="mr-2 h-4 w-4" />
                           Solicitar Cadastro de Insumo
                       </Button>
@@ -325,11 +322,11 @@ function AuditForm({
                   </CardContent>
                   <CardContent>
                       <div className="flex justify-between items-center pt-4 border-t">
-                      <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
+                      <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isFinalizing}>
                           <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Cancelando...' : 'Cancelar Contagem'}
                       </Button>
                       <div className="flex gap-2">
-                           <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving}><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
+                           <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing}><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
                       </div>
                       </div>
                   </CardContent>
@@ -354,10 +351,9 @@ function AuditForm({
             open={isConfirmCancelOpen}
             onOpenChange={setIsConfirmCancelOpen}
             title="Cancelar contagem?"
-            description="Tem certeza de que deseja cancelar esta contagem? Todo o progresso será perdido."
+            description="Tem certeza de que deseja cancelar esta contagem? Todo o progresso não salvo será perdido."
             confirmButtonText="Sim, cancelar"
-            onConfirm={() => { setIsConfirmCancelOpen(false); handleDiscardAndExit(); }}
-            cancelButtonText="Não, continuar contagem"
+            onConfirm={handleDiscardAndExit}
         />
     </>
   )
@@ -544,14 +540,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
         if (createdSession) setActiveSession(createdSession);
     }
   };
-
-  const handleSaveForReview = async (items: StockAuditItem[]) => {
-    if(!activeSession) return;
-    await updateAuditSession(activeSession.id, { items });
-    toast({ title: 'Progresso salvo!', description: 'Sua contagem foi salva. Você pode continuar depois.' });
-    setActiveSession(null);
-  }
-
+  
   const handleFinalize = async (items: StockAuditItem[]) => {
     if(!activeSession || !user) return;
     
@@ -578,7 +567,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
   }
 
   if (activeSession) {
-    return <AuditForm session={activeSession} onSave={handleSaveForReview} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
+    return <AuditForm session={activeSession} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
   }
   
   const pendingAudits = auditSessions.filter(s => s.status === 'pending_review');
