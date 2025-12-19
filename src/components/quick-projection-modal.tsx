@@ -7,7 +7,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
 import { convertValue } from '@/lib/conversion';
-import { format, addDays, differenceInDays } from 'date-fns';
+import { format, addDays, differenceInDays, parseISO, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { type BaseProduct } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
