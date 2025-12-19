@@ -130,8 +130,8 @@ export type MovementType =
     | 'SAIDA_DESCARTE_AVARIA'
     | 'SAIDA_DESCARTE_PERDA'
     | 'SAIDA_DESCARTE_OUTROS'
-    | 'SAIDA_AJUSTE_CONTAGEM' 
-    | 'ENTRADA_AJUSTE_CONTAGEM'
+    | 'SAIDA_CORRECAO'
+    | 'ENTRADA_CORRECAO'
     | 'TRANSFERENCIA_SAIDA' 
     | 'TRANSFERENCIA_ENTRADA' 
     | 'ENTRADA_ESTORNO' 
@@ -643,7 +643,7 @@ export const defaultGuestPermissions: PermissionSet = {
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
     consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
-    itemRequests: { add: false, approve: false },
+    itemRequests: { add: true, approve: false },
     reposition: { cancel: false },
 };
 

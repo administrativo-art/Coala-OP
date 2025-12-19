@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { StockCountManagement } from '@/components/stock-count-management';
 import { useItemAddition } from '@/hooks/use-item-addition';
@@ -19,25 +19,11 @@ export function StockCount() {
     return requests.filter(r => r.status === 'pending').length;
   }, [requests]);
 
+  // The new page for requests is at /dashboard/stock/item-requests, 
+  // so the tab logic here is removed to simplify the component.
+  // The StockCountManagement now contains the button to open the request modal.
+
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="count">Contagem de Estoque</TabsTrigger>
-            {canManageRequests && (
-                <TabsTrigger value="requests">
-                    Solicitações de Cadastro 
-                    {pendingRequestsCount > 0 && <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-destructive rounded-full">{pendingRequestsCount}</span>}
-                </TabsTrigger>
-            )}
-        </TabsList>
-        <TabsContent value="count" className="mt-6">
-            <StockCountManagement showExportButton={false} />
-        </TabsContent>
-        {canManageRequests && (
-            <TabsContent value="requests" className="mt-6">
-                <ItemAdditionRequestManagement />
-            </TabsContent>
-        )}
-    </Tabs>
+    <StockCountManagement showExportButton={false} />
   );
 }
