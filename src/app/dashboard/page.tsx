@@ -9,6 +9,7 @@ import { useKiosks } from "@/hooks/use-kiosks"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { GlassCard } from "@/components/ui/glass-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Box, Package, AlertTriangle, TrendingUp, Users, DollarSign, ListTodo, AreaChart, LayoutDashboard, ShieldCheck, Wifi, UserMinus, ShoppingCart, FileText } from 'lucide-react'
@@ -169,7 +170,7 @@ function OperationalDashboard() {
     <>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Link href="/dashboard/stock/inventory-control">
-        <Card className="hover:bg-muted/50 transition-colors">
+        <GlassCard className="transition-all duration-300 hover:border-white/50 hover:bg-white/50 hover:-translate-y-px">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Vencendo em 7 dias</CardTitle>
             <AlertTriangle className="h-6 w-6 text-yellow-500" />
@@ -177,10 +178,10 @@ function OperationalDashboard() {
           <CardContent>
             <div className="text-4xl font-bold text-yellow-500">{expiringSoonCount}</div>
           </CardContent>
-        </Card>
+        </GlassCard>
         </Link>
         <Link href="/dashboard/stock/inventory-control">
-        <Card className="hover:bg-muted/50 transition-colors">
+        <GlassCard className="transition-all duration-300 hover:border-white/50 hover:bg-white/50 hover:-translate-y-px">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Produtos vencidos</CardTitle>
             <AlertTriangle className="h-6 w-6 text-destructive" />
@@ -188,7 +189,7 @@ function OperationalDashboard() {
           <CardContent>
             <div className="text-4xl font-bold text-destructive">{expiredCount}</div>
           </CardContent>
-        </Card>
+        </GlassCard>
         </Link>
          <PurchaseAlertCard />
       </div>
@@ -332,14 +333,14 @@ export default function DashboardPage() {
     if (!permissions.dashboard.view) {
         return (
             <div className="flex items-center justify-center h-full">
-                <Card className="w-full max-w-md text-center">
+                <GlassCard className="w-full max-w-md text-center">
                     <CardHeader>
                         <CardTitle>Acesso Negado</CardTitle>
                         <CardDescription>
                             Você não tem permissão para visualizar o dashboard. Entre em contato com um administrador.
                         </CardDescription>
                     </CardHeader>
-                </Card>
+                </GlassCard>
             </div>
         );
     }

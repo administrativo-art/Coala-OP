@@ -22,7 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, PackagePlus } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History, PackagePlus } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -30,6 +30,7 @@ import { Separator } from './ui/separator';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
 
 
@@ -229,6 +230,7 @@ function AuditForm({
           await onCancel();
       }
   };
+  
 
   return (
     <>
@@ -289,9 +291,7 @@ function AuditForm({
               </CardContent>
               <CardContent>
                   <div className="flex justify-between items-center pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isFinalizing || isSaving}>
-                      Cancelar Contagem
-                  </Button>
+                  <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isFinalizing || isSaving}>Cancelar Contagem</Button>
                   <div className="flex gap-2">
                        <Button type="button" variant="secondary" onClick={handleSaveClick} disabled={isSaving || isFinalizing}>
                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Salvar e Sair
@@ -320,11 +320,9 @@ function AuditForm({
             open={isConfirmCancelOpen}
             onOpenChange={setIsConfirmCancelOpen}
             title="Sair da contagem?"
-            description="Você tem alterações não salvas. O que você gostaria de fazer?"
-            confirmButtonText="Salvar e sair"
-            onConfirm={() => { setIsConfirmCancelOpen(false); handleSaveClick(); }}
-            cancelButtonText="Descartar e sair"
-            onCancel={onCancel}
+            description="Você tem alterações não salvas que serão perdidas. Deseja sair mesmo assim?"
+            confirmButtonText="Sim, sair sem salvar"
+            onConfirm={onCancel}
         />
     </>
   )
@@ -353,7 +351,7 @@ function AuditHistory() {
                 <CardDescription>Visualize todas as contagens que foram concluídas.</CardDescription>
             </CardHeader>
             <CardContent>
-                {loading ? <Skeleton className="h-40 w-full" /> : completedAudits.length === 0 ? (
+                {loading ? <Skeleton className="h-40 w-full bg-white/20 dark:bg-white/5" /> : completedAudits.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                         <Inbox className="h-12 w-12 mx-auto mb-4" />
                         <p className="font-semibold">Nenhuma contagem concluída.</p>
@@ -470,9 +468,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
         setActiveSession(null);
         toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
     } catch (error: any) {
-        console.error("Erro ao finalizar contagem:", error);
         toast({ variant: "destructive", title: "Erro ao finalizar", description: error.message || "Não foi possível salvar a conclusão no servidor." });
-        // Don't clear the active session, so user can retry
     }
   };
   
@@ -533,5 +529,3 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     </>
   );
 }
-
-    
