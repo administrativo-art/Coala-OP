@@ -199,7 +199,7 @@ export function ConsumptionProjection() {
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
         relevantReports.forEach(report => {
-            const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+            const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
             report.results.forEach(res => {
                 if (res.baseProductId) {
                     if (!monthlyConsumptionByBaseId[res.baseProductId]) monthlyConsumptionByBaseId[res.baseProductId] = {};
@@ -211,7 +211,7 @@ export function ConsumptionProjection() {
         const allNetworkMonths = new Set<string>();
         if (isMatrixView) {
             for (const report of relevantReports) {
-                const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+                const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
                 const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
                 if (anyConsumption) allNetworkMonths.add(key);
             }
@@ -695,3 +695,5 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
+
+    

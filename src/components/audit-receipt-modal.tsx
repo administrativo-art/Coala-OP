@@ -256,3 +256,5 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     </Dialog>
   );
 }
+
+    

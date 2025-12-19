@@ -6,7 +6,7 @@ import { AuthProvider } from '@/components/auth-provider';
 import { ProductsProvider } from '@/components/products-provider';
 import { KiosksProvider } from '@/components/kiosks-provider';
 import { LocationsProvider } from '@/components/locations-provider';
-import { ExpiryProductsProvider } from '@/components/expiry-products-provider.tsx';
+import { ExpiryProductsProvider } from '@/components/expiry-products-provider';
 import { PredefinedListsProvider } from '@/components/predefined-lists-provider';
 import { BaseProductsProvider } from '@/components/base-products-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';

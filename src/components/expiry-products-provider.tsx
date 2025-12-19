@@ -353,7 +353,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         const change = item.adjustment!.type === 'positive' ? item.adjustment!.quantity : -item.adjustment!.quantity;
         transaction.update(lotRef, { quantity: increment(change) });
   
-        const movementType: MovementType = item.adjustment!.type === 'positive' ? 'ENTRADA_AJUSTE_CONTAGEM' : 'SAIDA_AJUSTE_CONTAGEM';
+        const movementType: MovementType = item.adjustment!.type === 'positive' ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
         addMovementRecord(transaction, {
           lotId: item.lotId,
           productId: item.productId,

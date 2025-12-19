@@ -4,7 +4,7 @@
 import { useMemo, useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
@@ -89,7 +89,7 @@ export function PurchaseAlertCard() {
 
             const monthlyConsumption: Record<string, number> = {};
             relevantReports.forEach(report => {
-                const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+                const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
                 const totalForMonth = report.results
                     .filter(res => res.baseProductId === baseProductId)
                     .reduce((sum, res) => sum + res.consumedQuantity, 0);
