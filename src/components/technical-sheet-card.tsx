@@ -87,4 +87,3 @@ export function TechnicalSheetCard({ simulation, onViewSheet, onViewAssembly }: 
         </Card>
     );
 }
-
