@@ -22,7 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History, PackagePlus } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -34,6 +34,7 @@ import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { RequestItemAdditionModal } from './request-item-addition-modal';
 
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
@@ -68,7 +69,7 @@ const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
 }).refine(data => {
     for (const item of data.items) {
-        const adjustmentQty = item.adjustment?.type === 'negative' ? -item.adjustment.quantity : (item.adjustment?.quantity || 0);
+        const adjustmentQty = item.adjustment?.type === 'negative' ? -(item.adjustment.quantity || 0) : (item.adjustment?.quantity || 0);
         const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
         const calculatedFinal = item.systemQuantity + adjustmentQty - totalDivergenceQty;
         
@@ -116,7 +117,7 @@ function JustificationSection({ itemIndex, control, difference }: { itemIndex: n
                         )}/>
                     </div>
                      <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.notes`} render={({ field: notesField }) => (
-                        <FormItem><FormLabel className="text-xs">Observação</FormLabel><FormControl><Textarea {...notesField} placeholder="Opcional..." rows={1} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel className="text-xs">Observação</FormLabel><FormControl><Textarea {...notesField} placeholder="Opcional, exceto para 'Outros'" rows={1} /></FormControl><FormMessage /></FormItem>
                     )}/>
                 </div>
             ))}
@@ -179,6 +180,9 @@ function AuditForm({
   const [isCancelling, setIsCancelling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState(false);
+  const [isConfirmCancelOpen, setIsConfirmCancelOpen] = useState(false);
   const { toast } = useToast();
   
   const form = useForm<AuditFormValues>({
@@ -200,7 +204,10 @@ function AuditForm({
 
   useEffect(() => {
     watchedItems.forEach((item, index) => {
-        const adjustmentQty = item.adjustment?.type === 'negative' ? -(item.adjustment.quantity || 0) : (item.adjustment?.quantity || 0);
+        const adjustmentQty = item.adjustment?.type === 'negative'
+            ? -(Number(item.adjustment?.quantity) || 0)
+            : (Number(item.adjustment?.quantity) || 0);
+
         const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
         const newFinalQuantity = item.systemQuantity + adjustmentQty - totalDivergenceQty;
         
@@ -221,9 +228,9 @@ function AuditForm({
     }));
   };
 
-  const handleSave = async (values: AuditFormValues) => {
+  const handleSaveAndExit = async () => {
     setIsSaving(true);
-    await onSave(getUpdatedItems(values));
+    await onSave(getUpdatedItems(form.getValues()));
     setIsSaving(false);
   };
   
@@ -238,101 +245,131 @@ function AuditForm({
       });
       return;
     }
-    
+    setIsConfirmFinalizeOpen(true);
+  };
+
+  const handleFinalizeConfirm = async () => {
+    setIsConfirmFinalizeOpen(false);
     setIsFinalizing(true);
     await onFinalize(getUpdatedItems(form.getValues()));
     setIsFinalizing(false);
-  };
+  }
 
   const handleCancelClick = async () => {
+      if (form.formState.isDirty) {
+          setIsConfirmCancelOpen(true);
+      } else {
+          handleDiscardAndExit();
+      }
+  }
+
+  const handleDiscardAndExit = async () => {
       setIsCancelling(true);
       await onCancel();
       setIsCancelling(false);
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Contagem em {session.kioskName}</CardTitle>
-        <CardDescription>Contagem iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
-      </CardHeader>
-        <Form {...form}>
-            <form>
-                <CardContent>
-                    <ScrollArea className="h-[calc(80vh-250px)] pr-2">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {fields.map((field, index) => {
-                                const item = session.items[index];
-                                const product = products.find(p => p.id === item.productId);
-                                const watchedItem = watchedItems[index];
-                                const systemQty = item.systemQuantity;
-                                const finalQty = watchedItem?.finalQuantity;
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Contagem em {session.kioskName}</CardTitle>
+          <CardDescription>Contagem iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
+        </CardHeader>
+          <Form {...form}>
+              <form>
+                  <CardContent>
+                      <Button variant="outline" className="mb-4" onClick={() => setIsRequestModalOpen(true)}>
+                          <PackagePlus className="mr-2 h-4 w-4" />
+                          Solicitar Cadastro de Insumo
+                      </Button>
+                      <ScrollArea className="h-[calc(80vh-320px)] pr-2">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                              {fields.map((field, index) => {
+                                  const item = session.items[index];
+                                  const product = products.find(p => p.id === item.productId);
+                                  const watchedItem = watchedItems[index];
+                                  const systemQty = item.systemQuantity;
+                                  const finalQty = watchedItem?.finalQuantity;
 
-                                return (
-                                    <Card key={item.lotId} className="flex flex-col">
-                                        <div className="p-4 flex gap-4 items-center">
-                                            <div className="w-20 h-20 shrink-0">
-                                                {product?.imageUrl ? (
-                                                    <Image src={product.imageUrl} alt={item.productName} width={80} height={80} className="w-20 h-20 rounded-md object-cover" />
-                                                ) : (
-                                                    <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center"><ListOrdered className="h-8 w-8 text-muted-foreground" /></div>
-                                                )}
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="font-semibold leading-tight">{product ? getProductFullName(product) : item.productName}</p>
-                                                <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
-                                                <p className="text-sm text-muted-foreground">Val: {item.expiryDate ? format(parseISO(item.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
-                                            </div>
-                                        </div>
-                                        <Separator />
-                                        <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="p-2 border rounded-md">
-                                                    <Label className="text-xs text-muted-foreground">Estoque Sistema</Label>
-                                                    <p className="text-lg font-bold">{systemQty}</p>
-                                                </div>
-                                                <div className="p-2 border rounded-md">
-                                                    <Label className="text-xs text-muted-foreground">Estoque Final</Label>
-                                                    <p className="text-lg font-bold">{finalQty}</p>
-                                                </div>
-                                            </div>
-                                            
-                                            <ReconciliationSection itemIndex={index} control={form.control} form={form} />
+                                  return (
+                                      <Card key={item.lotId} className="flex flex-col">
+                                          <div className="p-4 flex gap-4 items-center">
+                                              <div className="w-20 h-20 shrink-0">
+                                                  {product?.imageUrl ? (
+                                                      <Image src={product.imageUrl} alt={item.productName} width={80} height={80} className="w-20 h-20 rounded-md object-cover" />
+                                                  ) : (
+                                                      <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center"><ListOrdered className="h-8 w-8 text-muted-foreground" /></div>
+                                                  )}
+                                              </div>
+                                              <div className="space-y-1">
+                                                  <p className="font-semibold leading-tight">{product ? getProductFullName(product) : item.productName}</p>
+                                                  <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
+                                                  <p className="text-sm text-muted-foreground">Val: {item.expiryDate ? format(parseISO(item.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
+                                              </div>
+                                          </div>
+                                          <Separator />
+                                          <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                                              <div className="grid grid-cols-2 gap-4">
+                                                  <div className="p-2 border rounded-md">
+                                                      <Label className="text-xs text-muted-foreground">Estoque Sistema</Label>
+                                                      <p className="text-lg font-bold">{systemQty}</p>
+                                                  </div>
+                                                  <div className="p-2 border rounded-md">
+                                                      <Label className="text-xs text-muted-foreground">Estoque Final</Label>
+                                                      <p className="text-lg font-bold">{finalQty}</p>
+                                                  </div>
+                                              </div>
+                                              
+                                              <ReconciliationSection itemIndex={index} control={form.control} form={form} />
 
-                                            <JustificationSection itemIndex={index} control={form.control} difference={systemQty - finalQty} />
+                                              <JustificationSection itemIndex={index} control={form.control} difference={systemQty - finalQty} />
 
-                                        </div>
-                                    </Card>
-                                );
-                            })}
-                        </div>
-                    </ScrollArea>
-                </CardContent>
-                <CardContent>
-                    <div className="flex justify-between items-center pt-4 border-t">
-                    <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
-                        <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Cancelando...' : 'Cancelar Contagem'}
-                    </Button>
-                    <div className="flex gap-2">
-                        <Button type="button" variant="outline" onClick={form.handleSubmit(handleSave)} disabled={isSaving || isCancelling || isFinalizing}>
-                            <Save className="mr-2 h-4 w-4"/> {isSaving ? 'Salvando...' : 'Salvar'}
-                        </Button>
-                        <DeleteConfirmationDialog 
-                        open={false}
-                        onOpenChange={() => {}}
-                        onConfirm={handleFinalizeClick}
-                        isDeleting={isFinalizing}
-                        title="Tem certeza que quer efetivar?"
-                        description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída. Deseja continuar?"
-                        confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar contagem'}
-                        triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar contagem</Button>}
-                        />
-                    </div>
-                    </div>
-                </CardContent>
-            </form>
-        </Form>
-    </Card>
+                                          </div>
+                                      </Card>
+                                  );
+                              })}
+                          </div>
+                      </ScrollArea>
+                  </CardContent>
+                  <CardContent>
+                      <div className="flex justify-between items-center pt-4 border-t">
+                      <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
+                          {isCancelling ? 'Cancelando...' : 'Cancelar'}
+                      </Button>
+                      <div className="flex gap-2">
+                           <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving}><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
+                      </div>
+                      </div>
+                  </CardContent>
+              </form>
+          </Form>
+      </Card>
+      <RequestItemAdditionModal
+        open={isRequestModalOpen}
+        onOpenChange={setIsRequestModalOpen}
+        kioskId={session.kioskId}
+      />
+       <DeleteConfirmationDialog 
+            open={isConfirmFinalizeOpen}
+            onOpenChange={setIsConfirmFinalizeOpen}
+            onConfirm={handleFinalizeConfirm}
+            isDeleting={isFinalizing}
+            title="Tem certeza que quer concluir?"
+            description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída. Deseja continuar?"
+            confirmButtonText={isFinalizing ? 'Concluindo...' : 'Sim, concluir contagem'}
+        />
+        <DeleteConfirmationDialog 
+            open={isConfirmCancelOpen}
+            onOpenChange={setIsConfirmCancelOpen}
+            title="Sair da contagem?"
+            description="Você tem alterações não salvas. O que você gostaria de fazer?"
+            confirmButtonText="Salvar e sair"
+            onConfirm={() => { setIsConfirmCancelOpen(false); handleSaveAndExit(); }}
+            cancelButtonText="Descartar e sair"
+            onCancel={() => { setIsConfirmCancelOpen(false); handleDiscardAndExit(); }}
+        />
+    </>
   )
 }
 
@@ -539,7 +576,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
         completedAt: new Date().toISOString(),
     });
     
-    toast({ title: 'Contagem efetivada!', description: 'O estoque foi ajustado com sucesso.' });
+    toast({ title: 'Contagem concluída!', description: 'O estoque foi ajustado com sucesso.' });
     setActiveSession(null);
   };
   
