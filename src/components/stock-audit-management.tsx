@@ -253,8 +253,8 @@ function AuditForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Auditoria em {session.kioskName}</CardTitle>
-        <CardDescription>Auditoria iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
+        <CardTitle>Contagem em {session.kioskName}</CardTitle>
+        <CardDescription>Contagem iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
       </CardHeader>
         <Form {...form}>
             <form>
@@ -311,7 +311,7 @@ function AuditForm({
                 <CardContent>
                     <div className="flex justify-between items-center pt-4 border-t">
                     <Button type="button" variant="destructive" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
-                        <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Excluindo...' : 'Cancelar auditoria'}
+                        <Trash2 className="mr-2 h-4 w-4"/> {isCancelling ? 'Cancelando...' : 'Cancelar Contagem'}
                     </Button>
                     <div className="flex gap-2">
                         <Button type="button" variant="outline" onClick={form.handleSubmit(handleSave)} disabled={isSaving || isCancelling || isFinalizing}>
@@ -324,8 +324,8 @@ function AuditForm({
                         isDeleting={isFinalizing}
                         title="Tem certeza que quer efetivar?"
                         description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída. Deseja continuar?"
-                        confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar auditoria'}
-                        triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar auditoria</Button>}
+                        confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar contagem'}
+                        triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar contagem</Button>}
                         />
                     </div>
                     </div>
@@ -355,14 +355,14 @@ function AuditHistory() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Histórico de auditorias</CardTitle>
-                <CardDescription>Visualize todas as auditorias que foram concluídas.</CardDescription>
+                <CardTitle>Histórico de contagens</CardTitle>
+                <CardDescription>Visualize todas as contagens que foram concluídas.</CardDescription>
             </CardHeader>
             <CardContent>
                 {loading ? <Skeleton className="h-40 w-full" /> : completedAudits.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                         <Inbox className="h-12 w-12 mx-auto mb-4" />
-                        <p className="font-semibold">Nenhuma auditoria concluída.</p>
+                        <p className="font-semibold">Nenhuma contagem concluída.</p>
                     </div>
                 ) : (
                     <div className="space-y-2">
@@ -389,8 +389,8 @@ function AuditHistory() {
                 open={!!sessionToDelete}
                 onOpenChange={() => setSessionToDelete(null)}
                 onConfirm={handleDeleteConfirm}
-                itemName="esta auditoria"
-                description="Esta ação é irreversível e excluirá permanentemente o registro da auditoria."
+                itemName="esta contagem"
+                description="Esta ação é irreversível e excluirá permanentemente o registro da contagem."
             />
         </Card>
     );
@@ -411,8 +411,8 @@ function KioskSelectionModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Iniciar nova auditoria</DialogTitle>
-          <DialogDescription>Selecione o quiosque que você deseja auditar.</DialogDescription>
+          <DialogTitle>Iniciar nova contagem</DialogTitle>
+          <DialogDescription>Selecione o quiosque que você deseja contar.</DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-2">
           {kiosks.map((kiosk) => (
@@ -432,7 +432,7 @@ function KioskSelectionModal({
   );
 }
 
-export function StockAuditManagement({ showExportButton = false }: { showExportButton?: boolean }) {
+export function StockCountManagement({ showExportButton = false }: { showExportButton?: boolean }) {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
@@ -488,7 +488,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
         toast({
             variant: "destructive",
             title: "Quiosque Vazio",
-            description: "Não há lotes em estoque para auditar neste quiosque.",
+            description: "Não há lotes em estoque para contar neste quiosque.",
         });
         return;
     }
@@ -521,7 +521,7 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
   const handleSaveForReview = async (items: StockAuditItem[]) => {
     if(!activeSession) return;
     await updateAuditSession(activeSession.id, { items });
-    toast({ title: 'Progresso salvo!', description: 'Sua auditoria foi salva. Você pode continuar depois.' });
+    toast({ title: 'Progresso salvo!', description: 'Sua contagem foi salva. Você pode continuar depois.' });
     setActiveSession(null);
   }
 
@@ -539,14 +539,14 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
         completedAt: new Date().toISOString(),
     });
     
-    toast({ title: 'Auditoria efetivada!', description: 'O estoque foi ajustado com sucesso.' });
+    toast({ title: 'Contagem efetivada!', description: 'O estoque foi ajustado com sucesso.' });
     setActiveSession(null);
   };
   
   const handleCancelAudit = async () => {
     if (!activeSession) return;
     await deleteAuditSession(activeSession.id);
-    toast({ variant: 'destructive', title: 'Auditoria cancelada', description: 'A sessão de auditoria pendente foi removida.' });
+    toast({ variant: 'destructive', title: 'Contagem cancelada', description: 'A sessão de contagem pendente foi removida.' });
     setActiveSession(null);
   }
 
@@ -560,37 +560,37 @@ export function StockAuditManagement({ showExportButton = false }: { showExportB
     <>
         <Tabs defaultValue="active">
             <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="active">Auditoria</TabsTrigger>
+                <TabsTrigger value="active">Contagem</TabsTrigger>
                 <TabsTrigger value="history">Histórico</TabsTrigger>
             </TabsList>
             <TabsContent value="active" className="mt-4">
                 <Card>
                     <CardHeader>
                         <div>
-                            <CardTitle className="flex items-center gap-2"><ShieldCheck/> Auditoria de estoque</CardTitle>
-                            <CardDescription>Inicie uma nova auditoria ou continue uma sessão salva para revisão.</CardDescription>
+                            <CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle>
+                            <CardDescription>Inicie uma nova contagem ou continue uma sessão salva para revisão.</CardDescription>
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div>
-                            <h3 className="font-semibold mb-2">Iniciar nova auditoria</h3>
-                             <Button onClick={() => setIsKioskSelectionOpen(true)}>Iniciar auditoria</Button>
+                            <h3 className="font-semibold mb-2">Iniciar nova contagem</h3>
+                             <Button onClick={() => setIsKioskSelectionOpen(true)}>Iniciar contagem</Button>
                         </div>
 
                         <div className="space-y-2 pt-4 border-t">
-                            <h3 className="font-semibold">Auditorias salvas para revisão</h3>
+                            <h3 className="font-semibold">Contagens salvas para revisão</h3>
                             {loading ? (
                                 <Skeleton className="h-24 w-full" />
                             ) : pendingAudits.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">Nenhuma auditoria pendente.</p>
+                                <p className="text-sm text-muted-foreground">Nenhuma contagem pendente.</p>
                             ) : (
                                 pendingAudits.map(session => (
                                     <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
                                         <div>
-                                            <p className="font-medium">Auditoria em {session.kioskName}</p>
+                                            <p className="font-medium">Contagem em {session.kioskName}</p>
                                             <p className="text-xs text-muted-foreground">Iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yy HH:mm')}</p>
                                         </div>
-                                        <Button variant="outline" onClick={() => setActiveSession(session)}>Continuar auditoria</Button>
+                                        <Button variant="outline" onClick={() => setActiveSession(session)}>Continuar contagem</Button>
                                     </div>
                                 ))
                             )}

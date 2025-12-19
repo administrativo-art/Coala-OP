@@ -55,8 +55,8 @@ export function AuditDashboard() {
 
     allItems.forEach(item => {
       totalSystemQty += item.systemQuantity;
-      totalCountedQty += item.countedQuantity;
-      if (item.systemQuantity !== item.countedQuantity) {
+      totalCountedQty += item.finalQuantity; // Use finalQuantity which reflects the real count
+      if (item.systemQuantity !== item.finalQuantity) {
         itemsWithDivergence++;
       }
       const daysUntilExpiry = differenceInDays(parseISO(item.expiryDate), new Date());
@@ -78,7 +78,7 @@ export function AuditDashboard() {
   const divergenceByProduct = useMemo(() => {
       const divergenceMap = new Map<string, { name: string; divergence: number }>();
       filteredData.flatMap(s => s.items).forEach(item => {
-          const diff = item.countedQuantity - item.systemQuantity;
+          const diff = item.finalQuantity - item.systemQuantity;
           if(diff !== 0) {
               const current = divergenceMap.get(item.productId) || { name: item.productName, divergence: 0 };
               current.divergence += Math.abs(diff);
@@ -148,7 +148,7 @@ export function AuditDashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Lotes auditados</CardTitle><FileSearch className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.totalItems}</div></CardContent></Card>
+          <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Lotes contados</CardTitle><FileSearch className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.totalItems}</div></CardContent></Card>
           <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Acurácia geral</CardTitle><Percent className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.accuracy.toFixed(1)}%</div></CardContent></Card>
           <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Lotes vencendo (≤30d)</CardTitle><AlertTriangle className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.expiringLots}</div></CardContent></Card>
           <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Lotes com divergência</CardTitle><Target className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.itemsWithDivergence}</div></CardContent></Card>
@@ -172,7 +172,7 @@ export function AuditDashboard() {
             </CardContent>
         </Card>
         <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><PieChartIcon /> Status das auditorias</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><PieChartIcon /> Status das contagens</CardTitle></CardHeader>
             <CardContent>
             {filteredData.length > 0 ? (
                  <ResponsiveContainer width="100%" height={300}>
@@ -184,12 +184,12 @@ export function AuditDashboard() {
                         <Legend />
                     </PieChart>
                  </ResponsiveContainer>
-             ) : <div className="h-[300px] flex items-center justify-center text-muted-foreground"><Inbox/> Sem auditorias no período.</div> }
+             ) : <div className="h-[300px] flex items-center justify-center text-muted-foreground"><Inbox/> Sem contagens no período.</div> }
             </CardContent>
         </Card>
       </div>
        <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><FileSearch /> Auditorias detalhadas</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><FileSearch /> Contagens detalhadas</CardTitle></CardHeader>
         <CardContent>
             <Table>
                 <TableHeader>
@@ -209,7 +209,7 @@ export function AuditDashboard() {
                             <TableCell>{format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</TableCell>
                         </TableRow>
                      )) : (
-                        <TableRow><TableCell colSpan={4} className="text-center h-24">Nenhuma auditoria encontrada com os filtros atuais.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center h-24">Nenhuma contagem encontrada com os filtros atuais.</TableCell></TableRow>
                      )}
                 </TableBody>
             </Table>
@@ -218,5 +218,3 @@ export function AuditDashboard() {
     </div>
   );
 }
-
-    

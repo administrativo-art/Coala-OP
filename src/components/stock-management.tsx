@@ -69,25 +69,6 @@ export function StockManagement() {
                         </CardContent>
                     </Card>
                 )}
-
-                {canViewAudit && (
-                    <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
-                        <CardHeader className="p-0 items-center">
-                            <div className="p-4 bg-primary/10 rounded-full mb-4">
-                                <AuditIcon className="h-10 w-10 text-primary" />
-                            </div>
-                            <CardTitle className="text-2xl mb-2">Auditoria</CardTitle>
-                            <CardDescription>Realize auditorias pontuais para garantir a acurácia dos processos de estoque.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
-                            <Link href="/dashboard/stock/audit" className="w-full">
-                                <Button className="w-full text-lg py-6">
-                                    Acessar auditorias <ArrowRight className="ml-2" />
-                                </Button>
-                            </Link>
-                        </CardContent>
-                    </Card>
-                )}
                 
                 {canViewAnalysis && <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">

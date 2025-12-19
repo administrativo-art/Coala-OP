@@ -1,10 +1,9 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { StockAuditManagement } from '@/components/stock-audit-management';
+import { StockCountManagement } from '@/components/stock-audit-management';
 
 export function StockCount() {
   const { permissions } = useAuth();
@@ -14,7 +13,7 @@ export function StockCount() {
 
   return (
     <div className="space-y-6">
-        <StockAuditManagement showExportButton={false} />
+        <StockCountManagement showExportButton={false} />
     </div>
   );
 }
