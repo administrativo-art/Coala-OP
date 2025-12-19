@@ -44,7 +44,6 @@ export function Sidebar() {
       subItems: [
         { href: '/dashboard/stock/inventory-control', label: 'Controle de estoque', icon: ClipboardCheck, show: permissions.stock.inventoryControl.view },
         { href: '/dashboard/stock/count', label: 'Contagem de estoque', icon: ListOrdered, show: permissions.stock.stockCount.view },
-        { href: '/dashboard/stock/audit', label: 'Auditoria', icon: AuditIcon, show: permissions.stock.audit.view },
         { href: '/dashboard/stock/analysis', label: 'Análise de estoque', icon: BarChart3, show: permissions.stock.analysis.view },
         { href: '/dashboard/stock/purchasing', label: 'Gestão de compras', icon: ShoppingCart, show: permissions.stock.purchasing.view },
         { href: '/dashboard/stock/returns', label: 'Gestão de avarias', icon: ShieldAlert, show: permissions.stock.returns.view },
