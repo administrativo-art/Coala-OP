@@ -7,7 +7,7 @@ import { type RepositionActivity, type RepositionItem, type LotEntry, type Movem
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc, where, getDocs, increment } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
 
 export interface RepositionContextType {
   activities: RepositionActivity[];
@@ -329,6 +329,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
+
 
 
 
