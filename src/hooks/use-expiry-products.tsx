@@ -8,7 +8,7 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where
 import { useAuth } from '@/hooks/use-auth';
 import { pruneUndefined } from '@/lib/utils';
 
-
+// --- TYPE DEFINITIONS ---
 export type MoveLotParams = {
   lotId: string;
   toKioskId: string;
@@ -16,7 +16,7 @@ export type MoveLotParams = {
   fromKioskId: string;
   fromKioskName: string;
   toKioskName: string;
-  productName: string; // This should be the full formatted name
+  productName: string; 
   lotNumber: string;
   productId: string;
 };
@@ -50,28 +50,22 @@ export interface ExpiryProductsContextType {
   revertMovement: (movement: MovementRecord) => Promise<void>;
 }
 
-export const ExpiryProductsContext = createContext<ExpiryProductsContextType | undefined>(undefined);
+// --- CONTEXT CREATION ---
+const ExpiryProductsContext = createContext<ExpiryProductsContextType | undefined>(undefined);
 
-export const useExpiryProducts = (): ExpiryProductsContextType => {
-  const context = useContext(ExpiryProductsContext);
-  if (context === undefined) {
-    throw new Error('useExpiryProducts must be used within a ExpiryProductsProvider');
-  }
-  return context;
-};
-
-function destLotIdKey(params: {
+// --- HELPER FUNCTIONS ---
+const destLotIdKey = (params: {
   productId: string;
   kioskId: string;
   expiryDate?: string | null;
   lotNumber: string;
-}) {
+}) => {
   const { productId, kioskId, lotNumber, expiryDate = 'null' } = params;
   const cleanLotNumber = lotNumber.replace(/[\/\s]/g, '_');
   return `prod_${productId}__kiosk_${kioskId}__lot_${cleanLotNumber}__exp_${expiryDate}`;
-}
+};
 
-
+// --- PROVIDER COMPONENT ---
 export function ExpiryProductsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [lots, setLots] = useState<LotEntry[]>([]);
@@ -87,7 +81,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         console.error("Error fetching lots from Firestore: ", error);
         setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -162,9 +155,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, []);
 
   const deleteLotsByIds = useCallback(async (lotIds: string[]): Promise<boolean> => {
-    if (!lotIds || lotIds.length === 0) {
-      return false;
-    }
+    if (!lotIds || lotIds.length === 0) return false;
     const batch = writeBatch(db);
     lotIds.forEach(id => {
       batch.delete(doc(db, "lots", id));
@@ -200,7 +191,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     if (!paramsArray?.length) throw new Error('Nenhum item para movimentar.');
 
     await runTransaction(db, async (transaction) => {
-        // Step 1: Read all necessary documents first.
         const lotRefs = paramsArray.map(it => doc(db, 'lots', it.lotId));
         const lotSnaps = await Promise.all(lotRefs.map(ref => transaction.get(ref)));
 
@@ -222,7 +212,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         const destSnaps = await Promise.all(Array.from(destRefsMap.values()).map(ref => transaction.get(ref)));
         const destSnapMap = new Map(destSnaps.map(snap => [snap.id, snap]));
 
-        // Step 2: Process logic and prepare writes.
         for (const [index, it] of paramsArray.entries()) {
             const { lotId, quantityToMove, toKioskId, productId, lotNumber } = it;
 
@@ -260,7 +249,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 continue;
             }
 
-            // Prepare writes
             const newQuantity = quantity - movable;
             const newReserved = isFinalizingReposition ? Math.max(0, reserved - movable) : reserved;
 
@@ -288,7 +276,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 transaction.update(destRef, { quantity: increment(movable) });
             } else {
                 const newLotData = { ...source, kioskId: toKioskId, quantity: movable, reservedQuantity: 0, locationId: null, locationName: null, locationCode: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
-                delete (newLotData as any).id; // Ensure we don't write the old ID
+                delete (newLotData as any).id;
                 transaction.set(destRef, newLotData);
             }
             
@@ -306,16 +294,12 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
   }, [user]);
 
   const consumeFromLot = useCallback(async (params: ConsumeLotParams, user: User) => {
-    if (!user) {
-        throw new Error("Usuário de baixa não autenticado.");
-    }
+    if (!user) throw new Error("Usuário de baixa não autenticado.");
     await runTransaction(db, async (transaction) => {
         const lotRef = doc(db, "lots", params.lotId);
         const lotDoc = await transaction.get(lotRef);
 
-        if (!lotDoc.exists()) {
-            throw new Error("Lote não encontrado para dar baixa.");
-        }
+        if (!lotDoc.exists()) throw new Error("Lote não encontrado para dar baixa.");
         
         const currentLot = lotDoc.data() as LotEntry;
         const totalQty = currentLot.quantity || 0;
@@ -407,7 +391,6 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
     if (movement.reverted) throw new Error("This movement has already been reverted.");
 
     await runTransaction(db, async (transaction) => {
-        // Identify the lot involved
         const lotRef = doc(db, 'lots', movement.lotId);
         const lotDoc = await transaction.get(lotRef);
         if (!lotDoc.exists()) throw new Error("Lot related to the movement not found.");
@@ -426,10 +409,8 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
             throw new Error("Only entry or exit movements can be reverted this way.");
         }
 
-        // Apply the reverse quantity change
         transaction.update(lotRef, { quantity: increment(quantityChange) });
 
-        // Create a new movement record for the reversal
         const reversalRecord: Omit<MovementRecord, 'id'> = {
             lotId: movement.lotId,
             productId: movement.productId,
@@ -447,14 +428,12 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
         };
         addMovementRecord(transaction, reversalRecord);
 
-        // Mark the original movement as reverted
         const originalMovementRef = doc(db, 'movementHistory', movement.id);
         transaction.update(originalMovementRef, { reverted: true });
     });
 }, [user]);
 
-
-  const value: ExpiryProductsContextType = useMemo(() => ({
+  const value = useMemo(() => ({
       lots,
       loading,
       addLot,
@@ -469,3 +448,12 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
+
+// --- HOOK ---
+export const useExpiryProducts = (): ExpiryProductsContextType => {
+  const context = useContext(ExpiryProductsContext);
+  if (context === undefined) {
+    throw new Error('useExpiryProducts must be used within an ExpiryProductsProvider');
+  }
+  return context;
+};
