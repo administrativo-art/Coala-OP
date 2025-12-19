@@ -1,7 +1,7 @@
 
 "use client";
 
-import { StockCountManagement } from "@/components/stock-audit-management";
+import { StockCountManagement } from "@/components/stock-count-management";
 
 export default function AuditPage() {
     return (
