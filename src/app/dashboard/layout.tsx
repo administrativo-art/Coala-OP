@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -64,21 +65,24 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen w-full flex-col">
-      <Header tasks={legacyTasks} />
-      {originalUser && (
-        <div className="flex items-center justify-center gap-4 bg-yellow-400 text-black font-bold text-center py-2 px-4 shadow-md">
-          <span>Você está navegando como <strong>{user?.username}</strong>.</span>
-          <Button variant="ghost" className="h-auto p-0 underline text-black hover:bg-yellow-400/50 hover:text-black" onClick={stopImpersonating}>
-            <Undo2 className="mr-1 h-4 w-4"/>
-            Voltar para sua conta
-          </Button>
-        </div>
-      )}
-      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-        {children}
-      </main>
-      {process.env.NODE_ENV === 'development' && <DebugPanel dataLoadTime={dataLoadTime} />}
+    <div className="flex min-h-screen w-full">
+      <Sidebar />
+      <div className="flex flex-col flex-1 pl-72">
+        <Header tasks={legacyTasks} />
+        {originalUser && (
+          <div className="flex items-center justify-center gap-4 bg-yellow-400 text-black font-bold text-center py-2 px-4 shadow-md">
+            <span>Você está navegando como <strong>{user?.username}</strong>.</span>
+            <Button variant="ghost" className="h-auto p-0 underline text-black hover:bg-yellow-400/50 hover:text-black" onClick={stopImpersonating}>
+              <Undo2 className="mr-1 h-4 w-4"/>
+              Voltar para sua conta
+            </Button>
+          </div>
+        )}
+        <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+          {children}
+        </main>
+        {process.env.NODE_ENV === 'development' && <DebugPanel dataLoadTime={dataLoadTime} />}
+      </div>
     </div>
   )
 }
