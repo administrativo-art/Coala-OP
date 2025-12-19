@@ -69,7 +69,7 @@ const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
 }).refine(data => {
     for (const item of data.items) {
-        const adjustmentQty = item.adjustment?.type === 'negative' ? -(Number(item.adjustment.quantity) || 0) : (Number(item.adjustment.quantity) || 0);
+        const adjustmentQty = item.adjustment?.type === 'negative' ? -(item.adjustment.quantity || 0) : (item.adjustment?.quantity || 0);
         const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
         const calculatedFinal = item.systemQuantity + adjustmentQty - totalDivergenceQty;
         
@@ -203,8 +203,8 @@ function AuditForm({
   useEffect(() => {
     watchedItems.forEach((item, index) => {
         const adjustmentQty = item.adjustment?.type === 'negative'
-            ? -(Number(item.adjustment.quantity) || 0)
-            : (Number(item.adjustment.quantity) || 0);
+            ? -(Number(item.adjustment?.quantity) || 0)
+            : (Number(item.adjustment?.quantity) || 0);
 
         const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
         const newFinalQuantity = item.systemQuantity + adjustmentQty - totalDivergenceQty;
