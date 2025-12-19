@@ -19,8 +19,8 @@ import { Loader2 } from "lucide-react";
 
 
 type DeleteConfirmationDialogProps = {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   onCancel?: () => void;
   itemName?: string;
@@ -48,22 +48,16 @@ export function DeleteConfirmationDialog({
   triggerButton,
 }: DeleteConfirmationDialogProps) {
 
-  const [internalOpen, setInternalOpen] = React.useState(false);
-
-  const isControlled = controlledOpen !== undefined && setControlledOpen !== undefined;
-  const open = isControlled ? controlledOpen : internalOpen;
-  const setOpen = isControlled ? setControlledOpen : setInternalOpen;
-
   const handleCancel = () => {
     if (onCancel) {
       onCancel();
     }
-    setOpen(false);
+    setControlledOpen(false);
   };
   
   const handleConfirm = () => {
     onConfirm();
-    setOpen(false);
+    setControlledOpen(false);
   }
 
   const content = (
@@ -75,25 +69,25 @@ export function DeleteConfirmationDialog({
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <Button variant="outline" onClick={handleCancel} disabled={isDeleting}>
-          {cancelButtonText}
-        </Button>
-        <Button
+        <AlertDialogCancel onClick={handleCancel} disabled={isDeleting}>
+            {cancelButtonText}
+        </AlertDialogCancel>
+        <AlertDialogAction
           onClick={handleConfirm}
           disabled={isDeleting}
           className={buttonVariants({ variant: confirmButtonVariant })}
         >
           {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {confirmButtonText}
-        </Button>
+        </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
   );
 
   if (triggerButton) {
     return (
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogTrigger asChild onClick={() => setOpen(true)}>
+      <AlertDialog open={controlledOpen} onOpenChange={setControlledOpen}>
+        <AlertDialogTrigger asChild>
           {triggerButton}
         </AlertDialogTrigger>
         {content}
@@ -102,7 +96,7 @@ export function DeleteConfirmationDialog({
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog open={controlledOpen} onOpenChange={setControlledOpen}>
       {content}
     </AlertDialog>
   );

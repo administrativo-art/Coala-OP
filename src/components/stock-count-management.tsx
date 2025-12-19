@@ -228,12 +228,6 @@ function AuditForm({
       divergences: values.items[index].divergences,
     }));
   };
-
-  const handleSaveAndExit = async () => {
-    setIsSaving(true);
-    await onSave(getUpdatedItems(form.getValues()));
-    setIsSaving(false);
-  };
   
   const handleFinalizeClick = async () => {
     if (!user) return;
@@ -257,11 +251,7 @@ function AuditForm({
   }
 
   const handleCancelClick = async () => {
-      if (form.formState.isDirty) {
-          setIsConfirmCancelOpen(true);
-      } else {
-          handleDiscardAndExit();
-      }
+      setIsConfirmCancelOpen(true);
   }
 
   const handleDiscardAndExit = async () => {
@@ -363,12 +353,11 @@ function AuditForm({
         <DeleteConfirmationDialog 
             open={isConfirmCancelOpen}
             onOpenChange={setIsConfirmCancelOpen}
-            title="Sair da contagem?"
-            description="Você tem alterações não salvas. O que você gostaria de fazer?"
-            confirmButtonText="Salvar e sair"
-            onConfirm={() => { setIsConfirmCancelOpen(false); handleSaveAndExit(); }}
-            cancelButtonText="Descartar e sair"
-            onCancel={() => { setIsConfirmCancelOpen(false); handleDiscardAndExit(); }}
+            title="Cancelar contagem?"
+            description="Tem certeza de que deseja cancelar esta contagem? Todo o progresso será perdido."
+            confirmButtonText="Sim, cancelar"
+            onConfirm={() => { setIsConfirmCancelOpen(false); handleDiscardAndExit(); }}
+            cancelButtonText="Não, continuar contagem"
         />
     </>
   )
@@ -661,4 +650,3 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     </>
   );
 }
-
