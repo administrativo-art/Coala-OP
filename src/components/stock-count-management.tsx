@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -181,6 +182,7 @@ function AuditForm({
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState(false);
   const { toast } = useToast();
   
   const form = useForm<AuditFormValues>({
@@ -243,11 +245,15 @@ function AuditForm({
       });
       return;
     }
-    
+    setIsConfirmFinalizeOpen(true);
+  };
+
+  const handleFinalizeConfirm = async () => {
+    setIsConfirmFinalizeOpen(false);
     setIsFinalizing(true);
     await onFinalize(getUpdatedItems(form.getValues()));
     setIsFinalizing(false);
-  };
+  }
 
   const handleCancelClick = async () => {
       setIsCancelling(true);
@@ -327,16 +333,7 @@ function AuditForm({
                           <Button type="button" variant="outline" onClick={form.handleSubmit(handleSave)} disabled={isSaving || isCancelling || isFinalizing}>
                               <Save className="mr-2 h-4 w-4"/> {isSaving ? 'Salvando...' : 'Salvar'}
                           </Button>
-                          <DeleteConfirmationDialog 
-                          open={false}
-                          onOpenChange={() => {}}
-                          onConfirm={handleFinalizeClick}
-                          isDeleting={isFinalizing}
-                          title="Tem certeza que quer efetivar?"
-                          description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída. Deseja continuar?"
-                          confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar contagem'}
-                          triggerButton={<Button type="button"><Check className="mr-2 h-4 w-4"/> Efetivar contagem</Button>}
-                          />
+                           <Button type="button" onClick={handleFinalizeClick}><Check className="mr-2 h-4 w-4"/> Efetivar contagem</Button>
                       </div>
                       </div>
                   </CardContent>
@@ -348,6 +345,15 @@ function AuditForm({
         onOpenChange={setIsRequestModalOpen}
         kioskId={session.kioskId}
       />
+       <DeleteConfirmationDialog 
+            open={isConfirmFinalizeOpen}
+            onOpenChange={setIsConfirmFinalizeOpen}
+            onConfirm={handleFinalizeConfirm}
+            isDeleting={isFinalizing}
+            title="Tem certeza que quer efetivar?"
+            description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída. Deseja continuar?"
+            confirmButtonText={isFinalizing ? 'Efetivando...' : 'Sim, efetivar contagem'}
+        />
     </>
   )
 }

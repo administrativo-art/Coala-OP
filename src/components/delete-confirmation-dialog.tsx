@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import * as React from 'react';
@@ -18,8 +19,8 @@ import { Loader2 } from "lucide-react";
 
 
 type DeleteConfirmationDialogProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onConfirm: () => void;
   onCancel?: () => void;
   itemName?: string;
@@ -33,8 +34,8 @@ type DeleteConfirmationDialogProps = {
 }
 
 export function DeleteConfirmationDialog({ 
-  open, 
-  onOpenChange, 
+  open: controlledOpen, 
+  onOpenChange: setControlledOpen, 
   onConfirm, 
   onCancel,
   itemName,
@@ -47,12 +48,23 @@ export function DeleteConfirmationDialog({
   triggerButton,
 }: DeleteConfirmationDialogProps) {
 
+  const [internalOpen, setInternalOpen] = React.useState(false);
+
+  const isControlled = controlledOpen !== undefined && setControlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? setControlledOpen : setInternalOpen;
+
   const handleCancel = () => {
     if (onCancel) {
       onCancel();
     }
-    onOpenChange(false);
+    setOpen(false);
   };
+  
+  const handleConfirm = () => {
+    onConfirm();
+    setOpen(false);
+  }
 
   const content = (
     <AlertDialogContent>
@@ -67,7 +79,7 @@ export function DeleteConfirmationDialog({
           {cancelButtonText}
         </Button>
         <Button
-          onClick={onConfirm}
+          onClick={handleConfirm}
           disabled={isDeleting}
           className={buttonVariants({ variant: confirmButtonVariant })}
         >
@@ -80,8 +92,8 @@ export function DeleteConfirmationDialog({
 
   if (triggerButton) {
     return (
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogTrigger asChild onClick={() => setOpen(true)}>
           {triggerButton}
         </AlertDialogTrigger>
         {content}
@@ -90,7 +102,7 @@ export function DeleteConfirmationDialog({
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={setOpen}>
       {content}
     </AlertDialog>
   );
