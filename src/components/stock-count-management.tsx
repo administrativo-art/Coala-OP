@@ -403,7 +403,7 @@ function KioskSelectionModal({ open, onOpenChange, kiosks, onSelectKiosk }: { op
             <DialogClose key={kiosk.id} asChild>
                 <Button
                 variant="outline"
-                className="w-full justify-start text-base py-6"
+                className="w-full justify-start text-base py-6 transition-all duration-200 hover:border-primary hover:shadow-lg hover:-translate-y-px"
                 onClick={() => onSelectKiosk(kiosk.id)}
                 >
                 {kiosk.name}
@@ -469,9 +469,10 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
         });
         setActiveSession(null);
         toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erro ao finalizar contagem:", error);
-        toast({ variant: "destructive", title: "Erro ao finalizar", description: "Não foi possível salvar a conclusão no servidor." });
+        toast({ variant: "destructive", title: "Erro ao finalizar", description: error.message || "Não foi possível salvar a conclusão no servidor." });
+        // Don't clear the active session, so user can retry
     }
   };
   
@@ -500,14 +501,14 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
                 <GlassCard>
                     <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
-                        <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Nova contagem</Button>
+                        <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto transition-transform hover:-translate-y-px">Nova contagem</Button>
                         <Button variant="outline" className="ml-2" onClick={() => setIsRequestModalOpen(true)}>
                             <PackagePlus className="mr-2 h-4 w-4" />
                             Solicitar Cadastro de Insumo
                         </Button>
                         <div className="space-y-3 pt-4 border-t">
                             <h3 className="text-sm font-bold uppercase text-muted-foreground">Contagens em aberto</h3>
-                            {loading ? <Skeleton className="h-24 w-full" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
+                            {loading ? <Skeleton className="h-24 w-full bg-white/20 dark:bg-white/5 backdrop-blur-md" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
                                 pendingAudits.map(s => (
                                     <div key={s.id} className="p-3 border rounded-lg flex justify-between items-center bg-muted/10">
                                         <div className="space-y-0.5"><p className="font-bold text-sm">{s.kioskName}</p><p className="text-[10px] text-muted-foreground uppercase">{s.auditedBy.username} • {format(parseISO(s.startedAt), 'dd/MM HH:mm')}</p></div>
@@ -532,3 +533,5 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     </>
   );
 }
+
+    
