@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -137,7 +138,7 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
                  <h4 className="font-semibold text-amber-800">Reconciliação de Turno</h4>
                 <div className="grid grid-cols-2 gap-4">
                      <FormField control={control} name={`items.${itemIndex}.adjustment.quantity`} render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
                      <FormField control={control} name={`items.${itemIndex}.adjustment.type`} render={({ field }) => (
                         <FormItem><FormLabel className="text-xs">Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger></FormControl><SelectContent><SelectItem value="positive">Acréscimo</SelectItem><SelectItem value="negative">Decréscimo</SelectItem></SelectContent></Select><FormMessage /></FormItem>
