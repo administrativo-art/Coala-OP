@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -69,7 +68,6 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
   const updateAuditSession = useCallback(async (sessionId: string, updates: Partial<StockAuditSession>) => {
     const sessionRef = doc(db, "stockAuditSessions", sessionId);
     try {
-        // Clean the updates object to remove any `undefined` fields
         const cleanData = JSON.parse(JSON.stringify(updates));
         await updateDoc(sessionRef, cleanData);
     } catch(error) {
@@ -101,4 +99,3 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
 
   return <StockAuditContext.Provider value={value}>{children}</StockAuditContext.Provider>;
 }
-

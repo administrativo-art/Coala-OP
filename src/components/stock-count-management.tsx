@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
@@ -16,7 +15,7 @@ import { useStockAudit } from '@/hooks/use-stock-audit';
 import { useToast } from '@/hooks/use-toast';
 import { type StockAuditItem, type StockAuditSession, type MovementType, type LotEntry } from '@/types';
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { GlassCard, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -58,7 +57,7 @@ const auditItemSchema = z.object({
         type: z.enum(['positive', 'negative']),
         quantity: z.coerce.number().min(0),
         notes: z.string().optional()
-    }).optional(),
+    }).nullable(),
     divergences: z.array(divergenceSchema),
 });
 
@@ -79,18 +78,18 @@ type AuditFormValues = z.infer<typeof auditFormSchema>;
 function JustificationSection({ itemIndex, control }: { itemIndex: number, control: any }) {
   const { fields, append, remove } = useFieldArray({ control, name: `items.${itemIndex}.divergences` });
   return (
-    <div className="mt-3 p-3 space-y-3 bg-red-500/5 rounded-lg border border-red-500/10">
-        <h4 className="font-semibold text-destructive/80 flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>Registrar Saídas do Turno</h4>
+    <GlassCard variant="red" className="mt-3 p-3 space-y-3">
+        <h4 className="font-semibold text-red-700 dark:text-red-400 flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>Registrar Saídas do Turno</h4>
         <div className="space-y-2">
             {fields.map((field, divIndex) => (
-                <div key={field.id} className="p-3 border rounded-md space-y-2 bg-background relative shadow-sm">
+                <div key={field.id} className="p-3 border rounded-md space-y-2 bg-background/50 relative shadow-sm">
                     <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive h-7 w-7" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
                     <div className="grid grid-cols-2 gap-2">
                         <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field }) => (
-                            <FormItem><FormLabel className="text-[10px] uppercase font-bold text-muted-foreground">Qtd</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>
+                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>
                         )}/>
                         <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field }) => (
-                            <FormItem><FormLabel className="text-[10px] uppercase font-bold text-muted-foreground">Motivo</FormLabel>
+                            <FormItem><FormLabel className="text-xs">Motivo</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="..." /></SelectTrigger></FormControl>
                                     <SelectContent>{DIVERGENCE_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
@@ -107,7 +106,7 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
         <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: '', quantity: 0, notes: '' })}>
             <PlusCircle className="mr-2 h-3 w-3"/> Adicionar Saída
         </Button>
-    </div>
+    </GlassCard>
   );
 }
 
@@ -115,21 +114,21 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
     const [showForm, setShowForm] = useState(!!form.getValues(`items.${itemIndex}.adjustment`));
     if (showForm) {
         return (
-             <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20 space-y-3">
-                 <h4 className="font-semibold text-amber-800 text-sm">Reconciliação de Turno Anterior</h4>
+             <GlassCard variant="amber" className="p-3 space-y-3">
+                 <h4 className="font-semibold text-amber-700 dark:text-amber-400 text-sm">Reconciliação de Turno Anterior</h4>
                 <div className="grid grid-cols-2 gap-4">
                      <FormField control={control} name={`items.${itemIndex}.adjustment.quantity`} render={({ field }) => (
-                        <FormItem><FormLabel className="text-[10px] uppercase font-bold">Quantidade</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl></FormItem>
+                        <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl></FormItem>
                     )}/>
                      <FormField control={control} name={`items.${itemIndex}.adjustment.type`} render={({ field }) => (
-                        <FormItem><FormLabel className="text-[10px] uppercase font-bold">Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger></FormControl><SelectContent><SelectItem value="positive">Acréscimo</SelectItem><SelectItem value="negative">Decréscimo</SelectItem></SelectContent></Select></FormItem>
+                        <FormItem><FormLabel className="text-xs">Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger></FormControl><SelectContent><SelectItem value="positive">Acréscimo</SelectItem><SelectItem value="negative">Decréscimo</SelectItem></SelectContent></Select></FormItem>
                     )}/>
                 </div>
                 <FormField control={control} name={`items.${itemIndex}.adjustment.notes`} render={({ field }) => (
                     <FormItem><FormControl><Textarea {...field} placeholder="Ex: Encontrado no freezer" rows={1} className="text-sm min-h-[38px]" /></FormControl></FormItem>
                 )}/>
-                <Button type="button" variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => { form.setValue(`items.${itemIndex}.adjustment`, undefined); setShowForm(false); }}>Remover ajuste</Button>
-            </div>
+                <Button type="button" variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => { form.setValue(`items.${itemIndex}.adjustment`, null); setShowForm(false); }}>Remover ajuste</Button>
+            </GlassCard>
         )
     }
     return <div className="text-center p-2"><Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setShowForm(true)}>Identificou divergência do turno anterior?</Button></div>
@@ -150,7 +149,6 @@ function AuditForm({
   const { user } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState(false);
   const [isConfirmCancelOpen, setIsConfirmCancelOpen] = useState(false);
@@ -161,7 +159,7 @@ function AuditForm({
     defaultValues: {
       items: session.items.map(i => ({
         productId: i.productId, lotId: i.lotId, systemQuantity: i.systemQuantity,
-        finalQuantity: i.finalQuantity, adjustment: i.adjustment, divergences: i.divergences || [],
+        finalQuantity: i.finalQuantity, adjustment: i.adjustment || null, divergences: i.divergences || [],
       })),
     },
   });
@@ -232,19 +230,9 @@ function AuditForm({
       }
   };
 
-  const handleDiscardAndExit = async () => {
-      setIsCancelling(true);
-      try {
-          await onCancel();
-      } finally {
-          setIsCancelling(false);
-          setIsConfirmCancelOpen(false);
-      }
-  };
-
   return (
     <>
-      <Card>
+      <GlassCard>
         <CardHeader>
           <CardTitle>Contagem em {session.kioskName}</CardTitle>
           <CardDescription>Contagem iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
@@ -263,7 +251,7 @@ function AuditForm({
                               const finalQty = watchedItems[index]?.finalQuantity;
 
                               return (
-                                  <Card key={item.lotId} className="flex flex-col">
+                                  <GlassCard key={item.lotId} className="flex flex-col">
                                       <div className="p-4 flex gap-4 items-center">
                                           <div className="w-20 h-20 shrink-0">
                                               {product?.imageUrl ? (
@@ -293,7 +281,7 @@ function AuditForm({
                                           <ReconciliationSection itemIndex={index} control={form.control} form={form} />
                                           <JustificationSection itemIndex={index} control={form.control} />
                                       </div>
-                                  </Card>
+                                  </GlassCard>
                               );
                           })}
                       </div>
@@ -301,7 +289,7 @@ function AuditForm({
               </CardContent>
               <CardContent>
                   <div className="flex justify-between items-center pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
+                  <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isFinalizing || isSaving}>
                       Cancelar Contagem
                   </Button>
                   <div className="flex gap-2">
@@ -313,7 +301,7 @@ function AuditForm({
                   </div>
               </CardContent>
           </form></Form>
-      </Card>
+      </GlassCard>
       <RequestItemAdditionModal
         open={isRequestModalOpen}
         onOpenChange={setIsRequestModalOpen}
@@ -336,7 +324,7 @@ function AuditForm({
             confirmButtonText="Salvar e sair"
             onConfirm={() => { setIsConfirmCancelOpen(false); handleSaveClick(); }}
             cancelButtonText="Descartar e sair"
-            onCancel={handleDiscardAndExit}
+            onCancel={onCancel}
         />
     </>
   )
@@ -359,7 +347,7 @@ function AuditHistory() {
     }
 
     return (
-        <Card>
+        <GlassCard>
             <CardHeader>
                 <CardTitle>Histórico de contagens</CardTitle>
                 <CardDescription>Visualize todas as contagens que foram concluídas.</CardDescription>
@@ -398,7 +386,7 @@ function AuditHistory() {
                     </div>
                 )}
             </CardContent>
-        </Card>
+        </GlassCard>
     );
 }
 
@@ -413,8 +401,12 @@ function KioskSelectionModal({ open, onOpenChange, kiosks, onSelectKiosk }: { op
         <div className="py-4 space-y-2">
           {kiosks.map((kiosk) => (
             <DialogClose key={kiosk.id} asChild>
-                <Button variant="outline" className="w-full justify-start text-base py-6" onClick={() => onSelectKiosk(kiosk.id)}>
-                    {kiosk.name}
+                <Button
+                variant="outline"
+                className="w-full justify-start text-base py-6"
+                onClick={() => onSelectKiosk(kiosk.id)}
+                >
+                {kiosk.name}
                 </Button>
             </DialogClose>
           ))}
@@ -505,7 +497,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
         <Tabs defaultValue="active">
             <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="active">Contagem</TabsTrigger><TabsTrigger value="history">Histórico</TabsTrigger></TabsList>
             <TabsContent value="active" className="mt-4">
-                <Card>
+                <GlassCard>
                     <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle></CardHeader>
                     <CardContent className="space-y-6">
                         <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Nova contagem</Button>
@@ -525,7 +517,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
                             }
                         </div>
                     </CardContent>
-                </Card>
+                </GlassCard>
             </TabsContent>
             <TabsContent value="history" className="mt-4">
                 <AuditHistory />

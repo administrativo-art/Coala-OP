@@ -32,7 +32,7 @@ export function Header({ tasks }: { tasks: LegacyTask[] }) {
   const canViewTasks = !loading && permissions.tasks.view;
 
   return (
-    <header className="sticky top-0 flex h-14 items-center gap-4 border-b bg-background px-4 lg:h-[60px] lg:px-6 z-30">
+    <header className="sticky top-0 z-40 w-full border-b border-white/20 bg-white/30 dark:bg-slate-900/30 backdrop-blur-lg dark:border-white/10 flex h-14 items-center gap-4 px-4 lg:h-[60px] lg:px-6">
         <Sheet>
             <SheetTrigger asChild>
                 <Button

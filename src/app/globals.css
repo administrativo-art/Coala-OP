@@ -4,6 +4,25 @@
 @tailwind utilities;
 
 @layer base {
+  body {
+    /* Modo Claro: Um gradiente muito sutil com toques de cor (ex: roxo/azul claro) */
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(250, 60%, 96%, 1) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, hsla(200, 60%, 96%, 1) 0px, transparent 50%);
+    background-color: #f8fafc; /* Cor base de fallback (slate-50) */
+    background-attachment: fixed; /* Importante: o fundo não rola com a página */
+  }
+
+  .dark body {
+    /* Modo Escuro: Gradiente profundo para o tema dark */
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(250, 40%, 15%, 0.4) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, hsla(200, 40%, 15%, 0.4) 0px, transparent 50%);
+    background-color: #0f172a; /* Cor base dark (slate-900) */
+  }
+}
+
+@layer base {
   :root {
     --background: 240 10% 97%; /* #F5F7FA */
     --foreground: 240 6% 10%; /* #1A1B1F */

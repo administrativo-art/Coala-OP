@@ -108,7 +108,7 @@ export function Sidebar() {
   )
 
   return (
-    <div className="flex h-full flex-col gap-2">
+    <div className="flex h-full flex-col gap-2 bg-white/30 dark:bg-slate-900/30 backdrop-blur-lg border-r border-white/20 dark:border-white/10">
       <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
         <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
            <div className="font-logo select-none">
