@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -23,6 +23,7 @@ import Image from 'next/image';
 import { format, parseISO } from 'date-fns';
 import { ScrollArea } from './ui/scroll-area';
 import { type MovementType } from '@/types';
+import Link from 'next/link';
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
     { value: 'SAIDA_CONSUMO', label: 'Consumo / Venda' },

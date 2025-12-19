@@ -19,7 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useExpiryProducts } from '@/hooks/use-expiry-products.tsx';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -694,7 +694,3 @@ export function ExpiryControl() {
         </Suspense>
     );
 }
-
-    
-
-    
