@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
-import { useExpiryProducts } from "@/hooks/use-expiry-products"
+import { useExpiryProducts } from "@/hooks/use-expiry-products.tsx"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 
