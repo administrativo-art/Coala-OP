@@ -36,11 +36,7 @@ const userSchema = z.object({
   password: z.string().optional(),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
   assignedKioskIds: z.array(z.string()).min(1, 'Selecione pelo menos um quiosque.'),
-  turno: z.enum(['T1', 'T2']).nullable(),
-  folguista: z.boolean(),
   operacional: z.boolean(),
-  valeTransporte: z.coerce.number().optional(),
-  color: z.string().nullable().optional(),
   avatarUrl: z.string().optional(),
 }).refine(data => {
     return !data.password || data.password.length >= 6;
@@ -50,8 +46,6 @@ const userSchema = z.object({
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
-
-const userColors = ['#FDFFB6', '#CAFFBF', '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#FFADAD', '#FFD6A5', '#A7F3D0', '#99F6E4', '#FECACA', '#DDD6FE', '#E5E7EB', '#FBCFE8'];
 
 export function UserManagement() {
   const { permissions, users, addUser, deleteUser, user: currentUser, updateUser, resetPassword } = useAuth();
@@ -80,23 +74,11 @@ export function UserManagement() {
         password: '',
         profileId: '',
         assignedKioskIds: [],
-        turno: null,
-        folguista: false,
         operacional: true,
-        valeTransporte: 0,
-        color: null,
         avatarUrl: '',
     }
   });
-  
-  const isFolguista = form.watch('folguista');
 
-  useEffect(() => {
-    if (isFolguista) {
-        form.setValue('turno', null);
-    }
-  }, [isFolguista, form]);
-  
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
       const searchMatch = user.username.toLowerCase().includes(searchTerm.toLowerCase());
@@ -115,11 +97,7 @@ export function UserManagement() {
       password: '',
       profileId: '',
       assignedKioskIds: [],
-      turno: null,
-      folguista: false,
       operacional: true,
-      valeTransporte: 0,
-      color: null,
       avatarUrl: '',
     });
     setShowForm(true);
@@ -133,11 +111,7 @@ export function UserManagement() {
       password: '',
       profileId: user.profileId,
       assignedKioskIds: user.assignedKioskIds || [],
-      turno: user.turno,
-      folguista: user.folguista,
       operacional: user.operacional,
-      valeTransporte: user.valeTransporte || 0,
-      color: user.color || null,
       avatarUrl: user.avatarUrl || '',
     });
     setShowForm(true);
@@ -179,7 +153,6 @@ export function UserManagement() {
     if (editingUser) {
       const updatedData: Partial<User> = {
           ...values,
-          valeTransporte: values.valeTransporte || 0,
       };
       delete (updatedData as any).password; 
       updateUser({ ...editingUser, ...updatedData });
@@ -192,11 +165,7 @@ export function UserManagement() {
           username: values.username, 
           profileId: values.profileId,
           assignedKioskIds: values.assignedKioskIds,
-          turno: values.turno,
-          folguista: values.folguista,
           operacional: values.operacional,
-          valeTransporte: values.valeTransporte || 0,
-          color: values.color,
           avatarUrl: values.avatarUrl,
       }, values.email, values.password);
     }
@@ -237,23 +206,6 @@ export function UserManagement() {
       };
       reader.readAsDataURL(file);
     }
-  };
-
-  const handleCurrencyChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
-    const value = e.target.value;
-    const digitsOnly = value.replace(/\D/g, '');
-    if (digitsOnly === '') {
-        field.onChange(undefined);
-        return;
-    }
-
-    const numericValue = parseInt(digitsOnly, 10) / 100;
-    field.onChange(numericValue);
-  };
-
-  const formatCurrencyForDisplay = (value: number | undefined) => {
-      if (value === undefined || value === null) return '';
-      return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
 
@@ -425,7 +377,6 @@ export function UserManagement() {
                   </div>
 
                   <Separator />
-                  <h4 className="font-medium text-muted-foreground">Configuração de escala</h4>
 
                   <FormField
                     control={form.control}
@@ -444,89 +395,6 @@ export function UserManagement() {
                             onCheckedChange={field.onChange}
                             />
                         </FormControl>
-                        </FormItem>
-                    )}
-                    />
-                  
-                   <FormField control={form.control} name="folguista" render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                            <div className="space-y-0.5">
-                                <FormLabel>É folguista?</FormLabel>
-                            </div>
-                            <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                        </FormItem>
-                    )}/>
-                    
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField control={form.control} name="turno" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Turno padrão</FormLabel>
-                            <Select onValueChange={(val) => field.onChange(val === 'null' ? null : val)} value={field.value || 'null'} disabled={isFolguista}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione um turno..." /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    <SelectItem value="T1">T1</SelectItem>
-                                    <SelectItem value="T2">T2</SelectItem>
-                                    <SelectItem value="null">Nenhum (para folguistas)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
-                     <FormField control={form.control} name="valeTransporte" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Valor diário do VT</FormLabel>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
-                                <FormControl>
-                                <Input
-                                    type="text"
-                                    placeholder="0,00"
-                                    className="pl-9"
-                                    value={formatCurrencyForDisplay(field.value)}
-                                    onChange={e => handleCurrencyChange(e, field)}
-                                />
-                                </FormControl>
-                            </div>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
-                  </div>
-                   <FormField
-                    control={form.control}
-                    name="color"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Cor do destaque</FormLabel>
-                        <FormControl>
-                            <div className="flex flex-wrap gap-2 pt-2">
-                            {userColors.map((color) => (
-                                <button
-                                key={color}
-                                type="button"
-                                className={cn(
-                                    "h-8 w-8 rounded-full border-2 transition-all",
-                                    field.value === color ? 'border-primary ring-2 ring-ring' : 'border-transparent'
-                                )}
-                                style={{ backgroundColor: color }}
-                                onClick={() => field.onChange(color)}
-                                />
-                            ))}
-                            <button
-                                type="button"
-                                className={cn(
-                                    "h-8 w-8 rounded-full border-2 flex items-center justify-center bg-muted transition-all",
-                                    !field.value ? 'border-primary ring-2 ring-ring' : 'border-transparent'
-                                )}
-                                onClick={() => field.onChange(null)}
-                            >
-                                <Eraser className="h-4 w-4 text-muted-foreground" />
-                            </button>
-                            </div>
-                        </FormControl>
-                        <FormDescription>
-                            Selecione uma cor para destacar o colaborador na escala.
-                        </FormDescription>
-                        <FormMessage />
                         </FormItem>
                     )}
                     />
@@ -596,17 +464,15 @@ export function UserManagement() {
               
               <Separator className="my-4" />
               <div className="space-y-2">
-                <div className="hidden rounded-lg bg-muted px-4 py-2 text-sm font-medium text-muted-foreground md:grid md:grid-cols-5">
+                <div className="hidden rounded-lg bg-muted px-4 py-2 text-sm font-medium text-muted-foreground md:grid md:grid-cols-4">
                   <div>Usuário</div>
                   <div>Perfil</div>
                   <div>Quiosque(s)</div>
-                  <div>VT diário</div>
                   <div className="text-right">Ações</div>
                 </div>
                 {filteredUsers.map(user => (
-                  <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-5">
-                    <div className="font-medium flex items-center gap-2">
-                      {user.color && <div className="h-3 w-3 rounded-full" style={{ backgroundColor: user.color }}></div>}
+                  <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-4">
+                    <div className="font-medium">
                       <span className="md:hidden text-muted-foreground">Usuário: </span>
                       {user.username}
                     </div>
@@ -619,10 +485,6 @@ export function UserManagement() {
                     <div className="text-muted-foreground text-sm truncate">
                       <span className="md:hidden font-medium text-card-foreground">Quiosque(s): </span>
                       {getKioskNames(user.assignedKioskIds)}
-                    </div>
-                     <div>
-                      <span className="md:hidden text-muted-foreground">VT diário: </span>
-                      {user.valeTransporte ? user.valeTransporte.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
                         {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}

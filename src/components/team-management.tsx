@@ -1,8 +1,6 @@
-
-"use client"
-
-import { ScheduleCalendar } from './schedule-calendar';
+// This component has been removed as the team management module was removed.
+"use client";
 
 export function TeamManagement() {
-    return <ScheduleCalendar />;
+    return null;
 }

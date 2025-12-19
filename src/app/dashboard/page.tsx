@@ -6,7 +6,6 @@ import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useKiosks } from "@/hooks/use-kiosks"
-import { useMonthlySchedule } from "@/hooks/use-monthly-schedule"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -17,7 +16,7 @@ import { differenceInDays, parseISO } from 'date-fns'
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { type DailySchedule, type ProductSimulation, type AbsenceEntry, type Kiosk } from "@/types"
+import { type ProductSimulation } from "@/types"
 import { cn } from "@/lib/utils"
 import { AverageConsumptionChart } from "@/components/average-consumption-chart"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -40,19 +39,6 @@ interface OnlineUser {
     status: 'online' | 'offline';
     last_seen: Date;
 }
-
-const lookupShift = (daySchedule: DailySchedule | undefined, kiosk: Kiosk, turn: 'T1' | 'T2' | 'T3' | 'Folga' | 'Ausencia'): string | AbsenceEntry[] => {
-    if (!daySchedule) return turn === 'Ausencia' ? [] : '';
-    // Prioriza a chave nova com ID, mas mantém o fallback para a chave antiga com nome
-    const byId   = daySchedule[`${kiosk.id} ${turn}`];
-    if (byId !== undefined) return byId;
-
-    const byName = daySchedule[`${kiosk.name} ${turn}`];
-    if (byName !== undefined) return byName;
-
-    return turn === 'Ausencia' ? [] : '';
-};
-
 
 function OnlineUsersPanel() {
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
@@ -130,23 +116,9 @@ function OnlineUsersPanel() {
 function OperationalDashboard() {
   const { user, users, permissions } = useAuth()
   const { lots, loading: lotsLoading } = useExpiryProducts()
-  const { getProductFullName, products } = useProducts();
-  const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { schedule, loading: scheduleLoading } = useMonthlySchedule();
   
-  const [todayISO, setTodayISO] = useState<string>('');
-
-  useEffect(() => {
-    setTodayISO(format(new Date(), 'yyyy-MM-dd'));
-  }, []);
-
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
   
-  const todaySchedule = useMemo(() => {
-    if (!todayISO) return null;
-    return schedule.find(s => s.id === todayISO);
-  }, [schedule, todayISO]);
-
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
     if (user.username === 'Tiago Brasil') return lots;
@@ -176,16 +148,8 @@ function OperationalDashboard() {
         return differenceInDays(parseISO(lot.expiryDate), new Date()) < 0 && lot.quantity > 0;
     }).length;
   }, [lotsInKiosk, lotsLoading]);
-
-  const kiosksToDisplay = useMemo(() => {
-    return [...kiosks].sort((a, b) => {
-        if (a.id === 'matriz') return -1;
-        if (b.id === 'matriz') return 1;
-        return a.name.localeCompare(b.name);
-    });
-  }, [kiosks]);
   
-  const initialLoading = lotsLoading || kiosksLoading || scheduleLoading || consumptionLoading || !todayISO;
+  const initialLoading = lotsLoading || consumptionLoading;
 
   if (initialLoading) {
     return (
@@ -228,59 +192,6 @@ function OperationalDashboard() {
         </Link>
          <PurchaseAlertCard />
       </div>
-      
-      <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-6 w-6" /> Escala de Hoje ({format(new Date(), 'dd/MM/yyyy')})
-            </CardTitle>
-            <CardDescription>
-              Colaboradores escalados para o dia de hoje em cada unidade.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {kiosksToDisplay.map(kiosk => {
-                if (!todaySchedule) return (
-                  <div key={kiosk.id} className="p-3 border rounded-lg">
-                    <p className="font-semibold">{kiosk.name}</p>
-                    <p className="text-sm text-muted-foreground">Escala não definida para hoje.</p>
-                  </div>
-                );
-                
-                const t1 = (lookupShift(todaySchedule, kiosk, 'T1') as string || '');
-                const t2 = (lookupShift(todaySchedule, kiosk, 'T2') as string || '');
-                const t3 = (lookupShift(todaySchedule, kiosk, 'T3') as string || '');
-                const folgas = (lookupShift(todaySchedule, kiosk, 'Folga') as string || '');
-                const ausencias = (lookupShift(todaySchedule, kiosk, 'Ausencia') as AbsenceEntry[] || []);
-
-                const hasAnyEntry = t1 || t2 || t3 || folgas || ausencias.length > 0;
-                
-                if (!hasAnyEntry) return null;
-
-                return (
-                  <div key={kiosk.id} className="p-3 border rounded-lg text-sm bg-muted/50">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-semibold">{kiosk.name}</h4>
-                    </div>
-                    <div className="mt-2 space-y-1">
-                      {t1 && <p><strong>T1:</strong> {t1}</p>}
-                      {t2 && <p><strong>T2:</strong> {t2}</p>}
-                      {t3 && <p><strong>T3:</strong> {t3}</p>}
-                      {folgas && <p><strong>Folga:</strong> {folgas}</p>}
-                      {ausencias.length > 0 && ausencias.map(a => (
-                        <p key={a.userId} className="text-red-500 flex items-center gap-1">
-                          <UserMinus className="h-3 w-3" />
-                          <strong>Ausente:</strong> {users.find(u => u.id === a.userId)?.username} ({a.reason})
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
       
       <AverageConsumptionChart />
 
@@ -488,4 +399,5 @@ export default function DashboardPage() {
         </div>
     );
 }
+
 

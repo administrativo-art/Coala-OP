@@ -1,4 +1,4 @@
-
+// This provider is no longer used as the team management module has been removed.
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -20,133 +20,19 @@ export function MonthlyScheduleProvider({ children }: { children: React.ReactNod
   const prevUnsubscribeRef = useRef<(() => void) | null>(null);
 
   const fetchSchedule = useCallback((year: number, month: number) => {
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
-    }
-     if (prevUnsubscribeRef.current) {
-      prevUnsubscribeRef.current();
-    }
-    
-    setLoading(true);
-    setCurrentYear(year);
-    setCurrentMonth(month);
-    
-    const monthPadded = month.toString().padStart(2, '0');
-    const scheduleCollectionPath = `escala/${year}-${monthPadded}/dias`;
-    
-    const q = query(collection(db, scheduleCollectionPath));
-    unsubscribeRef.current = onSnapshot(q, (querySnapshot) => {
-      const scheduleData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as DailySchedule));
-      setSchedule(scheduleData);
-      setLoading(false);
-    }, (error) => {
-      console.error(`Error fetching schedule for ${year}-${monthPadded}: `, error);
-      setSchedule([]); // Clear schedule on error
-      setLoading(false);
-    });
-
-    const prevMonthDate = subMonths(new Date(year, month - 1, 15), 1);
-    const prevYear = getYear(prevMonthDate);
-    const prevMonth = getMonth(prevMonthDate) + 1;
-    const prevMonthPadded = prevMonth.toString().padStart(2, '0');
-    const prevScheduleCollectionPath = `escala/${prevYear}-${prevMonthPadded}/dias`;
-
-    const prevQ = query(collection(db, prevScheduleCollectionPath));
-    prevUnsubscribeRef.current = onSnapshot(prevQ, (querySnapshot) => {
-      const prevScheduleData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailySchedule));
-      setPreviousMonthSchedule(prevScheduleData);
-    }, (error) => {
-      console.error(`Error fetching schedule for ${prevYear}-${prevMonthPadded}: `, error);
-      setPreviousMonthSchedule([]);
-    });
-
   }, []);
 
   useEffect(() => {
-    fetchSchedule(currentYear, currentMonth);
-    
-    // Cleanup on component unmount
-    return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-      }
-      if (prevUnsubscribeRef.current) {
-        prevUnsubscribeRef.current();
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    setLoading(false)
   }, []);
 
   const updateDailySchedule = useCallback(async (dayId: string, updates: Partial<DailySchedule>) => {
-    const monthPadded = currentMonth.toString().padStart(2, '0');
-    const scheduleDocPath = `escala/${currentYear}-${monthPadded}/dias/${dayId}`;
-    const docRef = doc(db, scheduleDocPath);
-
-    try {
-        await setDoc(docRef, updates, { merge: true });
-    } catch(error) {
-        console.error("Error updating daily schedule:", error);
-        throw error;
-    }
   }, [currentYear, currentMonth]);
 
   const createFullMonthSchedule = useCallback(async (scheduleData: Record<string, any>, year: number, month: number) => {
-    const monthPadded = month.toString().padStart(2, '0');
-    const collectionPath = `escala/${year}-${monthPadded}/dias`;
-    const batch = writeBatch(db);
-
-    for (const dateId in scheduleData) {
-        if (Object.prototype.hasOwnProperty.call(scheduleData, dateId)) {
-            const daySchedule = scheduleData[dateId];
-            const docRef = doc(db, collectionPath, dateId);
-            batch.set(docRef, daySchedule);
-        }
-    }
-    
-    try {
-      await batch.commit();
-      console.log("Full month schedule successfully created.");
-    } catch (error) {
-      console.error("Error creating full month schedule:", error);
-      throw error;
-    }
-
   }, []);
   
   const bulkUpdateSchedules = useCallback(async (dayIds: string[], kioskId: string, turn: string, employeeNames: string[], action: 'add' | 'replace') => {
-    const batch = writeBatch(db);
-    const monthPadded = currentMonth.toString().padStart(2, '0');
-    const collectionPath = `escala/${currentYear}-${monthPadded}/dias`;
-
-    dayIds.forEach(dayId => {
-        const docRef = doc(db, collectionPath, dayId);
-        const shiftKey = `${kioskId} ${turn}`;
-        
-        if (action === 'replace') {
-            batch.update(docRef, { [shiftKey]: employeeNames.join(' + ') });
-        } else { // 'add'
-            // This is tricky without reading first. Best handled client-side then calling updateDailySchedule.
-            // For a pure batch operation, we'd need a server-side function or to overwrite.
-            // Let's assume for now we just overwrite for simplicity, or this would need reads.
-            // A more robust implementation would fetch docs, compute new value, then batch write.
-            // For now, let's just show how it *would* work with a simple replace.
-            // In a real scenario, you'd fetch the current values first.
-            const existingDay = schedule.find(d => d.id === dayId);
-            const existingNames = existingDay ? (existingDay[shiftKey] || '').split(' + ').filter(Boolean) : [];
-            const newNames = Array.from(new Set([...existingNames, ...employeeNames]));
-            batch.set(docRef, { [shiftKey]: newNames.join(' + ') }, { merge: true });
-        }
-    });
-
-    try {
-        await batch.commit();
-    } catch (error) {
-        console.error("Error in bulk schedule update:", error);
-        throw error;
-    }
   }, [currentYear, currentMonth, schedule]);
 
 

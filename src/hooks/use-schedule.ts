@@ -1,4 +1,4 @@
-
+// This hook is no longer used as the team management module has been removed.
 "use client";
 
 import { useContext } from 'react';

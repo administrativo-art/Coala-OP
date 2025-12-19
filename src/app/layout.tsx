@@ -12,8 +12,6 @@ import { BaseProductsProvider } from '@/components/base-products-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
 import { ReturnsProvider } from '@/components/return-request-provider';
-import { ScheduleProvider } from '@/components/schedule-provider';
-import { MonthlyScheduleProvider } from '@/components/monthly-schedule-provider';
 import { StockCountProvider } from '@/components/stock-count-provider';
 import { CompanySettingsProvider } from '@/components/company-settings-provider';
 import { EntitiesProvider } from '@/components/entities-provider';
@@ -76,8 +74,6 @@ export default function RootLayout({
                                       <ReturnsProvider>
                                           <ItemAdditionProvider>
                                             <StockCountProvider>
-                                              <ScheduleProvider>
-                                                <MonthlyScheduleProvider>
                                                   <RepositionProvider>
                                                      <AllTasksProvider>
                                                         <StockAuditProvider>
@@ -93,8 +89,6 @@ export default function RootLayout({
                                                         </StockAuditProvider>
                                                       </AllTasksProvider>
                                                   </RepositionProvider>
-                                                </MonthlyScheduleProvider>
-                                              </ScheduleProvider>
                                             </StockCountProvider>
                                           </ItemAdditionProvider>
                                       </ReturnsProvider>

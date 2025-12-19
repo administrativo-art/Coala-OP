@@ -1,4 +1,4 @@
-
+// This provider is no longer used as the team management module was removed.
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -21,44 +21,12 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "schedules"), (querySnapshot) => {
-      const shiftsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Shift));
-      setShifts(shiftsData);
-      setLoading(false);
-    }, (error) => {
-        console.error("Error fetching schedules from Firestore: ", error);
-        setLoading(false);
-    });
-
-    return () => unsubscribe();
+    setLoading(false);
   }, []);
 
-  const addShift = useCallback(async (shift: Omit<Shift, 'id'>) => {
-    try {
-        await addDoc(collection(db, "schedules"), shift);
-    } catch(error) {
-        console.error("Error adding shift:", error);
-    }
-  }, []);
-
-  const updateShift = useCallback(async (updatedShift: Shift) => {
-    const shiftRef = doc(db, "schedules", updatedShift.id);
-    const { id, ...dataToUpdate } = updatedShift;
-     try {
-        await updateDoc(shiftRef, dataToUpdate);
-    } catch(error) {
-        console.error("Error updating shift:", error);
-    }
-  }, []);
-
-  const deleteShift = useCallback(async (shiftId: string) => {
-    try {
-        await deleteDoc(doc(db, "schedules", shiftId));
-    } catch(error) {
-        console.error("Error deleting shift:", error);
-        throw error;
-    }
-  }, []);
+  const addShift = useCallback(async (shift: Omit<Shift, 'id'>) => {}, []);
+  const updateShift = useCallback(async (updatedShift: Shift) => {}, []);
+  const deleteShift = useCallback(async (shiftId: string) => {}, []);
 
   const value: ScheduleContextType = useMemo(() => ({
     shifts,

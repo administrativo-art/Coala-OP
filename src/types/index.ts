@@ -374,12 +374,8 @@ export type User = {
     email: string;
     profileId: string;
     assignedKioskIds: string[];
-    turno: 'T1' | 'T2' | null;
-    folguista: boolean;
     operacional: boolean;
     avatarUrl?: string;
-    valeTransporte?: number;
-    color?: string | null;
 };
 
 export type PredefinedConversionItem = {

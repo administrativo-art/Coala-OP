@@ -51,7 +51,6 @@ export function Sidebar() {
         { href: '/dashboard/conversions', label: 'Conversão de medidas', icon: Repeat, show: permissions.stock.conversions.view },
       ]
     },
-    { href: '/dashboard/team', label: 'Gestão de equipe', icon: Users, group: 'main', show: permissions.team.view },
     { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, group: 'main', show: permissions.registration.view },
     { href: '/dashboard/pricing', label: 'Custo e preço', icon: DollarSign, group: 'main', show: permissions.pricing.view },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, group: 'main', show: permissions.settings.view },

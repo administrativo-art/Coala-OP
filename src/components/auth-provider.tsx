@@ -65,8 +65,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 email: user.email!,
                 profileId: adminProfileId,
                 assignedKioskIds: [],
-                turno: null,
-                folguista: false,
                 operacional: true,
             };
             await setDoc(userDocRef, firstAdminData);
