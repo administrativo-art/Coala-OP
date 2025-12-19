@@ -134,17 +134,13 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
     return <div className="text-center p-2"><Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setShowForm(true)}>Identificou divergência do turno anterior?</Button></div>
 }
 
-function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAuditSession, onSave: (items: StockAuditItem[]) => Promise<void>, onFinalize: (items: StockAuditItem[]) => Promise<void>, onCancel: () => Promise<void> }) {
+function AuditForm({ session, onFinalize, onCancel }: { session: StockAuditSession, onFinalize: (items: StockAuditItem[]) => Promise<void>, onCancel: () => Promise<void> }) {
   const { products, getProductFullName } = useProducts();
-  const { user } = useAuth();
   const { toast } = useToast();
-  
-  const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState(false);
   const [isConfirmCancelOpen, setIsConfirmCancelOpen] = useState(false);
-  
+
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
     defaultValues: { items: [] },
@@ -152,8 +148,7 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
 
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
   const watchedItems = useWatch({ control: form.control, name: 'items' });
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
+  
   useEffect(() => {
     if (session?.id) {
         form.reset({
@@ -163,7 +158,7 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
             })),
         });
     }
-  }, [session?.id]);
+  }, [session.id, form]);
 
   useEffect(() => {
     if (!watchedItems) return;
@@ -178,25 +173,12 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
     });
   }, [watchedItems, form]);
 
-  const getUpdatedItems = useCallback((values: AuditFormValues): StockAuditItem[] => {
-    return session.items.map((originalItem, index) => ({
-      ...originalItem,
-      finalQuantity: values.items[index]?.finalQuantity ?? originalItem.systemQuantity,
-      adjustment: values.items[index]?.adjustment,
-      divergences: values.items[index]?.divergences || [],
-    }));
-  }, [session.items]);
-
-  const handleSaveAndExit = async () => {
-    setIsSaving(true);
-    await onSave(getUpdatedItems(form.getValues()));
-    setIsSaving(false);
-    onCancel();
-  };
-  
   const handleFinalizeClick = async () => {
     const isValid = await form.trigger();
-    if (!isValid) return toast({ variant: "destructive", title: "Erro", description: "Verifique os cálculos e justificativas." });
+    if (!isValid) {
+      toast({ variant: "destructive", title: "Erro", description: "Verifique os cálculos e justificativas." });
+      return;
+    }
     setIsConfirmFinalizeOpen(true);
   };
 
@@ -208,12 +190,17 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
   }
 
   const handleCancelClick = async () => {
-      if (form.formState.isDirty) {
-          setIsConfirmCancelOpen(true);
-      } else {
-          onCancel();
-      }
+      onCancel();
   }
+  
+  const getUpdatedItems = (values: AuditFormValues): StockAuditItem[] => {
+    return session.items.map((originalItem, index) => ({
+      ...originalItem,
+      finalQuantity: values.items[index]?.finalQuantity ?? originalItem.systemQuantity,
+      adjustment: values.items[index]?.adjustment,
+      divergences: values.items[index]?.divergences || [],
+    }));
+  };
 
   return (
     <>
@@ -224,11 +211,7 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
         </CardHeader>
           <Form {...form}><form>
               <CardContent>
-                  <Button variant="outline" className="mb-4" onClick={() => setIsRequestModalOpen(true)}>
-                      <PackagePlus className="mr-2 h-4 w-4" />
-                      Solicitar Cadastro de Insumo
-                  </Button>
-                  <ScrollArea className="h-[calc(80vh-320px)] pr-2">
+                  <ScrollArea className="h-[calc(80vh-280px)] pr-2">
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           {fields.map((field, index) => {
                               const item = session.items[index];
@@ -263,9 +246,7 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
                                                   <p className="text-lg font-bold">{finalQty}</p>
                                               </div>
                                           </div>
-                                          
                                           <ReconciliationSection itemIndex={index} control={form.control} form={form} />
-
                                           <JustificationSection itemIndex={index} control={form.control} />
                                       </div>
                                   </Card>
@@ -276,24 +257,16 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
               </CardContent>
               <CardContent>
                   <div className="flex justify-between items-center pt-4 border-t">
-                  <Button type="button" variant="ghost" className="text-destructive" onClick={handleCancelClick} disabled={isSaving || isFinalizing}>
+                  <Button type="button" variant="ghost" className="text-destructive" onClick={handleCancelClick} disabled={isFinalizing}>
                       Cancelar
                   </Button>
                   <div className="flex gap-2">
-                       <Button type="button" variant="secondary" onClick={handleSaveAndExit} disabled={isSaving || isFinalizing}>
-                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />} Salvar e Sair
-                       </Button>
-                       <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving} className="bg-pink-600 hover:bg-pink-700"><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
+                       <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing} className="bg-pink-600 hover:bg-pink-700"><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
                   </div>
                   </div>
               </CardContent>
           </form></Form>
       </Card>
-      <RequestItemAdditionModal
-        open={isRequestModalOpen}
-        onOpenChange={setIsRequestModalOpen}
-        kioskId={session.kioskId}
-      />
        <DeleteConfirmationDialog 
             open={isConfirmFinalizeOpen}
             onOpenChange={setIsConfirmFinalizeOpen}
@@ -302,16 +275,6 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
             title="Tem certeza que quer concluir?"
             description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída. Deseja continuar?"
             confirmButtonText={isFinalizing ? 'Concluindo...' : 'Sim, concluir contagem'}
-        />
-        <DeleteConfirmationDialog 
-            open={isConfirmCancelOpen}
-            onOpenChange={setIsConfirmCancelOpen}
-            title="Sair da contagem?"
-            description="Você tem alterações não salvas. O que você gostaria de fazer?"
-            confirmButtonText="Salvar e sair"
-            onConfirm={() => { setIsConfirmCancelOpen(false); handleSaveAndExit(); }}
-            cancelButtonText="Descartar e sair"
-            onCancel={onCancel}
         />
     </>
   )
@@ -356,7 +319,7 @@ function AuditHistory() {
                                 <div className="flex items-center gap-2">
                                     <Badge>Concluída</Badge>
                                     {permissions.stock.audit.approve && (
-                                        <DeleteConfirmationDialog
+                                        <DeleteConfirmationDialog 
                                             open={false} onOpenChange={()=>{}}
                                             onConfirm={handleDeleteConfirm}
                                             itemName={`a contagem de "${sessionToDelete?.kioskName}"`}
@@ -409,10 +372,8 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
   const { toast } = useToast();
   
   const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
-  
-  const pendingAudits = useMemo(() => {
-    return auditSessions.filter(s => s.status === 'pending_review');
-  }, [auditSessions]);
+
+  const pendingAudits = useMemo(() => auditSessions.filter(s => s.status === 'pending_review'), [auditSessions]);
   
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
@@ -421,6 +382,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
 
     const productMap = new Map(products.map(p => [p.id, p]));
     const activeLots = lots.filter(lot => lot.kioskId === kioskId && lot.quantity > 0);
+    
     const auditItems: StockAuditItem[] = activeLots.map(lot => ({
         productId: lot.productId, productName: getProductFullName(productMap.get(lot.productId)!),
         lotId: lot.id, lotNumber: lot.lotNumber, expiryDate: lot.expiryDate || '',
@@ -429,33 +391,38 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     
     if (auditItems.length === 0) return toast({ variant: "destructive", title: "Quiosque Vazio" });
 
-    const newId = await addAuditSession({
+    const newSessionData: Omit<StockAuditSession, 'id'> = {
       kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review',
       auditedBy: { userId: user.id, username: user.username },
       startedAt: new Date().toISOString(), items: auditItems,
-    });
+    };
+
+    const newId = await addAuditSession(newSessionData);
 
     if (newId) {
-      setTimeout(() => {
-        const newSession = auditSessions.find(s => s.id === newId) || { id: newId, items: auditItems, kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review', auditedBy: { userId: user.id, username: user.username }, startedAt: new Date().toISOString() };
-        setActiveSession(newSession);
-      }, 100);
+        setActiveSession({ id: newId, ...newSessionData });
     }
   };
 
   const handleFinalize = async (items: StockAuditItem[]) => {
     if (!activeSession || !user) return;
-    
-    await adjustLotQuantity({ ...activeSession, items }, user);
-    
-    await updateAuditSession(activeSession.id, {
-        items,
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-    });
-    
-    setActiveSession(null); 
-    toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
+    try {
+        await adjustLotQuantity({ ...activeSession, items }, user);
+        await updateAuditSession(activeSession.id, {
+            items,
+            status: 'completed',
+            completedAt: new Date().toISOString(),
+        });
+        setActiveSession(null);
+        toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
+    } catch (error) {
+        console.error("Erro ao finalizar contagem:", error);
+        toast({ 
+          variant: "destructive", 
+          title: "Erro ao finalizar", 
+          description: "Não foi possível salvar a conclusão no servidor. Tente novamente." 
+        });
+    }
   };
   
   const handleCancelAudit = async () => {
@@ -470,41 +437,31 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
 
   return (
     <>
-      <Tabs defaultValue="active">
-          <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="active">Contagem</TabsTrigger><TabsTrigger value="history">Histórico</TabsTrigger></TabsList>
-          <TabsContent value="active" className="mt-4">
-              <Card>
-                  <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle></CardHeader>
-                  <CardContent className="space-y-6">
-                      <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Nova contagem</Button>
-                      <div className="space-y-3 pt-4 border-t">
-                          <h3 className="text-sm font-bold uppercase text-muted-foreground">Contagens em aberto</h3>
-                          {loading ? <Skeleton className="h-24 w-full" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
-                              pendingAudits.map(s => (
-                                  <div key={s.id} className="p-3 border rounded-lg flex justify-between items-center bg-muted/10">
-                                      <div className="space-y-0.5"><p className="font-bold text-sm">{s.kioskName}</p><p className="text-[10px] text-muted-foreground uppercase">{s.auditedBy.username} • {format(parseISO(s.startedAt), 'dd/MM HH:mm')}</p></div>
-                                      <Button size="sm" variant="outline" onClick={() => setActiveSession(s)}>Continuar</Button>
-                                  </div>
-                              ))
-                          }
-                      </div>
-                  </CardContent>
-                   {showExportButton && (
-                         <CardContent>
-                             <div className="pt-4 border-t flex justify-end">
-                                <Button variant="outline" onClick={() => toast({ variant: 'destructive', title: "Funcionalidade não implementada." })}>
-                                    <Download className="mr-2" />
-                                    Relatório detalhado
-                                </Button>
-                             </div>
-                        </CardContent>
-                    )}
-              </Card>
-          </TabsContent>
-          <TabsContent value="history" className="mt-4">
-              <AuditHistory />
-          </TabsContent>
-      </Tabs>
+        <Tabs defaultValue="active">
+            <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="active">Contagem</TabsTrigger><TabsTrigger value="history">Histórico</TabsTrigger></TabsList>
+            <TabsContent value="active" className="mt-4">
+                <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle></CardHeader>
+                    <CardContent className="space-y-6">
+                        <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Nova contagem</Button>
+                        <div className="space-y-3 pt-4 border-t">
+                            <h3 className="text-sm font-bold uppercase text-muted-foreground">Contagens em aberto</h3>
+                            {loading ? <Skeleton className="h-24 w-full" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
+                                pendingAudits.map(s => (
+                                    <div key={s.id} className="p-3 border rounded-lg flex justify-between items-center bg-muted/10">
+                                        <div className="space-y-0.5"><p className="font-bold text-sm">{s.kioskName}</p><p className="text-[10px] text-muted-foreground uppercase">{s.auditedBy.username} • {format(parseISO(s.startedAt), 'dd/MM HH:mm')}</p></div>
+                                        <Button size="sm" variant="outline" onClick={() => setActiveSession(s)}>Continuar</Button>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+            <TabsContent value="history" className="mt-4">
+                <AuditHistory />
+            </TabsContent>
+        </Tabs>
       <KioskSelectionModal open={isKioskSelectionOpen} onOpenChange={setIsKioskSelectionOpen} kiosks={kiosks} onSelectKiosk={handleStartSession} />
     </>
   );
