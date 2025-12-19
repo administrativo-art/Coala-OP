@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
 import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -140,6 +141,7 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
 
 function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAuditSession, onSave: (items: StockAuditItem[]) => Promise<void>, onFinalize: (items: StockAuditItem[]) => Promise<void>, onCancel: () => Promise<void> }) {
   const { products, getProductFullName } = useProducts();
+  const { toast } = useToast();
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -275,6 +277,89 @@ function AuditForm({ session, onSave, onFinalize, onCancel }: { session: StockAu
   )
 }
 
+function AuditHistory() {
+    const { auditSessions, deleteAuditSession, loading } = useStockAudit();
+    const { permissions } = useAuth();
+    const [sessionToDelete, setSessionToDelete] = useState<StockAuditSession | null>(null);
+
+    const completedAudits = useMemo(() => {
+        return auditSessions.filter(s => s.status === 'completed');
+    }, [auditSessions]);
+    
+    const handleDeleteConfirm = () => {
+        if(sessionToDelete) {
+            deleteAuditSession(sessionToDelete.id);
+            setSessionToDelete(null);
+        }
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Histórico de contagens</CardTitle>
+                <CardDescription>Visualize todas as contagens que foram concluídas.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {loading ? <Skeleton className="h-40 w-full" /> : completedAudits.length === 0 ? (
+                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                        <Inbox className="h-12 w-12 mx-auto mb-4" />
+                        <p className="font-semibold">Nenhuma contagem concluída.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {completedAudits.map(session => (
+                            <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
+                                <div>
+                                    <p className="font-medium">{session.kioskName}</p>
+                                    <p className="text-xs text-muted-foreground">Concluída por {session.auditedBy.username} em {session.completedAt ? format(parseISO(session.completedAt), 'dd/MM/yy HH:mm') : '-'}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Badge>Concluída</Badge>
+                                    {permissions.stock.audit.approve && (
+                                        <DeleteConfirmationDialog 
+                                            open={false}
+                                            onOpenChange={() => {}}
+                                            onConfirm={handleDeleteConfirm}
+                                            itemName={`a contagem de "${session.kioskName}"`}
+                                            triggerButton={
+                                                <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => setSessionToDelete(session)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            }
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function KioskSelectionModal({ open, onOpenChange, kiosks, onSelectKiosk }: { open: boolean, onOpenChange: (open: boolean) => void, kiosks: any[], onSelectKiosk: (kioskId: string) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Iniciar nova contagem</DialogTitle>
+          <DialogDescription>Selecione o quiosque que você deseja contar.</DialogDescription>
+        </DialogHeader>
+        <div className="py-4 space-y-2">
+          {kiosks.map((kiosk) => (
+            <DialogClose key={kiosk.id} asChild>
+                <Button variant="outline" className="w-full justify-start text-base py-6" onClick={() => onSelectKiosk(kiosk.id)}>
+                    {kiosk.name}
+                </Button>
+            </DialogClose>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // --- Componente Principal ---
 
 export function StockCountManagement({ showExportButton = false }: { showExportButton?: boolean }) {
@@ -285,8 +370,9 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
   const { auditSessions, activeSession, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession, loading } = useStockAudit();
   const { adjustLotQuantity } = useExpiryProducts();
   const { toast } = useToast();
-  const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
   
+  const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
+
   const pendingAudits = useMemo(() => auditSessions.filter(s => s.status === 'pending_review'), [auditSessions]);
 
   const handleStartSession = async (kioskId: string) => {
@@ -308,17 +394,13 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
       auditedBy: { userId: user.id, username: user.username },
       startedAt: new Date().toISOString(), items: auditItems,
     });
-    if (newId) {
-        const createdSession = { id: newId, items: auditItems, kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review', auditedBy: { userId: user.id, username: user.username }, startedAt: new Date().toISOString() };
-        setActiveSession(createdSession as StockAuditSession);
-    }
+    if (newId) setActiveSession({ id: newId, items: auditItems, kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review', auditedBy: { userId: user.id, username: user.username }, startedAt: new Date().toISOString() } as StockAuditSession);
   };
-  
+
   const handleFinalize = async (items: StockAuditItem[]) => {
     if (!activeSession || !user) return;
     await adjustLotQuantity({ ...activeSession, items }, user);
     await updateAuditSession(activeSession.id, { items, status: 'completed', completedAt: new Date().toISOString() });
-    toast({ title: 'Sucesso!', description: 'O estoque foi ajustado.' });
     setActiveSession(null);
   };
   
@@ -355,44 +437,10 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
                 </CardContent>
             </Card>
         </TabsContent>
+        <TabsContent value="history" className="mt-4">
+            <AuditHistory />
+        </TabsContent>
         <KioskSelectionModal open={isKioskSelectionOpen} onOpenChange={setIsKioskSelectionOpen} kiosks={kiosks} onSelectKiosk={handleStartSession} />
     </Tabs>
-  );
-}
-
-
-function KioskSelectionModal({
-  open,
-  onOpenChange,
-  kiosks,
-  onSelectKiosk,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  kiosks: any[];
-  onSelectKiosk: (kioskId: string) => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Iniciar nova contagem</DialogTitle>
-          <DialogDescription>Selecione o quiosque que você deseja contar.</DialogDescription>
-        </DialogHeader>
-        <div className="py-4 space-y-2">
-          {kiosks.map((kiosk) => (
-            <DialogClose key={kiosk.id} asChild>
-                <Button
-                variant="outline"
-                className="w-full justify-start text-base py-6"
-                onClick={() => onSelectKiosk(kiosk.id)}
-                >
-                {kiosk.name}
-                </Button>
-            </DialogClose>
-          ))}
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
