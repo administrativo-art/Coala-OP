@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useCompanySettings } from '@/hooks/use-company-settings';
+import Image from 'next/image';
 
 // Componente do Item de Menu (Estilo Glass com suporte a Badge e Next.js Link)
 function GlassNavItem({ 
@@ -73,6 +74,7 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
   const { legacyTasks } = useAllTasks();
   const [searchTerm, setSearchTerm] = useState('');
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const { logoUrl } = useCompanySettings();
 
   // Fecha a sidebar ao clicar fora (Lógica da versão nova)
   useEffect(() => {
@@ -115,9 +117,28 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
         {/* TOPO: LOGO E BUSCA */}
         <div className="px-8 pt-10 pb-6">
             <div className="flex items-center justify-between mb-8">
-                <Link href="/dashboard" className="flex flex-col font-logo select-none">
-                    <span className="text-3xl font-bold tracking-tighter text-slate-800 dark:text-white">coalashakes</span>
-                    <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground/80 mt-0.5">Management System</span>
+                <Link href="/dashboard" className="flex flex-col group transition-all active:scale-95">
+                  {logoUrl ? (
+                    <div className="relative h-12 w-full max-w-[180px]">
+                      <Image 
+                        src={logoUrl} 
+                        alt="Logo Empresa" 
+                        fill 
+                        className="object-contain object-left transition-opacity duration-500"
+                        onLoadingComplete={(img) => img.classList.remove('opacity-0')}
+                        priority // Carrega a logo com prioridade máxima
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col">
+                      <span className="text-2xl font-bold tracking-tighter text-slate-800 dark:text-white">
+                        coala<span className="text-primary">shakes</span>
+                      </span>
+                      <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground/60 leading-none mt-1">
+                        Management System
+                      </span>
+                    </div>
+                  )}
                 </Link>
                 <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5">
                     <X className="h-4 w-4" />
