@@ -34,7 +34,7 @@ const defaultPricingParameters: PricingParameters = {
   ],
 };
 
-const defaultLogoUrl = "https://storage.googleapis.com/smart-converter-752gf.appspot.com/settings/company/01%20Logo%20-%20Coala%20Shakes.png";
+const defaultLogoUrl = "https://firebasestorage.googleapis.com/v0/b/smart-converter-752gf.appspot.com/o/settings%2Fcompany%2F01%20Logo%20-%20Coala%20Shakes.png?alt=media&token=182d597b-61e0-4f86-aaa1-ac85b2ce2c6f";
 
 export function CompanySettingsProvider({ children }: { children: React.ReactNode }) {
   const [labelSizeId, setLabelSizeId] = useState<string | null>('6080');
