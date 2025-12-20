@@ -33,12 +33,10 @@ const defaultPricingParameters: PricingParameters = {
   ],
 };
 
-const defaultLogoUrl = "https://storage.googleapis.com/smart-converter-752gf.appspot.com/settings/company/01%20Logo%20-%20Coala%20Shakes.png";
-
 export function CompanySettingsProvider({ children }: { children: React.ReactNode }) {
   const [labelSizeId, setLabelSizeId] = useState<string | null>('6080');
   const [pricingParameters, setPricingParameters] = useState<PricingParameters | null>(defaultPricingParameters);
-  const [logoUrl, setLogoUrl] = useState<string | null>(defaultLogoUrl);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,7 +45,7 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
         if (docSnap.exists()) {
             const data = docSnap.data() as CompanySettings;
             setLabelSizeId(data.labelSizeId || '6080');
-            setLogoUrl(data.logoUrl || defaultLogoUrl);
+            setLogoUrl(data.logoUrl || null);
             
             const params = data.pricingParameters || {};
             // Ensure defaults for new fields if they don't exist
@@ -62,7 +60,7 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
             setDoc(settingsRef, {
                 labelSizeId: '6080',
                 pricingParameters: defaultPricingParameters,
-                logoUrl: defaultLogoUrl,
+                logoUrl: null,
             });
         }
         setLoading(false);
