@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -9,13 +8,14 @@ import { type Task, type TaskHistoryItem, type TaskOrigin } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
-import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2, ShoppingCart } from 'lucide-react';
+import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2, ShoppingCart, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useTasks } from '@/hooks/use-tasks';
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -25,9 +25,8 @@ interface TaskDetailModalProps {
 const getStatusInfo = (status: Task['status']) => {
     switch (status) {
         case 'pending':
-            return { label: 'Pendente', color: 'bg-orange-500 text-white' };
         case 'reopened':
-            return { label: 'Reaberta', color: 'bg-orange-600 text-white' };
+            return { label: 'Pendente', color: 'bg-orange-500 text-white' };
         case 'in_progress':
             return { label: 'Em progresso', color: 'bg-blue-500 text-white' };
         case 'awaiting_approval':
@@ -74,8 +73,9 @@ function TaskOriginDetails({ origin }: { origin: TaskOrigin }) {
 
 export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const { user, users, profiles } = useAuth();
-  const { updateTask } = useTasks();
+  const { updateTask, deleteTask } = useTasks();
   const [rejectionNotes, setRejectionNotes] = useState('');
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
   const { todayLog, createOrGetDailyLog } = useAuthorBoardDiary();
 
@@ -158,6 +158,14 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       handleClose();
   };
   
+  const handleDeleteConfirm = async () => {
+    if (task) {
+      await deleteTask(task.id);
+      setIsDeleteConfirmOpen(false);
+      handleClose();
+    }
+  };
+
   return (
     <>
     <Dialog open={!!task} onOpenChange={handleClose}>
@@ -235,16 +243,17 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
           </div>
         </div>
 
-        <DialogFooter className="pt-4 border-t">
-          {isMyTurn && (
-            <div className="w-full">
+        <DialogFooter className="pt-4 border-t flex justify-between w-full">
+          <Button variant="destructive" onClick={() => setIsDeleteConfirmOpen(true)}>
+            <Trash2 className="mr-2 h-4 w-4" /> Excluir Tarefa
+          </Button>
+          {isMyTurn ? (
+            <div className="space-y-2">
               {task.status === 'awaiting_approval' ? (
-                <div className="space-y-2">
-                  <Textarea placeholder="Justificativa (obrigatório para rejeitar)" value={rejectionNotes} onChange={(e) => setRejectionNotes(e.target.value)} />
-                  <div className="flex justify-end gap-2">
-                    <Button variant="destructive" onClick={handleReject} disabled={!rejectionNotes}><X className="mr-2"/> Rejeitar</Button>
-                    <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={handleApprove}><Check className="mr-2"/> Aprovar</Button>
-                  </div>
+                <div className="flex justify-end gap-2">
+                  <div className="flex-grow"><Textarea placeholder="Justificativa (obrigatório para rejeitar)" value={rejectionNotes} onChange={(e) => setRejectionNotes(e.target.value)} /></div>
+                  <Button variant="destructive" onClick={handleReject} disabled={!rejectionNotes}><X className="mr-2"/> Rejeitar</Button>
+                  <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={handleApprove}><Check className="mr-2"/> Aprovar</Button>
                 </div>
               ) : (
                 <Button onClick={handleMarkAsComplete}>
@@ -253,10 +262,19 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
                 </Button>
               )}
             </div>
+          ) : (
+             <Button variant="outline" onClick={handleClose}>Fechar</Button>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <DeleteConfirmationDialog
+        open={isDeleteConfirmOpen}
+        onOpenChange={setIsDeleteConfirmOpen}
+        onConfirm={handleDeleteConfirm}
+        itemName={`a tarefa "${task?.title}"`}
+        description="Esta ação é permanente e não pode ser desfeita."
+      />
     </>
   );
 }

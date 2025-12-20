@@ -1,12 +1,15 @@
-
 "use client"
 
+import { useState } from 'react';
 import { type Task } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Inbox, FileText, AlertCircle, History, CheckCircle2, ClipboardCheck, Truck, ShieldAlert, PackagePlus } from 'lucide-react';
+import { Inbox, FileText, AlertCircle, History, CheckCircle2, ClipboardCheck, Truck, ShieldAlert, PackagePlus, Trash2 } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { useRouter } from 'next/navigation';
+import { Button } from './ui/button';
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { useTasks } from '@/hooks/use-tasks';
 
 interface TaskListProps {
   tasks: Task[]; 
@@ -34,7 +37,24 @@ const getStatusInfo = (status: Task['status']) => {
 
 export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
   const router = useRouter();
+  const { deleteTask } = useTasks();
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+
+  const handleTaskClick = (task: Task) => {
+    if (task.legacyLink) {
+        router.push(task.legacyLink);
+    } else {
+        onTaskSelect(task);
+    }
+  };
   
+  const handleDeleteConfirm = () => {
+    if (taskToDelete) {
+      deleteTask(taskToDelete.id);
+      setTaskToDelete(null);
+    }
+  };
+
   if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground border-2 border-dashed rounded-lg">
@@ -44,15 +64,9 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
     );
   }
 
-  const handleTaskClick = (task: Task) => {
-    if (task.legacyLink) {
-        router.push(task.legacyLink);
-    } else {
-        onTaskSelect(task);
-    }
-  };
 
   return (
+    <>
     <div className="space-y-3">
       {tasks.map(task => {
         const { icon: StatusIcon, color: statusColor, label: statusLabel } = getStatusInfo(task.status);
@@ -62,7 +76,7 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
         return (
           <div
             key={task.id}
-            className="border rounded-lg p-4 flex items-start gap-4 cursor-pointer hover:bg-muted/50"
+            className="border rounded-lg p-4 flex items-start gap-4 cursor-pointer hover:bg-muted/50 group"
             onClick={() => handleTaskClick(task)}
           >
             {LegacyIcon ? (
@@ -77,10 +91,28 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
               </div>
               {task.description && <p className="text-xs text-muted-foreground mt-1">{task.description}</p>}
             </div>
-            <Badge variant="outline">{statusLabel}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{statusLabel}</Badge>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => { e.stopPropagation(); setTaskToDelete(task); }}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
           </div>
         )
       })}
     </div>
+    <DeleteConfirmationDialog
+        open={!!taskToDelete}
+        onOpenChange={() => setTaskToDelete(null)}
+        onConfirm={handleDeleteConfirm}
+        itemName={`a tarefa "${taskToDelete?.title}"`}
+        description="Esta ação é permanente e não pode ser desfeita."
+      />
+    </>
   );
 }
