@@ -19,6 +19,7 @@ export interface CompanySettingsContextType {
   loading: boolean;
   updateLabelSize: (sizeId: string | null) => Promise<void>;
   updatePricingParameters: (params: PricingParameters) => Promise<void>;
+  updateLogoUrl: (url: string | null) => Promise<void>;
 }
 
 export const CompanySettingsContext = createContext<CompanySettingsContextType | undefined>(undefined);
@@ -75,7 +76,7 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
   const updateLabelSize = useCallback(async (sizeId: string | null) => {
     const settingsRef = doc(db, 'settings', 'company');
     try {
-        await updateDoc(settingsRef, { 'labelSizeId': sizeId });
+        await updateDoc(settingsRef, { 'labelSizeId': sizeId ?? null });
     } catch (error) {
         console.error("Error updating label size:", error);
         throw error;
@@ -91,6 +92,16 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
         throw error;
     }
   }, []);
+
+  const updateLogoUrl = useCallback(async (url: string | null) => {
+    const settingsRef = doc(db, 'settings', 'company');
+    try {
+        await updateDoc(settingsRef, { logoUrl: url ?? null });
+    } catch (error) {
+        console.error("Error updating logo URL:", error);
+        throw error;
+    }
+  }, []);
   
   const value: CompanySettingsContextType = useMemo(() => ({
     labelSizeId,
@@ -99,7 +110,8 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
     loading,
     updateLabelSize,
     updatePricingParameters,
-  }), [labelSizeId, pricingParameters, logoUrl, loading, updateLabelSize, updatePricingParameters]);
+    updateLogoUrl,
+  }), [labelSizeId, pricingParameters, logoUrl, loading, updateLabelSize, updatePricingParameters, updateLogoUrl]);
 
   return <CompanySettingsContext.Provider value={value}>{children}</CompanySettingsContext.Provider>;
 }
