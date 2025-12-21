@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from 'react';
@@ -7,6 +6,7 @@ import { StockCountManagement } from '@/components/stock-count-management';
 import { useItemAddition } from '@/hooks/use-item-addition';
 import { ItemAdditionRequestManagement } from './item-addition-request-management';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import { Badge } from './ui/badge';
 
 
 export function StockCount() {
@@ -19,11 +19,21 @@ export function StockCount() {
     return requests.filter(r => r.status === 'pending').length;
   }, [requests]);
 
-  // The new page for requests is at /dashboard/stock/item-requests, 
-  // so the tab logic here is removed to simplify the component.
-  // The StockCountManagement now contains the button to open the request modal.
-
   return (
-    <StockCountManagement showExportButton={false} />
+      <Tabs defaultValue="count" value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="count">Contagem e Auditoria</TabsTrigger>
+            <TabsTrigger value="requests" disabled={!canManageRequests}>
+                Solicitações
+                {pendingRequestsCount > 0 && <Badge className="ml-2">{pendingRequestsCount}</Badge>}
+            </TabsTrigger>
+        </TabsList>
+        <TabsContent value="count" className="mt-4">
+            <StockCountManagement showExportButton={false} />
+        </TabsContent>
+        <TabsContent value="requests" className="mt-4">
+            {canManageRequests ? <ItemAdditionRequestManagement /> : <p>Você não tem permissão para gerenciar solicitações.</p>}
+        </TabsContent>
+    </Tabs>
   );
 }
