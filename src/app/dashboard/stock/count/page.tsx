@@ -32,8 +32,8 @@ export default function StockCountPage() {
             </Link>
             
             <div className="mb-6">
-                <h1 className="text-3xl font-bold">Contagem e Auditoria</h1>
-                <p className="text-muted-foreground">Realize contagens de estoque, aprove divergências e gerencie solicitações de cadastro.</p>
+                <h1 className="text-3xl font-bold">Contagem de estoque</h1>
+                <p className="text-muted-foreground">Realize contagens, aprove divergências e gerencie solicitações de cadastro.</p>
             </div>
 
             <Tabs defaultValue="count" value={activeTab} onValueChange={setActiveTab}>
