@@ -1,10 +1,11 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type ItemAdditionRequest, type Task } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, runTransaction, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, runTransaction, writeBatch, getDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useTasks } from '@/hooks/use-tasks';
@@ -15,6 +16,7 @@ export interface ItemAdditionContextType {
   loading: boolean;
   addRequest: (data: Partial<Omit<ItemAdditionRequest, 'id' | 'kioskName' | 'requestedBy' | 'status' | 'createdAt' | 'taskId'>>) => Promise<void>;
   updateRequestStatus: (requestId: string, status: 'completed' | 'rejected') => Promise<void>;
+  deleteRequest: (requestId: string) => Promise<void>;
 }
 
 export const ItemAdditionContext = createContext<ItemAdditionContextType | undefined>(undefined);
@@ -150,13 +152,23 @@ export function ItemAdditionProvider({ children }: { children: React.ReactNode }
       throw error;
     }
   }, [user, requests]);
+  
+  const deleteRequest = useCallback(async (requestId: string) => {
+    try {
+        await deleteDoc(doc(db, "itemAdditionRequests", requestId));
+    } catch (error) {
+        console.error("Error deleting item request:", error);
+        throw error;
+    }
+  }, []);
 
   const value: ItemAdditionContextType = useMemo(() => ({
     requests,
     loading,
     addRequest,
     updateRequestStatus,
-  }), [requests, loading, addRequest, updateRequestStatus]);
+    deleteRequest,
+  }), [requests, loading, addRequest, updateRequestStatus, deleteRequest]);
 
   return <ItemAdditionContext.Provider value={value}>{children}</ItemAdditionContext.Provider>;
 }
