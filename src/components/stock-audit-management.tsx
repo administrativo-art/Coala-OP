@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -21,13 +20,12 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from './ui/skeleton';
 import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History, PackagePlus } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { cn } from '@/lib/utils';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
@@ -61,7 +59,7 @@ const auditItemSchema = z.object({
         type: z.enum(['positive', 'negative']),
         quantity: z.coerce.number().min(0),
         notes: z.string().optional()
-    }).optional(),
+    }).nullable(),
     divergences: z.array(divergenceSchema),
 });
 
@@ -69,99 +67,73 @@ const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
 }).refine(data => {
     for (const item of data.items) {
-        const adjustmentQty = item.adjustment?.type === 'negative' ? -(item.adjustment.quantity || 0) : (item.adjustment?.quantity || 0);
-        const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
-        const calculatedFinal = item.systemQuantity + adjustmentQty - totalDivergenceQty;
-        
-        if (Math.abs(calculatedFinal - item.finalQuantity) > 0.001) {
-            return false;
-        }
+        const adjQty = item.adjustment?.type === 'negative' ? -(Number(item.adjustment?.quantity) || 0) : (Number(item.adjustment?.quantity) || 0);
+        const totalDiv = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+        const calcFinal = item.systemQuantity + adjQty - totalDiv;
+        if (Math.abs(calcFinal - item.finalQuantity) > 0.001) return false;
     }
     return true;
-}, {
-    message: 'O cálculo do estoque final não corresponde às saídas e ajustes.',
-});
+}, { message: 'O cálculo do estoque final não corresponde às saídas e ajustes.' });
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
 
-function JustificationSection({ itemIndex, control, difference }: { itemIndex: number, control: any, difference: number }) {
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: `items.${itemIndex}.divergences`,
-  });
-
-  const addNewDivergence = () => {
-    append({ id: `div-${Date.now()}`, reason: '', quantity: 0, notes: '' });
-  };
-  
-  const totalJustified = useWatch({ control, name: `items.${itemIndex}.divergences` }).reduce((sum: number, div: any) => sum + (Number(div.quantity) || 0), 0);
-  
+function JustificationSection({ itemIndex, control }: { itemIndex: number, control: any }) {
+  const { fields, append, remove } = useFieldArray({ control, name: `items.${itemIndex}.divergences` });
   return (
-    <div className="mt-3 p-3 space-y-3 bg-red-500/5 rounded-lg border border-red-500/10">
-        <h4 className="font-semibold text-destructive/80 flex items-center gap-2"><AlertTriangle className="h-4 w-4"/>Registrar Saídas do Turno</h4>
+    <Card className="mt-3 p-3 space-y-3 bg-red-500/5">
+        <h4 className="font-semibold text-destructive/80 flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>Registrar Saídas do Turno</h4>
         <div className="space-y-2">
             {fields.map((field, divIndex) => (
-                <div key={field.id} className="p-3 border rounded-md space-y-2 bg-background relative">
+                <div key={field.id} className="p-3 border rounded-md space-y-2 bg-background/50 relative shadow-sm">
                     <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive h-7 w-7" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
                     <div className="grid grid-cols-2 gap-2 items-start">
                         <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field: qtyField }) => (
-                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} /></FormControl><FormMessage /></FormItem>
+                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} /></FormControl></FormItem>
                         )}/>
                         <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field: reasonField }) => (
                             <FormItem><FormLabel className="text-xs">Motivo</FormLabel>
                                 <Select onValueChange={reasonField.onChange} value={reasonField.value}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                    <SelectContent>{DIVERGENCE_REASONS.map(reason => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent>
-                                </Select><FormMessage />
+                                    <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="..." /></SelectTrigger></FormControl>
+                                    <SelectContent>{DIVERGENCE_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
+                                </Select>
                             </FormItem>
                         )}/>
                     </div>
                      <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.notes`} render={({ field: notesField }) => (
-                        <FormItem><FormLabel className="text-xs">Observação</FormLabel><FormControl><Textarea {...notesField} placeholder="Opcional, exceto para 'Outros'" rows={1} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormControl><Textarea {...notesField} placeholder="Observação (opcional)" rows={1} className="text-sm min-h-[38px]" /></FormControl></FormItem>
                     )}/>
                 </div>
             ))}
         </div>
-        <Button type="button" variant="outline" size="sm" className="w-full" onClick={addNewDivergence}>
-            <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Saída
+        <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: '', quantity: 0, notes: '' })}>
+            <PlusCircle className="mr-2 h-3 w-3"/> Adicionar Saída
         </Button>
-    </div>
+    </Card>
   );
 }
 
 function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number, control: any, form: any }) {
     const [showForm, setShowForm] = useState(!!form.getValues(`items.${itemIndex}.adjustment`));
-    const adjustment = useWatch({ control, name: `items.${itemIndex}.adjustment` });
-
     if (showForm) {
         return (
-             <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20 space-y-3">
-                 <h4 className="font-semibold text-amber-800">Reconciliação de Turno</h4>
+             <Card className="p-3 space-y-3 bg-amber-500/10">
+                 <h4 className="font-semibold text-amber-800 text-sm">Reconciliação de Turno Anterior</h4>
                 <div className="grid grid-cols-2 gap-4">
                      <FormField control={control} name={`items.${itemIndex}.adjustment.quantity`} render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl></FormItem>
                     )}/>
                      <FormField control={control} name={`items.${itemIndex}.adjustment.type`} render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger></FormControl><SelectContent><SelectItem value="positive">Acréscimo</SelectItem><SelectItem value="negative">Decréscimo</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                        <FormItem><FormLabel className="text-xs">Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger></FormControl><SelectContent><SelectItem value="positive">Acréscimo</SelectItem><SelectItem value="negative">Decréscimo</SelectItem></SelectContent></Select></FormItem>
                     )}/>
                 </div>
                 <FormField control={control} name={`items.${itemIndex}.adjustment.notes`} render={({ field }) => (
-                    <FormItem><FormLabel className="text-xs">Observação</FormLabel><FormControl><Textarea {...field} placeholder="Ex: Encontrado no freezer" rows={1} /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormControl><Textarea {...field} placeholder="Ex: Encontrado no freezer" rows={1} className="text-sm min-h-[38px]" /></FormControl></FormItem>
                 )}/>
-                <Button type="button" variant="ghost" size="sm" onClick={() => {
-                    form.setValue(`items.${itemIndex}.adjustment`, undefined);
-                    setShowForm(false);
-                }}>Remover ajuste</Button>
-            </div>
+                <Button type="button" variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => { form.setValue(`items.${itemIndex}.adjustment`, null); setShowForm(false); }}>Remover ajuste</Button>
+            </Card>
         )
     }
-
-    return (
-        <div className="text-center p-2">
-            <p className="text-sm text-muted-foreground mb-2">Identificou divergência do turno anterior?</p>
-            <Button type="button" variant="outline" size="sm" onClick={() => setShowForm(true)}>Sim, ajustar</Button>
-        </div>
-    )
+    return <div className="text-center p-2"><Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setShowForm(true)}>Identificou divergência do turno anterior?</Button></div>
 }
 
 function AuditForm({
@@ -189,12 +161,8 @@ function AuditForm({
     resolver: zodResolver(auditFormSchema),
     defaultValues: {
       items: session.items.map(i => ({
-        productId: i.productId,
-        lotId: i.lotId,
-        systemQuantity: i.systemQuantity,
-        finalQuantity: i.finalQuantity,
-        adjustment: i.adjustment,
-        divergences: i.divergences || [],
+        productId: i.productId, lotId: i.lotId, systemQuantity: i.systemQuantity,
+        finalQuantity: i.finalQuantity, adjustment: i.adjustment || null, divergences: i.divergences || [],
       })),
     },
   });
@@ -203,29 +171,28 @@ function AuditForm({
   const watchedItems = useWatch({ control: form.control, name: 'items' });
 
   useEffect(() => {
+    if (!watchedItems) return;
     watchedItems.forEach((item, index) => {
-        const adjustmentQty = item.adjustment?.type === 'negative'
-            ? -(Number(item.adjustment?.quantity) || 0)
-            : (Number(item.adjustment?.quantity) || 0);
-
-        const totalDivergenceQty = item.divergences.reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
-        const newFinalQuantity = item.systemQuantity + adjustmentQty - totalDivergenceQty;
-        
-        const currentFinalQuantity = form.getValues(`items.${index}.finalQuantity`);
-        if (newFinalQuantity !== currentFinalQuantity) {
-            form.setValue(`items.${index}.finalQuantity`, newFinalQuantity, { shouldValidate: true });
+        if (!item) return;
+        const adj = item.adjustment?.type === 'negative' ? -(Number(item.adjustment?.quantity) || 0) : (Number(item.adjustment?.quantity) || 0);
+        const divs = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+        const newFinal = item.systemQuantity + adj - divs;
+        if (Math.abs(newFinal - (item.finalQuantity || 0)) > 0.001) {
+            form.setValue(`items.${index}.finalQuantity`, newFinal, { shouldValidate: true });
         }
     });
   }, [watchedItems, form]);
 
-
   const getUpdatedItems = (values: AuditFormValues): StockAuditItem[] => {
-    return session.items.map((originalItem, index) => ({
-      ...originalItem,
-      finalQuantity: values.items[index].finalQuantity,
-      adjustment: values.items[index].adjustment,
-      divergences: values.items[index].divergences,
-    }));
+    return session.items.map((originalItem, index) => {
+      const formItem = values.items[index];
+      return {
+        ...originalItem,
+        finalQuantity: formItem?.finalQuantity ?? originalItem.systemQuantity,
+        adjustment: formItem?.adjustment || null,
+        divergences: formItem?.divergences || [],
+      };
+    });
   };
 
   const handleSaveAndExit = async () => {
@@ -251,23 +218,21 @@ function AuditForm({
   const handleFinalizeConfirm = async () => {
     setIsConfirmFinalizeOpen(false);
     setIsFinalizing(true);
-    await onFinalize(getUpdatedItems(form.getValues()));
-    setIsFinalizing(false);
-  }
+    try {
+        await onFinalize(getUpdatedItems(form.getValues()));
+    } finally {
+        setIsFinalizing(false);
+    }
+  };
 
   const handleCancelClick = async () => {
       if (form.formState.isDirty) {
           setIsConfirmCancelOpen(true);
       } else {
-          handleDiscardAndExit();
+          await onCancel();
       }
-  }
-
-  const handleDiscardAndExit = async () => {
-      setIsCancelling(true);
-      await onCancel();
-      setIsCancelling(false);
-  }
+  };
+  
 
   return (
     <>
@@ -276,74 +241,68 @@ function AuditForm({
           <CardTitle>Contagem em {session.kioskName}</CardTitle>
           <CardDescription>Contagem iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
         </CardHeader>
-          <Form {...form}>
-              <form>
-                  <CardContent>
-                      <Button variant="outline" className="mb-4" onClick={() => setIsRequestModalOpen(true)}>
-                          <PackagePlus className="mr-2 h-4 w-4" />
-                          Solicitar Cadastro de Insumo
-                      </Button>
-                      <ScrollArea className="h-[calc(80vh-320px)] pr-2">
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                              {fields.map((field, index) => {
-                                  const item = session.items[index];
-                                  const product = products.find(p => p.id === item.productId);
-                                  const watchedItem = watchedItems[index];
-                                  const systemQty = item.systemQuantity;
-                                  const finalQty = watchedItem?.finalQuantity;
+          <Form {...form}><form>
+              <CardContent>
+                  <Button variant="outline" className="mb-4" onClick={() => setIsRequestModalOpen(true)}>
+                      <PackagePlus className="mr-2 h-4 w-4" />
+                      Solicitar Cadastro de Insumo
+                  </Button>
+                  <ScrollArea className="h-[calc(80vh-280px)] pr-2">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {fields.map((field, index) => {
+                              const item = session.items[index];
+                              const product = products.find(p => p.id === item.productId);
+                              const finalQty = watchedItems[index]?.finalQuantity;
 
-                                  return (
-                                      <Card key={item.lotId} className="flex flex-col">
-                                          <div className="p-4 flex gap-4 items-center">
-                                              <div className="w-20 h-20 shrink-0">
-                                                  {product?.imageUrl ? (
-                                                      <Image src={product.imageUrl} alt={item.productName} width={80} height={80} className="w-20 h-20 rounded-md object-cover" />
-                                                  ) : (
-                                                      <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center"><ListOrdered className="h-8 w-8 text-muted-foreground" /></div>
-                                                  )}
+                              return (
+                                  <Card key={item.lotId} className="flex flex-col">
+                                      <div className="p-4 flex gap-4 items-center">
+                                          <div className="w-20 h-20 shrink-0">
+                                              {product?.imageUrl ? (
+                                                  <Image src={product.imageUrl} alt={item.productName} width={80} height={80} className="w-20 h-20 rounded-md object-cover" />
+                                              ) : (
+                                                  <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center"><ListOrdered className="h-8 w-8 text-muted-foreground" /></div>
+                                              )}
+                                          </div>
+                                          <div className="space-y-1">
+                                              <p className="font-semibold leading-tight">{product ? getProductFullName(product) : item.productName}</p>
+                                              <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
+                                              <p className="text-sm text-muted-foreground">Val: {item.expiryDate ? format(parseISO(item.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
+                                          </div>
+                                      </div>
+                                      <Separator />
+                                      <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                                          <div className="grid grid-cols-2 gap-4">
+                                              <div className="p-2 border rounded-md">
+                                                  <Label className="text-xs text-muted-foreground">Estoque Sistema</Label>
+                                                  <p className="text-lg font-bold">{item.systemQuantity}</p>
                                               </div>
-                                              <div className="space-y-1">
-                                                  <p className="font-semibold leading-tight">{product ? getProductFullName(product) : item.productName}</p>
-                                                  <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
-                                                  <p className="text-sm text-muted-foreground">Val: {item.expiryDate ? format(parseISO(item.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
+                                              <div className="p-2 border rounded-md">
+                                                  <Label className="text-xs text-muted-foreground">Estoque Final</Label>
+                                                  <p className="text-lg font-bold">{finalQty}</p>
                                               </div>
                                           </div>
-                                          <Separator />
-                                          <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
-                                              <div className="grid grid-cols-2 gap-4">
-                                                  <div className="p-2 border rounded-md">
-                                                      <Label className="text-xs text-muted-foreground">Estoque Sistema</Label>
-                                                      <p className="text-lg font-bold">{systemQty}</p>
-                                                  </div>
-                                                  <div className="p-2 border rounded-md">
-                                                      <Label className="text-xs text-muted-foreground">Estoque Final</Label>
-                                                      <p className="text-lg font-bold">{finalQty}</p>
-                                                  </div>
-                                              </div>
-                                              
-                                              <ReconciliationSection itemIndex={index} control={form.control} form={form} />
-
-                                              <JustificationSection itemIndex={index} control={form.control} difference={systemQty - finalQty} />
-
-                                          </div>
-                                      </Card>
-                                  );
-                              })}
-                          </div>
-                      </ScrollArea>
-                  </CardContent>
-                  <CardContent>
-                      <div className="flex justify-between items-center pt-4 border-t">
-                      <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isCancelling || isSaving || isFinalizing}>
-                          {isCancelling ? 'Cancelando...' : 'Cancelar'}
-                      </Button>
-                      <div className="flex gap-2">
-                           <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving}><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
+                                          <ReconciliationSection itemIndex={index} control={form.control} form={form} />
+                                          <JustificationSection itemIndex={index} control={form.control} />
+                                      </div>
+                                  </Card>
+                              );
+                          })}
                       </div>
-                      </div>
-                  </CardContent>
-              </form>
-          </Form>
+                  </ScrollArea>
+              </CardContent>
+              <CardContent>
+                  <div className="flex justify-between items-center pt-4 border-t">
+                  <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isFinalizing || isSaving}>Cancelar Contagem</Button>
+                  <div className="flex gap-2">
+                       <Button type="button" variant="secondary" onClick={handleSaveAndExit} disabled={isSaving || isFinalizing}>
+                           {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Salvar e Sair
+                       </Button>
+                       <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving}><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
+                  </div>
+                  </div>
+              </CardContent>
+          </form></Form>
       </Card>
       <RequestItemAdditionModal
         open={isRequestModalOpen}
@@ -362,18 +321,16 @@ function AuditForm({
         <DeleteConfirmationDialog 
             open={isConfirmCancelOpen}
             onOpenChange={setIsConfirmCancelOpen}
-            title="Sair da contagem?"
-            description="Você tem alterações não salvas. O que você gostaria de fazer?"
-            confirmButtonText="Salvar e sair"
-            onConfirm={() => { setIsConfirmCancelOpen(false); handleSaveAndExit(); }}
-            cancelButtonText="Descartar e sair"
-            onCancel={() => { setIsConfirmCancelOpen(false); handleDiscardAndExit(); }}
+            title="Sair sem salvar?"
+            description="Você tem alterações não salvas que serão perdidas ao sair. Deseja continuar?"
+            confirmButtonText="Sair sem salvar"
+            onConfirm={onCancel}
         />
     </>
   )
 }
 
-function AuditHistory() {
+export function AuditHistory() {
     const { auditSessions, deleteAuditSession, loading } = useStockAudit();
     const { permissions } = useAuth();
     const [sessionToDelete, setSessionToDelete] = useState<StockAuditSession | null>(null);
@@ -456,7 +413,7 @@ function KioskSelectionModal({
             <DialogClose key={kiosk.id} asChild>
                 <Button
                 variant="outline"
-                className="w-full justify-start text-base py-6"
+                className="w-full justify-start text-base py-6 transition-all duration-200 hover:border-primary hover:shadow-lg hover:-translate-y-px"
                 onClick={() => onSelectKiosk(kiosk.id)}
                 >
                 {kiosk.name}
@@ -469,7 +426,7 @@ function KioskSelectionModal({
   );
 }
 
-export function StockCountManagement({ showExportButton = false }: { showExportButton?: boolean }) {
+export function StockCountManagement() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
@@ -478,9 +435,10 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
   const { adjustLotQuantity } = useExpiryProducts();
   const { toast } = useToast();
   
-  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
 
+  const pendingAudits = useMemo(() => auditSessions.filter(s => s.status === 'pending_review'), [auditSessions]);
+  
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
 
@@ -489,7 +447,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
 
     const productMap = new Map(products.map(p => [p.id, p]));
     const activeLots = lots.filter(lot => lot.kioskId === kioskId && lot.quantity > 0);
-
+    
     const groupedLots: { [key: string]: LotEntry } = {};
 
     activeLots.forEach(lot => {
@@ -518,6 +476,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
             systemQuantity: systemQuantity,
             finalQuantity: systemQuantity,
             divergences: [],
+            adjustment: null,
         };
     });
     
@@ -530,133 +489,77 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
         return;
     }
 
-    const newSessionId = await addAuditSession({
-      kioskId: kiosk.id,
-      kioskName: kiosk.name,
-      status: 'pending_review',
+    const newSessionData: Omit<StockAuditSession, 'id'> = {
+      kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review',
       auditedBy: { userId: user.id, username: user.username },
-      startedAt: new Date().toISOString(),
-      items: auditItems,
-    });
+      startedAt: new Date().toISOString(), items: auditItems,
+    };
 
-    if (newSessionId) {
-        const createdSession = await new Promise<StockAuditSession | undefined>(resolve => {
-            const check = () => {
-                const session = auditSessions.find(s => s.id === newSessionId) || { id: newSessionId, items: auditItems, kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review', auditedBy: { userId: user.id, username: user.username }, startedAt: new Date().toISOString() };
-                if (session) {
-                    resolve(session);
-                } else {
-                    setTimeout(check, 100);
-                }
-            };
-            check();
-        });
-        if (createdSession) setActiveSession(createdSession);
+    const newId = await addAuditSession(newSessionData);
+    if (newId) {
+        setActiveSession({ id: newId, ...newSessionData });
     }
   };
-
-  const handleSaveForReview = async (items: StockAuditItem[]) => {
-    if(!activeSession) return;
-    await updateAuditSession(activeSession.id, { items });
-    toast({ title: 'Progresso salvo!', description: 'Sua contagem foi salva. Você pode continuar depois.' });
-    setActiveSession(null);
-  }
-
+  
   const handleFinalize = async (items: StockAuditItem[]) => {
-    if(!activeSession || !user) return;
-    
-    await adjustLotQuantity({
-        ...activeSession,
-        items: items,
-    }, user);
-    
-    await updateAuditSession(activeSession.id, {
-        items,
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-    });
-    
-    toast({ title: 'Contagem concluída!', description: 'O estoque foi ajustado com sucesso.' });
-    setActiveSession(null);
+    if (!activeSession || !user) return;
+    try {
+        await adjustLotQuantity({ ...activeSession, items }, user);
+        await updateAuditSession(activeSession.id, {
+            items, status: 'completed', completedAt: new Date().toISOString(),
+        });
+        setActiveSession(null);
+        toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "Erro ao finalizar", description: error.message || "Não foi possível salvar a conclusão no servidor." });
+    }
   };
   
   const handleCancelAudit = async () => {
     if (!activeSession) return;
     await deleteAuditSession(activeSession.id);
-    toast({ variant: 'destructive', title: 'Contagem cancelada', description: 'A sessão de contagem pendente foi removida.' });
     setActiveSession(null);
-  }
+  };
+  
+   const handleSaveAndExit = async (items: StockAuditItem[]) => {
+    if (!activeSession) return;
+    await updateAuditSession(activeSession.id, { items });
+    toast({ title: 'Progresso salvo!', description: 'Sua contagem foi salva para continuar depois.' });
+    setActiveSession(null);
+  };
 
   if (activeSession) {
-    return <AuditForm session={activeSession} onSave={handleSaveForReview} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
+    return <AuditForm session={activeSession} onSave={handleSaveAndExit} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
   }
-  
-  const pendingAudits = auditSessions.filter(s => s.status === 'pending_review');
 
   return (
     <>
-        <Tabs defaultValue="active">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="active">Contagem</TabsTrigger>
-                <TabsTrigger value="history">Histórico</TabsTrigger>
-            </TabsList>
-            <TabsContent value="active" className="mt-4">
-                <Card>
-                    <CardHeader>
-                        <div>
-                            <CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle>
-                            <CardDescription>Inicie uma nova contagem ou continue uma sessão salva para revisão.</CardDescription>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div>
-                            <h3 className="font-semibold mb-2">Iniciar nova contagem</h3>
-                             <Button onClick={() => setIsKioskSelectionOpen(true)}>Iniciar contagem</Button>
-                        </div>
-
-                        <div className="space-y-2 pt-4 border-t">
-                            <h3 className="font-semibold">Contagens salvas para revisão</h3>
-                            {loading ? (
-                                <Skeleton className="h-24 w-full" />
-                            ) : pendingAudits.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">Nenhuma contagem pendente.</p>
-                            ) : (
-                                pendingAudits.map(session => (
-                                    <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
-                                        <div>
-                                            <p className="font-medium">Contagem em {session.kioskName}</p>
-                                            <p className="text-xs text-muted-foreground">Iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yy HH:mm')}</p>
-                                        </div>
-                                        <Button variant="outline" onClick={() => setActiveSession(session)}>Continuar contagem</Button>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </CardContent>
-                    {showExportButton && (
-                         <CardContent>
-                             <div className="pt-4 border-t flex justify-end">
-                                <Button variant="outline" onClick={() => {
-                                    toast({ variant: 'destructive', title: "Funcionalidade não implementada." });
-                                }}>
-                                    <Download className="mr-2" />
-                                    Relatório detalhado
-                                </Button>
-                             </div>
-                        </CardContent>
-                    )}
-                </Card>
-            </TabsContent>
-            <TabsContent value="history" className="mt-4">
-                <AuditHistory />
-            </TabsContent>
-        </Tabs>
-      <KioskSelectionModal
-        open={isKioskSelectionOpen}
-        onOpenChange={setIsKioskSelectionOpen}
-        kiosks={kiosks}
-        onSelectKiosk={handleStartSession}
-      />
+        <Card>
+            <CardHeader>
+                <div>
+                    <CardTitle className="flex items-center gap-2"><ShieldCheck/>Contagem de estoque</CardTitle>
+                    <CardDescription>Inicie uma nova contagem ou continue uma sessão salva para revisão.</CardDescription>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Nova contagem</Button>
+                <div className="space-y-3 pt-4 border-t">
+                    <h3 className="text-sm font-bold uppercase text-muted-foreground">Contagens em aberto</h3>
+                    {loading ? <Skeleton className="h-24 w-full" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
+                        pendingAudits.map(s => (
+                            <div key={s.id} className="p-3 border rounded-md flex justify-between items-center">
+                                <div>
+                                    <p className="font-bold text-sm">{s.kioskName}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase">{s.auditedBy.username} • {format(parseISO(s.startedAt), 'dd/MM HH:mm')}</p>
+                                </div>
+                                <Button size="sm" variant="outline" onClick={() => setActiveSession(s)}>Continuar</Button>
+                            </div>
+                        ))
+                    }
+                </div>
+            </CardContent>
+        </Card>
+      <KioskSelectionModal open={isKioskSelectionOpen} onOpenChange={setIsKioskSelectionOpen} kiosks={kiosks} onSelectKiosk={handleStartSession} />
     </>
   );
 }
