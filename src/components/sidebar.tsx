@@ -91,10 +91,10 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
 
   const navItems = useMemo(() => [
     { href: '/dashboard', label: 'Painel', icon: LayoutDashboard, show: permissions.dashboard.view },
-    { href: '/dashboard/stock', label: 'Gestão de Estoque', icon: ClipboardCheck, show: permissions.stock.view },
-    { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: permissions.registration.view },
-    { href: '/dashboard/pricing', label: 'Custo e Preço', icon: DollarSign, show: permissions.pricing.view },
     { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo, show: permissions.tasks.view, notificationCount: legacyTasks.length },
+    { href: '/dashboard/stock', label: 'Gestão de Estoque', icon: ClipboardCheck, show: permissions.stock.view },
+    { href: '/dashboard/pricing', label: 'Custo e Preço', icon: DollarSign, show: permissions.pricing.view },
+    { href: '/dashboard/registration', label: 'Cadastros', icon: ListPlus, show: permissions.registration.view },
     { href: '/dashboard/settings', label: 'Configurações', icon: Settings, show: permissions.settings.view },
     { href: '/dashboard/help', label: 'Ajuda', icon: BookOpen, show: permissions.help.view },
   ], [permissions, legacyTasks.length]);
@@ -158,7 +158,6 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
 
         {/* MEIO: NAVEGAÇÃO COM SCROLL */}
         <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto custom-scrollbar">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground/50 px-4 mb-4 tracking-[0.15em]">Principal</p>
             {filteredNavItems.map(item => (
                 <GlassNavItem 
                     key={item.href}

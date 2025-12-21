@@ -5,20 +5,27 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight, TrendingUp, DollarSign, RefreshCw, LineChart } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export default function AnalysisPage() {
+    const router = useRouter();
     return (
         <div className="w-full">
-            <Link href="/dashboard/stock" className="inline-block mb-4">
-                <Button variant="outline">
-                    <ArrowLeft className="mr-2" />
-                    Voltar para gestão de estoque
+            <div className="flex items-center gap-4 mb-4">
+                <Button 
+                    onClick={() => router.push('/dashboard/stock')}
+                    variant="ghost"
+                    className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
+                    aria-label="Voltar para gestão de estoque"
+                >
+                    <ArrowLeft className="w-6 h-6" />
                 </Button>
-            </Link>
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold">Análise de estoque</h1>
-                <p className="text-muted-foreground">Visualize o consumo e o valor financeiro do seu estoque.</p>
+                <div>
+                    <h1 className="text-3xl font-bold">Análise de estoque</h1>
+                    <p className="text-sm text-muted-foreground">Voltar para gestão de estoque</p>
+                </div>
             </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  <Card className="flex flex-col">
                     <CardHeader>

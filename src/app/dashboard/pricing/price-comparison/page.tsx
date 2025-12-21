@@ -8,7 +8,7 @@ import { PriceComparisonTable } from '@/components/price-comparison-table';
 import { CompetitorManagementModal } from '@/components/competitor-management-modal';
 import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
 import { ArrowLeft, LineChart, SlidersHorizontal, Group, Users, History, Menu, Trash2 } from 'lucide-react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCompetitors } from '@/hooks/use-competitors';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { format, parseISO } from 'date-fns';
@@ -22,6 +22,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 
 export default function PriceComparisonPage() {
+  const router = useRouter();
   const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
@@ -38,12 +39,20 @@ export default function PriceComparisonPage() {
 
   return (
     <div className="space-y-6">
-       <Link href="/dashboard/pricing" className="inline-block">
-        <Button variant="outline">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar para custo e preço
-        </Button>
-      </Link>
+       <div className="flex items-center gap-4 mb-2">
+          <Button 
+            onClick={() => router.push('/dashboard/pricing')}
+            variant="ghost"
+            className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
+            aria-label="Voltar para custo e preço"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Estudo de preço</h1>
+            <p className="text-sm text-muted-foreground">Voltar para custo e preço</p>
+          </div>
+        </div>
       <Card>
         <CardHeader>
             <div className="flex justify-between items-start">
