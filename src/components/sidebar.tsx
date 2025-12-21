@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
@@ -115,7 +116,7 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
       <div className="flex h-full flex-col bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl border border-white/40 dark:border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden">
         
         {/* TOPO: LOGO E BUSCA */}
-        <div className="px-8 pt-10 pb-6">
+        <div className="px-8 pt-10 pb-6 border-b border-black/5 dark:border-white/5">
             <div className="flex items-center justify-between mb-8">
                 <Link href="/dashboard" className="flex flex-col group transition-all active:scale-95">
                   {logoUrl ? (
@@ -171,7 +172,7 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
         </nav>
 
         {/* RODAPÉ: PERFIL FLUTUANTE (DESIGN PREMIUM) */}
-        <div className="p-4 mt-auto">
+        <div className="p-4 mt-auto border-t border-black/5 dark:border-white/5">
             <div className="p-4 bg-white/60 dark:bg-slate-800/50 border border-white/60 dark:border-white/5 rounded-[2.2rem] backdrop-blur-md shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
