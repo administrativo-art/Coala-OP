@@ -10,6 +10,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useItemAddition } from "@/hooks/use-item-addition";
 import { Badge } from "@/components/ui/badge";
 import { useMemo, useState } from "react";
+import { AuditHistory } from '@/components/stock-audit-management';
+
 
 export default function StockCountPage() {
     const { permissions } = useAuth();
@@ -35,8 +37,9 @@ export default function StockCountPage() {
             </div>
 
             <Tabs defaultValue="count" value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-2 md:w-auto md:grid-cols-none">
+                <TabsList className="grid w-full grid-cols-2 md:w-auto md:grid-cols-3">
                     <TabsTrigger value="count">Contagem e Auditoria</TabsTrigger>
+                    <TabsTrigger value="history">Histórico</TabsTrigger>
                     {canManageRequests && (
                         <TabsTrigger value="requests">
                             Solicitações
@@ -46,6 +49,9 @@ export default function StockCountPage() {
                 </TabsList>
                 <TabsContent value="count" className="mt-4">
                     <StockCountManagement />
+                </TabsContent>
+                <TabsContent value="history" className="mt-4">
+                    <AuditHistory />
                 </TabsContent>
                 {canManageRequests && (
                     <TabsContent value="requests" className="mt-4">

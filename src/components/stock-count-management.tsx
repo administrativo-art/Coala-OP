@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
+import { useState, useMemo } from 'react';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -26,9 +26,9 @@ import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCirc
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { Separator } from './ui/separator';
+import { cn } from '@/lib/utils';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from './ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
@@ -67,7 +67,7 @@ const auditFormSchema = z.object({
 }).refine(data => {
     for (const item of data.items) {
         const adjQty = item.adjustment?.type === 'negative' ? -(Number(item.adjustment?.quantity) || 0) : (Number(item.adjustment?.quantity) || 0);
-        const totalDiv = (item.divergences || []).reduce((sum, div) => sum + (Number(div.quantity) || 0), 0);
+        const totalDiv = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
         const calcFinal = item.systemQuantity + adjQty - totalDiv;
         if (Math.abs(calcFinal - item.finalQuantity) > 0.001) return false;
     }
@@ -137,17 +137,18 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
 
 function AuditForm({
   session,
-  onSaveAndExit,
+  onSave,
   onFinalize,
   onCancel,
 }: {
   session: StockAuditSession,
-  onSaveAndExit: (items: StockAuditItem[]) => Promise<void>,
+  onSave: (items: StockAuditItem[]) => Promise<void>,
   onFinalize: (items: StockAuditItem[]) => Promise<void>,
   onCancel: () => Promise<void>,
 }) {
   const { products, getProductFullName } = useProducts();
   const { user } = useAuth();
+  const [isCancelling, setIsCancelling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -193,9 +194,9 @@ function AuditForm({
     });
   };
 
-  const handleSaveClick = async () => {
+  const handleSaveAndExit = async () => {
     setIsSaving(true);
-    await onSaveAndExit(getUpdatedItems(form.getValues()));
+    await onSave(getUpdatedItems(form.getValues()));
     setIsSaving(false);
   };
   
@@ -293,7 +294,7 @@ function AuditForm({
                   <div className="flex justify-between items-center pt-4 border-t">
                   <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isFinalizing || isSaving}>Cancelar Contagem</Button>
                   <div className="flex gap-2">
-                       <Button type="button" variant="secondary" onClick={handleSaveClick} disabled={isSaving || isFinalizing}>
+                       <Button type="button" variant="secondary" onClick={handleSaveAndExit} disabled={isSaving || isFinalizing}>
                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Salvar e Sair
                        </Button>
                        <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving}><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
@@ -319,16 +320,16 @@ function AuditForm({
         <DeleteConfirmationDialog 
             open={isConfirmCancelOpen}
             onOpenChange={setIsConfirmCancelOpen}
-            title="Sair da contagem?"
-            description="Você tem alterações não salvas que serão perdidas. Deseja sair mesmo assim?"
-            confirmButtonText="Sim, sair sem salvar"
+            title="Sair sem salvar?"
+            description="Você tem alterações não salvas que serão perdidas ao sair. Deseja continuar?"
+            confirmButtonText="Sair sem salvar"
             onConfirm={onCancel}
         />
     </>
   )
 }
 
-function AuditHistory() {
+export function AuditHistory() {
     const { auditSessions, deleteAuditSession, loading } = useStockAudit();
     const { permissions } = useAuth();
     const [sessionToDelete, setSessionToDelete] = useState<StockAuditSession | null>(null);
@@ -414,7 +415,7 @@ function KioskSelectionModal({ open, onOpenChange, kiosks, onSelectKiosk }: { op
   );
 }
 
-export function StockCountManagement({ showExportButton = false }: { showExportButton?: boolean }) {
+export function StockCountManagement() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
@@ -424,7 +425,6 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
   const { toast } = useToast();
   
   const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
-  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
   const pendingAudits = useMemo(() => auditSessions.filter(s => s.status === 'pending_review'), [auditSessions]);
   
@@ -461,9 +461,7 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
     try {
         await adjustLotQuantity({ ...activeSession, items }, user);
         await updateAuditSession(activeSession.id, {
-            items,
-            status: 'completed',
-            completedAt: new Date().toISOString(),
+            items, status: 'completed', completedAt: new Date().toISOString(),
         });
         setActiveSession(null);
         toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
@@ -491,41 +489,27 @@ export function StockCountManagement({ showExportButton = false }: { showExportB
 
   return (
     <>
-        <Tabs defaultValue="active">
-            <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="active">Contagem</TabsTrigger><TabsTrigger value="history">Histórico</TabsTrigger></TabsList>
-            <TabsContent value="active" className="mt-4">
-                <GlassCard>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle></CardHeader>
-                    <CardContent className="space-y-6">
-                        <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto transition-transform hover:-translate-y-px">Nova contagem</Button>
-                        <Button variant="outline" className="ml-2" onClick={() => setIsRequestModalOpen(true)}>
-                            <PackagePlus className="mr-2 h-4 w-4" />
-                            Solicitar Cadastro de Insumo
-                        </Button>
-                        <div className="space-y-3 pt-4 border-t">
-                            <h3 className="text-sm font-bold uppercase text-muted-foreground">Contagens em aberto</h3>
-                            {loading ? <Skeleton className="h-24 w-full bg-white/20 dark:bg-white/5 backdrop-blur-md" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
-                                pendingAudits.map(s => (
-                                    <div key={s.id} className="p-3 border rounded-lg flex justify-between items-center bg-muted/10">
-                                        <div className="space-y-0.5"><p className="font-bold text-sm">{s.kioskName}</p><p className="text-[10px] text-muted-foreground uppercase">{s.auditedBy.username} • {format(parseISO(s.startedAt), 'dd/MM HH:mm')}</p></div>
-                                        <Button size="sm" variant="outline" onClick={() => setActiveSession(s)}>Continuar</Button>
-                                    </div>
-                                ))
-                            }
-                        </div>
-                    </CardContent>
-                </GlassCard>
-            </TabsContent>
-            <TabsContent value="history" className="mt-4">
-                <AuditHistory />
-            </TabsContent>
-        </Tabs>
+        <GlassCard>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle>
+                <CardDescription>Inicie uma nova contagem ou continue uma sessão salva para revisão.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto transition-transform hover:-translate-y-px">Nova contagem</Button>
+                <div className="space-y-3 pt-4 border-t">
+                    <h3 className="text-sm font-bold uppercase text-muted-foreground">Contagens em aberto</h3>
+                    {loading ? <Skeleton className="h-24 w-full bg-white/20 dark:bg-white/5 backdrop-blur-md" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
+                        pendingAudits.map(s => (
+                            <div key={s.id} className="p-3 border rounded-lg flex justify-between items-center bg-muted/10">
+                                <div className="space-y-0.5"><p className="font-bold text-sm">{s.kioskName}</p><p className="text-[10px] text-muted-foreground uppercase">{s.auditedBy.username} • {format(parseISO(s.startedAt), 'dd/MM HH:mm')}</p></div>
+                                <Button size="sm" variant="outline" onClick={() => setActiveSession(s)}>Continuar</Button>
+                            </div>
+                        ))
+                    }
+                </div>
+            </CardContent>
+        </GlassCard>
       <KioskSelectionModal open={isKioskSelectionOpen} onOpenChange={setIsKioskSelectionOpen} kiosks={kiosks} onSelectKiosk={handleStartSession} />
-       <RequestItemAdditionModal
-        open={isRequestModalOpen}
-        onOpenChange={setIsRequestModalOpen}
-        kioskId={activeSession?.kioskId || ''}
-      />
     </>
   );
 }
