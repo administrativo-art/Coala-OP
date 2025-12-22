@@ -11,6 +11,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import Papa from 'papaparse';
 import { DateRange } from "react-day-picker"
+import { type ConsumptionReport } from "@/types"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -81,7 +82,7 @@ export function AverageConsumptionChart() {
     const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
     
     relevantReports.forEach(report => {
-        const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+        const key = `${(report as any).year}-${String(report.month).padStart(2, '0')}`;
         report.results.forEach(res => {
             if (res.baseProductId) {
                 if (!monthlyConsumptionByBaseId[res.baseProductId]) monthlyConsumptionByBaseId[res.baseProductId] = {};
@@ -89,10 +90,10 @@ export function AverageConsumptionChart() {
             }
         });
     });
-
+    
     const allNetworkMonths = new Set<string>();
     for (const report of relevantReports) {
-      const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+      const key = `${(report as any).year}-${String(report.month).padStart(2, '0')}`;
       const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
       if (anyConsumption) allNetworkMonths.add(key);
     }
@@ -436,3 +437,4 @@ export function AverageConsumptionChart() {
     </Card>
   )
 }
+
