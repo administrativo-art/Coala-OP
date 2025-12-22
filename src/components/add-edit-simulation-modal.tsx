@@ -25,7 +25,6 @@ import { useProductSimulationCategories } from '@/hooks/use-product-simulation-c
 import { getUnitsForCategory, unitCategories, type UnitCategory, convertValue } from '@/lib/conversion';
 import { useProducts } from '@/hooks/use-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
-import { analyzePricing, type PricingAnalysisInput } from '@/ai/flows/pricing-analysis-flow';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
@@ -913,3 +912,4 @@ useEffect(() => {
     </>
   );
 }
+

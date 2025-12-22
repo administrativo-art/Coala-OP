@@ -56,60 +56,61 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-        <ProfilesProvider>
-          <AuthProvider>
-            <KiosksProvider>
-              <LocationsProvider>
-                <CompanySettingsProvider>
-                  <EntitiesProvider>
-                    <BaseProductsProvider>
-                      <ClassificationsProvider>
-                        <ProductsProvider>
-                          <PurchaseProvider>
-                            <ProductSimulationCategoryProvider>
-                              <ProductSimulationProvider>
-                                <ExpiryProductsProvider>
-                                  <PredefinedListsProvider>
-                                    <TaskProvider>
-                                      <ReturnsProvider>
-                                          <ItemAdditionProvider>
-                                            <StockCountProvider>
+          <ProfilesProvider>
+            <AuthProvider>
+                <KiosksProvider>
+                  <LocationsProvider>
+                    <CompanySettingsProvider>
+                      <EntitiesProvider>
+                        <BaseProductsProvider>
+                          <ClassificationsProvider>
+                            <ProductsProvider>
+                              <TaskProvider>
+                                <ItemAdditionProvider>
+                                  <ReturnsProvider>
+                                    <ExpiryProductsProvider>
+                                      <MovementHistoryProvider>
+                                        <AllTasksProvider>
+                                          <PredefinedListsProvider>
+                                            <ConsumptionAnalysisProvider>
+                                                <StockCountProvider>
                                                   <RepositionProvider>
-                                                     <AllTasksProvider>
-                                                        <StockAuditProvider>
-                                                          <AuthorBoardDiaryProvider>
-                                                            <ConsumptionAnalysisProvider>
-                                                              <MovementHistoryProvider>
-                                                                <CompetitorProvider>
-                                                                  {children}
-                                                                </CompetitorProvider>
-                                                              </MovementHistoryProvider>
-                                                            </ConsumptionAnalysisProvider>
-                                                          </AuthorBoardDiaryProvider>
-                                                        </StockAuditProvider>
-                                                      </AllTasksProvider>
+                                                    <StockAuditProvider>
+                                                      <AuthorBoardDiaryProvider>
+                                                        <PurchaseProvider>
+                                                          <ProductSimulationCategoryProvider>
+                                                            <ProductSimulationProvider>
+                                                              <CompetitorProvider>
+                                                                {children}
+                                                              </CompetitorProvider>
+                                                            </ProductSimulationProvider>
+                                                          </ProductSimulationCategoryProvider>
+                                                        </PurchaseProvider>
+                                                      </AuthorBoardDiaryProvider>
+                                                    </StockAuditProvider>
                                                   </RepositionProvider>
-                                            </StockCountProvider>
-                                          </ItemAdditionProvider>
-                                      </ReturnsProvider>
-                                    </TaskProvider>
-                                  </PredefinedListsProvider>
-                                </ExpiryProductsProvider>
-                              </ProductSimulationProvider>
-                            </ProductSimulationCategoryProvider>
-                          </PurchaseProvider>
-                        </ProductsProvider>
-                      </ClassificationsProvider>
-                    </BaseProductsProvider>
-                  </EntitiesProvider>
-                </CompanySettingsProvider>
-              </LocationsProvider>
-            </KiosksProvider>
-          </AuthProvider>
-        </ProfilesProvider>
+                                                </StockCountProvider>
+                                            </ConsumptionAnalysisProvider>
+                                          </PredefinedListsProvider>
+                                        </AllTasksProvider>
+                                      </MovementHistoryProvider>
+                                    </ExpiryProductsProvider>
+                                  </ReturnsProvider>
+                                </ItemAdditionProvider>
+                              </TaskProvider>
+                            </ProductsProvider>
+                          </ClassificationsProvider>
+                        </BaseProductsProvider>
+                      </EntitiesProvider>
+                    </CompanySettingsProvider>
+                  </LocationsProvider>
+                </KiosksProvider>
+            </AuthProvider>
+          </ProfilesProvider>
         <Toaster />
         </ThemeProvider>
       </body>
     </html>
   );
 }
+
