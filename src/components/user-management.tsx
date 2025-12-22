@@ -196,7 +196,12 @@ export function UserManagement() {
             const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
             handlePhotoUpdate(resizedDataUrl);
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Erro ao processar imagem' });
+            console.error("Image resize error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Erro ao processar imagem',
+                description: 'Não foi possível redimensionar a imagem. Tente uma imagem diferente.'
+            });
         }
       };
       reader.readAsDataURL(file);
@@ -436,46 +441,44 @@ export function UserManagement() {
               
               <Separator className="my-4" />
               <div className="space-y-2">
-                <div className="hidden rounded-lg bg-muted px-4 py-2 text-sm font-medium text-muted-foreground md:grid md:grid-cols-4">
-                  <div>Usuário</div>
-                  <div>Perfil</div>
-                  <div>Quiosque(s)</div>
-                  <div className="text-right">Ações</div>
-                </div>
-                {filteredUsers.map(user => (
-                  <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-4">
-                    <div className="font-medium">
-                      <span className="md:hidden text-muted-foreground">Usuário: </span>
-                      {user.username}
-                    </div>
-                    <div>
-                      <span className="md:hidden text-muted-foreground">Perfil: </span>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${profileIsAdmin(user.profileId) ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>
-                        {getProfileName(user.profileId)}
-                      </span>
-                    </div>
-                    <div className="text-muted-foreground text-sm truncate">
-                      <span className="md:hidden font-medium text-card-foreground">Quiosque(s): </span>
-                      {getKioskNames(user.assignedKioskIds)}
-                    </div>
-                    <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
-                        {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
-                        {permissions.settings.manageUsers && (
-                          <DeleteConfirmationDialog
-                              open={false}
-                              onOpenChange={() => {}}
-                              onConfirm={() => setUserToResetPassword(user)}
-                              title={`Redefinir senha de ${user.username}?`}
-                              description={`Um e-mail será enviado para ${user.email} com instruções para redefinir a senha.`}
-                              confirmButtonText="Sim, enviar e-mail"
-                              confirmButtonVariant="default"
-                              triggerButton={<Button variant="ghost" size="icon"><KeyRound className="h-4 w-4" /></Button>}
-                          />
-                        )}
-                        {permissions.settings.manageUsers && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}><Trash2 className="h-4 w-4" /></Button>}
-                    </div>
+                <ScrollArea className="h-[40vh]">
+                  <div className="pr-4 space-y-2">
+                    {filteredUsers.map(user => (
+                      <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-4">
+                        <div className="font-medium">
+                          <span className="md:hidden text-muted-foreground">Usuário: </span>
+                          {user.username}
+                        </div>
+                        <div>
+                          <span className="md:hidden text-muted-foreground">Perfil: </span>
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${profileIsAdmin(user.profileId) ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>
+                            {getProfileName(user.profileId)}
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground text-sm truncate">
+                          <span className="md:hidden font-medium text-card-foreground">Quiosque(s): </span>
+                          {getKioskNames(user.assignedKioskIds)}
+                        </div>
+                        <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
+                            {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
+                            {permissions.settings.manageUsers && (
+                              <DeleteConfirmationDialog
+                                  open={false}
+                                  onOpenChange={() => {}}
+                                  onConfirm={() => setUserToResetPassword(user)}
+                                  title={`Redefinir senha de ${user.username}?`}
+                                  description={`Um e-mail será enviado para ${user.email} com instruções para redefinir a senha.`}
+                                  confirmButtonText="Sim, enviar e-mail"
+                                  confirmButtonVariant="default"
+                                  triggerButton={<Button variant="ghost" size="icon"><KeyRound className="h-4 w-4" /></Button>}
+                              />
+                            )}
+                            {permissions.settings.manageUsers && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}><Trash2 className="h-4 w-4" /></Button>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </ScrollArea>
               </div>
             </>
           )}

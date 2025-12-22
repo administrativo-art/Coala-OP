@@ -67,7 +67,7 @@ const permissionsSchema = z.object({
   kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
   predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
   consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
-  itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
+  itemRequests: z.object({ add: true, approve: false }),
   reposition: { cancel: z.boolean() },
 });
 
@@ -472,7 +472,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                 </Button>
               )}
               <Separator className="my-4" />
-              <div className="flex-1 overflow-auto">
+              <div className="flex-1 overflow-auto -mx-6 px-6">
                 <ScrollArea className="h-full pr-4">
                   <div className="space-y-2">
                     {profiles.length > 0 ? profiles.map(profile => (
