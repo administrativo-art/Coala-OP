@@ -519,7 +519,7 @@ useEffect(() => {
                                     <DropdownMenuTrigger asChild>
                                         <FormControl>
                                             <Button variant="outline" className="w-full justify-between font-normal">
-                                                {field.value?.length > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione os quiosques"}
+                                                {(field.value?.length ?? 0) > 0 ? `${field.value?.length} quiosque(s) selecionado(s)` : "Selecione os quiosques"}
                                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                             </Button>
                                         </FormControl>
@@ -559,7 +559,7 @@ useEffect(() => {
                                   <DropdownMenuTrigger asChild>
                                   <FormControl>
                                       <Button variant="outline" className="w-full justify-between font-normal">
-                                          {field.value?.length > 0 ? `${field.value.length} selecionada(s)` : "Selecione categorias"}
+                                          {(field.value?.length ?? 0) > 0 ? `${field.value?.length} selecionada(s)` : "Selecione categorias"}
                                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                       </Button>
                                   </FormControl>
@@ -613,7 +613,7 @@ useEffect(() => {
                                     <DropdownMenuTrigger asChild>
                                         <FormControl>
                                             <Button variant="outline" className="w-full justify-between font-normal">
-                                            {field.value?.length > 0 ? `${field.value.length} selecionado(s)` : "Selecione grupos"}
+                                            {(field.value?.length ?? 0) > 0 ? `${field.value?.length} selecionado(s)` : "Selecione grupos"}
                                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                             </Button>
                                         </FormControl>
@@ -914,9 +914,5 @@ useEffect(() => {
     </>
   );
 }
-
-    
-
-
 
     
