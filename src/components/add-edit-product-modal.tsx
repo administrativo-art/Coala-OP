@@ -15,7 +15,7 @@ import { getUnitsForCategory, units, type UnitCategory, unitCategories } from '@
 import { type Product } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { resizeImage } from '@/lib/image-utils';
-import { fetchProductInfo } from '@/ai/flows/fetch-product-info-flow';
+
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -218,33 +218,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
     };
 
-    const handleFetchProductInfo = async () => {
-        const barcode = form.getValues('barcode');
-        if (!barcode) {
-            toast({ variant: 'destructive', title: 'Código de barras ausente', description: 'Por favor, insira um código de barras para buscar.' });
-            return;
-        }
-
-        setIsFetchingProduct(true);
-        try {
-            const result = await fetchProductInfo(barcode);
-            if (result.found) {
-                form.setValue('baseName', result.name || '', { shouldValidate: true });
-                form.setValue('brand', result.brand || '', { shouldValidate: true });
-                if (result.packageSize) form.setValue('packageSize', result.packageSize, { shouldValidate: true });
-                if (result.unit) form.setValue('unit', result.unit, { shouldValidate: true });
-                if (result.imageUrl) form.setValue('imageUrl', result.imageUrl, { shouldValidate: true });
-                toast({ title: 'Produto encontrado!', description: 'Os dados do formulário foram preenchidos.' });
-            } else {
-                toast({ variant: 'destructive', title: 'Produto não encontrado', description: 'Nenhuma informação encontrada para este código de barras.' });
-            }
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Erro na busca', description: 'Não foi possível se comunicar com o banco de dados de produtos.' });
-        } finally {
-            setIsFetchingProduct(false);
-        }
-    };
-
     const onSubmit = (values: ProductFormValues) => {
         // Validation Trava 1
         if (values.baseProductId) {
@@ -349,9 +322,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         <div className="flex gap-2">
                                             <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
                                             <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button>
-                                            <Button type="button" variant="secondary" onClick={handleFetchProductInfo} disabled={isFetchingProduct}>
-                                                {isFetchingProduct ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                                            </Button>
                                         </div>
                                         <FormMessage />
                                     </FormItem>
