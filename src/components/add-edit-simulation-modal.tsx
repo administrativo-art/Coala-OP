@@ -60,12 +60,14 @@ const simulationSchema = z.object({
         if (!item.useDefault) {
             if (!item.overrideUnit) {
                 ctx.addIssue({
+                    code: 'custom',
                     path: [`items`, index, 'overrideUnit'],
                     message: "Unidade é obrigatória.",
                 });
             }
              if (item.overrideCostPerUnit === undefined || item.overrideCostPerUnit <= 0) {
                 ctx.addIssue({
+                    code: 'custom',
                     path: [`items`, index, 'overrideCostPerUnit'],
                     message: "Custo deve ser > 0.",
                 });
@@ -611,10 +613,12 @@ useEffect(() => {
                                 <FormLabel>Grupo por Insumo</FormLabel>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" className="w-full justify-between font-normal">
+                                        <FormControl>
+                                            <Button variant="outline" className="w-full justify-between font-normal">
                                             {field.value?.length > 0 ? `${field.value.length} selecionado(s)` : "Selecione grupos"}
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </Button>
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </FormControl>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
                                         <DropdownMenuLabel>Grupos disponíveis</DropdownMenuLabel>
