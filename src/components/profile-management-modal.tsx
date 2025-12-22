@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -531,17 +532,9 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         {canEdit && <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClick(profile)}><Copy className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
-                            <DeleteConfirmationDialog
-                                open={false}
-                                onOpenChange={()=>{}}
-                                onConfirm={handleDeleteConfirm}
-                                itemName={`o perfil "${profileToDelete?.name}"`}
-                                triggerButton={
-                                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                }
-                            />
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>}
                       </div>
                     )) : (
@@ -555,6 +548,15 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
           </div>
         </DialogContent>
       </Dialog>
+      
+      {profileToDelete && (
+          <DeleteConfirmationDialog
+            open={!!profileToDelete}
+            onOpenChange={() => setProfileToDelete(null)}
+            onConfirm={handleDeleteConfirm}
+            itemName={`o perfil "${profileToDelete?.name}"`}
+        />
+      )}
 
       <DuplicateProfileModal
         profileToDuplicate={profileToDuplicate}
