@@ -2,9 +2,151 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to all documents for authenticated users
+
+    // --- FUNÇÕES DE APOIO (O "Cérebro" das Regras) ---
+
+    // Verifica se o usuário está autenticado
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Busca os dados do documento do usuário logado
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Busca o mapa de permissões (PermissionSet) do perfil do usuário logado
+    function getPerms() {
+      let profileId = getUserData().profileId;
+      return get(/databases/$(database)/documents/profiles/$(profileId)).data.permissions;
+    }
+
+    // Verifica se o usuário tem o perfil de Administrador
+    function isAdmin() {
+      // Checa pelo ID do perfil de admin, que é mais seguro que o nome.
+      return getUserData().profileId == 'admin';
+    }
+
+    // --- REGRAS POR COLEÇÃO ---
+
+    // 1. Coleção de Perfis: Protege quem pode alterar as permissões.
+    match /profiles/{profileId} {
+      allow read: if isAuth();
+      allow write: if isAuth() && (isAdmin() || getPerms().settings.manageProfiles == true);
+    }
+
+    // 2. Coleção de Usuários: Protege contra auto-promoção de privilégios.
+    match /users/{userId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && (isAdmin() || getPerms().settings.manageUsers == true);
+      allow delete: if isAuth() && (isAdmin() || getPerms().settings.manageUsers == true);
+      
+      // Permite que admins editem tudo, ou que o próprio usuário edite seus dados, exceto o profileId.
+      allow update: if isAuth() && (
+        isAdmin() || 
+        getPerms().settings.manageUsers == true ||
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['profileId']))
+      );
+    }
+
+    // 3. Regras para coleções principais de negócio
+    match /lots/{lotId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.view == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.addLot == true);
+      allow update: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.editLot == true);
+      allow delete: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.writeDown == true);
+    }
+
+    match /products/{productId} {
+        allow read: if isAuth();
+        allow create: if isAuth() && (isAdmin() || getPerms().registration.items.add == true);
+        allow update: if isAuth() && (isAdmin() || getPerms().registration.items.edit == true);
+        allow delete: if isAuth() && (isAdmin() || getPerms().registration.items.delete == true);
+    }
+
+    match /baseProducts/{baseProductId} {
+        allow read: if isAuth();
+        allow create: if isAuth() && (isAdmin() || getPerms().registration.baseProducts.add == true);
+        allow update: if isAuth() && (isAdmin() || getPerms().registration.baseProducts.edit == true);
+        allow delete: if isAuth() && (isAdmin() || getPerms().registration.baseProducts.delete == true);
+    }
+    
+    match /productSimulations/{simId} {
+        allow read: if isAuth();
+        allow create, update, delete: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true);
+    }
+
+    match /productSimulationItems/{itemId} {
+        allow read: if isAuth();
+        allow create, update, delete: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true);
+    }
+    
+    match /productSimulationCategories/{catId} {
+        allow read: if isAuth();
+        allow write: if isAuth() && (isAdmin() || getPerms().pricing.manageParameters == true);
+    }
+
+    match /repositionActivities/{activityId} {
+        allow read: if isAuth() && (isAdmin() || getPerms().stock.analysis.restock == true);
+        allow write: if isAuth() && (isAdmin() || getPerms().stock.analysis.restock == true);
+    }
+    
+    match /returnRequests/{reqId} {
+        allow read: if isAuth() && (isAdmin() || getPerms().stock.returns.view == true);
+        allow create: if isAuth() && (isAdmin() || getPerms().stock.returns.add == true);
+        allow update: if isAuth() && (isAdmin() || getPerms().stock.returns.updateStatus == true);
+        allow delete: if isAuth() && (isAdmin() || getPerms().stock.returns.delete == true);
+    }
+
+    match /stockAuditSessions/{sessionId} {
+        allow read: if isAuth() && (isAdmin() || getPerms().stock.audit.view == true);
+        allow write: if isAuth() && (isAdmin() || getPerms().stock.audit.start == true || getPerms().stock.audit.approve == true);
+    }
+
+    match /purchaseSessions/{sessionId} {
+        allow read: if isAuth() && (isAdmin() || getPerms().stock.purchasing.view == true);
+        allow write: if isAuth() && (isAdmin() || getPerms().stock.purchasing.suggest == true || getPerms().stock.purchasing.approve == true);
+    }
+
+    match /purchaseItems/{itemId} {
+        allow read: if isAuth() && (isAdmin() || getPerms().stock.purchasing.view == true);
+        allow write: if isAuth() && (isAdmin() || getPerms().stock.purchasing.suggest == true || getPerms().stock.purchasing.approve == true);
+    }
+    
+    match /tasks/{taskId} {
+      allow read: if isAuth();
+      allow write: if isAuth(); // A lógica de quem pode editar qual tarefa fica no front-end por enquanto
+    }
+    
+    // 4. Coleção de Quiosques (Apenas Admin)
+    match /kiosks/{kioskId} {
+      allow read: if isAuth();
+      allow write: if isAuth() && isAdmin();
+    }
+
+    // 5. Históricos e Logs (Imutáveis)
+    match /movementHistory/{moveId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if false; 
+    }
+    match /priceHistory/{historyId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if false;
+    }
+     match /simulationPriceHistory/{historyId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if false;
+    }
+
+    // 6. Regra genérica de negação
+    // Se nenhuma regra acima corresponder, o acesso é negado por padrão.
+    // Todas as outras coleções só podem ser lidas por enquanto.
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read: if isAuth();
+      allow write: if false;
     }
   }
 }
