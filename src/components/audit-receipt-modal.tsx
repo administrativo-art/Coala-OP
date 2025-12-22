@@ -126,7 +126,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     const newStatus = hasDivergence ? 'Recebido com divergência' : 'Recebido sem divergência';
     
     const signature: SignatureData = {
-        dataUrl: sigCanvas.current.toDataURL('image/png'),
+        dataUrl: sigCanvas.current?.toDataURL('image/png') || '',
         signedBy: user.username,
         signedAt: new Date().toISOString()
     };
@@ -256,7 +256,5 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     </Dialog>
   );
 }
-
-    
 
     
