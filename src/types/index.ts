@@ -340,6 +340,7 @@ export type PermissionSet = {
   // Legado - Will be removed
   products: { add: boolean; edit: boolean; delete: boolean; };
   lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
+  returns: { add: boolean, view: boolean; updateStatus: boolean; delete: boolean; };
   users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
   kiosks: { add: boolean; delete: boolean; };
   predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
@@ -639,6 +640,7 @@ export const defaultGuestPermissions: PermissionSet = {
     // Legado - Will be removed
     products: { add: false, edit: false, delete: false },
     lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
+    returns: { add: false, view: false, updateStatus: false, delete: false },
     users: { add: false, edit: false, delete: false, impersonate: false },
     kiosks: { add: false, delete: false },
     predefinedLists: { add: false, edit: false, delete: false },
@@ -662,6 +664,7 @@ export const defaultAdminPermissions: PermissionSet = {
     products: { add: true, edit: true, delete: true },
     lots: { add: true, edit: true, move: true, delete: true, viewMovementHistory: true },
     kiosks: { add: true, delete: true },
+    returns: { add: true, view: true, updateStatus: true, delete: true },
     predefinedLists: { add: true, edit: true, delete: true },
     consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
     itemRequests: { add: true, approve: true },
