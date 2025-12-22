@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -32,7 +33,10 @@ service cloud.firestore {
     // 1. Coleção de Perfis: Protege quem pode alterar as permissões.
     match /profiles/{profileId} {
       allow read: if isAuth();
-      allow write: if isAuth() && (isAdmin() || getPerms().settings.manageProfiles == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().settings.manageProfiles == true);
+      // Permite que admins deletem qualquer perfil, exceto o próprio 'admin'
+      allow delete: if isAuth() && profileId != 'admin' && (isAdmin() || getPerms().settings.manageProfiles == true);
+      allow update: if isAuth() && (isAdmin() || getPerms().settings.manageProfiles == true);
     }
 
     // 2. Coleção de Usuários: Protege contra auto-promoção de privilégios.
@@ -133,7 +137,7 @@ service cloud.firestore {
     match /priceHistory/{historyId} {
       allow read: if isAuth();
       allow create: if isAuth();
-      allow update, delete: if false;
+      allow update, delete: if isAuth() && (isAdmin() || getPerms().stock.purchasing.deleteHistory == true);
     }
      match /simulationPriceHistory/{historyId} {
       allow read: if isAuth();
