@@ -181,7 +181,7 @@ useEffect(() => {
             notes: simulationToEdit.notes,
         });
         setSimulatedPrice(simulationToEdit.salePrice);
-        setSimulatedProfitGoal(simulationToEdit.profitGoal);
+        setSimulatedProfitGoal(simulationToEdit.profitGoal ?? null);
     } else {
         form.reset({ 
             name: '', 

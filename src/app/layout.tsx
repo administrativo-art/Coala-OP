@@ -67,35 +67,35 @@ export default function RootLayout({
                             <ProductsProvider>
                               <TaskProvider>
                                 <ItemAdditionProvider>
-                                  <ReturnsProvider>
-                                    <ExpiryProductsProvider>
-                                      <MovementHistoryProvider>
-                                        <AllTasksProvider>
-                                          <PredefinedListsProvider>
-                                            <ConsumptionAnalysisProvider>
-                                                <StockCountProvider>
-                                                  <RepositionProvider>
-                                                    <StockAuditProvider>
-                                                      <AuthorBoardDiaryProvider>
-                                                        <PurchaseProvider>
-                                                          <ProductSimulationCategoryProvider>
-                                                            <ProductSimulationProvider>
-                                                              <CompetitorProvider>
-                                                                {children}
-                                                              </CompetitorProvider>
-                                                            </ProductSimulationProvider>
-                                                          </ProductSimulationCategoryProvider>
-                                                        </PurchaseProvider>
-                                                      </AuthorBoardDiaryProvider>
-                                                    </StockAuditProvider>
-                                                  </RepositionProvider>
-                                                </StockCountProvider>
-                                            </ConsumptionAnalysisProvider>
-                                          </PredefinedListsProvider>
-                                        </AllTasksProvider>
-                                      </MovementHistoryProvider>
-                                    </ExpiryProductsProvider>
-                                  </ReturnsProvider>
+                                    <ReturnsProvider>
+                                        <ExpiryProductsProvider>
+                                            <MovementHistoryProvider>
+                                                <PredefinedListsProvider>
+                                                    <ConsumptionAnalysisProvider>
+                                                        <StockCountProvider>
+                                                            <RepositionProvider>
+                                                                <StockAuditProvider>
+                                                                    <AuthorBoardDiaryProvider>
+                                                                        <PurchaseProvider>
+                                                                            <ProductSimulationCategoryProvider>
+                                                                                <ProductSimulationProvider>
+                                                                                    <CompetitorProvider>
+                                                                                        <AllTasksProvider>
+                                                                                            {children}
+                                                                                        </AllTasksProvider>
+                                                                                    </CompetitorProvider>
+                                                                                </ProductSimulationProvider>
+                                                                            </ProductSimulationCategoryProvider>
+                                                                        </PurchaseProvider>
+                                                                    </AuthorBoardDiaryProvider>
+                                                                </StockAuditProvider>
+                                                            </RepositionProvider>
+                                                        </StockCountProvider>
+                                                    </ConsumptionAnalysisProvider>
+                                                </PredefinedListsProvider>
+                                            </MovementHistoryProvider>
+                                        </ExpiryProductsProvider>
+                                    </ReturnsProvider>
                                 </ItemAdditionProvider>
                               </TaskProvider>
                             </ProductsProvider>
