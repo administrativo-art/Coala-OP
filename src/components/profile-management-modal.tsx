@@ -283,7 +283,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
             <DialogDescription>Crie perfis de permissão para atribuir aos usuários.</DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto -mx-6 px-6">
           {showForm ? (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 h-full flex flex-col">
@@ -472,31 +472,29 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                 </Button>
               )}
               <Separator className="my-4" />
-              <div className="flex-1 overflow-auto -mx-6 px-6">
-                <ScrollArea className="h-full pr-4">
-                  <div className="space-y-2">
-                    {profiles.length > 0 ? profiles.map(profile => (
-                      <div key={profile.id} className="flex items-center justify-between rounded-md border p-3">
-                        <span className="font-medium">{profile.name}</span>
-                        {canEdit && <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClick(profile)}><Copy className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
-                            <DeleteConfirmationDialog
-                                open={false}
-                                onOpenChange={()=>{}}
-                                onConfirm={handleDeleteConfirm}
-                                itemName={`o perfil "${profileToDelete?.name}"`}
-                                triggerButton={
-                                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}><Trash2 className="h-4 w-4" /></Button>
-                                }
-                            />
-                        </div>}
-                      </div>
-                    )) : (
-                      <p className="text-center text-muted-foreground py-8">Nenhum perfil cadastrado.</p>
-                    )}
-                  </div>
-                </ScrollArea>
+              <div className="flex-1 overflow-y-auto -mx-6 px-6">
+                <div className="space-y-2 pr-4">
+                  {profiles.length > 0 ? profiles.map(profile => (
+                    <div key={profile.id} className="flex items-center justify-between rounded-md border p-3">
+                      <span className="font-medium">{profile.name}</span>
+                      {canEdit && <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClick(profile)}><Copy className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
+                          <DeleteConfirmationDialog
+                              open={false}
+                              onOpenChange={()=>{}}
+                              onConfirm={handleDeleteConfirm}
+                              itemName={`o perfil "${profileToDelete?.name}"`}
+                              triggerButton={
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}><Trash2 className="h-4 w-4" /></Button>
+                              }
+                          />
+                      </div>}
+                    </div>
+                  )) : (
+                    <p className="text-center text-muted-foreground py-8">Nenhum perfil cadastrado.</p>
+                  )}
+                </div>
               </div>
             </>
           )}
