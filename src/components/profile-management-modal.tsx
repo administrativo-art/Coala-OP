@@ -41,16 +41,48 @@ const permissionsSchema = z.object({
   }),
   stock: z.object({
     view: z.boolean(),
-    inventoryControl: z.object({ view: z.boolean(), addLot: z.boolean(), editLot: z.boolean(), writeDown: z.boolean(), transfer: z.boolean(), viewHistory: z.boolean() }),
-    stockCount: z.object({ view: z.boolean(), perform: z.boolean(), approve: z.boolean(), requestItem: z.boolean() }),
+    inventoryControl: z.object({
+      view: z.boolean(),
+      addLot: z.boolean(),
+      editLot: z.boolean(),
+      writeDown: z.boolean(),
+      transfer: z.boolean(),
+      viewHistory: z.boolean(),
+    }),
+    stockCount: z.object({
+      view: z.boolean(),
+      perform: z.boolean(),
+      approve: z.boolean(),
+      requestItem: z.boolean(),
+    }),
     audit: z.object({ view: z.boolean(), start: z.boolean(), approve: z.boolean() }),
-    analysis: z.object({ view: z.boolean(), restock: z.boolean(), consumption: z.boolean(), projection: z.boolean(), valuation: z.boolean() }),
-    purchasing: z.object({ view: z.boolean(), suggest: z.boolean(), approve: z.boolean(), deleteHistory: z.boolean() }),
-    returns: z.object({ view: z.boolean(), add: z.boolean(), updateStatus: z.boolean(), delete: z.boolean() }),
+    analysis: z.object({
+      view: z.boolean(),
+      restock: z.boolean(),
+      consumption: z.boolean(),
+      projection: z.boolean(),
+      valuation: z.boolean(),
+    }),
+    purchasing: z.object({
+      view: z.boolean(),
+      suggest: z.boolean(),
+      approve: z.boolean(),
+      deleteHistory: z.boolean(),
+    }),
+    returns: z.object({
+      view: z.boolean(),
+      add: z.boolean(),
+      updateStatus: z.boolean(),
+      delete: z.boolean(),
+    }),
     conversions: z.object({ view: z.boolean() }),
   }),
   team: z.object({ view: z.boolean(), manage: z.boolean() }),
-  pricing: z.object({ view: z.boolean(), simulate: z.boolean(), manageParameters: z.boolean() }),
+  pricing: z.object({
+    view: z.boolean(),
+    simulate: z.boolean(),
+    manageParameters: z.boolean(),
+  }),
   settings: z.object({
     view: z.boolean(),
     manageUsers: z.boolean(),
@@ -60,15 +92,30 @@ const permissionsSchema = z.object({
   }),
   tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
   help: z.object({ view: z.boolean() }),
-  // Legado
+  // Legado - será removido
   products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-  lots: z.object({ add: z.boolean(), edit: z.boolean(), move: z.boolean(), delete: z.boolean(), viewMovementHistory: z.boolean() }),
-  users: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean(), impersonate: z.boolean() }),
+  lots: z.object({
+    add: z.boolean(),
+    edit: z.boolean(),
+    move: z.boolean(),
+    delete: z.boolean(),
+    viewMovementHistory: z.boolean(),
+  }),
+  users: z.object({
+    add: z.boolean(),
+    edit: z.boolean(),
+    delete: z.boolean(),
+    impersonate: z.boolean(),
+  }),
   kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
   predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-  consumptionAnalysis: z.object({ upload: z.boolean(), viewHistory: z.boolean(), deleteHistory: z.boolean() }),
-  itemRequests: z.object({ add: true, approve: false }),
-  reposition: { cancel: z.boolean() },
+  consumptionAnalysis: z.object({
+    upload: z.boolean(),
+    viewHistory: z.boolean(),
+    deleteHistory: z.boolean(),
+  }),
+  itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
+  reposition: z.object({ cancel: z.boolean() }),
 });
 
 
@@ -162,23 +209,26 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const handleEdit = (profile: Profile) => {
     setEditingProfile(profile);
     
-    const mergedPermissions = JSON.parse(JSON.stringify(defaultGuestPermissions));
-    
-    const deepMerge = (target: any, source: any) => {
-        for (const key in source) {
-            if (source.hasOwnProperty(key)) {
-                if (source[key] instanceof Object && !Array.isArray(source[key])) {
-                    if (!target[key]) Object.assign(target, { [key]: {} });
-                    deepMerge(target[key], source[key]);
-                } else {
-                    Object.assign(target, { [key]: source[key] });
-                }
+    // Deep merge to ensure all permission keys from default are present
+    const deepMerge = (target: any, source: any): any => {
+      const output = { ...target };
+      for (const key in source) {
+        if (source.hasOwnProperty(key)) {
+          if (source[key] instanceof Object && !Array.isArray(source[key])) {
+            if (!(key in target)) {
+              Object.assign(output, { [key]: source[key] });
+            } else {
+              output[key] = deepMerge(target[key], source[key]);
             }
+          } else {
+            Object.assign(output, { [key]: source[key] });
+          }
         }
-        return target;
-    }
+      }
+      return output;
+    };
     
-    deepMerge(mergedPermissions, profile.permissions);
+    const mergedPermissions = deepMerge(defaultGuestPermissions, profile.permissions || {});
 
     form.reset({
       name: profile.name,
@@ -301,7 +351,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </FormItem>
                             )}
                             />
-                            <Accordion type="multiple" defaultValue={['stock']} className="w-full">
+                            <Accordion type="multiple" defaultValue={['dashboard', 'stock']} className="w-full">
                             
                             <AccordionItem value="dashboard">
                                 <AccordionTrigger className="text-lg font-semibold"><LayoutDashboard className="mr-2 h-5 w-5" /> Dashboard</AccordionTrigger>
@@ -473,28 +523,32 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
               )}
               <Separator className="my-4" />
               <div className="flex-1 overflow-y-auto -mx-6 px-6">
-                <div className="space-y-2 pr-4">
-                  {profiles.length > 0 ? profiles.map(profile => (
-                    <div key={profile.id} className="flex items-center justify-between rounded-md border p-3">
-                      <span className="font-medium">{profile.name}</span>
-                      {canEdit && <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClick(profile)}><Copy className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
-                          <DeleteConfirmationDialog
-                              open={false}
-                              onOpenChange={()=>{}}
-                              onConfirm={handleDeleteConfirm}
-                              itemName={`o perfil "${profileToDelete?.name}"`}
-                              triggerButton={
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}><Trash2 className="h-4 w-4" /></Button>
-                              }
-                          />
-                      </div>}
-                    </div>
-                  )) : (
-                    <p className="text-center text-muted-foreground py-8">Nenhum perfil cadastrado.</p>
-                  )}
-                </div>
+                <ScrollArea className="h-full pr-4">
+                  <div className="space-y-2">
+                    {profiles.length > 0 ? profiles.map(profile => (
+                      <div key={profile.id} className="flex items-center justify-between rounded-md border p-3">
+                        <span className="font-medium">{profile.name}</span>
+                        {canEdit && <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClick(profile)}><Copy className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
+                            <DeleteConfirmationDialog
+                                open={false}
+                                onOpenChange={()=>{}}
+                                onConfirm={handleDeleteConfirm}
+                                itemName={`o perfil "${profileToDelete?.name}"`}
+                                triggerButton={
+                                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                }
+                            />
+                        </div>}
+                      </div>
+                    )) : (
+                      <p className="text-center text-muted-foreground py-8">Nenhum perfil cadastrado.</p>
+                    )}
+                  </div>
+                </ScrollArea>
               </div>
             </>
           )}
