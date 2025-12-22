@@ -68,23 +68,23 @@ const productFormSchema = z.object({
 }).superRefine((data, ctx) => {
     if (data.enableLogistics) {
         if (!data.multiplo_caixa || data.multiplo_caixa <= 0) {
-            ctx.addIssue({ path: ['multiplo_caixa'], message: 'Deve ser > 0.' });
+            ctx.addIssue({ code: 'custom', path: ['multiplo_caixa'], message: 'Deve ser > 0.' });
         }
         if (!data.rotulo_caixa || data.rotulo_caixa.trim() === '') {
-            ctx.addIssue({ path: ['rotulo_caixa'], message: 'Obrigatório.' });
+            ctx.addIssue({ code: 'custom', path: ['rotulo_caixa'], message: 'Obrigatório.' });
         }
     }
     if (data.enableSecondaryUnit) {
         if (!data.secondaryUnitValue || data.secondaryUnitValue <= 0) {
-            ctx.addIssue({ path: ['secondaryUnitValue'], message: 'Deve ser > 0.' });
+            ctx.addIssue({ code: 'custom', path: ['secondaryUnitValue'], message: 'Deve ser > 0.' });
         }
         if (!data.secondaryUnit) {
-            ctx.addIssue({ path: ['secondaryUnit'], message: 'Obrigatório.' });
+            ctx.addIssue({ code: 'custom', path: ['secondaryUnit'], message: 'Obrigatório.' });
         }
     }
     if (data.enableCountingInstruction) {
         if (!data.countingInstruction && !data.countingInstructionImageUrl) {
-            ctx.addIssue({ path: ['countingInstruction'], message: 'Adicione um texto ou uma imagem.' });
+            ctx.addIssue({ code: 'custom', path: ['countingInstruction'], message: 'Adicione um texto ou uma imagem.' });
         }
     }
 });
@@ -455,5 +455,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         </>
     );
 }
+
+    
 
     
