@@ -1,5 +1,4 @@
 
-
       
 "use client"
 
@@ -31,7 +30,6 @@ import { ClassificationManagementModal } from './classification-management-modal
 import { useClassifications } from '@/hooks/use-classifications';
 
 const stockLevelSchema = z.object({
-    kioskId: z.string(),
     min: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
     safetyStock: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
     leadTime: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
@@ -44,9 +42,10 @@ const baseProductSchema = z.object({
   category: z.enum(unitCategories),
   unit: z.string().min(1, 'A unidade de medida é obrigatória.'),
   initialCostPerUnit: z.coerce.number().optional(),
-  stockLevels: z.array(stockLevelSchema),
+  stockLevels: z.record(stockLevelSchema).optional(),
   consumptionMonths: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
 });
+
 
 type BaseProductFormValues = z.infer<typeof baseProductSchema>;
 
@@ -80,18 +79,12 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
-    defaultValues: { name: '', classification: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: [], consumptionMonths: 0 }
-  });
-
-  const { fields, update } = useFieldArray({
-    control: form.control,
-    name: 'stockLevels'
+    defaultValues: { name: '', classification: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: {}, consumptionMonths: 0 }
   });
   
   const isDirty = form.formState.isDirty;
 
   useEffect(() => {
-    // If the modal is closed, reset the ref to allow re-initialization on next open.
     if (!open) {
       lastInitKeyRef.current = null;
       return;
@@ -99,16 +92,14 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
     const initKey = productToEdit ? `edit:${productToEdit.id}` : 'create';
 
-    // 1) If we have already initialized for this key, do not run again.
     if (lastInitKeyRef.current === initKey) return;
     
-    // 2) If the user has already dirtied the form, do not reset over their changes.
     if (isDirty && initKey === lastInitKeyRef.current) return;
     
-    const kioskStockLevels = sortedKiosks.map(kiosk => {
+    const stockLevelsObject: Record<string, any> = {};
+    sortedKiosks.forEach(kiosk => {
       const level = productToEdit?.stockLevels?.[kiosk.id];
-      return {
-          kioskId: kiosk.id,
+      stockLevelsObject[kiosk.id] = {
           min: level?.min ?? 0,
           safetyStock: level?.safetyStock ?? 0,
           leadTime: level?.leadTime ?? 0,
@@ -122,7 +113,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       category: productToEdit?.category ?? 'Massa',
       unit: productToEdit?.unit ?? 'g',
       initialCostPerUnit: productToEdit?.initialCostPerUnit ?? 0,
-      stockLevels: kioskStockLevels,
+      stockLevels: stockLevelsObject,
       consumptionMonths: productToEdit?.consumptionMonths ?? 0,
     });
     
@@ -141,16 +132,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   }, [categoryWatch, form, productToEdit]);
 
   const onSubmit = (values: BaseProductFormValues) => {
-    const stockLevelsObject: { [kioskId: string]: { min: number, safetyStock: number, leadTime: number, override: boolean } } = {};
-    values.stockLevels.forEach(sl => {
-        stockLevelsObject[sl.kioskId] = { 
-            min: sl.min ?? 0,
-            safetyStock: sl.safetyStock ?? 0,
-            leadTime: sl.leadTime ?? 0,
-            override: sl.override 
-        };
-    });
-
     const finalClassification = values.classification === 'none' ? '' : values.classification;
 
     const dataPayload: Partial<BaseProduct> = {
@@ -158,7 +139,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       classification: finalClassification,
       category: values.category,
       unit: values.unit,
-      stockLevels: stockLevelsObject,
+      stockLevels: values.stockLevels,
       consumptionMonths: values.consumptionMonths,
       initialCostPerUnit: values.initialCostPerUnit,
     };
@@ -294,31 +275,28 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                               </TableRow>
                           </TableHeader>
                           <TableBody>
-                              {fields.map((field, index) => {
-                                const kiosk = sortedKiosks.find(k => k.id === field.kioskId);
-                                return (
-                                  <TableRow key={field.id}>
+                              {sortedKiosks.map((kiosk) => (
+                                  <TableRow key={kiosk.id}>
                                     <TableCell className="font-medium">
-                                      {kiosk?.name}
+                                      {kiosk.name}
                                     </TableCell>
                                     <TableCell>
-                                       <FormField control={form.control} name={`stockLevels.${index}.min`} render={({ field: minField }) => (
-                                            <FormItem><FormControl><Input type="number" className="text-right w-full" {...minField} value={minField.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                       <FormField control={form.control} name={`stockLevels.${kiosk.id}.min`} render={({ field }) => (
+                                            <FormItem><FormControl><Input type="number" className="text-right w-full" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                                         )}/>
                                     </TableCell>
                                      <TableCell>
-                                       <FormField control={form.control} name={`stockLevels.${index}.safetyStock`} render={({ field: safetyField }) => (
-                                            <FormItem><FormControl><Input type="number" className="text-right w-full" {...safetyField} value={safetyField.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                       <FormField control={form.control} name={`stockLevels.${kiosk.id}.safetyStock`} render={({ field }) => (
+                                            <FormItem><FormControl><Input type="number" className="text-right w-full" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                                         )}/>
                                     </TableCell>
                                      <TableCell>
-                                       <FormField control={form.control} name={`stockLevels.${index}.leadTime`} render={({ field: leadTimeField }) => (
-                                            <FormItem><FormControl><Input type="number" className="text-right w-full" {...leadTimeField} value={leadTimeField.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                       <FormField control={form.control} name={`stockLevels.${kiosk.id}.leadTime`} render={({ field }) => (
+                                            <FormItem><FormControl><Input type="number" className="text-right w-full" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                                         )}/>
                                     </TableCell>
                                   </TableRow>
-                                )}
-                              )}
+                                ))}
                           </TableBody>
                       </Table>
                   </div>
@@ -336,4 +314,3 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     </>
   );
 }
-

@@ -1,9 +1,9 @@
-
 {
   "storage": {
     "rules": "storage.rules"
   },
   "firestore": {
+    "database": "coala",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   }
