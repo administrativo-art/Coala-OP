@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo } from 'react';
-import { useForm, useFieldArray, useWatch } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -15,7 +15,7 @@ import { useStockAudit } from '@/hooks/use-stock-audit';
 import { useToast } from '@/hooks/use-toast';
 import { type StockAuditItem, type StockAuditSession, type MovementType, type LotEntry } from '@/types';
 
-import { GlassCard, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/glass-card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -29,6 +29,8 @@ import { Textarea } from './ui/textarea';
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from './ui/badge';
+import { Separator } from './ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
@@ -79,27 +81,27 @@ type AuditFormValues = z.infer<typeof auditFormSchema>;
 function JustificationSection({ itemIndex, control }: { itemIndex: number, control: any }) {
   const { fields, append, remove } = useFieldArray({ control, name: `items.${itemIndex}.divergences` });
   return (
-    <GlassCard variant="red" className="mt-3 p-3 space-y-3">
-        <h4 className="font-semibold text-red-700 dark:text-red-400 flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>Registrar Saídas do Turno</h4>
+    <Card className="mt-3 p-3 space-y-3 bg-red-500/5">
+        <h4 className="font-semibold text-destructive/80 flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>Registrar Saídas do Turno</h4>
         <div className="space-y-2">
             {fields.map((field, divIndex) => (
                 <div key={field.id} className="p-3 border rounded-md space-y-2 bg-background/50 relative shadow-sm">
                     <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive h-7 w-7" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
-                    <div className="grid grid-cols-2 gap-2">
-                        <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field }) => (
-                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>
+                    <div className="grid grid-cols-2 gap-2 items-start">
+                        <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field: qtyField }) => (
+                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} /></FormControl></FormItem>
                         )}/>
-                        <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field }) => (
+                        <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field: reasonField }) => (
                             <FormItem><FormLabel className="text-xs">Motivo</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
+                                <Select onValueChange={reasonField.onChange} value={reasonField.value}>
                                     <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="..." /></SelectTrigger></FormControl>
                                     <SelectContent>{DIVERGENCE_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
                                 </Select>
                             </FormItem>
                         )}/>
                     </div>
-                     <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.notes`} render={({ field }) => (
-                        <FormItem><FormControl><Textarea {...field} placeholder="Observação (opcional)" rows={1} className="text-sm min-h-[38px]" /></FormControl></FormItem>
+                     <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.notes`} render={({ field: notesField }) => (
+                        <FormItem><FormControl><Textarea {...notesField} placeholder="Observação (opcional)" rows={1} className="text-sm min-h-[38px]" /></FormControl></FormItem>
                     )}/>
                 </div>
             ))}
@@ -107,7 +109,7 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
         <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: '', quantity: 0, notes: '' })}>
             <PlusCircle className="mr-2 h-3 w-3"/> Adicionar Saída
         </Button>
-    </GlassCard>
+    </Card>
   );
 }
 
@@ -115,8 +117,8 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
     const [showForm, setShowForm] = useState(!!form.getValues(`items.${itemIndex}.adjustment`));
     if (showForm) {
         return (
-             <GlassCard variant="amber" className="p-3 space-y-3">
-                 <h4 className="font-semibold text-amber-700 dark:text-amber-400 text-sm">Reconciliação de Turno Anterior</h4>
+             <Card className="p-3 space-y-3 bg-amber-500/10">
+                 <h4 className="font-semibold text-amber-800 text-sm">Reconciliação de Turno Anterior</h4>
                 <div className="grid grid-cols-2 gap-4">
                      <FormField control={control} name={`items.${itemIndex}.adjustment.quantity`} render={({ field }) => (
                         <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl></FormItem>
@@ -129,7 +131,7 @@ function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number
                     <FormItem><FormControl><Textarea {...field} placeholder="Ex: Encontrado no freezer" rows={1} className="text-sm min-h-[38px]" /></FormControl></FormItem>
                 )}/>
                 <Button type="button" variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => { form.setValue(`items.${itemIndex}.adjustment`, null); setShowForm(false); }}>Remover ajuste</Button>
-            </GlassCard>
+            </Card>
         )
     }
     return <div className="text-center p-2"><Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setShowForm(true)}>Identificou divergência do turno anterior?</Button></div>
@@ -235,7 +237,7 @@ function AuditForm({
 
   return (
     <>
-      <GlassCard>
+      <Card>
         <CardHeader>
           <CardTitle>Contagem em {session.kioskName}</CardTitle>
           <CardDescription>Contagem iniciada por {session.auditedBy.username} em {format(parseISO(session.startedAt), 'dd/MM/yyyy HH:mm')}</CardDescription>
@@ -254,7 +256,7 @@ function AuditForm({
                               const finalQty = watchedItems[index]?.finalQuantity;
 
                               return (
-                                  <GlassCard key={item.lotId} className="flex flex-col">
+                                  <Card key={item.lotId} className="flex flex-col">
                                       <div className="p-4 flex gap-4 items-center">
                                           <div className="w-20 h-20 shrink-0">
                                               {product?.imageUrl ? (
@@ -284,7 +286,7 @@ function AuditForm({
                                           <ReconciliationSection itemIndex={index} control={form.control} form={form} />
                                           <JustificationSection itemIndex={index} control={form.control} />
                                       </div>
-                                  </GlassCard>
+                                  </Card>
                               );
                           })}
                       </div>
@@ -302,7 +304,7 @@ function AuditForm({
                   </div>
               </CardContent>
           </form></Form>
-      </GlassCard>
+      </Card>
       <RequestItemAdditionModal
         open={isRequestModalOpen}
         onOpenChange={setIsRequestModalOpen}
@@ -346,13 +348,13 @@ export function AuditHistory() {
     }
 
     return (
-        <GlassCard>
+        <Card>
             <CardHeader>
                 <CardTitle>Histórico de contagens</CardTitle>
                 <CardDescription>Visualize todas as contagens que foram concluídas.</CardDescription>
             </CardHeader>
             <CardContent>
-                {loading ? <Skeleton className="h-40 w-full bg-white/20 dark:bg-white/5" /> : completedAudits.length === 0 ? (
+                {loading ? <Skeleton className="h-40 w-full" /> : completedAudits.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                         <Inbox className="h-12 w-12 mx-auto mb-4" />
                         <p className="font-semibold">Nenhuma contagem concluída.</p>
@@ -385,11 +387,21 @@ export function AuditHistory() {
                     </div>
                 )}
             </CardContent>
-        </GlassCard>
+        </Card>
     );
 }
 
-function KioskSelectionModal({ open, onOpenChange, kiosks, onSelectKiosk }: { open: boolean, onOpenChange: (open: boolean) => void, kiosks: any[], onSelectKiosk: (kioskId: string) => void }) {
+function KioskSelectionModal({
+  open,
+  onOpenChange,
+  kiosks,
+  onSelectKiosk,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  kiosks: any[];
+  onSelectKiosk: (kioskId: string) => void;
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -415,7 +427,11 @@ function KioskSelectionModal({ open, onOpenChange, kiosks, onSelectKiosk }: { op
   );
 }
 
-export function StockCountManagement() {
+interface StockCountManagementProps {
+  showExportButton?: boolean;
+}
+
+export function StockCountManagement({ showExportButton = false }: StockCountManagementProps) {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
@@ -430,19 +446,36 @@ export function StockCountManagement() {
   
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
+
     const kiosk = kiosks.find(k => k.id === kioskId);
     if (!kiosk) return;
 
     const productMap = new Map(products.map(p => [p.id, p]));
     const activeLots = lots.filter(lot => lot.kioskId === kioskId && lot.quantity > 0);
     
-    const auditItems: StockAuditItem[] = activeLots.map(lot => ({
-        productId: lot.productId, productName: getProductFullName(productMap.get(lot.productId)!),
-        lotId: lot.id, lotNumber: lot.lotNumber, expiryDate: lot.expiryDate || '',
-        systemQuantity: lot.quantity, finalQuantity: lot.quantity, divergences: [],
-    }));
+    const auditItems: StockAuditItem[] = activeLots.map(lot => {
+        const product = productMap.get(lot.productId)!;
+        const systemQuantity = lot.quantity; 
+        return {
+            productId: lot.productId,
+            productName: getProductFullName(product),
+            lotId: lot.id, 
+            lotNumber: lot.lotNumber,
+            expiryDate: lot.expiryDate || '',
+            systemQuantity: systemQuantity,
+            finalQuantity: systemQuantity,
+            divergences: [],
+        };
+    });
     
-    if (auditItems.length === 0) return toast({ variant: "destructive", title: "Quiosque Vazio" });
+    if (auditItems.length === 0) {
+        toast({
+            variant: "destructive",
+            title: "Quiosque Vazio",
+            description: "Não há lotes em estoque para contar neste quiosque.",
+        });
+        return;
+    }
 
     const newSessionData: Omit<StockAuditSession, 'id'> = {
       kioskId: kiosk.id, kioskName: kiosk.name, status: 'pending_review',
@@ -455,7 +488,7 @@ export function StockCountManagement() {
         setActiveSession({ id: newId, ...newSessionData });
     }
   };
-
+  
   const handleFinalize = async (items: StockAuditItem[]) => {
     if (!activeSession || !user) return;
     try {
@@ -483,24 +516,40 @@ export function StockCountManagement() {
     setActiveSession(null);
   };
 
+  const handleExport = () => {
+    // Logic to export data goes here.
+    // For now, it will just show an alert.
+    alert('Função de exportação a ser implementada.');
+  };
+
   if (activeSession) {
-    return <AuditForm session={activeSession} onSaveAndExit={handleSaveAndExit} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
+    return <AuditForm session={activeSession} onSave={handleSaveAndExit} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
   }
 
   return (
     <>
-        <GlassCard>
+        <Card>
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><ShieldCheck/> Contagem de estoque</CardTitle>
-                <CardDescription>Inicie uma nova contagem ou continue uma sessão salva para revisão.</CardDescription>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <CardTitle className="flex items-center gap-2"><ShieldCheck/>Contagem de estoque</CardTitle>
+                        <CardDescription>Inicie uma nova contagem ou continue uma sessão salva para revisão.</CardDescription>
+                    </div>
+                     {showExportButton && (
+                        <Button onClick={handleExport} variant="outline" size="sm" className="w-full sm:w-auto">
+                            <Download className="mr-2 h-4 w-4" />
+                            Exportar
+                        </Button>
+                    )}
+                </div>
             </CardHeader>
             <CardContent className="space-y-6">
-                <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto transition-transform hover:-translate-y-px">Nova contagem</Button>
+                <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Nova contagem</Button>
                 <div className="space-y-3 pt-4 border-t">
                     <h3 className="text-sm font-bold uppercase text-muted-foreground">Contagens em aberto</h3>
-                    {loading ? <Skeleton className="h-24 w-full bg-white/20 dark:bg-white/5 backdrop-blur-md" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
+                    {loading ? <Skeleton className="h-24 w-full" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
                         pendingAudits.map(s => (
-                            <div key={s.id} className="p-3 border rounded-lg flex justify-between items-center bg-muted/10">
+                            <div key={s.id} className="p-3 border rounded-md flex justify-between items-center bg-muted/10">
                                 <div className="space-y-0.5"><p className="font-bold text-sm">{s.kioskName}</p><p className="text-[10px] text-muted-foreground uppercase">{s.auditedBy.username} • {format(parseISO(s.startedAt), 'dd/MM HH:mm')}</p></div>
                                 <Button size="sm" variant="outline" onClick={() => setActiveSession(s)}>Continuar</Button>
                             </div>
@@ -508,7 +557,7 @@ export function StockCountManagement() {
                     }
                 </div>
             </CardContent>
-        </GlassCard>
+        </Card>
       <KioskSelectionModal open={isKioskSelectionOpen} onOpenChange={setIsKioskSelectionOpen} kiosks={kiosks} onSelectKiosk={handleStartSession} />
     </>
   );
