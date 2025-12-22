@@ -351,7 +351,7 @@ useEffect(() => {
         sku: values.sku,
     };
     
-    const finalStatus: 'active' | 'archived' = values.status ? 'active' : 'archived';
+    const finalStatus = values.status ? 'active' : 'archived';
     
     if (simulationToEdit) {
       const simulationData = { 
@@ -915,5 +915,3 @@ useEffect(() => {
     </>
   );
 }
-
-    

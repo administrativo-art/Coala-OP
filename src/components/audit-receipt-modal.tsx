@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
@@ -91,7 +90,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
   });
 
   const handleConfirmReceipt = async (values: AuditFormValues) => {
-    if (!user || sigCanvas.current?.isEmpty()) {
+    if (!user || !sigCanvas.current || sigCanvas.current.isEmpty()) {
         toast({ variant: 'destructive', title: 'Assinatura obrigatória', description: 'Por favor, assine para confirmar o recebimento.' });
         return;
     }
@@ -126,7 +125,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     const newStatus = hasDivergence ? 'Recebido com divergência' : 'Recebido sem divergência';
     
     const signature: SignatureData = {
-        dataUrl: sigCanvas.current?.toDataURL('image/png') || '',
+        dataUrl: sigCanvas.current.toDataURL('image/png') || '',
         signedBy: user.username,
         signedAt: new Date().toISOString()
     };
@@ -147,7 +146,9 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
   };
   
   const clearSignature = () => {
-    sigCanvas.current?.clear();
+    if (sigCanvas.current) {
+      sigCanvas.current.clear();
+    }
   };
   
   const LotRow = ({ itemIndex, lotIndex }: { itemIndex: number, lotIndex: number }) => {
@@ -256,5 +257,3 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     </Dialog>
   );
 }
-
-    
