@@ -369,8 +369,7 @@ useEffect(() => {
         markup,
         ppo: ppoData
       };
-      const items = values.items;
-      await updateSimulation(simulationData, items);
+      await updateSimulation({ ...simulationData, items: values.items });
     } else {
        const finalData = {
         ...values,
@@ -918,3 +917,4 @@ useEffect(() => {
 }
 
     
+
