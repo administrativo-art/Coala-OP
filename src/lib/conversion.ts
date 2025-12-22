@@ -21,7 +21,7 @@ export const getUnitsForCategory = (category: UnitCategory): string[] => {
   return Object.keys(units[category] || {});
 };
 
-export { unitCategories };
+export { unitCategories, type UnitCategory };
 
 export function convertValue(value: number, fromUnit: string, toUnit: string, category: UnitCategory): number {
   if (value === 0) return 0;
