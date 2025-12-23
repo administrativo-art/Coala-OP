@@ -85,7 +85,7 @@ export async function generateFichaTecnicaCompletaPdf(
     
     if (hasImage) {
         try {
-            const img = new (window as any).Image();
+            const img = new Image();
             img.crossOrigin = 'anonymous';
             img.src = sim.ppo!.referenceImageUrl!;
             await new Promise(resolve => { img.onload = resolve; img.onerror = () => resolve(null); });
@@ -239,7 +239,7 @@ export async function generateFichaTecnicaCompletaPdf(
 
                 if (i > 0) {
                     doc.setDrawColor(226);
-                    doc.setLineDash([1]);
+                    doc.setLineDash([1], 0);
                     doc.line(SEP_INSET_L, blockY, SEP_INSET_R, blockY);
                     doc.setLineDash([]);
                 }
@@ -271,7 +271,7 @@ export async function generateFichaTecnicaCompletaPdf(
 
                 blockY += rowH;
                 doc.setDrawColor(226);
-                doc.setLineDash([1]);
+                doc.setLineDash([1], 0);
                 doc.line(SEP_INSET_L, blockY, SEP_INSET_R, blockY);
                 doc.setLineDash([]);
 

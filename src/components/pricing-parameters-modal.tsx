@@ -47,9 +47,14 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   
   const form = useForm<ParametersFormValues>({
     resolver: zodResolver(parametersSchema),
+    defaultValues: { // Add default values to prevent uncontrolled component warnings
+        defaultOperationPercentage: 0,
+        profitGoals: [],
+        profitRanges: [],
+    }
   });
 
-  const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: 'profitGoals' as const });
+  const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: 'profitGoals' });
   const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
 
   useEffect(() => {

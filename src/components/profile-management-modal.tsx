@@ -21,11 +21,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
-const permissionsSchema = z.object({}).catchall(z.any());
+const permissionsSchema = z.object({}).passthrough();
 
 const profileSchema = z.object({
   name: z.string().min(3, 'O nome do perfil deve ter pelo menos 3 caracteres.'),
@@ -180,10 +180,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     setEditingProfile(null);
   };
 
-  const renderPermissionSwitch = (name: FieldPath<ProfileFormValues["permissions"]>, label: string, description: string, disabled: boolean = false, indented: boolean = false) => (
+  const renderPermissionSwitch = (name: FieldPath<ProfileFormValues>, label: string, description: string, disabled: boolean = false, indented: boolean = false) => (
     <FormField
       control={form.control}
-      name={name as any}
+      name={name}
       render={({ field }) => (
         <FormItem className={`flex flex-row items-center justify-between rounded-lg border p-3 ${indented ? 'ml-6 bg-muted/30' : ''}`}>
           <div className="space-y-0.5">
@@ -198,10 +198,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     />
   );
   
-   const renderModuleToggle = (name: FieldPath<ProfileFormValues["permissions"]>, label: string, description?: string) => (
+   const renderModuleToggle = (name: FieldPath<ProfileFormValues>, label: string, description?: string) => (
     <FormField
       control={form.control}
-      name={name as any}
+      name={name}
       render={({ field }) => (
         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-muted/30">
           <div className="space-y-0.5">
@@ -407,6 +407,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.tasks.manage", "Gerenciar Tarefas", "Permite criar, atribuir, editar e excluir tarefas.", !tasksViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>
+                            
                              <AccordionItem value="itemRequests">
                                 <AccordionTrigger className="text-lg font-semibold"><PackagePlus className="mr-2 h-5 w-5" /> Solicitação de Itens</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
