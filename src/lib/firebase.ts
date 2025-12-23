@@ -1,6 +1,6 @@
 
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
@@ -16,8 +16,10 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Connect to the specific "coala" database
-const db = getFirestore(app, "coala");
+// Connect to the specific "coala" database and force Long Polling
+const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, "coala");
 const storage = getStorage(app);
 const auth = getAuth(app);
 
