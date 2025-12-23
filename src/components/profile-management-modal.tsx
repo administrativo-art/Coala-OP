@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useForm, type FieldPath, type FieldValues, ControllerRenderProps } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -365,18 +365,16 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <h4 className="font-semibold text-md mb-2">Conversões</h4>
+                                        <h4 className="font-semibold text-md mb-2">Conversões e Listas</h4>
                                         {renderPermissionSwitch("permissions.stock.conversions.view", "Visualizar Conversor de Medidas", "Permite acessar a ferramenta de conversão.", !stockViewWatch)}
-                                    </div>
-                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <h4 className="font-semibold text-md mb-2">Listas</h4>
-                                        {renderPermissionSwitch("permissions.stock.predefinedLists.view", "Visualizar Listas", "Permite ver e usar listas de contagem pré-definidas.", !stockViewWatch)}
                                         {renderPermissionSwitch("permissions.stock.predefinedLists.manage", "Gerenciar Listas", "Permite criar, editar e excluir listas de contagem.", !stockViewWatch, true)}
                                     </div>
+                                    
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Reposição</h4>
                                         {renderPermissionSwitch("permissions.reposition.cancel", "Cancelar Atividade", "Permite cancelar uma atividade de reposição em andamento.", !stockViewWatch)}
                                     </div>
+
                                 </AccordionContent>
                             </AccordionItem>
 

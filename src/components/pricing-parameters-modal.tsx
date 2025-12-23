@@ -56,17 +56,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
 
   const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
 
-  const goalFields = form.watch('profitGoals');
-
-  const appendGoal = (value: number) => {
-    const currentGoals = form.getValues('profitGoals');
-    form.setValue('profitGoals', [...currentGoals, value]);
-  };
-
-  const removeGoal = (index: number) => {
-    const currentGoals = form.getValues('profitGoals');
-    form.setValue('profitGoals', currentGoals.filter((_, i) => i !== index));
-  };
+  const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: "profitGoals" as "profitRanges" });
 
 
   useEffect(() => {
@@ -96,6 +86,17 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
       color: 'text-primary'
     });
   };
+
+  const handleAddGoal = () => {
+    const currentGoals = form.getValues('profitGoals') || [];
+    form.setValue('profitGoals', [...currentGoals, 50]);
+  }
+
+  const handleRemoveGoal = (index: number) => {
+    const currentGoals = form.getValues('profitGoals') || [];
+    form.setValue('profitGoals', currentGoals.filter((_, i) => i !== index));
+  }
+
 
   const colorOptions = [
     { value: 'text-green-600', label: 'Verde', hex: '#16A34A' },
@@ -145,15 +146,15 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                       <div>
                         <FormLabel>Metas de Lucro Disponíveis (%)</FormLabel>
                         <div className="space-y-2 mt-2 p-3 border rounded-lg">
-                            {goalFields.map((field, index) => (
+                            {(form.watch('profitGoals') || []).map((goal, index) => (
                                 <div key={index} className="flex items-center gap-2">
                                   <FormField control={form.control} name={`profitGoals.${index}`} render={({ field: inputField }) => (
                                       <FormItem className="flex-grow"><FormControl><Input type="number" {...inputField} value={inputField.value ?? ''} onChange={e => inputField.onChange(e.target.value === '' ? '' : parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>
                                   )}/>
-                                  <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeGoal(index)}><Trash2 className="h-4 w-4" /></Button>
+                                  <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => handleRemoveGoal(index)}><Trash2 className="h-4 w-4" /></Button>
                                 </div>
                             ))}
-                            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => appendGoal(50)}><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Meta</Button>
+                            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={handleAddGoal}><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Meta</Button>
                         </div>
                       </div>
 
