@@ -3,8 +3,6 @@
 
 import { useMemo } from 'react';
 import { useTasks } from '@/hooks/use-tasks';
-import { useForm } from '@/hooks/use-form';
-import { useForm as useSubmissionHook } from "@/hooks/use-form";
 import { useAuth } from '@/hooks/use-auth';
 import { differenceInHours, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -21,10 +19,9 @@ const truncateLabel = (label: string, maxLength = 25) => {
 
 export function ReportsDashboard() {
     const { tasks, loading: loadingTasks } = useTasks();
-    const { submissions, templates, loading: loadingForms } = useSubmissionHook();
     const { users, loading: loadingUsers } = useAuth();
     
-    const loading = loadingTasks || loadingForms || loadingUsers;
+    const loading = loadingTasks || loadingUsers;
 
     const stats = useMemo(() => {
         if (loading) return null;
@@ -36,47 +33,43 @@ export function ReportsDashboard() {
             ? completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
             : 0;
             
-        // Pergunta que gerou mais tarefas
+        // Pergunta que gerou mais tarefas (mantendo lógica, mas pode ser menos útil agora)
         const questionTaskCounts = tasks.reduce((acc, task) => {
-            const questionId = task.origin.questionId;
-            acc[questionId] = (acc[questionId] || 0) + 1;
+            if (task.origin.questionId) {
+                const questionId = task.origin.questionId;
+                acc[questionId] = (acc[questionId] || 0) + 1;
+            }
             return acc;
         }, {} as Record<string, number>);
         
-        const allQuestions = templates.flatMap(t => t.sections.flatMap(s => s.questions));
-        const questionLabels = new Map(allQuestions.map(q => [q.id, q.label]));
-        
         const questionData = Object.entries(questionTaskCounts)
-            .map(([id, count]) => ({ name: truncateLabel(questionLabels.get(id) || `Pergunta ${id.slice(0,5)}`), count }))
+            .map(([id, count]) => ({ name: `Pergunta ${id.slice(0,5)}`, count }))
             .sort((a,b) => b.count - a.count)
             .slice(0, 10);
             
-        // Formulário que gerou mais tarefas
+        // Formulário que gerou mais tarefas (mantendo lógica, mas pode ser menos útil agora)
         const formTaskCounts = tasks.reduce((acc, task) => {
-            const submission = submissions.find(s => s.id === task.origin.submissionId);
-            if(submission) {
-                const templateId = submission.templateId;
+            if (task.origin.type === 'form') {
+                const templateId = task.origin.id;
                 acc[templateId] = (acc[templateId] || 0) + 1;
             }
             return acc;
         }, {} as Record<string, number>);
         
-        const formLabels = new Map(templates.map(t => [t.id, t.name]));
-        
         const formData = Object.entries(formTaskCounts)
-            .map(([id, count]) => ({ name: truncateLabel(formLabels.get(id) || `Formulário ${id.slice(0,5)}`), count }))
+            .map(([id, count]) => ({ name: `Formulário ${id.slice(0,5)}`, count }))
             .sort((a,b) => b.count - a.count)
             .slice(0, 10);
             
-        // Usuário com mais respostas
-        const userSubmissionCounts = submissions.reduce((acc, submission) => {
-            acc[submission.userId] = (acc[submission.userId] || 0) + 1;
+        // Usuário com mais tarefas atribuídas
+        const userTaskCounts = tasks.reduce((acc, task) => {
+            acc[task.assigneeId] = (acc[task.assigneeId] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
         const userLabels = new Map(users.map(u => [u.id, u.username]));
 
-        const userData = Object.entries(userSubmissionCounts)
+        const userData = Object.entries(userTaskCounts)
              .map(([id, count]) => ({ name: userLabels.get(id) || `Usuário ${id.slice(0,5)}`, count }))
              .sort((a,b) => b.count - a.count)
              .slice(0, 10);
@@ -100,7 +93,7 @@ export function ReportsDashboard() {
             taskTypeData
         };
         
-    }, [loading, tasks, submissions, templates, users]);
+    }, [loading, tasks, users]);
 
     const renderChart = (title: string, description: string, data: {name: string, count: number}[], Icon: React.ElementType) => (
         <Card>
@@ -139,7 +132,7 @@ export function ReportsDashboard() {
         <div className="space-y-6">
             <CardHeader className="p-0">
                 <CardTitle className="flex items-center gap-2 text-3xl"><AreaChart/> Relatórios</CardTitle>
-                <CardDescription>Métricas e análises sobre os formulários e tarefas do sistema.</CardDescription>
+                <CardDescription>Métricas e análises sobre as tarefas do sistema.</CardDescription>
             </CardHeader>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -165,20 +158,18 @@ export function ReportsDashboard() {
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Formulários Enviados</CardTitle>
+                        <CardTitle className="text-sm font-medium">Tarefas Concluídas</CardTitle>
                         <CheckCircle className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{submissions.length}</div>
-                        <p className="text-xs text-muted-foreground">Total de respostas de formulários</p>
+                        <div className="text-2xl font-bold">{tasks.filter(t => t.status === 'completed').length}</div>
+                        <p className="text-xs text-muted-foreground">Total de tarefas finalizadas</p>
                     </CardContent>
                 </Card>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {stats && renderChart("Perguntas que mais geram tarefas", "Top 10 perguntas por número de tarefas criadas.", stats.questionData, FileText)}
-                {stats && renderChart("Formulários que mais geram tarefas", "Top 10 formulários por número de tarefas criadas.", stats.formData, FileText)}
-                {stats && renderChart("Usuários que mais respondem", "Top 10 usuários por número de formulários enviados.", stats.userData, Users)}
+                {stats && renderChart("Tarefas por Usuário", "Top 10 usuários por número de tarefas atribuídas.", stats.userData, Users)}
                 {stats && renderChart("Tipos de tarefa mais frequentes", "Top 10 tipos de tarefas por frequência.", stats.taskTypeData, BarChart2)}
             </div>
         </div>
