@@ -56,9 +56,6 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
 
   const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
 
-  const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: "profitGoals" as "profitRanges" });
-
-
   useEffect(() => {
     if (open && pricingParameters) {
       form.reset({
@@ -154,7 +151,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                                   <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => handleRemoveGoal(index)}><Trash2 className="h-4 w-4" /></Button>
                                 </div>
                             ))}
-                            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={handleAddGoal}><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Meta</Button>
+                            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => handleAddGoal()}><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Meta</Button>
                         </div>
                       </div>
 
@@ -357,3 +354,5 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
         </div>
     );
 }
+
+    

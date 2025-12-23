@@ -367,3 +367,5 @@ export async function generateFichaTecnicaCompletaPdf(
 
     doc.save(`ficha_tecnica_${sim.name.replace(/ /g, '_')}.pdf`);
 }
+
+    
