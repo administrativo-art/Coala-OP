@@ -68,7 +68,7 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
     }
   };
   
-  const canRevert = permissions.lots.delete;
+  const canRevert = permissions.stock.inventoryControl.editLot;
 
   return (
     <>
@@ -161,5 +161,3 @@ export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistor
     </>
   );
 }
-
-    

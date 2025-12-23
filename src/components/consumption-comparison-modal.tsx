@@ -18,6 +18,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useProducts } from '@/hooks/use-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface ConsumptionComparisonModalProps {
     open: boolean;
@@ -298,14 +300,13 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, basePr
                 </div>
                 
                 <div className="flex-1 overflow-y-auto pr-4">
-                    {comparisonResults === null && (
+                    {comparisonResults === null ? (
                         <div className="flex h-full flex-col items-center justify-center text-muted-foreground text-center">
                             <Info className="h-12 w-12 mb-4" />
                             <p className="font-semibold">Aguardando seleção</p>
                             <p className="text-sm">Selecione o quiosque e os dois períodos para gerar o comparativo.</p>
                         </div>
-                    )}
-                    {comparisonResults?.length === 0 && (
+                    ) : comparisonResults.length === 0 ? (
                         <Alert variant="destructive">
                             <AlertCircle className="h-4 w-4" />
                             <AlertTitle>Relatório não encontrado</AlertTitle>
@@ -313,8 +314,7 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, basePr
                                 Não foi encontrado um relatório de consumo para um ou ambos os períodos selecionados. Verifique a seleção ou importe os relatórios faltantes.
                             </AlertDescription>
                         </Alert>
-                    )}
-                    {comparisonResults && comparisonResults.length > 0 && (
+                    ) : (
                         <div className="space-y-4">
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between">

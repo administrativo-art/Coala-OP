@@ -166,14 +166,20 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         const {items, ...simulationHeader} = data;
 
         const newSimulation: Omit<ProductSimulation, 'id' | 'totalCmv' | 'grossCost' | 'profitValue' | 'profitPercentage' | 'markup'> = {
-            ...simulationHeader,
+            name: simulationHeader.name,
+            kioskIds: simulationHeader.kioskIds ?? [],
+            categoryIds: simulationHeader.categoryIds,
             lineId: simulationHeader.lineId ?? null,
+            groupIds: simulationHeader.groupIds,
             userId: user.id,
+            operationPercentage: simulationHeader.operationPercentage ?? 0,
+            salePrice: simulationHeader.salePrice ?? 0,
+            profitGoal: simulationHeader.profitGoal,
+            notes: simulationHeader.notes,
+            ppo: data.ppo ?? {},
             createdAt: now,
             updatedAt: now,
             updatedBy: { userId: user.id, username: user.username },
-            ppo: data.ppo || {},
-            kioskIds: data.kioskIds || [],
         };
 
         try {

@@ -1,5 +1,4 @@
 
-
 // This hook is deprecated. Use `useValidatedConsumptionData` or other more specific hooks.
 "use client";
 

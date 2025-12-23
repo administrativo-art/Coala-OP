@@ -79,11 +79,6 @@ export function PredefinedConverter() {
   const handleSaveCount = (list: PredefinedList) => {
     if (!user) return;
     
-    // This functionality is now part of the StockCountManagement component,
-    // which uses a more complex data structure (StockAuditSession).
-    // This component's save functionality is now deprecated as it uses
-    // an outdated data model (StockCount).
-    
     toast({
         variant: "destructive",
         title: "Função Descontinuada",

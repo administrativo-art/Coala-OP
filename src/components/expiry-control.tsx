@@ -222,7 +222,7 @@ function ExpiryControlContent() {
         groups.set(baseProductId, {
           isBaseProduct: isBaseProdGroup,
           baseProductId: product.baseProductId || null,
-          baseProduct: baseProduct ?? null,
+          baseProduct: baseProduct,
           name: groupName,
           brands: [],
           hasLeadTime,
@@ -324,7 +324,7 @@ function ExpiryControlContent() {
     });
   };
 
-  const canManageProducts = permissions.products.add || permissions.products.edit || permissions.products.delete;
+  const canManageProducts = permissions.registration.items.add || permissions.registration.items.edit || permissions.registration.items.delete;
 
   const handleExportPdf = () => {
     const doc = new jsPDF();

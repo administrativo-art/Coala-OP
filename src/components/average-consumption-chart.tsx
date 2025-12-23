@@ -16,7 +16,7 @@ import { type ConsumptionReport } from "@/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, ListFilter, Download, ArrowUpDown, Calendar as CalendarIcon, Package, Folder, Palette } from 'lucide-react'
+import { TrendingUp, ListFilter, Download, ArrowUpDown, Calendar as CalendarIcon, Package, Folder, Palette, Inbox } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -310,7 +310,7 @@ export function AverageConsumptionChart() {
                     </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Select value={classificationFilter} onValueChange={(value) => setClassificationFilter(value as any)}>
+                <Select value={classificationFilter ?? 'all'} onValueChange={(value) => setClassificationFilter(value as any)}>
                     <SelectTrigger className="w-full sm:w-[180px]">
                         <Folder className="mr-2 h-4 w-4" />
                         <SelectValue placeholder="Classificação" />
@@ -384,7 +384,7 @@ export function AverageConsumptionChart() {
                             />
                             <Bar 
                                 dataKey="Consumo" 
-                                radius={[0, 4, 4, 0]}
+                                radius={[0, 4, 0, 0]}
                                 onMouseEnter={(data) => setHoveredBar(data.name)}
                                 onMouseLeave={() => setHoveredBar(null)}
                             >

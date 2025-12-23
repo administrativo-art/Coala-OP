@@ -30,7 +30,7 @@ export default function ReturnsPage() {
                     <p className="text-sm text-muted-foreground">Voltar para gestão de estoque</p>
                 </div>
             </div>
-            {permissions.returns.add && (
+            {permissions.stock.returns.add && (
                 <div className="flex justify-end">
                     <Button onClick={() => setIsAddModalOpen(true)}>
                         <PlusCircle className="mr-2" /> Abrir chamado

@@ -35,7 +35,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set(session.confirmedItemIds || []));
 
     const entity = useMemo(() => entities.find(e => e.id === session.entityId), [session.entityId, entities]);
     const user = useMemo(() => users.find(u => u.id === session.userId), [session.userId, users]);

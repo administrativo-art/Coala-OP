@@ -3,7 +3,7 @@
 
 import { useState } from "react"
 import { useKiosks } from "@/hooks/use-kiosks"
-import { useValidatedConsumptionData } from "@/hooks/use-validated-consumption-data"
+import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 
 import { Button } from "@/components/ui/button"
 import { UploadCloud, History, Scale } from 'lucide-react'

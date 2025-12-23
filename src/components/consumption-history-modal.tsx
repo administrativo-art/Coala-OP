@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useMemo } from "react";
-import { format } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 
 import { type ConsumptionReport } from "@/types";
@@ -90,7 +90,7 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
                                                         <div className="flex items-center justify-between gap-4 w-full">
                                                             <div className="grid gap-1 flex-grow text-left">
                                                                 <p className="font-semibold">Relatório de {report.month}/{report.year}</p>
-                                                                <p className="text-sm text-muted-foreground">Analisado em: {report.createdAt ? format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'Data indisponível'}</p>
+                                                                <p className="text-sm text-muted-foreground">Analisado em: {report.createdAt && isValid(parseISO(report.createdAt)) ? format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'Data indisponível'}</p>
                                                             </div>
                                                             <div className="flex items-center gap-1 shrink-0">
                                                                  <DeleteConfirmationDialog 

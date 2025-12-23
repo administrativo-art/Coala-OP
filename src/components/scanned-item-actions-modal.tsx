@@ -28,13 +28,13 @@ export function ScannedItemActionsModal({ product, onOpenChange }: ScannedItemAc
   
   const [isAddLotModalOpen, setIsAddLotModalOpen] = useState(false);
 
-  const canAddLot = permissions.lots?.add;
-  const canConsumeLot = permissions.lots?.edit; // Assuming edit permission allows consumption
+  const canAddLot = permissions.stock.inventoryControl.addLot;
+  const canConsumeLot = permissions.stock.inventoryControl.writeDown; 
 
   const handleViewInStock = () => {
     if (!product) return;
     onOpenChange(false);
-    router.push(`/dashboard/stock/inventory-control?search=${product.barcode}`);
+    router.push(`/dashboard/inventory-control?search=${product.barcode}`);
   };
 
   const handleAddLot = () => {

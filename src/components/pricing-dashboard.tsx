@@ -260,12 +260,11 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                                 {activeFilters.profitGoalFilter !== 'all' && (
                                     <ReferenceLine y={Number(activeFilters.profitGoalFilter)} label={{ value: `Meta ${activeFilters.profitGoalFilter}%`, position: 'insideTopRight' }} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
                                 )}
-                                <Bar dataKey="Lucro %">
+                                <Bar dataKey="Lucro %" radius={[4, 4, 0, 0]}>
                                     {profitChartData.map((entry, index) => (
                                         <Cell
                                             key={`cell-${index}`}
                                             fill={getBarColor(entry['Lucro %'])}
-                                            radius={[4, 4, 0, 0]}
                                         />
                                     ))}
                                 </Bar>
