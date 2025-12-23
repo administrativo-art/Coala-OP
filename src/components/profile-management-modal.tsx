@@ -89,33 +89,12 @@ const permissionsSchema = z.object({
     manageKiosks: z.boolean(),
     manageProfiles: z.boolean(),
     manageLabels: z.boolean(),
-  }),
-  tasks: z.object({ view: z.boolean(), manage: z.boolean() }),
-  help: z.object({ view: z.boolean() }),
-  // Legado - será removido
-  products: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-  lots: z.object({
-    add: z.boolean(),
-    edit: z.boolean(),
-    move: z.boolean(),
-    delete: z.boolean(),
-    viewMovementHistory: z.boolean(),
-  }),
-  users: z.object({
-    add: z.boolean(),
-    edit: z.boolean(),
-    delete: z.boolean(),
     impersonate: z.boolean(),
   }),
-  kiosks: z.object({ add: z.boolean(), delete: z.boolean() }),
-  predefinedLists: z.object({ add: z.boolean(), edit: z.boolean(), delete: z.boolean() }),
-  consumptionAnalysis: z.object({
-    upload: z.boolean(),
-    viewHistory: z.boolean(),
-    deleteHistory: z.boolean(),
-  }),
-  itemRequests: z.object({ add: z.boolean(), approve: z.boolean() }),
-  reposition: z.object({ cancel: z.boolean() }),
+  tasks: { view: z.boolean(), manage: z.boolean() },
+  help: { view: z.boolean() },
+  itemRequests: { add: z.boolean(), approve: z.boolean() },
+  reposition: { cancel: z.boolean() },
 });
 
 
@@ -179,7 +158,7 @@ function DuplicateProfileModal({
 }
 
 export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileManagementModalProps) {
-  const { profiles, addProfile, updateProfile, deleteProfile } = useProfiles();
+  const { profiles, addProfile, updateProfile, deleteProfile, adminProfileId } = useProfiles();
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
@@ -290,7 +269,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     />
   );
   
-   const renderModuleToggle = (label: string, name: FieldPath<ProfileFormValues['permissions']>, description?: string) => (
+   const renderModuleToggle = (name: FieldPath<ProfileFormValues['permissions']>, label: string, description?: string) => (
     <FormField
       control={form.control}
       name={`permissions.${name}`}
@@ -356,7 +335,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="dashboard">
                                 <AccordionTrigger className="text-lg font-semibold"><LayoutDashboard className="mr-2 h-5 w-5" /> Dashboard</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("Visualizar Dashboard Principal", "dashboard.view", "Permite que o usuário veja a página inicial do dashboard.")}
+                                    {renderModuleToggle("dashboard.view", "Visualizar Dashboard Principal", "Permite que o usuário veja a página inicial do dashboard.")}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Operacional</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
                                         <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Custo e Preço</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
@@ -369,7 +348,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="registration">
                                 <AccordionTrigger className="text-lg font-semibold"><ListPlus className="mr-2 h-5 w-5" /> Cadastros</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("Ver Módulo de Cadastros", "registration.view")}
+                                    {renderModuleToggle("registration.view", "Ver Módulo de Cadastros")}
                                     {renderPermissionSwitch("registration.items.add", "Adicionar Insumos", "Permite cadastrar novos insumos (itens físicos).", !registrationViewWatch)}
                                     {renderPermissionSwitch("registration.items.edit", "Editar Insumos", "Permite editar insumos existentes.", !registrationViewWatch)}
                                     {renderPermissionSwitch("registration.items.delete", "Excluir Insumos", "Permite excluir insumos (ação perigosa).", !registrationViewWatch)}
@@ -385,7 +364,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="stock">
                                 <AccordionTrigger className="text-lg font-semibold"><ClipboardCheck className="mr-2 h-5 w-5" /> Gestão de Estoque</AccordionTrigger>
                                 <AccordionContent className="space-y-4 p-1 pt-4">
-                                    {renderModuleToggle("Visualizar Módulo de Estoque", "stock.view", "Permissão geral para acessar a seção.")}
+                                    {renderModuleToggle("stock.view", "Visualizar Módulo de Estoque", "Permissão geral para acessar a seção.")}
                                     
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Controle de Estoque</h4>
@@ -483,7 +462,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderModuleToggle("settings.view", "Ver Módulo de Configurações")}
                                     {renderPermissionSwitch("settings.manageUsers", "Gerenciar Usuários", "Permite criar, editar e excluir usuários.", !settingsViewWatch)}
-                                    {renderPermissionSwitch("users.impersonate", "Navegar como Outro Usuário", "Permite entrar no sistema como se fosse outro usuário.", !settingsViewWatch)}
+                                    {renderPermissionSwitch("settings.impersonate", "Navegar como Outro Usuário", "Permite entrar no sistema como se fosse outro usuário.", !settingsViewWatch)}
                                     {renderPermissionSwitch("settings.manageKiosks", "Gerenciar Quiosques", "Permite criar e excluir quiosques.", !settingsViewWatch)}
                                     {renderPermissionSwitch("settings.manageProfiles", "Gerenciar Perfis", "Permite criar e editar perfis de permissão.", !settingsViewWatch)}
                                     {renderPermissionSwitch("settings.manageLabels", "Gerenciar Etiquetas", "Permite alterar o tamanho padrão das etiquetas.", !settingsViewWatch)}

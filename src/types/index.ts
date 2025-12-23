@@ -78,7 +78,7 @@ export type Product = {
 export type ProductDefinition = {
     baseName: string;
     brand?: string;
-    packageSize?: number;
+    packageSize: number;
     category: UnitCategory;
     unit: string;
 }
@@ -338,10 +338,10 @@ export type PermissionSet = {
   stock: { view: boolean; inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; }; stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; }; audit: { view: boolean; start: boolean; approve: boolean; }; analysis: { view: boolean; restock: boolean; consumption: boolean; projection: boolean; valuation: boolean; }; purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; conversions: { view: boolean; }; };
   team: { view: boolean; manage: boolean; };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
-  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
+  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; impersonate: boolean; };
   tasks: { view: boolean; manage: boolean; };
   help: { view: boolean; };
-  itemRequests: { add: boolean; approve: boolean; },
+  itemRequests: { add: boolean; approve: boolean; };
   reposition: { cancel: boolean; };
 };
 
@@ -630,7 +630,7 @@ export const defaultGuestPermissions: PermissionSet = {
     stock: { view: false, inventoryControl: { view: false, addLot: false, editLot: false, writeDown: false, transfer: false, viewHistory: false }, stockCount: { view: false, perform: false, approve: false, requestItem: false }, audit: { view: false, start: false, approve: false }, analysis: { view: false, restock: false, consumption: false, projection: false, valuation: false }, purchasing: { view: false, suggest: false, approve: false, deleteHistory: false }, returns: { view: false, add: false, updateStatus: false, delete: false }, conversions: { view: false } },
     team: { view: false, manage: false },
     pricing: { view: false, simulate: false, manageParameters: false },
-    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
+    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, impersonate: false },
     tasks: { view: false, manage: false },
     help: { view: true },
     itemRequests: { add: true, approve: false },
@@ -644,10 +644,11 @@ export const defaultAdminPermissions: PermissionSet = {
     stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true } },
     team: { view: true, manage: true },
     pricing: { view: true, simulate: true, manageParameters: true },
-    settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
+    settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true, impersonate: true },
     tasks: { view: true, manage: true },
     reposition: { cancel: true },
     help: { view: true },
+    itemRequests: { add: true, approve: true },
 };
 
 export const defaultUserPermissions: PermissionSet = { ...defaultGuestPermissions };

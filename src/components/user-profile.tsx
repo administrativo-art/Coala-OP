@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from 'react';
@@ -97,7 +98,7 @@ export function UserProfile() {
   };
   
   const canImpersonate = useMemo(() => {
-    return permissions.users.impersonate
+    return permissions.settings.impersonate;
   }, [permissions]);
 
   return (
