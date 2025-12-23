@@ -48,7 +48,6 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, onDay
       
       const count = workDayCounts.get(`${dayISO}-${user.id}`);
       
-      const color = user?.color;
       const overworkWarning = warnings.get(`${dayISO}-${user.id}`);
       const conflictWarning = warnings.get(`${dayISO}-${user.username}-${kioskId}`);
 
@@ -64,7 +63,6 @@ export function ScheduleTableView({ kiosks, scheduleMap, dates, onEditDay, onDay
         <span className={cn("inline-flex items-center gap-1", isSelectedEmployee && "font-bold")}>
             <span
                 className="px-1.5 py-0.5 rounded-md"
-                style={color ? { backgroundColor: color, color: 'black' } : {}}
             >
                 {name}
                 {count && count >= 1 && (

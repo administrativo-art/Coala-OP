@@ -1,8 +1,7 @@
 
-
 import {
   type ConsumptionReport,
-  type ConsumptionAnalysisItem as ConsumptionItem,
+  type ConsumptionAnalysisItem,
   type BaseProduct,
 } from '@/types';
 
@@ -10,7 +9,7 @@ import {
 /**
  * Valida e normaliza um item de consumo
  */
-export function validateConsumptionItem(item: any): ConsumptionItem | null {
+export function validateConsumptionItem(item: any): ConsumptionAnalysisItem | null {
   if (!item || typeof item !== 'object') {
     console.warn('Item de consumo inválido: não é um objeto', item);
     return null;
@@ -81,7 +80,7 @@ export function validateConsumptionReport(report: any): ConsumptionReport | null
   // Validar e filtrar itens
   const validItems = results
     .map(validateConsumptionItem)
-    .filter((item): item is ConsumptionItem => item !== null);
+    .filter((item): item is ConsumptionAnalysisItem => item !== null);
 
   if (validItems.length === 0) {
     console.warn('Relatório sem itens válidos:', report);
@@ -180,13 +179,13 @@ export function validateBaseProducts(products: any[]): BaseProduct[] {
 export function detectOrphanItems(
   reports: ConsumptionReport[], 
   baseProducts: BaseProduct[]
-): ConsumptionItem[] {
+): ConsumptionAnalysisItem[] {
   const baseProductIds = new Set(baseProducts.map(bp => bp.id));
-  const orphanItems: ConsumptionItem[] = [];
+  const orphanItems: ConsumptionAnalysisItem[] = [];
 
   reports.forEach(report => {
     report.results.forEach(item => {
-      if (!baseProductIds.has(item.baseProductId)) {
+      if (!item.baseProductId || !baseProductIds.has(item.baseProductId)) {
         orphanItems.push(item);
       }
     });

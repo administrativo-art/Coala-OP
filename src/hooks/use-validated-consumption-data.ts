@@ -1,3 +1,4 @@
+
 // src/hooks/useValidatedConsumptionData.ts
 import { useEffect, useMemo, useCallback } from 'react';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
@@ -6,7 +7,7 @@ import { useKiosks } from './use-kiosks';
 import { validateConsumptionReports, validateBaseProducts, generateDataIntegrityReport } from '@/utils/dataValidation';
 import { writeBatch, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { type BaseProductStockLevel, type ConsumptionReport } from '@/types';
+import { type BaseProductStockLevel, type ConsumptionReport, type BaseProduct } from '@/types';
 
 export function useValidatedConsumptionData() {
   const { history: rawReports, loading: loadingReports, addReport: rawAddReport, deleteReport } = useConsumptionAnalysis();
@@ -14,8 +15,7 @@ export function useValidatedConsumptionData() {
   const { kiosks, loading: loadingKiosks } = useKiosks();
 
   const { reports, baseProducts, integrityReport } = useMemo(() => {
-    const validBaseProducts = validateBaseProducts(rawBaseProducts || []);
-    // Directly use the validated and complete reports.
+    const validBaseProducts: BaseProduct[] = validateBaseProducts(rawBaseProducts || []);
     const validReports = validateConsumptionReports(rawReports || []);
     const report = generateDataIntegrityReport(validReports, validBaseProducts);
     
@@ -32,16 +32,8 @@ export function useValidatedConsumptionData() {
         return item;
       });
 
-      // Ensure all properties of ConsumptionReport are present
       return {
-        id: r.id,
-        reportName: r.reportName,
-        month: r.month,
-        year: r.year,
-        kioskId: r.kioskId,
-        kioskName: r.kioskName,
-        createdAt: r.createdAt,
-        status: r.status,
+        ...r,
         results: newResults,
       };
     });

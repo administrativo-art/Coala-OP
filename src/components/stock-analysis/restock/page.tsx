@@ -3,8 +3,8 @@
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { StockAnalyzer } from '@/components/stock-importer';
 import { ArrowLeft } from 'lucide-react';
+import { RestockAnalysis } from '@/components/restock-analysis';
 
 export default function RestockAnalysisPage() {
     return (
@@ -15,7 +15,7 @@ export default function RestockAnalysisPage() {
                     Voltar para Análises
                 </Button>
             </Link>
-            <StockAnalyzer />
+            <RestockAnalysis />
         </div>
     );
 }

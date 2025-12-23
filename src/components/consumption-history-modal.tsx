@@ -89,7 +89,7 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
                                                         <div className="flex items-center justify-between gap-4 w-full">
                                                             <div className="grid gap-1 flex-grow text-left">
                                                                 <p className="font-semibold">Relatório de {report.month}/{report.year}</p>
-                                                                <p className="text-sm text-muted-foreground">Analisado em: {format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                                                                <p className="text-sm text-muted-foreground">Analisado em: {report.createdAt ? format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'Data indisponível'}</p>
                                                             </div>
                                                             <div className="flex items-center gap-1 shrink-0">
                                                                  <DeleteConfirmationDialog 

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -190,7 +190,7 @@ function AuditForm({
       return {
         ...originalItem,
         finalQuantity: formItem?.finalQuantity ?? originalItem.systemQuantity,
-        adjustment: formItem?.adjustment || null,
+        adjustment: formItem?.adjustment ?? undefined,
         divergences: formItem?.divergences || [],
       };
     });
@@ -453,7 +453,23 @@ export function StockCountManagement({ showExportButton = false }: StockCountMan
     const productMap = new Map(products.map(p => [p.id, p]));
     const activeLots = lots.filter(lot => lot.kioskId === kioskId && lot.quantity > 0);
     
-    const auditItems: StockAuditItem[] = activeLots.map(lot => {
+    const groupedLots: { [key: string]: LotEntry } = {};
+
+    activeLots.forEach(lot => {
+        const product = productMap.get(lot.productId);
+        if (!product || product.isArchived) return;
+
+        const uniqueKey = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
+        
+        const existingLot = groupedLots[uniqueKey];
+        if (existingLot) {
+            existingLot.quantity += lot.quantity;
+        } else {
+            groupedLots[uniqueKey] = { ...lot };
+        }
+    });
+
+    const auditItems: StockAuditItem[] = Object.values(groupedLots).map(lot => {
         const product = productMap.get(lot.productId)!;
         const systemQuantity = lot.quantity; 
         return {
@@ -465,6 +481,7 @@ export function StockCountManagement({ showExportButton = false }: StockCountMan
             systemQuantity: systemQuantity,
             finalQuantity: systemQuantity,
             divergences: [],
+            adjustment: null,
         };
     });
     

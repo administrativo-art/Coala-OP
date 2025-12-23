@@ -15,6 +15,7 @@ interface CompanySettings {
 export interface CompanySettingsContextType {
   labelSizeId: string | null;
   pricingParameters: PricingParameters | null;
+  logoUrl: string | null;
   loading: boolean;
   updateLabelSize: (sizeId: string | null) => Promise<void>;
   updatePricingParameters: (params: PricingParameters) => Promise<void>;
@@ -50,7 +51,6 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
             setLogoUrl(data.logoUrl || defaultLogoUrl);
             
             const params = data.pricingParameters || {};
-            // Ensure defaults for new fields if they don't exist
             const validatedParams: PricingParameters = {
                 ...defaultPricingParameters,
                 ...params,
@@ -109,11 +109,12 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
   const value: CompanySettingsContextType = useMemo(() => ({
     labelSizeId,
     pricingParameters,
+    logoUrl,
     loading,
     updateLabelSize,
     updatePricingParameters,
     updateLogoUrl,
-  }), [labelSizeId, pricingParameters, loading, updateLabelSize, updatePricingParameters, updateLogoUrl]);
+  }), [labelSizeId, pricingParameters, logoUrl, loading, updateLabelSize, updatePricingParameters, updateLogoUrl]);
 
   return <CompanySettingsContext.Provider value={value}>{children}</CompanySettingsContext.Provider>;
 }

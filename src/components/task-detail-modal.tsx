@@ -1,10 +1,11 @@
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { type Task, type TaskHistoryItem, type TaskOrigin } from '@/types';
+import { type Task, type TaskHistoryItem, type TaskOrigin, type ReturnRequestStatus } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
@@ -16,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { useProfiles } from '@/hooks/use-profiles';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -72,7 +74,8 @@ function TaskOriginDetails({ origin }: { origin: TaskOrigin }) {
 }
 
 export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
-  const { user, users, profiles } = useAuth();
+  const { user, users } = useAuth();
+  const { profiles } = useProfiles();
   const { updateTask, deleteTask } = useTasks();
   const [rejectionNotes, setRejectionNotes] = useState('');
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -107,7 +110,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
 
   const { label: statusLabel, color: statusColor } = getStatusInfo(task.status);
   
-  const addHistoryItem = (action: string, details?: string): TaskHistoryItem => ({
+  const addHistoryItem = (action: TaskHistoryItem['action'], details?: string): TaskHistoryItem => ({
       timestamp: new Date().toISOString(),
       author: { id: user!.id, name: user!.username },
       action,
@@ -134,7 +137,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       
       if(task.origin.type === 'author_board_diary'){
           const log = await createOrGetDailyLog();
-          if(log) await updateTask(log.id, {status: 'validated'});
+          if(log) await updateTask(log.id, {status: 'finalizado' as any});
       }
       
       await updateTask(task.id, { status: 'completed', history: newHistory, completedAt: now, updatedAt: now });
@@ -151,7 +154,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       
        if(task.origin.type === 'author_board_diary'){
           const log = await createOrGetDailyLog();
-          if(log) await updateTask(log.id, {status: 'draft'});
+          if(log) await updateTask(log.id, {status: 'aberto' as any});
       }
       
       await updateTask(task.id, { status: 'reopened', history: newHistory, completedAt: undefined, updatedAt: now });

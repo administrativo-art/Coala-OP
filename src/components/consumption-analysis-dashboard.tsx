@@ -60,7 +60,7 @@ export function ConsumptionAnalysisDashboard() {
             open={isComparisonModalOpen}
             onOpenChange={setIsComparisonModalOpen}
             history={reports}
-            products={baseProducts}
+            baseProducts={baseProducts}
             kiosks={kiosks}
         />
     </>

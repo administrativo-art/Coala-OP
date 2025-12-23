@@ -247,7 +247,7 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
 
     const daysInMonth = eachDayOfInterval({ start: startOfMonth(monthDate), end: endOfMonth(monthDate) });
     const previousScheduleMap = new Map<string, DailySchedule>();
-    previousMonthSchedule.forEach(daySchedule => {
+    previousMonthSchedule.forEach((daySchedule: DailySchedule) => {
         previousScheduleMap.set(daySchedule.id, daySchedule);
     });
 
@@ -410,6 +410,7 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
                         workDayCounts={workDayCounts}
                         warnings={warnings}
                         todaysWorkersMap={todaysWorkersMap}
+                        selectedEmployee="all"
                     />
                 </div>
               </>
