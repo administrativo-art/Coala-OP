@@ -239,9 +239,9 @@ export async function generateFichaTecnicaCompletaPdf(
 
                 if (i > 0) {
                     doc.setDrawColor(226);
-                    doc.setLineDash([1], 0);
+                    doc.setLineDashPattern([1], 0);
                     doc.line(SEP_INSET_L, blockY, SEP_INSET_R, blockY);
-                    doc.setLineDash([], 0);
+                    doc.setLineDashPattern([]);
                 }
 
                 const qty = (etapa.quantity ?? (etapa as any).qty ?? (etapa as any).quantidade ?? (etapa as any).amount ?? (etapa as any).medida ?? (etapa as any).qtd) as number | string | undefined;
@@ -271,9 +271,9 @@ export async function generateFichaTecnicaCompletaPdf(
 
                 blockY += rowH;
                 doc.setDrawColor(226);
-                doc.setLineDash([1], 0);
+                doc.setLineDashPattern([1], 0);
                 doc.line(SEP_INSET_L, blockY, SEP_INSET_R, blockY);
-                doc.setLineDash([], 0);
+                doc.setLineDashPattern([]);
 
                 const note = ((etapa as any).note || (etapa as any).obs || (etapa as any).observacao || '').trim();
                 if (note) {

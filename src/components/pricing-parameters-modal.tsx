@@ -54,8 +54,20 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
     }
   });
 
-  const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: 'profitGoals' });
   const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
+
+  const goalFields = form.watch('profitGoals');
+
+  const appendGoal = (value: number) => {
+    const currentGoals = form.getValues('profitGoals');
+    form.setValue('profitGoals', [...currentGoals, value]);
+  };
+
+  const removeGoal = (index: number) => {
+    const currentGoals = form.getValues('profitGoals');
+    form.setValue('profitGoals', currentGoals.filter((_, i) => i !== index));
+  };
+
 
   useEffect(() => {
     if (open && pricingParameters) {
@@ -134,7 +146,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                         <FormLabel>Metas de Lucro Disponíveis (%)</FormLabel>
                         <div className="space-y-2 mt-2 p-3 border rounded-lg">
                             {goalFields.map((field, index) => (
-                                <div key={field.id} className="flex items-center gap-2">
+                                <div key={index} className="flex items-center gap-2">
                                   <FormField control={form.control} name={`profitGoals.${index}`} render={({ field: inputField }) => (
                                       <FormItem className="flex-grow"><FormControl><Input type="number" {...inputField} value={inputField.value ?? ''} onChange={e => inputField.onChange(e.target.value === '' ? '' : parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>
                                   )}/>
