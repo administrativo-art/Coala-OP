@@ -357,7 +357,7 @@ useEffect(() => {
       const simulationData = { 
         ...simulationToEdit, 
         ...values,
-        status: finalStatus,
+        status: finalStatus, // Use the correctly typed status
         operationPercentage: values.operationPercentage,
         salePrice: values.salePrice,
         profitGoal: values.profitGoal,
@@ -369,8 +369,7 @@ useEffect(() => {
         markup,
         ppo: ppoData
       };
-      const items = values.items;
-      await updateSimulation({ ...simulationData, items });
+      await updateSimulation({ ...simulationData, items: values.items });
     } else {
        const finalData = {
         ...values,
@@ -916,4 +915,3 @@ useEffect(() => {
     </>
   );
 }
-
