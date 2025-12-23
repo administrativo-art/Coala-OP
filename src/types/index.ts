@@ -126,6 +126,8 @@ export type LotEntry = {
   locationId?: string | null;
   locationName?: string | null;
   locationCode?: string | null;
+  createdAt?: any;
+  updatedAt?: any;
 };
 
 export type MovementType = 

@@ -221,8 +221,8 @@ function ExpiryControlContent() {
       if (!groups.has(baseProductId)) {
         groups.set(baseProductId, {
           isBaseProduct: isBaseProdGroup,
-          baseProductId: product.baseProductId || null,
-          baseProduct: baseProduct,
+          baseProductId: product.baseProductId ?? null,
+          baseProduct: baseProduct ?? null,
           name: groupName,
           brands: [],
           hasLeadTime,
