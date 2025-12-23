@@ -15,7 +15,7 @@ import { AverageConsumptionChart } from "./average-consumption-chart"
 
 export function ConsumptionAnalysisDashboard() {
   const { kiosks } = useKiosks();
-  const { reports: consumptionHistory, baseProducts, isLoading, addReport, deleteReport } = useValidatedConsumptionData();
+  const { reports, baseProducts, isLoading, addReport, deleteReport } = useValidatedConsumptionData();
 
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -43,7 +43,7 @@ export function ConsumptionAnalysisDashboard() {
         <ConsumptionHistoryModal
             open={isHistoryModalOpen}
             onOpenChange={setIsHistoryModalOpen}
-            history={consumptionHistory}
+            history={reports}
             loading={isLoading}
             deleteReport={deleteReport}
         />
@@ -59,7 +59,7 @@ export function ConsumptionAnalysisDashboard() {
         <ConsumptionComparisonModal
             open={isComparisonModalOpen}
             onOpenChange={setIsComparisonModalOpen}
-            history={consumptionHistory}
+            history={reports}
             products={baseProducts}
             kiosks={kiosks}
         />
