@@ -1,3 +1,4 @@
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
 
@@ -168,13 +169,13 @@ export type ConsumptionAnalysisItem = {
 
 export type ConsumptionReport = {
   id: string;
-  reportName: string;
+  reportName?: string;
   month: number;
   year: number;
   kioskId: string;
-  kioskName: string;
-  createdAt: string;
-  status: 'completed' | 'processing' | 'error';
+  kioskName?: string;
+  createdAt?: string;
+  status?: 'completed' | 'processing' | 'error';
   results: ConsumptionAnalysisItem[];
 };
 
