@@ -78,7 +78,7 @@ export type Product = {
 export type ProductDefinition = {
     baseName: string;
     brand?: string;
-    packageSize: number;
+    packageSize?: number;
     category: UnitCategory;
     unit: string;
 }
@@ -341,14 +341,6 @@ export type PermissionSet = {
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
   tasks: { view: boolean; manage: boolean; };
   help: { view: boolean; };
-  // Legado - Will be removed
-  products: { add: boolean; edit: boolean; delete: boolean; };
-  lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
-  returns: { add: boolean; view: boolean; updateStatus: boolean; delete: boolean; };
-  users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
-  kiosks: { add: boolean; delete: boolean; };
-  predefinedLists: { add: boolean; edit: boolean; delete: boolean; };
-  consumptionAnalysis: { upload: boolean; viewHistory: boolean; deleteHistory: boolean; };
   itemRequests: { add: boolean; approve: boolean; },
   reposition: { cancel: boolean; };
 };
@@ -641,14 +633,6 @@ export const defaultGuestPermissions: PermissionSet = {
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
     tasks: { view: false, manage: false },
     help: { view: true },
-    // Legado - Will be removed
-    products: { add: false, edit: false, delete: false },
-    lots: { add: false, edit: false, move: false, delete: false, viewMovementHistory: false },
-    returns: { add: false, view: false, updateStatus: false, delete: false },
-    users: { add: false, edit: false, delete: false, impersonate: false },
-    kiosks: { add: false, delete: false },
-    predefinedLists: { add: false, edit: false, delete: false },
-    consumptionAnalysis: { upload: false, viewHistory: false, deleteHistory: false },
     itemRequests: { add: true, approve: false },
     reposition: { cancel: false },
 };
@@ -661,17 +645,9 @@ export const defaultAdminPermissions: PermissionSet = {
     team: { view: true, manage: true },
     pricing: { view: true, simulate: true, manageParameters: true },
     settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
-    users: { add: true, edit: true, delete: true, impersonate: true },
     tasks: { view: true, manage: true },
     reposition: { cancel: true },
     help: { view: true },
-    products: { add: true, edit: true, delete: true },
-    lots: { add: true, edit: true, move: true, delete: true, viewMovementHistory: true },
-    kiosks: { add: true, delete: true },
-    returns: { add: true, view: true, updateStatus: true, delete: true },
-    predefinedLists: { add: true, edit: true, delete: true },
-    consumptionAnalysis: { upload: true, viewHistory: true, deleteHistory: true },
-    itemRequests: { add: true, approve: true },
 };
 
 export const defaultUserPermissions: PermissionSet = { ...defaultGuestPermissions };

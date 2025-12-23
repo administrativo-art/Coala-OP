@@ -95,7 +95,7 @@ function ExpiryControlContent() {
 
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
-    if (user.username === 'Tiago Brasil' || (permissions.lots.editLot && permissions.lots.delete)) return lots;
+    if (user.username === 'Tiago Brasil' || (permissions.stock.inventoryControl.editLot && permissions.stock.inventoryControl.writeDown)) return lots;
     return lots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
   }, [lots, user, loading, permissions]);
 
@@ -418,7 +418,7 @@ function ExpiryControlContent() {
               <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
                   Comece adicionando um novo lote ao estoque para monitorar sua validade.
               </p>
-              <Button size="lg" onClick={handleAddClick} disabled={!permissions.lots.addLot}>
+              <Button size="lg" onClick={handleAddClick} disabled={!permissions.stock.inventoryControl.addLot}>
                   <Plus className="mr-2 h-5 w-5" /> Adicionar lote
               </Button>
           </div>
@@ -560,7 +560,7 @@ function ExpiryControlContent() {
                 </Button>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.lots.addLot}>
+                <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.stock.inventoryControl.addLot}>
                     <Plus className="mr-2" /> Adicionar lote
                 </Button>
                  <DropdownMenu>

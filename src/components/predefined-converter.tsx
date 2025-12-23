@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
 import { useStockCount } from '@/hooks/use-stock-count';
-import { type PredefinedList } from '@/types';
+import { type PredefinedList, type StockCountItem } from '@/types';
 import { AddEditPredefinedListModal } from './add-edit-predefined-list-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
