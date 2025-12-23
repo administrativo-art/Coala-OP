@@ -27,7 +27,7 @@ function InventoryControlContent() {
     return (
         <>
             <div className="space-y-4">
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-4">
                         <Button 
                             onClick={() => router.push('/dashboard/stock')}
