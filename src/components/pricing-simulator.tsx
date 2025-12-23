@@ -70,7 +70,6 @@ const formatCurrency = (value: number | undefined | null) => {
 
 type SortKey = keyof ProductSimulation | 'name' | 'sku' | 'salePrice' | 'grossCost' | 'profitGoal' | 'profitPercentage';
 type SortDirection = 'asc' | 'desc';
-type StatusFilter = "active" | "inactive" | "all";
 
 
 export function PricingSimulator() {
@@ -96,7 +95,6 @@ export function PricingSimulator() {
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
     const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
     const [groupFilters, setGroupFilters] = useState<Set<string>>(new Set());
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
     const [kioskFilter, setKioskFilter] = useState<string>("all");
 
 
@@ -108,10 +106,6 @@ export function PricingSimulator() {
     const handleEdit = (simulation: ProductSimulation) => {
         setSimulationToEdit(simulation);
         setIsAddEditModalOpen(true);
-    };
-    
-    const handleReactivate = async (simulation: ProductSimulation) => {
-        await updateSimulation({ ...simulation, status: 'active' });
     };
 
     const handlePpoClick = (simulation: ProductSimulation) => {
@@ -143,15 +137,7 @@ export function PricingSimulator() {
     }, [categories]);
 
     const filteredSimulations = useMemo(() => {
-        const baseSimulations = simulations;
-
-        const statusFiltered = baseSimulations.filter(sim => {
-            if (statusFilter === 'all') return true;
-            const isActive = sim.status === 'active';
-            return statusFilter === 'active' ? isActive : !isActive;
-        });
-
-        const textAndCategoryFiltered = statusFiltered.filter(sim => {
+        return simulations.filter(sim => {
             const searchMatch = searchTerm ? (sim.name.toLowerCase().includes(searchTerm.toLowerCase()) || (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase())) : true;
             const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
@@ -159,9 +145,7 @@ export function PricingSimulator() {
             const kioskMatch = kioskFilter === 'all' || (sim.kioskIds || []).includes(kioskFilter);
             
             return searchMatch && categoryMatch && lineMatch && groupMatch && kioskMatch;
-        });
-        
-        return textAndCategoryFiltered.sort((a, b) => {
+        }).sort((a, b) => {
             let aValue: any;
             let bValue: any;
 
@@ -186,7 +170,7 @@ export function PricingSimulator() {
             return sortConfig.direction === 'asc' ? comparison : -comparison;
         });
 
-    }, [simulations, searchTerm, categoryFilters, lineFilters, groupFilters, sortConfig, statusFilter, kioskFilter]);
+    }, [simulations, searchTerm, categoryFilters, lineFilters, groupFilters, sortConfig, kioskFilter]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -1136,22 +1120,10 @@ export function PricingSimulator() {
                         </div>
                     </div>
                 </div>
-                 <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
-                    <TabsList>
-                        <TabsTrigger value="active">Ativas</TabsTrigger>
-                        <TabsTrigger value="inactive">Inativas</TabsTrigger>
-                        <TabsTrigger value="all">Todas</TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                
                 <div className="mt-4">
                     {renderTable()}
                 </div>
-                 <ArchivedSimulationsModal 
-                    open={isArchivedModalOpen} 
-                    onOpenChange={setIsArchivedModalOpen} 
-                    simulations={simulations.filter(sim => sim.status === 'archived')}
-                    onReactivate={handleReactivate}
-                />
             </div>
 
             <AddEditSimulationModal 
@@ -1193,38 +1165,5 @@ export function PricingSimulator() {
                 selectedSimulationIds={selectedSimulations}
             />
         </div>
-    );
-}
-
-function ArchivedSimulationsModal({ open, onOpenChange, simulations, onReactivate }: { open: boolean, onOpenChange: (open: boolean) => void, simulations: ProductSimulation[], onReactivate: (sim: ProductSimulation) => void }) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Mercadorias Inativas</DialogTitle>
-            <DialogDescription>
-              Visualize ou reative mercadorias que foram marcadas como inativas.
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="h-96">
-            <div className="space-y-2 p-1">
-              {simulations.length > 0 ? (
-                simulations.map(sim => (
-                  <div key={sim.id} className="flex items-center justify-between p-2 border rounded-md">
-                    <span className="font-medium">{sim.name}</span>
-                    <Button size="sm" variant="outline" onClick={() => onReactivate(sim)}>
-                      Reativar
-                    </Button>
-                  </div>
-                ))
-              ) : (
-                <p className="text-center text-muted-foreground py-10">
-                  Nenhuma mercadoria inativa.
-                </p>
-              )}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
     );
 }
