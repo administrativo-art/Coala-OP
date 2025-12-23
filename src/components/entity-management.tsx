@@ -48,7 +48,7 @@ const entitySchema = z.object({
             });
         }
     } else {
-       if (!data.address.zipCode || data.address.street || data.address.number || data.address.neighborhood || data.address.city || data.address.state) {
+       if (data.address.zipCode || data.address.street || data.address.number || data.address.neighborhood || data.address.city || data.address.state) {
             // Se um campo de endereço for preenchido, todos se tornam obrigatórios
             if (!data.address.zipCode) ctx.addIssue({ code: 'custom', message: 'CEP inválido.', path: ['address.zipCode'] });
             if (!data.address.street) ctx.addIssue({ code: 'custom', message: 'A rua é obrigatória.', path: ['address.street'] });
@@ -107,10 +107,31 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     };
 
     const onSubmit = (values: EntityFormValues) => {
+        const payload: Omit<Entity, 'id'> = {
+            type: values.type,
+            name: values.name,
+            fantasyName: values.fantasyName,
+            document: values.document,
+            address: {
+                street: values.address?.street ?? '',
+                number: values.address?.number ?? '',
+                complement: values.address?.complement ?? '',
+                neighborhood: values.address?.neighborhood ?? '',
+                city: values.address?.city ?? '',
+                state: values.address?.state ?? '',
+                zipCode: values.address?.zipCode ?? '',
+            },
+            contact: {
+                phone: values.contact?.phone,
+                email: values.contact?.email,
+            },
+            responsible: values.responsible
+        };
+
         if (entityToEdit) {
-            updateEntity({ ...entityToEdit, ...values });
+            updateEntity({ ...entityToEdit, ...payload });
         } else {
-            addEntity(values);
+            addEntity(payload);
         }
         onOpenChange(false);
     };

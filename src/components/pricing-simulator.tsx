@@ -450,14 +450,14 @@ export function PricingSimulator() {
 
                     if (i > 0) {
                         doc.setDrawColor(226);
-                        doc.setLineDash([1], 0);
+                        doc.setLineDash([1]);
                         doc.line(SEP_INSET_L, blockY, SEP_INSET_R, blockY);
-                        doc.setLineDash();
+                        doc.setLineDash([]);
                     }
 
                     const qty = (etapa.quantity ?? (etapa as any).qty ?? (etapa as any).quantidade ?? (etapa as any).amount ?? (etapa as any).medida ?? (etapa as any).qtd) as number | string | undefined;
                     const unit = (etapa.unit ?? (etapa as any).unidade ?? (etapa as any).units ?? (etapa as any).sigla) as string | undefined;
-                    const extraSize = (etapa.size ?? (etapa as any).tamanho) as string | undefined;
+                    const extraSize = (etapa as any).size as string | undefined;
               
                     let measureStr = '';
                     if (qty !== undefined && qty !== null && `${qty}`.trim() !== '') {
@@ -485,9 +485,9 @@ export function PricingSimulator() {
 
                     blockY += rowH;
                     doc.setDrawColor(226);
-                    doc.setLineDash([1], 0);
+                    doc.setLineDash([1]);
                     doc.line(SEP_INSET_L, blockY, SEP_INSET_R, blockY);
-                    doc.setLineDash();
+                    doc.setLineDash([]);
 
                     const note = ((etapa as any).note || (etapa as any).obs || (etapa as any).observacao || '').trim();
                     if (note) {

@@ -35,7 +35,7 @@ const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
 const writeDownItemSchema = z.object({
   lotId: z.string(),
   quantity: z.coerce.number().min(0.01, "Deve ser > 0"),
-  type: z.string().min(1, 'Selecione o tipo.'),
+  type: z.custom<MovementType>(val => typeof val === 'string' && DIVERGENCE_REASONS.some(r => r.value === val), 'Selecione um tipo válido'),
   notes: z.string().optional(),
 }).refine(data => {
     if (data.type === 'SAIDA_DESCARTE_OUTROS' && (!data.notes || data.notes.trim() === '')) {
@@ -110,7 +110,7 @@ export function StockWriteDown() {
             await consumeFromLot({
                 lotId: item.lotId,
                 quantityToConsume: item.quantity,
-                type: item.type as MovementType,
+                type: item.type,
                 notes: item.notes,
             }, user);
         }

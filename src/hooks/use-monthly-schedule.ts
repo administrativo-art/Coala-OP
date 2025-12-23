@@ -3,7 +3,8 @@
 "use client";
 
 import { useContext } from 'react';
-import { MonthlyScheduleContext, type MonthlyScheduleContextType } from '@/components/monthly-schedule-provider';
+import { MonthlyScheduleContext } from '@/components/monthly-schedule-provider';
+import { type MonthlyScheduleContextType } from '@/types';
 
 export const useMonthlySchedule = (): MonthlyScheduleContextType => {
   const context = useContext(MonthlyScheduleContext);

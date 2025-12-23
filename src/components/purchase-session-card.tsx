@@ -233,13 +233,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                 {sessionBaseProducts.map(bp => (
                                     <div key={bp.id}>
                                         <h3 className="text-lg font-semibold my-2">{bp.name}</h3>
-                                        <PriceComparisonTable
-                                            sessionId={session.id}
-                                            isSessionClosed={isSessionClosed}
-                                            selectedItems={selectedItems}
-                                            onSelectionChange={handleSelectionChange}
-                                            baseProduct={bp}
-                                        />
+                                        
                                     </div>
                                 ))}
                             </div>

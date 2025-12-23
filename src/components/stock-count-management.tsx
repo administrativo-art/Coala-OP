@@ -46,7 +46,7 @@ const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
 
 const divergenceSchema = z.object({
     id: z.string(),
-    reason: z.string().min(1, "Selecione um motivo."),
+    reason: z.custom<MovementType>(val => typeof val === 'string' && DIVERGENCE_REASONS.some(r => r.value === val), "Selecione um motivo válido."),
     quantity: z.coerce.number().min(0.01, "A quantidade deve ser maior que 0."),
     notes: z.string().optional(),
 });

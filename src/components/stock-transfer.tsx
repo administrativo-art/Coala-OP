@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from './ui/dropdown-menu';
 import { ScrollArea } from './ui/scroll-area';
+import { useReposition } from '@/hooks/use-reposition';
 
 interface TransferItem {
   productId: string;
@@ -33,6 +34,7 @@ export function StockTransfer() {
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { products, getProductFullName, loading: productsLoading } = useProducts();
   const { lots, loading: lotsLoading } = useExpiryProducts();
+  const { createRepositionActivity, loading: repositionLoading } = useReposition();
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -80,17 +82,56 @@ export function StockTransfer() {
     setTransferItems(prev => prev.filter((_, index) => index !== productIndex));
   };
   
-  const handleConfirmTransfer = () => {
-    // Placeholder for actual transfer logic
-    console.log({
-        originKioskId,
-        destinationKioskId,
-        transferItems,
-    });
-    toast({
-        title: "Transferência confirmada (simulação)",
-        description: "Os dados foram registrados no console. A lógica de back-end será implementada em seguida.",
-    });
+  const handleConfirmTransfer = async () => {
+    if (!isTransferReady || !user) return;
+
+    const originKiosk = kiosks.find(k => k.id === originKioskId)!;
+    const destinationKiosk = kiosks.find(k => k.id === destinationKioskId)!;
+
+    try {
+        await createRepositionActivity({
+            kioskOriginId: originKiosk.id,
+            kioskOriginName: originKiosk.name,
+            kioskDestinationId: destinationKiosk.id,
+            kioskDestinationName: destinationKiosk.name,
+            items: transferItems.map(item => {
+                const product = products.find(p => p.id === item.productId)!;
+                return {
+                    baseProductId: product.baseProductId || '',
+                    productName: product.baseName,
+                    quantityNeeded: 0, // Manual transfer, not based on need
+                    suggestedLots: item.lots
+                        .filter(lot => lot.quantity > 0)
+                        .map(lot => {
+                            const lotDetails = lots.find(l => l.id === lot.lotId)!;
+                            return {
+                                lotId: lot.lotId,
+                                productId: lotDetails.productId,
+                                productName: getProductFullName(product),
+                                lotNumber: lotDetails.lotNumber,
+                                quantityToMove: lot.quantity,
+                            };
+                        }),
+                };
+            }).filter(item => item.suggestedLots.length > 0),
+        });
+
+        toast({
+            title: 'Atividade de Reposição Criada',
+            description: 'Acesse "Gestão de Estoque > Análise > Gerenciar Reposição" para despachar os itens.',
+        });
+
+        setTransferItems([]);
+        setOriginKioskId('');
+        setDestinationKioskId('');
+
+    } catch (error: any) {
+        toast({
+            variant: 'destructive',
+            title: 'Erro ao criar atividade',
+            description: error.message || "Não foi possível criar a atividade de reposição.",
+        });
+    }
   };
 
   const availableProducts = useMemo(() => {
@@ -224,8 +265,9 @@ export function StockTransfer() {
         )}
       </CardContent>
       <CardFooter className="justify-end border-t pt-6">
-        <Button onClick={handleConfirmTransfer} disabled={!isTransferReady}>
-            <Truck className="mr-2"/> Concluir Transferência
+        <Button onClick={handleConfirmTransfer} disabled={!isTransferReady || repositionLoading}>
+            <Truck className="mr-2"/> 
+            {repositionLoading ? "Criando atividade..." : "Criar atividade de transferência"}
         </Button>
       </CardFooter>
     </Card>

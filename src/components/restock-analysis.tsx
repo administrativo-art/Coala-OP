@@ -18,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2, PlusCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2, PlusCircle, Inbox } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory, type RepositionActivity } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';

@@ -13,7 +13,7 @@ export interface ProductsContextType {
   updateProduct: (updatedProduct: Product) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
   deleteMultipleProducts: (productIds: string[]) => Promise<void>;
-  getProductFullName: (product: Product) => string;
+  getProductFullName: (product: Product | null | undefined) => string;
   updateMultipleProducts: (products: Partial<Product>[]) => Promise<void>;
   findOrCreateProduct: (productDef: ProductDefinition) => Promise<Product | null>;
 }

@@ -81,7 +81,7 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
             } else {
                 if (height > MAX_HEIGHT) {
                     width = Math.round(width * (MAX_HEIGHT / height));
-                    height = maxHeight;
+                    height = MAX_HEIGHT;
                 }
             }
             

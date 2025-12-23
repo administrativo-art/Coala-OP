@@ -43,7 +43,7 @@ export function StockManagement() {
                         <CardDescription>Acompanhe a validade dos lotes, adicione novos insumos e faça transferências entre quiosques.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
-                        <Link href="/dashboard/stock/inventory-control" className="w-full">
+                        <Link href="/dashboard/inventory-control" className="w-full">
                             <Button className="w-full text-lg py-6">
                                 Acessar controle <ArrowRight className="ml-2" />
                             </Button>

@@ -66,7 +66,7 @@ export function AverageConsumptionChart() {
   }, [baseProducts, initialSelectionMade]);
 
   const classificationOptions = useMemo(() => {
-    const classifications = new Set(baseProducts.map(p => p.classification).filter(Boolean));
+    const classifications = new Set(baseProducts.map(p => p.classification).filter((c): c is string => !!c));
     return ['all', ...Array.from(classifications)];
   }, [baseProducts]);
 
