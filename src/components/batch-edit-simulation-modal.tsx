@@ -286,7 +286,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                         <DropdownMenuTrigger asChild>
                                                             <FormControl>
                                                                 <Button variant="outline" className="w-full justify-between font-normal">
-                                                                    {field.value?.length > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
+                                                                    {(field.value?.length ?? 0) > 0 ? `${field.value?.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
                                                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                                 </Button>
                                                             </FormControl>
@@ -487,5 +487,3 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
         </Dialog>
     );
 }
-
-    
