@@ -76,8 +76,8 @@ export function AverageConsumptionChart() {
     const isMatrixView = selectedKiosk === 'matriz';
     
     let relevantReports = isMatrixView
-      ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
-      : consumptionHistory.filter(r => r.kioskId === selectedKiosk);
+      ? consumptionHistory.filter(r => (r as ConsumptionReport).kioskId !== 'matriz')
+      : consumptionHistory.filter(r => (r as ConsumptionReport).kioskId === selectedKiosk);
 
     const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
     
@@ -438,3 +438,4 @@ export function AverageConsumptionChart() {
   )
 }
 
+  
