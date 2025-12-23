@@ -76,13 +76,13 @@ export function AverageConsumptionChart() {
     const isMatrixView = selectedKiosk === 'matriz';
     
     let relevantReports = isMatrixView
-      ? consumptionHistory.filter(r => (r as ConsumptionReport).kioskId !== 'matriz')
-      : consumptionHistory.filter(r => (r as ConsumptionReport).kioskId === selectedKiosk);
+      ? consumptionHistory.filter(r => r.kioskId !== 'matriz')
+      : consumptionHistory.filter(r => r.kioskId === selectedKiosk);
 
     const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
     
     relevantReports.forEach(report => {
-        const key = `${(report as any).year}-${String(report.month).padStart(2, '0')}`;
+        const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
         report.results.forEach(res => {
             if (res.baseProductId) {
                 if (!monthlyConsumptionByBaseId[res.baseProductId]) monthlyConsumptionByBaseId[res.baseProductId] = {};
@@ -93,7 +93,7 @@ export function AverageConsumptionChart() {
     
     const allNetworkMonths = new Set<string>();
     for (const report of relevantReports) {
-      const key = `${(report as any).year}-${String(report.month).padStart(2, '0')}`;
+      const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
       const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
       if (anyConsumption) allNetworkMonths.add(key);
     }
@@ -437,5 +437,3 @@ export function AverageConsumptionChart() {
     </Card>
   )
 }
-
-  
