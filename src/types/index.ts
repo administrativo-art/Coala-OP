@@ -1,6 +1,6 @@
 
 "use client"
-export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
+export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
 export type UnitCategory = (typeof unitCategories)[number];
 
@@ -78,6 +78,7 @@ export type Product = {
 export type ProductDefinition = {
     baseName: string;
     brand?: string;
+    packageSize: number;
     category: UnitCategory;
     unit: string;
 }
@@ -98,6 +99,10 @@ export const units: ConversionUnits = {
       'mg': 0.000001,
     },
     Unidade: {
+      'un': 1,
+      'pacote': 1,
+    },
+    Embalagem: {
       'un': 1,
       'pacote': 1,
     }
@@ -339,7 +344,7 @@ export type PermissionSet = {
   // Legado - Will be removed
   products: { add: boolean; edit: boolean; delete: boolean; };
   lots: { add: boolean; edit: boolean; move: boolean; delete: boolean; viewMovementHistory: boolean; };
-  returns: { add: boolean, view: boolean; updateStatus: boolean; delete: boolean; };
+  returns: { add: boolean; view: boolean; updateStatus: boolean; delete: boolean; };
   users: { add: boolean; edit: boolean; delete: boolean; impersonate: boolean; };
   kiosks: { add: boolean; delete: boolean; };
   predefinedLists: { add: boolean; edit: boolean; delete: boolean; };

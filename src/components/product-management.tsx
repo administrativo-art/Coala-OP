@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useRef } from 'react';
@@ -10,7 +11,6 @@ import * as z from 'zod';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
-import { useStockAnalysisProducts } from '@/hooks/use-stock-analysis-products';
 import { useToast } from '@/hooks/use-toast';
 
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Edit, Trash2, PlusCircle, Camera, Archive, Upload, Settings } from 'lucide-react';
-import { type Product, unitCategories, type UnitCategory, type AnalysisProduct } from '@/types';
+import { type Product, unitCategories, type UnitCategory } from '@/types';
 import { getUnitsForCategory } from '@/lib/conversion';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ArchivedProductsModal } from './archived-products-modal';
@@ -49,8 +49,7 @@ const productFormSchema = z.object({
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
   notes: z.string().optional(),
-  analysisProductId: z.string().optional(),
-  stockLevels: z.any().optional(), // For compatibility, not directly edited here
+  baseProductId: z.string().optional(),
   pdfUnit: z.string().optional(),
 });
 
@@ -99,7 +98,6 @@ interface ProductManagementProps {
 
 export function ProductManagement({ productToEdit: initialProductToEdit }: ProductManagementProps) {
     const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useProducts();
-    const { analysisProducts } = useStockAnalysisProducts();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { lists, loading: listsLoading } = usePredefinedLists();
     const { toast } = useToast();
@@ -120,7 +118,7 @@ export function ProductManagement({ productToEdit: initialProductToEdit }: Produ
         defaultValues: {
             baseName: '', brand: '', barcode: '', imageUrl: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
-            notes: '', analysisProductId: ''
+            notes: '', baseProductId: ''
         }
     });
     
@@ -149,8 +147,7 @@ export function ProductManagement({ productToEdit: initialProductToEdit }: Produ
             packageSize: product.packageSize,
             unit: product.unit,
             notes: product.notes || '',
-            analysisProductId: product.analysisProductId || '',
-            stockLevels: product.stockLevels,
+            baseProductId: product.baseProductId || '',
             pdfUnit: product.pdfUnit,
         });
         setShowForm(true);
@@ -311,8 +308,8 @@ export function ProductManagement({ productToEdit: initialProductToEdit }: Produ
                                     <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                 </div>
 
-                                <FormField control={form.control} name="analysisProductId" render={({ field }) => (
-                                    <FormItem><FormLabel>Categoria (Agrupador Macro)</FormLabel><Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger></FormControl><SelectContent>{analysisProducts.map(ap => <SelectItem key={ap.id} value={ap.id}>{ap.itemName}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                                <FormField control={form.control} name="baseProductId" render={({ field }) => (
+                                    <FormItem><FormLabel>Categoria (Agrupador Macro)</FormLabel><Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger></FormControl><SelectContent>{[].map(ap => <SelectItem key={(ap as any).id} value={(ap as any).id}>{(ap as any).itemName}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                                 )}/>
                                 
                                 <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>

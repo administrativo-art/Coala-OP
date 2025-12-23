@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { Skeleton } from './ui/skeleton';
 import { AlertCircle, AreaChart, BarChart2, CheckCircle, Clock, FileText, Inbox, User, Users } from 'lucide-react';
-import { type FormTemplate } from '@/types';
 
 // Helper to truncate long labels for charts
 const truncateLabel = (label: string, maxLength = 25) => {

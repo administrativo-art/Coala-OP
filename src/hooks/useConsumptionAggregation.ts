@@ -1,3 +1,4 @@
+
 // src/hooks/useConsumptionAggregation.ts
 import { useMemo } from 'react';
 import { useValidatedConsumptionData } from './useValidatedConsumptionData';
@@ -58,7 +59,7 @@ export function useConsumptionAggregation(options: ConsumptionAggregationOptions
 
       // Somar consumo por baseProductId neste relatório
       report.results.forEach(item => {
-        if (consumption[item.baseProductId] !== undefined) {
+        if (item.baseProductId && consumption[item.baseProductId] !== undefined) {
           monthlyByBase[item.baseProductId] = (monthlyByBase[item.baseProductId] || 0) + item.consumedQuantity;
         }
       });

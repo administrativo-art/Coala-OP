@@ -156,7 +156,7 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
 
           const key = `${kioskId} ${turno}`;
           if (scheduleByDay[dayISO][key]) {
-              scheduleByDay[dayISO][key] += ` + ${colaborador}`;
+              (scheduleByDay[dayISO][key] as string) += ` + ${colaborador}`;
           } else {
               scheduleByDay[dayISO][key] = colaborador;
           }
@@ -247,7 +247,7 @@ export function ScheduleImportModal({ open, onOpenChange }: { open: boolean, onO
 
     const daysInMonth = eachDayOfInterval({ start: startOfMonth(monthDate), end: endOfMonth(monthDate) });
     const previousScheduleMap = new Map<string, DailySchedule>();
-    previousMonthSchedule.forEach((daySchedule: DailySchedule) => {
+    previousMonthSchedule.forEach((daySchedule) => {
         previousScheduleMap.set(daySchedule.id, daySchedule);
     });
 

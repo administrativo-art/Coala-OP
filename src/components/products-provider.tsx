@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -70,7 +69,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     const q = query(
         collection(db, "products"),
         where("baseName", "==", productDef.baseName),
-        where("packageSize", "==", productDef.packageSize),
+        where("packageSize", "==", productDef.packageSize || 1),
         where("unit", "==", productDef.unit)
     );
 

@@ -34,7 +34,7 @@ function PriceHistoryList() {
     const [entryToDelete, setEntryToDelete] = useState<PriceHistoryEntry | null>(null);
     const [priceLimit, setPriceLimit] = useState<string>('3');
 
-    const enrichedHistory = useMemo(() => {
+    const enrichedHistory: (PriceHistoryEntry & { productName: string; entityName: string; confirmedByUsername: string })[] = useMemo(() => {
         return priceHistory.map(entry => {
             const product = products.find(p => p.id === entry.productId);
             const entity = entities.find(e => e.id === entry.entityId);
@@ -67,7 +67,7 @@ function PriceHistoryList() {
         }
 
         const limit = parseInt(priceLimit, 10);
-        const grouped = new Map<string, PriceHistoryEntry[]>();
+        const grouped = new Map<string, (PriceHistoryEntry & { productName: string; entityName: string; confirmedByUsername: string })[]>();
 
         initialFilter.forEach(entry => {
             const key = `${entry.productId}-${entry.entityId}`;
@@ -77,7 +77,7 @@ function PriceHistoryList() {
             grouped.get(key)!.push(entry);
         });
 
-        const limitedResult: PriceHistoryEntry[] = [];
+        const limitedResult: (PriceHistoryEntry & { productName: string; entityName: string; confirmedByUsername: string })[] = [];
         grouped.forEach(group => {
             limitedResult.push(...group.slice(0, limit));
         });
@@ -93,7 +93,7 @@ function PriceHistoryList() {
         }
     }
     
-    const canDeleteHistory = permissions.purchasing.deleteHistory;
+    const canDeleteHistory = permissions.stock.purchasing.deleteHistory;
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;

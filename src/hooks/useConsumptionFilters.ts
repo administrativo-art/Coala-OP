@@ -1,6 +1,7 @@
+
 // src/hooks/useConsumptionFilters.ts
 import { useState, useCallback, useMemo } from 'react';
-import { type BaseProduct } from '@/utils/dataValidation';
+import { type BaseProduct } from '@/types';
 
 export interface FilterState {
   selectedBaseIds: string[];

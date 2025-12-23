@@ -57,7 +57,7 @@ export function validateConsumptionReport(report: any): ConsumptionReport | null
     return null;
   }
 
-  const { id, results, kioskId, month, year } = report;
+  const { id, results, kioskId, month, year, reportName, kioskName, createdAt, status } = report;
 
   // Validar ID
   if (!id || typeof id !== 'string') {
@@ -103,7 +103,7 @@ export function validateBaseProduct(product: any): BaseProduct | null {
     return null;
   }
 
-  const { id, name, unit } = product;
+  const { id, name, unit, category, stockLevels } = product;
 
   // Validar ID
   if (!id || typeof id !== 'string' || id.trim() === '') {
@@ -127,7 +127,9 @@ export function validateBaseProduct(product: any): BaseProduct | null {
     ...product,
     id: id.trim(),
     name: name.trim(),
-    unit: unit.trim()
+    unit: unit.trim(),
+    category: category || 'Massa',
+    stockLevels: stockLevels || {},
   };
 }
 

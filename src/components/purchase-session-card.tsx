@@ -12,7 +12,6 @@ import { usePurchase } from "@/hooks/use-purchase";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
 import { type PurchaseSession, type PurchaseItem } from "@/types";
-import { PriceComparisonTable } from "./price-comparison-table";
 import { Building, Calendar, ShoppingCart, User, Trash2, Download } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -20,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { convertValue } from '@/lib/conversion';
+import { PriceComparisonTable } from './price-comparison-table';
 
 interface PurchaseSessionCardProps {
     session: PurchaseSession;
@@ -234,15 +234,11 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                     <div key={bp.id}>
                                         <h3 className="text-lg font-semibold my-2">{bp.name}</h3>
                                         <PriceComparisonTable
-                                            baseProduct={bp}
-                                            items={sessionItems.filter(i => {
-                                                const product = products.find(p => p.id === i.productId);
-                                                return product?.baseProductId === bp.id;
-                                            })}
                                             sessionId={session.id}
                                             isSessionClosed={isSessionClosed}
                                             selectedItems={selectedItems}
                                             onSelectionChange={handleSelectionChange}
+                                            baseProduct={bp}
                                         />
                                     </div>
                                 ))}
