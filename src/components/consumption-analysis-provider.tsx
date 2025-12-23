@@ -23,7 +23,7 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
     const q = query(collection(db, "consumptionReports"));
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
       const historyData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ConsumptionReport));
-      setHistory(historyData.sort((a,b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
+      setHistory(historyData.sort((a,b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()));
       setLoading(false);
     }, (error) => {
         console.error("Error fetching consumption reports from Firestore: ", error);

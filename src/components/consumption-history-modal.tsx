@@ -42,7 +42,8 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
     const groupedHistory = useMemo(() => {
         if (loading || history.length === 0) return {};
         return history.reduce((acc, report) => {
-            const key = report.kioskName || 'Quiosque Desconhecido';
+            const key = report.kioskName;
+            if (!key) return acc;
             if (!acc[key]) {
                 acc[key] = [];
             }
