@@ -6,7 +6,7 @@ import { useKiosks } from './use-kiosks';
 import { validateConsumptionReports, validateBaseProducts, generateDataIntegrityReport } from '@/utils/dataValidation';
 import { writeBatch, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { type BaseProductStockLevel } from '@/types';
+import { type BaseProductStockLevel, type ConsumptionReport, type BaseProduct } from '@/types';
 
 export function useValidatedConsumptionData() {
   const { history: rawReports, loading: loadingReports, addReport: rawAddReport, deleteReport } = useConsumptionAnalysis();
@@ -14,23 +14,28 @@ export function useValidatedConsumptionData() {
   const { kiosks, loading: loadingKiosks } = useKiosks();
 
   const { reports, baseProducts, integrityReport } = useMemo(() => {
-    const validBaseProducts = validateBaseProducts(rawBaseProducts || []);
+    const validBaseProducts: BaseProduct[] = validateBaseProducts(rawBaseProducts || []);
     const validReports = validateConsumptionReports(rawReports || []);
     const report = generateDataIntegrityReport(validReports, validBaseProducts);
     
     const baseProductMap = new Map(validBaseProducts.map(bp => [bp.name.toLowerCase(), bp.id]));
-    const enrichedReports = validReports.map(r => ({
-      ...r,
-      results: r.results.map(item => {
+    
+    const enrichedReports: ConsumptionReport[] = validReports.map(r => {
+      const newResults = r.results.map(item => {
         if (!item.baseProductId) {
-            const foundId = baseProductMap.get(item.productName.toLowerCase());
-            if (foundId) {
-                return { ...item, baseProductId: foundId };
-            }
+          const foundId = baseProductMap.get(item.productName.toLowerCase());
+          if (foundId) {
+            return { ...item, baseProductId: foundId };
+          }
         }
         return item;
-      })
-    }));
+      });
+
+      return {
+        ...r,
+        results: newResults,
+      };
+    });
 
     return {
       reports: enrichedReports,

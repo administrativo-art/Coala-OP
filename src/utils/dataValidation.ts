@@ -1,27 +1,11 @@
 
 
-export interface ConsumptionItem {
-  baseProductId: string;
-  consumedQuantity: number;
-  productName: string;
-  [key: string]: any;
-}
+import {
+  type ConsumptionReport,
+  type ConsumptionAnalysisItem as ConsumptionItem,
+  type BaseProduct,
+} from '@/types';
 
-export interface ConsumptionReport {
-  id: string;
-  results: ConsumptionItem[];
-  kioskId: string;
-  month: number;
-  year: number;
-  [key: string]: any;
-}
-
-export interface BaseProduct {
-  id: string;
-  name: string;
-  unit: string;
-  [key: string]: any;
-}
 
 /**
  * Valida e normaliza um item de consumo
@@ -32,7 +16,7 @@ export function validateConsumptionItem(item: any): ConsumptionItem | null {
     return null;
   }
 
-  const { baseProductId, consumedQuantity, productName } = item;
+  const { baseProductId, consumedQuantity, productName, productId } = item;
 
   // Validar baseProductId
   if (!baseProductId || typeof baseProductId !== 'string' || baseProductId.trim() === '') {
@@ -58,6 +42,7 @@ export function validateConsumptionItem(item: any): ConsumptionItem | null {
 
   return {
     ...item,
+    productId: (productId || '').trim(), // Ensure productId is always a string
     baseProductId: (baseProductId || '').trim(), // Pode ser vazio aqui, será preenchido depois
     consumedQuantity: quantity,
     productName: productName.trim()
