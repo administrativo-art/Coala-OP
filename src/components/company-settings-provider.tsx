@@ -54,7 +54,9 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
             const validatedParams: PricingParameters = {
                 ...defaultPricingParameters,
                 ...params,
-                profitRanges: (params.profitRanges && params.profitRanges.length > 0) ? params.profitRanges : defaultPricingParameters.profitRanges,
+                profitRanges: (data.pricingParameters?.profitRanges && data.pricingParameters.profitRanges.length > 0)
+                    ? data.pricingParameters.profitRanges
+                    : defaultPricingParameters.profitRanges,
             };
             setPricingParameters(validatedParams);
         } else {
@@ -107,12 +109,11 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
   const value: CompanySettingsContextType = useMemo(() => ({
     labelSizeId,
     pricingParameters,
-    logoUrl,
     loading,
     updateLabelSize,
     updatePricingParameters,
     updateLogoUrl,
-  }), [labelSizeId, pricingParameters, logoUrl, loading, updateLabelSize, updatePricingParameters, updateLogoUrl]);
+  }), [labelSizeId, pricingParameters, loading, updateLabelSize, updatePricingParameters, updateLogoUrl]);
 
   return <CompanySettingsContext.Provider value={value}>{children}</CompanySettingsContext.Provider>;
 }
