@@ -16,7 +16,7 @@ export function useValidatedConsumptionData() {
   const { reports, baseProducts, integrityReport } = useMemo(() => {
     const validBaseProducts = validateBaseProducts(rawBaseProducts || []);
     // Directly use the validated and complete reports.
-    const validReports: ConsumptionReport[] = validateConsumptionReports(rawReports || []);
+    const validReports = validateConsumptionReports(rawReports || []);
     const report = generateDataIntegrityReport(validReports, validBaseProducts);
     
     const baseProductMap = new Map(validBaseProducts.map(bp => [bp.name.toLowerCase(), bp.id]));
@@ -32,8 +32,16 @@ export function useValidatedConsumptionData() {
         return item;
       });
 
+      // Ensure all properties of ConsumptionReport are present
       return {
-        ...r,
+        id: r.id,
+        reportName: r.reportName,
+        month: r.month,
+        year: r.year,
+        kioskId: r.kioskId,
+        kioskName: r.kioskName,
+        createdAt: r.createdAt,
+        status: r.status,
         results: newResults,
       };
     });
