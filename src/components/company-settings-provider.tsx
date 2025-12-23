@@ -15,7 +15,6 @@ interface CompanySettings {
 export interface CompanySettingsContextType {
   labelSizeId: string | null;
   pricingParameters: PricingParameters | null;
-  logoUrl: string | null;
   loading: boolean;
   updateLabelSize: (sizeId: string | null) => Promise<void>;
   updatePricingParameters: (params: PricingParameters) => Promise<void>;
@@ -55,7 +54,7 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
             const validatedParams: PricingParameters = {
                 ...defaultPricingParameters,
                 ...params,
-                profitRanges: params.profitRanges && params.profitRanges.length > 0 ? params.profitRanges : defaultPricingParameters.profitRanges,
+                profitRanges: (params.profitRanges && params.profitRanges.length > 0) ? params.profitRanges : defaultPricingParameters.profitRanges,
             };
             setPricingParameters(validatedParams);
         } else {
