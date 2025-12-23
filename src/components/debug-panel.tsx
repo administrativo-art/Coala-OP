@@ -16,7 +16,7 @@ export function DebugPanel({ dataLoadTime }: DebugPanelProps) {
   useEffect(() => {
     const perf = window.performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming;
     if (perf) {
-      const loadTime = perf.loadEventEnd - perf.navigationStart;
+      const loadTime = perf.loadEventEnd - perf.startTime;
       setPageLoadTime(loadTime);
     }
   }, []);
