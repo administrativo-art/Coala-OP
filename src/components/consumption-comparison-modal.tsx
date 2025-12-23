@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { type ConsumptionReport, type Product, type Kiosk, type BaseProduct } from "@/types";
+import { type ConsumptionReport, type Kiosk, type BaseProduct } from "@/types";
 import { Scale, TrendingUp, TrendingDown, Minus, AlertCircle, Info, Download, Copy } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -23,7 +23,7 @@ interface ConsumptionComparisonModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     history: ConsumptionReport[];
-    products: BaseProduct[];
+    baseProducts: BaseProduct[];
     kiosks: Kiosk[];
 }
 
@@ -50,7 +50,7 @@ Hipóteses e Implicações de Negócio: Com base nos dados, formule hipóteses p
 
 Recomendação Principal: Forneça uma recomendação clara e assertiva para a gerência do quiosque.`;
 
-export function ConsumptionComparisonModal({ open, onOpenChange, history, products, kiosks }: ConsumptionComparisonModalProps) {
+export function ConsumptionComparisonModal({ open, onOpenChange, history, baseProducts, kiosks }: ConsumptionComparisonModalProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const { getProductFullName } = useProducts();
@@ -132,12 +132,12 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         const allBaseProductIds = new Set([
             ...reportA.results.map(r => r.baseProductId), 
             ...reportB.results.map(r => r.baseProductId)
-        ].filter(id => id !== null));
+        ].filter((id): id is string => id !== null));
 
         const results: ComparisonResult[] = [];
 
         allBaseProductIds.forEach(baseProductId => {
-            const productInfo = products.find(p => p.id === baseProductId);
+            const productInfo = baseProducts.find(p => p.id === baseProductId);
             if (!productInfo) return;
 
             const consumptionA = reportA.results.find(r => r.baseProductId === baseProductId)?.consumedQuantity || 0;
@@ -380,4 +380,3 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, produc
         </Dialog>
     );
 }
-

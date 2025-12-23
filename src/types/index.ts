@@ -174,7 +174,7 @@ export type ConsumptionReport = {
   year: number;
   kioskId: string;
   kioskName?: string;
-  createdAt?: string;
+  createdAt: string; // ISO String
   status?: 'completed' | 'processing' | 'error';
   results: ConsumptionAnalysisItem[];
 };
