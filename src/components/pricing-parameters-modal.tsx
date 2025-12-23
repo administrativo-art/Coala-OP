@@ -47,7 +47,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   
   const form = useForm<ParametersFormValues>({
     resolver: zodResolver(parametersSchema),
-    defaultValues: { // Add default values to prevent uncontrolled component warnings
+    defaultValues: { 
         defaultOperationPercentage: 0,
         profitGoals: [],
         profitRanges: [],

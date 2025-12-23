@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
-import { useForm, type FieldPath, type FieldValues } from 'react-hook-form';
+import { useForm, type FieldPath, type FieldValues, ControllerRenderProps } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -25,7 +25,7 @@ import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
-const permissionsSchema = z.object({}).passthrough();
+const permissionsSchema = z.object({}).passthrough(); // Looser validation
 
 const profileSchema = z.object({
   name: z.string().min(3, 'O nome do perfil deve ter pelo menos 3 caracteres.'),
@@ -117,7 +117,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const handleEdit = (profile: Profile) => {
     setEditingProfile(profile);
     
-    // Deep merge to ensure all permission keys from default are present
     const deepMerge = (target: any, source: any): any => {
       const output = { ...target };
       for (const key in source) {
@@ -180,7 +179,13 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     setEditingProfile(null);
   };
 
-  const renderPermissionSwitch = (name: FieldPath<ProfileFormValues>, label: string, description: string, disabled: boolean = false, indented: boolean = false) => (
+  const renderPermissionSwitch = (
+    name: FieldPath<ProfileFormValues>, 
+    label: string, 
+    description: string, 
+    disabled: boolean = false, 
+    indented: boolean = false
+  ) => (
     <FormField
       control={form.control}
       name={name}
@@ -191,14 +196,18 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
             <FormDescription className="text-xs">{description}</FormDescription>
           </div>
           <FormControl>
-            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={disabled} />
+            <Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={disabled} />
           </FormControl>
         </FormItem>
       )}
     />
   );
   
-   const renderModuleToggle = (name: FieldPath<ProfileFormValues>, label: string, description?: string) => (
+   const renderModuleToggle = (
+     name: FieldPath<ProfileFormValues>,
+     label: string,
+     description?: string
+   ) => (
     <FormField
       control={form.control}
       name={name}
@@ -209,7 +218,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
             {description && <FormDescription>{description}</FormDescription>}
           </div>
           <FormControl>
-            <Switch checked={field.value} onCheckedChange={field.onChange} />
+            <Switch checked={!!field.value} onCheckedChange={field.onChange} />
           </FormControl>
         </FormItem>
       )}
@@ -264,10 +273,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderModuleToggle("permissions.dashboard.view", "Visualizar Dashboard Principal", "Permite que o usuário veja a página inicial do dashboard.")}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Operacional</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
-                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Custo e Preço</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
-                                        <FormField control={form.control} name="permissions.dashboard.technicalSheets" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Fichas Técnicas</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
-                                        <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Auditoria</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
+                                        <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Operacional</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
+                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Custo e Preço</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
+                                        <FormField control={form.control} name="permissions.dashboard.technicalSheets" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Fichas Técnicas</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
+                                        <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Auditoria</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
                                     </div>
                                 </AccordionContent>
                             </AccordionItem>
