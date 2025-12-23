@@ -351,13 +351,13 @@ useEffect(() => {
         sku: values.sku,
     };
     
-    const finalStatus = values.status ? 'active' : 'archived';
+    const finalStatus: 'active' | 'archived' = values.status ? 'active' : 'archived';
     
     if (simulationToEdit) {
       const simulationData = { 
         ...simulationToEdit, 
         ...values,
-        status: finalStatus, // Use the correctly typed status
+        status: finalStatus,
         operationPercentage: values.operationPercentage,
         salePrice: values.salePrice,
         profitGoal: values.profitGoal,
@@ -369,7 +369,8 @@ useEffect(() => {
         markup,
         ppo: ppoData
       };
-      await updateSimulation({ ...simulationData, items: values.items });
+      const items = values.items;
+      await updateSimulation({ ...simulationData, items });
     } else {
        const finalData = {
         ...values,
@@ -915,3 +916,5 @@ useEffect(() => {
     </>
   );
 }
+
+    
