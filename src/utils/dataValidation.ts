@@ -10,6 +10,9 @@ export interface ConsumptionItem {
 export interface ConsumptionReport {
   id: string;
   results: ConsumptionItem[];
+  kioskId: string;
+  month: number;
+  year: number;
   [key: string]: any;
 }
 
@@ -70,11 +73,17 @@ export function validateConsumptionReport(report: any): ConsumptionReport | null
     return null;
   }
 
-  const { id, results } = report;
+  const { id, results, kioskId, month, year } = report;
 
   // Validar ID
   if (!id || typeof id !== 'string') {
     console.warn('Relatório sem ID válido:', report);
+    return null;
+  }
+
+  // Validar kioskId, month, year
+  if (!kioskId || typeof kioskId !== 'string' || !month || !year) {
+    console.warn('Relatório com informações de período ou quiosque inválidas:', report);
     return null;
   }
 

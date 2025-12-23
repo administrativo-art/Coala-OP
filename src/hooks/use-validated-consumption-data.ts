@@ -16,23 +16,26 @@ export function useValidatedConsumptionData() {
 
   const { reports, baseProducts, integrityReport } = useMemo(() => {
     const validBaseProducts = validateBaseProducts(rawBaseProducts || []);
-    const validReports = validateConsumptionReports(rawReports || []) as ConsumptionReport[];
+    const validReports = validateConsumptionReports(rawReports || []);
     const report = generateDataIntegrityReport(validReports, validBaseProducts);
     
     const baseProductMap = new Map(validBaseProducts.map(bp => [bp.name.toLowerCase(), bp.id]));
-    const enrichedReports = validReports.map(r => {
+    
+    const enrichedReports: ConsumptionReport[] = validReports.map(r => {
+      const newResults = r.results.map(item => {
+        if (!item.baseProductId) {
+          const foundId = baseProductMap.get(item.productName.toLowerCase());
+          if (foundId) {
+            return { ...item, baseProductId: foundId };
+          }
+        }
+        return item;
+      });
+
       return {
         ...r,
-        results: r.results.map(item => {
-          if (!item.baseProductId) {
-              const foundId = baseProductMap.get(item.productName.toLowerCase());
-              if (foundId) {
-                  return { ...item, baseProductId: foundId };
-              }
-          }
-          return item;
-        })
-      }
+        results: newResults,
+      };
     });
 
     return {
