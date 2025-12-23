@@ -46,7 +46,7 @@ const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
 
 const divergenceSchema = z.object({
     id: z.string(),
-    reason: z.string().min(1, "Selecione um motivo."),
+    reason: z.custom<MovementType>(val => typeof val === 'string' && DIVERGENCE_REASONS.some(r => r.value === val), "Selecione um motivo válido."),
     quantity: z.coerce.number().min(0.01, "A quantidade deve ser maior que 0."),
     notes: z.string().optional(),
 });
@@ -106,7 +106,7 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
                 </div>
             ))}
         </div>
-        <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: '', quantity: 0, notes: '' })}>
+        <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: 'SAIDA_CONSUMO', quantity: 0, notes: '' })}>
             <PlusCircle className="mr-2 h-3 w-3"/> Adicionar Saída
         </Button>
     </Card>
@@ -190,7 +190,7 @@ function AuditForm({
       return {
         ...originalItem,
         finalQuantity: formItem?.finalQuantity ?? originalItem.systemQuantity,
-        adjustment: formItem?.adjustment ?? undefined,
+        adjustment: formItem?.adjustment,
         divergences: formItem?.divergences || [],
       };
     });

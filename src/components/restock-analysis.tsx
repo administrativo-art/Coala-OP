@@ -602,5 +602,3 @@ export function RestockAnalysis() {
     </Tabs>
   );
 }
-
-    

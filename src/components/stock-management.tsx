@@ -21,7 +21,6 @@ export function StockManagement() {
     
     const canViewInventoryControl = permissions.stock.inventoryControl.view;
     const canViewStockCount = permissions.stock.stockCount.view;
-    const canViewAudit = permissions.stock.audit.view;
     const canViewAnalysis = permissions.stock.analysis.view;
     const canViewPurchasing = permissions.stock.purchasing.view;
     const canViewReturns = permissions.stock.returns.view;

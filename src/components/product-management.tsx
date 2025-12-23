@@ -1,380 +1,279 @@
 
 "use client"
 
-import { useState, useEffect, useRef } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Image from 'next/image';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import Link from 'next/link';
 
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
-import { useToast } from '@/hooks/use-toast';
+import { useBaseProducts } from '@/hooks/use-base-products';
+import { type Product, type BaseProduct, unitCategories, type UnitCategory } from '@/types';
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from './ui/checkbox';
+import { ScrollArea } from './ui/scroll-area';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
-import { Edit, Trash2, PlusCircle, Camera, Archive, Upload, Settings } from 'lucide-react';
-import { type Product, unitCategories, type UnitCategory } from '@/types';
-import { getUnitsForCategory } from '@/lib/conversion';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { PlusCircle, Edit, Trash2, Archive, Box, Search, MoreHorizontal, Inbox } from 'lucide-react';
 import { ArchivedProductsModal } from './archived-products-modal';
-import { Textarea } from '@/components/ui/textarea';
+import { AddEditProductModal } from './add-edit-product-modal';
+import { Input } from './ui/input';
+import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Badge } from './ui/badge';
+import { BaseProductManagement } from './base-product-management';
 
 
-const BarcodeScannerModal = dynamic(
-  () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
-  { ssr: false }
-);
+export function ItemManagement() {
+  const { products, loading: productsLoading, getProductFullName, updateProduct, deleteMultipleProducts } = useProducts();
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+  const { lots, loading: lotsLoading } = useExpiryProducts();
+  const { lists, loading: listsLoading } = usePredefinedLists();
 
-const PhotoCaptureModal = dynamic(
-  () => import('./photo-capture-modal').then(mod => mod.PhotoCaptureModal),
-  { ssr: false }
-);
+  const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBaseProductModalOpen, setIsBaseProductModalOpen] = useState(false);
+  const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  const loading = productsLoading || listsLoading || lotsLoading || baseProductsLoading;
 
-const productFormSchema = z.object({
-  baseName: z.string().min(1, 'O nome base é obrigatório.'),
-  brand: z.string().optional(),
-  barcode: z.string().optional(),
-  imageUrl: z.string().optional(),
-  category: z.enum(unitCategories),
-  packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
-  unit: z.string().min(1, 'A unidade é obrigatória.'),
-  notes: z.string().optional(),
-  baseProductId: z.string().optional(),
-  pdfUnit: z.string().optional(),
-});
+  const baseProductMap = useMemo(() => {
+    return new Map(baseProducts.map(bp => [bp.id, bp.name]));
+  }, [baseProducts]);
 
-type ProductFormValues = z.infer<typeof productFormSchema>;
+  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
 
-const resizeImage = (dataUrl: string, maxWidth: number, maxHeight: number): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-            let width = img.width;
-            let height = img.height;
+  const filteredProducts = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    if (!searchLower) return activeProducts;
 
-            if (width > height) {
-                if (width > maxWidth) {
-                    height = Math.round(height * (maxWidth / width));
-                    width = maxWidth;
-                }
-            } else {
-                if (height > maxHeight) {
-                    width = Math.round(width * (maxHeight / height));
-                    height = maxHeight;
-                }
-            }
+    return activeProducts.filter(p => {
+        const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.toLowerCase() : '';
+        return getProductFullName(p).toLowerCase().includes(searchLower) ||
+               (p.barcode && p.barcode.includes(searchLower)) ||
+               (baseProductName && baseProductName.includes(searchLower));
+    });
+  }, [activeProducts, searchTerm, getProductFullName, baseProductMap]);
 
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                return reject(new Error('Could not get canvas context'));
-            }
-            ctx.drawImage(img, 0, 0, width, height);
+
+  const handleEdit = (product: Product) => {
+    setProductToEdit(product);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteClick = (product: Product) => {
+      const usedInLotsCount = lots.filter(lot => lot.productId === product.id).length;
+      const usedInLists = lists.filter(list => list.items.some(item => item.productId === product.id));
+
+      let messages = [];
+      if (usedInLotsCount > 0) messages.push(`está sendo usado em ${usedInLotsCount} lote(s)`);
+      if (usedInLists.length > 0) messages.push(`está nas listas predefinidas: ${usedInLists.map(l => `"${l.name}"`).join(', ')}`);
+
+      if (messages.length > 0) {
+          alert(`Não é possível excluir o insumo: este insumo não pode ser excluído pois ${messages.join(' e ')}.`);
+          return;
+      }
+      setProductsToDelete([product]);
+  };
+  
+  const handleArchiveClick = (product: Product) => {
+      updateProduct({ ...product, isArchived: true });
+  };
+  
+  const handleAddNewClick = () => {
+    setProductToEdit(null);
+    setIsModalOpen(true);
+  };
+
+  const handleProductSelectionChange = (id: string, isSelected: boolean) => {
+    setSelectedProducts(prev => {
+        const newSet = new Set(prev);
+        if (isSelected) newSet.add(id);
+        else newSet.delete(id);
+        return newSet;
+    });
+  };
+
+  const handleSelectAllChange = (isSelected: boolean) => {
+      setSelectedProducts(isSelected ? new Set(filteredProducts.map(p => p.id)) : new Set());
+  };
+
+  const handleDeleteSelectedClick = () => {
+      const toDelete = products.filter(p => selectedProducts.has(p.id));
+      setProductsToDelete(toDelete);
+  };
+
+  const handleDeleteMultipleConfirm = async () => {
+      if (productsToDelete.length > 0) {
+          setIsDeleting(true);
+          try {
+              const idsToDelete = productsToDelete.map(p => p.id);
+              await deleteMultipleProducts(idsToDelete);
+              setSelectedProducts(new Set());
+              setProductsToDelete([]);
+          } finally { setIsDeleting(false); }
+      }
+  };
+
+  const allFilteredProductsSelected = filteredProducts.length > 0 && selectedProducts.size === filteredProducts.length;
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Insumos cadastrados</CardTitle>
+          <CardDescription>Adicione, edite e agrupe os insumos (itens físicos) que compõem seu estoque.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row gap-2">
+                <Button onClick={handleAddNewClick} className="w-full sm:w-auto">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Adicionar insumo
+                </Button>
+                <div className="relative flex-grow">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar por insumo, marca, cód. de barras..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="pl-10 w-full"
+                    />
+                </div>
+            </div>
+             <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setIsArchiveModalOpen(true)}>
+                    <Archive className="mr-2 h-4 w-4" /> Ver arquivados
+                </Button>
+            </div>
             
-            resolve(canvas.toDataURL('image/jpeg', 0.8));
-        };
-        img.onerror = (err) => {
-            reject(new Error('Failed to load image'));
-        };
-        img.src = dataUrl;
-    });
-};
-
-interface ProductManagementProps {
-  productToEdit?: Product | null;
-}
-
-export function ProductManagement({ productToEdit: initialProductToEdit }: ProductManagementProps) {
-    const { products, loading: productsLoading, getProductFullName, addProduct, updateProduct, deleteProduct, deleteMultipleProducts } = useProducts();
-    const { lots, loading: lotsLoading } = useExpiryProducts();
-    const { lists, loading: listsLoading } = usePredefinedLists();
-    const { toast } = useToast();
-
-    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-    const [showForm, setShowForm] = useState(false);
-    const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-    const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
-    const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [isScannerOpen, setIsScannerOpen] = useState(false);
-    const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
-    const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const form = useForm<ProductFormValues>({
-        resolver: zodResolver(productFormSchema),
-        defaultValues: {
-            baseName: '', brand: '', barcode: '', imageUrl: '',
-            category: 'Massa', packageSize: undefined, unit: 'g',
-            notes: '', baseProductId: ''
-        }
-    });
-    
-    useEffect(() => {
-        if(initialProductToEdit) {
-            handleEdit(initialProductToEdit);
-        }
-    }, [initialProductToEdit]);
-    
-    const categoryWatch = form.watch('category');
-    
-    useEffect(() => {
-        if (form.formState.isDirty || !editingProduct) {
-            form.setValue('unit', getUnitsForCategory(categoryWatch)[0]);
-        }
-    }, [categoryWatch, form, editingProduct]);
-
-    const handleEdit = (product: Product) => {
-        setEditingProduct(product);
-        form.reset({
-            baseName: product.baseName,
-            brand: product.brand || '',
-            barcode: product.barcode || '',
-            imageUrl: product.imageUrl || '',
-            category: product.category,
-            packageSize: product.packageSize,
-            unit: product.unit,
-            notes: product.notes || '',
-            baseProductId: product.baseProductId || '',
-            pdfUnit: product.pdfUnit,
-        });
-        setShowForm(true);
-    };
-
-    const handleDeleteClick = (product: Product) => {
-        const usedInLotsCount = lots.filter(lot => lot.productId === product.id).length;
-        const usedInLists = lists.filter(list => list.items.some(item => item.productId === product.id));
-
-        let messages = [];
-        if (usedInLotsCount > 0) messages.push(`está sendo usado em ${usedInLotsCount} lote(s)`);
-        if (usedInLists.length > 0) messages.push(`está nas listas predefinidas: ${usedInLists.map(l => `"${l.name}"`).join(', ')}`);
-
-        if (messages.length > 0) {
-            alert(`Não é possível excluir o insumo: Este insumo não pode ser excluído pois ${messages.join(' e ')}.`);
-            return;
-        }
-        setProductToDelete(product);
-    };
-
-    const handleArchiveClick = (product: Product) => {
-        updateProduct({ ...product, isArchived: true });
-    };
-    
-    const handleDeleteConfirm = async () => {
-        if (productToDelete) {
-            setIsDeleting(true);
-            try { await deleteProduct(productToDelete.id); } 
-            finally { setIsDeleting(false); setProductToDelete(null); }
-        }
-    };
-    
-    const handleProductSelectionChange = (id: string, isSelected: boolean) => {
-        setSelectedProducts(prev => {
-            const newSet = new Set(prev);
-            if (isSelected) newSet.add(id);
-            else newSet.delete(id);
-            return newSet;
-        });
-    };
-
-    const handleSelectAllChange = (isSelected: boolean) => {
-        const activeProducts = products.filter(p => !p.isArchived);
-        setSelectedProducts(isSelected ? new Set(activeProducts.map(p => p.id)) : new Set());
-    };
-
-    const handleDeleteSelectedClick = () => {
-        const toDelete = products.filter(p => selectedProducts.has(p.id));
-        setProductsToDelete(toDelete);
-    };
-
-    const handleDeleteMultipleConfirm = async () => {
-        if (productsToDelete.length > 0) {
-            setIsDeleting(true);
-            try {
-                const idsToDelete = productsToDelete.map(p => p.id);
-                await deleteMultipleProducts(idsToDelete);
-                setSelectedProducts(new Set());
-                setProductsToDelete([]);
-            } finally { setIsDeleting(false); }
-        }
-    };
-
-    const handleScanSuccess = (decodedText: string) => {
-        form.setValue('barcode', decodedText, { shouldValidate: true });
-        setIsScannerOpen(false);
-    };
-
-    const handlePhotoCaptured = (dataUrl: string) => {
-        handlePhotoUpdate(dataUrl);
-    };
-
-    const handlePhotoUpdate = (dataUrl: string) => {
-        if (editingProduct) {
-          updateProduct({ ...editingProduct, imageUrl: dataUrl });
-        }
-        form.setValue('imageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
-        toast({ title: "Foto do insumo atualizada!" });
-    };
-
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast({ variant: 'destructive', title: 'Arquivo muito grande', description: 'Por favor, selecione um arquivo de imagem menor que 5MB.' });
-                return;
-            }
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                try {
-                    const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
-                    handlePhotoUpdate(resizedDataUrl);
-                } catch (error) {
-                    toast({ variant: 'destructive', title: 'Erro ao processar imagem', description: 'Não foi possível redimensionar a imagem. Tente uma imagem diferente.' });
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const onSubmit = (values: ProductFormValues) => {
-        const productData = { ...values };
-        if (editingProduct) {
-            updateProduct({ ...editingProduct, ...productData });
-        } else {
-            addProduct(productData);
-        }
-        setShowForm(false);
-        setEditingProduct(null);
-    };
-
-    const activeProducts = products.filter(p => !p.isArchived);
-    const allProductsSelected = activeProducts.length > 0 && selectedProducts.size === activeProducts.length;
-
-    return (
-        <>
-        <Card>
-            <CardHeader>
-                <CardTitle>Insumos Cadastrados</CardTitle>
-                 <CardDescription>Adicione, edite ou exclua os insumos (itens físicos) do seu estoque.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {showForm ? (
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
-                            <ScrollArea className="flex-1 pr-6 -mr-6">
-                            <div className="space-y-4 pt-4">
-                                <h3 className="text-lg font-medium">{editingProduct ? `Editando ${getProductFullName(editingProduct)}` : 'Adicionar novo insumo'}</h3>
-                                
-                                <div className="space-y-2">
-                                    <FormLabel>Foto do Insumo</FormLabel>
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
-                                            {form.watch('imageUrl') ? <Image src={form.watch('imageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
-                                        </div>
-                                        <div className="flex flex-col gap-2">
-                                            <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
-                                            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
-                                            {form.watch('imageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
-                                        </div>
-                                    </div>
-                                    <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
-                                    <FormField control={form.control} name="imageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca (Opcional)</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                </div>
-                                
-                                <FormField control={form.control} name="barcode" render={({ field }) => (
-                                    <FormItem><FormLabel>Código de Barras</FormLabel><div className="flex gap-2"><FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl><Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button></div><FormMessage /></FormItem>
-                                )}/>
-
-                                <div className="grid grid-cols-3 gap-4">
-                                    <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem><FormLabel>Tamanho</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                                </div>
-
-                                <FormField control={form.control} name="baseProductId" render={({ field }) => (
-                                    <FormItem><FormLabel>Categoria (Agrupador Macro)</FormLabel><Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger></FormControl><SelectContent>{[].map(ap => <SelectItem key={(ap as any).id} value={(ap as any).id}>{(ap as any).itemName}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
-                                )}/>
-                                
-                                <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                            </div>
-                            </ScrollArea>
-                            <div className="flex justify-end gap-2 pt-4">
-                                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                                <Button type="submit">{editingProduct ? 'Salvar alterações' : 'Adicionar insumo'}</Button>
-                            </div>
-                        </form>
-                    </Form>
-                ) : (
-                    <div className="flex flex-col flex-1 overflow-hidden">
-                        <div className="p-1 flex gap-2">
-                            <Button type="button" className="flex-grow" onClick={() => { setEditingProduct(null); form.reset({ baseName: '', brand: '', barcode: '', imageUrl: '', category: 'Massa', packageSize: undefined, unit: 'g', notes: '' }); setShowForm(true); }}>
-                                <PlusCircle className="mr-2" /> Adicionar Novo Insumo
-                            </Button>
-                            <Button type="button" variant="outline" className="flex-grow" onClick={() => setIsArchiveModalOpen(true)}>
-                                <Archive className="mr-2" /> Ver Arquivados
-                            </Button>
-                        </div>
-                        <Separator className="my-4" />
-
-                            {activeProducts.length > 0 && (
-                            <div className="flex items-center gap-3 px-1 py-2 mb-2 border-y bg-muted/50">
-                                <Checkbox id="select-all-active-products" checked={allProductsSelected} onCheckedChange={(checked) => handleSelectAllChange(!!checked)} aria-label="Selecionar todos"/>
-                                <label htmlFor="select-all-active-products" className="text-sm font-medium leading-none cursor-pointer">Selecionar todos</label>
-                            </div>
-                        )}
-
-                        <ScrollArea className="flex-grow">
-                            <div className="space-y-2 pr-4">
-                                {activeProducts.length > 0 ? activeProducts.map(product => (
-                                    <div key={product.id} className="flex items-center justify-between rounded-md border p-2">
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-10">
+                                <Checkbox 
+                                    checked={allFilteredProductsSelected} 
+                                    onCheckedChange={(checked) => handleSelectAllChange(!!checked)}
+                                    aria-label="Selecionar todos"
+                                />
+                            </TableHead>
+                            <TableHead className="w-[40%]">Insumo</TableHead>
+                            <TableHead>Produto Base</TableHead>
+                            <TableHead>Embalagem</TableHead>
+                            <TableHead>Cód. Barras</TableHead>
+                            <TableHead className="w-16 text-right">Ações</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {loading ? (
+                            [...Array(5)].map((_, i) => (
+                                <TableRow key={i}>
+                                    <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
+                                </TableRow>
+                            ))
+                        ) : filteredProducts.length > 0 ? (
+                            filteredProducts.map(product => (
+                                <TableRow key={product.id}>
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={selectedProducts.has(product.id)}
+                                            onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
                                         <div className="flex items-center gap-3">
-                                                <Checkbox id={`active-product-${product.id}`} checked={selectedProducts.has(product.id)} onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}/>
-                                            <label htmlFor={`active-product-${product.id}`} className="font-medium cursor-pointer">{getProductFullName(product)}</label>
+                                            {product.imageUrl ? (
+                                                <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                                    <Box className="h-5 w-5 text-muted-foreground" />
+                                                </div>
+                                            )}
+                                            <span className="font-semibold">{getProductFullName(product)}</span>
                                         </div>
-                                        <div className="flex gap-1">
-                                            <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleArchiveClick(product)}><Archive className="h-4 w-4" /></Button>
-                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(product)}><Trash2 className="h-4 w-4" /></Button>
-                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        {product.baseProductId ? (
+                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId) || 'N/A'}</Badge>
+                                        ) : (
+                                            <span className="text-muted-foreground">-</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {product.packageSize}
+                                        {product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}
+                                        {product.unit}
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
+                                    <TableCell className="text-right">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
+                                                <DropdownMenuItem onSelect={() => handleArchiveClick(product)}><Archive className="mr-2 h-4 w-4" /> Arquivar</DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
+                                                    <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <Inbox className="h-10 w-10" />
+                                        <span>Nenhum insumo encontrado.</span>
                                     </div>
-                                )) : (
-                                    <div className="text-center py-12 text-muted-foreground">
-                                        <p>Nenhum insumo cadastrado.</p>
-                                        <p className="text-sm">Clique em "Adicionar Novo Insumo" para começar.</p>
-                                    </div>
-                                )}
-                            </div>
-                        </ScrollArea>
-                        <div className="pt-4 border-t mt-auto shrink-0 flex justify-between">
-                            <Button type="button" variant="destructive" onClick={handleDeleteSelectedClick} disabled={selectedProducts.size === 0}><Trash2 className="mr-2 h-4 w-4" /> Excluir ({selectedProducts.size})</Button>
-                        </div>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-            
-        <ArchivedProductsModal open={isArchiveModalOpen} onOpenChange={setIsArchiveModalOpen} />
-        {isScannerOpen && <BarcodeScannerModal open={isScannerOpen} onOpenChange={setIsScannerOpen} onScanSuccess={handleScanSuccess} />}
-        {isPhotoModalOpen && <PhotoCaptureModal open={isPhotoModalOpen} onOpenChange={setIsPhotoModalOpen} onPhotoCaptured={handlePhotoCaptured} />}
-        {productToDelete && <DeleteConfirmationDialog open={!!productToDelete} isDeleting={isDeleting} onOpenChange={() => setProductToDelete(null)} onConfirm={handleDeleteConfirm} itemName={`o insumo "${getProductFullName(productToDelete)}"`} />}
-        {productsToDelete.length > 0 && <DeleteConfirmationDialog open={productsToDelete.length > 0} isDeleting={isDeleting} onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }} onConfirm={handleDeleteMultipleConfirm} itemName={`os ${productsToDelete.length} insumo(s) selecionado(s)`} />}
-        </>
-    );
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
+            {selectedProducts.size > 0 && (
+                 <div className="pt-2">
+                    <Button variant="destructive" onClick={handleDeleteSelectedClick}>
+                        <Trash2 className="mr-2 h-4 w-4" /> Excluir selecionados ({selectedProducts.size})
+                    </Button>
+                </div>
+            )}
+        </CardContent>
+      </Card>
+      
+      <AddEditProductModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        productToEdit={productToEdit}
+        onManageBaseProducts={() => {
+            setIsModalOpen(false);
+            setIsBaseProductModalOpen(true);
+        }}
+      />
+      
+      <ArchivedProductsModal open={isArchiveModalOpen} onOpenChange={setIsArchiveModalOpen} />
+      
+      {productsToDelete.length > 0 && 
+        <DeleteConfirmationDialog 
+            open={productsToDelete.length > 0} 
+            isDeleting={isDeleting} 
+            onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }} 
+            onConfirm={handleDeleteMultipleConfirm} 
+            itemName={productsToDelete.length > 1 ? `os ${productsToDelete.length} insumos selecionados` : `o insumo "${getProductFullName(productsToDelete[0])}"`}
+        />
+      }
+    </>
+  );
 }

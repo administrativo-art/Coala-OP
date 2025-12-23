@@ -115,7 +115,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
             const TI = movementsInPeriodForProduct.filter(h => h.type === 'TRANSFERENCIA_ENTRADA' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
             const TO = movementsInPeriodForProduct.filter(h => h.type === 'TRANSFERENCIA_SAIDA' && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
             const AJ_plus = movementsInPeriodForProduct.filter(h => h.type === 'ENTRADA_CORRECAO' && h.toKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
-            const AJ_minus = movementsInPeriodForProduct.filter(h => (h.type === 'SAIDA_CORRECAO' || h.type === 'SAIDA_DESCARTE') && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
+            const AJ_minus = movementsInPeriodForProduct.filter(h => (h.type === 'SAIDA_CORRECAO' || h.type?.startsWith('SAIDA_DESCARTE')) && h.fromKioskId === kioskId).reduce((sum, h) => sum + h.quantityChange, 0);
             
             const consumoTeorico = (EI + EC + TI + AJ_plus) - (TO + EF + AJ_minus);
             

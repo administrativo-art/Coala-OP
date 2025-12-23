@@ -75,16 +75,16 @@ export function MovementAnalysis() {
                                 <TableRow key={item.id}>
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span>{format(parseISO(item.movedAt), "dd/MM/yy", { locale: ptBR })}</span>
-                                            <span className="text-xs text-muted-foreground">{format(parseISO(item.movedAt), "HH:mm", { locale: ptBR })}</span>
+                                            <span>{format(parseISO(item.timestamp), "dd/MM/yy", { locale: ptBR })}</span>
+                                            <span className="text-xs text-muted-foreground">{format(parseISO(item.timestamp), "HH:mm", { locale: ptBR })}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell className="font-medium">{item.displayName}</TableCell>
                                     <TableCell>{item.lotNumber}</TableCell>
-                                    <TableCell className="text-right font-semibold">{item.quantityMoved}</TableCell>
+                                    <TableCell className="text-right font-semibold">{item.quantityChange}</TableCell>
                                     <TableCell>{item.fromKioskName}</TableCell>
                                     <TableCell>{item.toKioskName}</TableCell>
-                                    <TableCell>{item.movedByUsername}</TableCell>
+                                    <TableCell>{item.username}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>

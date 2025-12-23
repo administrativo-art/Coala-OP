@@ -229,14 +229,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                     </CardHeader>
                     <AccordionContent>
                         <CardContent>
-                            <div className="w-full space-y-3">
-                                {sessionBaseProducts.map(bp => (
-                                    <div key={bp.id}>
-                                        <h3 className="text-lg font-semibold my-2">{bp.name}</h3>
-                                        
-                                    </div>
-                                ))}
-                            </div>
+                           {/* Content will be added here in a future request */}
                         </CardContent>
                         {!isSessionClosed && (
                             <CardFooter className="border-t pt-4 justify-end">

@@ -27,10 +27,13 @@ import { Card, CardContent } from './ui/card';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const MOVEMENT_TYPE_CONFIG: Record<MovementType, { label: string; color: string }> = {
+const MOVEMENT_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
     'ENTRADA': { label: 'Entrada', color: 'bg-green-100 text-green-800' },
     'SAIDA_CONSUMO': { label: 'Saída consumo', color: 'bg-red-100 text-red-800' },
-    'SAIDA_DESCARTE': { label: 'Saída descarte', color: 'bg-red-100 text-red-800' },
+    'SAIDA_DESCARTE_VENCIMENTO': { label: 'Descarte Vencimento', color: 'bg-red-100 text-red-800' },
+    'SAIDA_DESCARTE_AVARIA': { label: 'Descarte Avaria', color: 'bg-red-100 text-red-800' },
+    'SAIDA_DESCARTE_PERDA': { label: 'Descarte Perda', color: 'bg-red-100 text-red-800' },
+    'SAIDA_DESCARTE_OUTROS': { label: 'Descarte Outros', color: 'bg-red-100 text-red-800' },
     'SAIDA_CORRECAO': { label: 'Ajuste saída', color: 'bg-red-100 text-red-800' },
     'ENTRADA_CORRECAO': { label: 'Ajuste entrada', color: 'bg-green-100 text-green-800' },
     'TRANSFERENCIA_SAIDA': { label: 'Transferência', color: 'bg-blue-100 text-blue-800' },
@@ -328,4 +331,3 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
     </Dialog>
   );
 }
-

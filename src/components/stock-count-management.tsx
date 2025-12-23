@@ -106,7 +106,7 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
                 </div>
             ))}
         </div>
-        <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: '', quantity: 0, notes: '' })}>
+        <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: 'SAIDA_CONSUMO', quantity: 0, notes: '' })}>
             <PlusCircle className="mr-2 h-3 w-3"/> Adicionar Saída
         </Button>
     </Card>
@@ -190,7 +190,7 @@ function AuditForm({
       return {
         ...originalItem,
         finalQuantity: formItem?.finalQuantity ?? originalItem.systemQuantity,
-        adjustment: formItem?.adjustment ?? undefined,
+        adjustment: formItem?.adjustment,
         divergences: formItem?.divergences || [],
       };
     });

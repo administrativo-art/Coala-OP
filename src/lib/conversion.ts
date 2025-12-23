@@ -14,6 +14,10 @@ export const units: ConversionUnits = {
   Unidade: {
     'un': 1,
     'pacote': 1,
+  },
+  Embalagem: {
+      'un': 1,
+      'pacote': 1,
   }
 };
 

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -166,6 +167,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
         const newSimulation: Omit<ProductSimulation, 'id' | 'totalCmv' | 'grossCost' | 'profitValue' | 'profitPercentage' | 'markup'> = {
             ...simulationHeader,
+            lineId: simulationHeader.lineId ?? null,
             userId: user.id,
             createdAt: now,
             updatedAt: now,
