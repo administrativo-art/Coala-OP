@@ -105,7 +105,7 @@ export function PredefinedConverter() {
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
                 Crie modelos de contagem para agilizar as tarefas do dia a dia.
             </p>
-            <Button size="lg" onClick={handleAddNew} disabled={!permissions.predefinedLists.add}>
+            <Button size="lg" onClick={handleAddNew} disabled={!permissions.stock.predefinedLists}>
                 <ListPlus className="mr-2 h-5 w-5" /> Criar seu primeiro modelo
             </Button>
         </div>
@@ -121,12 +121,12 @@ export function PredefinedConverter() {
                   <div className="flex justify-between items-center w-full">
                     <span className="text-lg font-semibold">{list.name}</span>
                     <div className="flex items-center gap-1">
-                        {permissions.predefinedLists.edit && (
+                        {permissions.stock.predefinedLists && (
                           <Button asChild variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEdit(list); }}>
                               <span><Edit className="h-4 w-4" /></span>
                           </Button>
                         )}
-                        {permissions.predefinedLists.delete && (
+                        {permissions.stock.predefinedLists && (
                           <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(list); }}>
                                <span><Trash2 className="h-4 w-4" /></span>
                           </Button>
@@ -177,7 +177,7 @@ export function PredefinedConverter() {
           <CardDescription className="text-center">Use modelos de contagem para agilizar as tarefas comuns.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
-          {permissions.predefinedLists.add && (
+          {permissions.stock.predefinedLists && (
             <Button onClick={handleAddNew} className="w-full">
                 <ListPlus className="mr-2 h-4 w-4" /> Criar novo modelo de contagem
             </Button>
