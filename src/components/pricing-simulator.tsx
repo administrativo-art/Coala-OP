@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -235,10 +236,10 @@ export function PricingSimulator() {
         const addSectionTitle = (title: string, currentY: number) => {
             if (currentY > 260) { doc.addPage(); currentY = 15; }
             doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
+            doc.setFont('helvetica', 'bold');
             doc.setTextColor(0);
             doc.text(title, pageMargin, currentY);
-            doc.setFont(undefined, 'normal');
+            doc.setFont('helvetica', 'normal');
             return currentY + 8;
         };
     
@@ -251,7 +252,7 @@ export function PricingSimulator() {
         };
     
         const measureCardH = (value: string, w: number) => {
-          doc.setFontSize(12); doc.setFont(undefined, 'bold');
+          doc.setFontSize(12); doc.setFont('helvetica', 'bold');
           const lines = doc.splitTextToSize(value || '—', w - 10);
           const h = (doc.getTextDimensions(lines as any).h || 0);
           return Math.max(18, 12 + h);
@@ -264,11 +265,11 @@ export function PricingSimulator() {
           roundedRect(x, y, w, h, 1.8, 'DF');
           doc.setFontSize(10);
           doc.setTextColor(100);
-          doc.setFont(undefined, 'normal');
+          doc.setFont('helvetica', 'normal');
           doc.text(label, x + 5, y + 7);
           doc.setFontSize(12);
           doc.setTextColor(17, 24, 39);
-          doc.setFont(undefined, 'bold');
+          doc.setFont('helvetica', 'bold');
           const maxTextWidth = w - 10;
           const lines = doc.splitTextToSize(value || '—', maxTextWidth);
           doc.text(lines as any, x + 5, y + 14);
@@ -276,7 +277,7 @@ export function PricingSimulator() {
 
         const measureStepTextH = (txt: string, maxW: number) => {
             doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
+            doc.setFont('helvetica', 'normal');
             const lines = doc.splitTextToSize(txt, maxW);
             return { lines, h: doc.getTextDimensions(lines as any).h || 4 };
         };
@@ -306,16 +307,16 @@ export function PricingSimulator() {
                     textX = pageMargin + imgW + 10;
     
                     const titleY = headerStartY + (imgH / 2) - 3;
-                    doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
+                    doc.setFontSize(18); doc.setFont('helvetica', 'bold'); doc.setTextColor(0);
                     doc.text(sim.name, textX, titleY);
-                    doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
+                    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(100);
                     doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, titleY + 6);
                 }
             } catch { yPos += 25; }
         } else {
-            doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
+            doc.setFontSize(18); doc.setFont('helvetica', 'bold'); doc.setTextColor(0);
             doc.text(sim.name, textX, yPos + 7);
-            doc.setFontSize(9); doc.setTextColor(100); doc.setFont(undefined, 'normal');
+            doc.setFontSize(9); doc.setTextColor(100); doc.setFont('helvetica', 'normal');
             doc.text(`SKU: ${sim.ppo?.sku || 'N/A'}`, textX, yPos + 13);
             yPos += 25;
         }
@@ -363,7 +364,7 @@ export function PricingSimulator() {
         ensureSpace(boxH_info + 8);
         doc.setFillColor(248, 250, 252); doc.setDrawColor(226);
         roundedRect(pageMargin, yPos, pageContentWidth, boxH_info, 4, 'DF');
-        doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(39, 51, 68);
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(39, 51, 68);
         doc.text('Informações de Venda e Fiscais', pageMargin + padX_info, yPos + padTop_info + 3);
     
         let gridY_info = gridTopY_info;
@@ -422,7 +423,7 @@ export function PricingSimulator() {
         
                 // Título centralizado VERTICALMENTE e justificado
                 doc.setFontSize(10);
-                doc.setFont(undefined, 'bold');
+                doc.setFont('helvetica', 'bold');
                 doc.setTextColor(39, 51, 68);
                 const _baseline = doc.getFontSize() * 0.32;
                 const titleY = blockY + phaseTitleH / 2 + _baseline;
@@ -434,7 +435,7 @@ export function PricingSimulator() {
                 blockY += phaseTitleH + 4; // respiro abaixo do título
         
                 // Etapas (somente texto, sem imagens nem badges)
-                doc.setFont(undefined, 'normal');
+                doc.setFont('helvetica', 'normal');
                 doc.setTextColor(0);
 
                 const SEP_INSET_L = pageMargin + 5;
@@ -494,11 +495,11 @@ export function PricingSimulator() {
                         const nH = doc.getTextDimensions(nLines as any).h || 4;
                         ensureSpace(nH + 3);
                         doc.setFontSize(9);
-                        doc.setFont(undefined, 'italic');
+                        doc.setFont('helvetica', 'italic');
                         doc.setTextColor(100);
                         doc.text(nLines as any, pageMargin + 6, blockY + 3);
                         blockY += nH + 3;
-                        doc.setFont(undefined, 'normal');
+                        doc.setFont('helvetica', 'normal');
                         doc.setTextColor(0);
                     }
                 }
@@ -513,11 +514,11 @@ export function PricingSimulator() {
             ensureSpace(boxH + 4);
             doc.setFillColor(230, 240, 250); doc.setDrawColor(200);
             roundedRect(pageMargin, yPos, pageContentWidth, boxH, 3, 'DF');
-            doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(39, 51, 68);
+            doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(39, 51, 68);
             doc.text('Vídeo de montagem', pageMargin + 6, yPos + 9);
             const linkLabel = 'Abrir vídeo';
             const linkY = yPos + 16;
-            doc.setFontSize(10); doc.setFont(undefined, 'normal'); doc.setTextColor(0, 0, 238);
+            doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(0, 0, 238);
             doc.text(linkLabel, pageMargin + 6, linkY);
             const labelW = doc.getTextWidth(linkLabel);
             doc.link(pageMargin + 6, linkY - 4, labelW, 6, { url: sim.ppo.assemblyVideoUrl });
@@ -557,7 +558,7 @@ export function PricingSimulator() {
             ensureSpace(innerH2 + 4);
             doc.setFillColor(248, 250, 252); doc.setDrawColor(226);
             roundedRect(pageMargin, yPos, pageContentWidth, innerH2, 4, 'DF');
-            doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(39, 51, 68);
+            doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(39, 51, 68);
             doc.text('Detalhes Adicionais', pageMargin + padX2, yPos + padTop2);
     
             let gy = gridTopY2;
