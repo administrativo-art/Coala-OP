@@ -128,7 +128,7 @@ export function ReturnRequestManagement() {
                                 )}
 
                                 <div className={cn("flex justify-end", isArchived ? "col-start-2 row-start-1 md:col-span-1" : "md:col-span-1")}>
-                                    {permissions.returns.delete && (
+                                    {permissions.stock.returns.delete && (
                                         <Button
                                             variant="ghost"
                                             size="icon"

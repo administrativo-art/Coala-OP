@@ -49,7 +49,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
     resolver: zodResolver(parametersSchema),
   });
 
-  const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: 'profitGoals' });
+  const { fields: goalFields, append: appendGoal, remove: removeGoal } = useFieldArray({ control: form.control, name: 'profitGoals' as const });
   const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
 
   useEffect(() => {
