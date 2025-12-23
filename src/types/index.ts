@@ -432,7 +432,7 @@ export type StockAuditItem = {
         type: 'positive' | 'negative';
         quantity: number;
         notes?: string;
-    };
+    } | null;
     divergences: StockAuditDivergence[];
 };
 
@@ -506,7 +506,7 @@ export type Entity = {
   name: string;
   fantasyName?: string;
   document: string; // CPF ou CNPJ
-  address?: {
+  address: {
     street: string;
     number: string;
     complement?: string;

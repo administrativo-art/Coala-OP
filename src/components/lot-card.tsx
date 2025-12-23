@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Pencil, Trash2, Truck, History, QrCode, MinusCircle, Eye, LineChart, Shield, Database, Copy } from 'lucide-react';
-import { type Kiosk, type LotEntry, type Product, type Location, type BaseProduct, type RepositionActivity } from '@/types';
+import { type Kiosk, type LotEntry, type Product, type Location, type BaseProduct, type RepositionActivity, type MovementType } from '@/types';
 import { useMemo, useState } from 'react';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { labelSizes } from '@/lib/label-sizes';
@@ -72,13 +72,13 @@ const getStatus = (lot: LotEntry, product?: Product) => {
 type ConsumeLotModalProps = {
   lot: LotEntry;
   onClose: () => void;
-  onConfirm: (params: { lotId: string; quantityToConsume: number; type: 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO'; notes?: string }) => void;
+  onConfirm: (params: { lotId: string; quantityToConsume: number; type: MovementType; notes?: string }) => void;
 };
 
 function ConsumeLotModal({ lot, onClose, onConfirm }: ConsumeLotModalProps) {
   const formSchema = z.object({
     quantity: z.coerce.number().min(0.01, "A quantidade deve ser positiva.").max(lot.quantity, `Máximo: ${lot.quantity}`),
-    type: z.enum(['SAIDA_CONSUMO', 'SAIDA_DESCARTE'], { required_error: 'Selecione o tipo de baixa.'}),
+    type: z.custom<MovementType>(val => typeof val === 'string', 'Selecione um tipo válido'),
     notes: z.string().optional(),
   });
 
@@ -109,7 +109,7 @@ function ConsumeLotModal({ lot, onClose, onConfirm }: ConsumeLotModalProps) {
                      <FormControl>
                         <RadioGroup onValueChange={field.onChange} value={field.value} className="flex gap-4">
                             <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="SAIDA_CONSUMO" /></FormControl><Label className="font-normal">Consumo / Venda</Label></FormItem>
-                            <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="SAIDA_DESCARTE" /></FormControl><Label className="font-normal">Descarte / Perda</Label></FormItem>
+                            <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="SAIDA_DESCARTE_AVARIA" /></FormControl><Label className="font-normal">Descarte / Perda</Label></FormItem>
                         </RadioGroup>
                      </FormControl>
                 </FormItem>
@@ -144,7 +144,6 @@ function ConsumeLotModal({ lot, onClose, onConfirm }: ConsumeLotModalProps) {
 
 type LotCardProps = {
   productGroup: GroupedProduct;
-  baseProduct?: BaseProduct;
   getProductFullName: (product: Product) => string;
   kiosks: Kiosk[];
   locations: Location[];
@@ -152,15 +151,10 @@ type LotCardProps = {
   onMove: (lotId: string) => void;
   onDelete: (lotId: string) => void;
   onViewHistory: (lot: LotEntry) => void;
-  canEdit: boolean;
-  canMove: boolean;
-  canDelete: boolean;
-  canViewHistory: boolean;
 };
 
 export function LotCard({
     productGroup,
-    baseProduct,
     getProductFullName,
     kiosks,
     locations,
@@ -186,7 +180,7 @@ export function LotCard({
     setLotToConsume(lot);
   };
 
-  const handleConfirmConsumption = (params: { lotId: string; quantityToConsume: number; type: 'SAIDA_CONSUMO' | 'SAIDA_DESCARTE' | 'SAIDA_CORRECAO'; notes?: string }) => {
+  const handleConfirmConsumption = (params: { lotId: string; quantityToConsume: number; type: MovementType; notes?: string }) => {
     if (!user) {
         toast({ variant: 'destructive', title: 'Erro de autenticação', description: 'Usuário não encontrado para registrar a baixa.' });
         return;
@@ -455,4 +449,3 @@ export function LotCard({
   );
 }
 
-    

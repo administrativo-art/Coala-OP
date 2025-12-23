@@ -232,7 +232,6 @@ export function PricingSimulator() {
     
         const snap = (n: number) => Math.round(n * 100) / 100;
     
-        // ---------- HELPERS (topo da função) ----------
         const addSectionTitle = (title: string, currentY: number) => {
             if (currentY > 260) { doc.addPage(); currentY = 15; }
             doc.setFontSize(12);
@@ -282,14 +281,13 @@ export function PricingSimulator() {
             return { lines, h: doc.getTextDimensions(lines as any).h || 4 };
         };
         
-        // ---------- CABEÇALHO ----------
         const hasImage = sim.ppo?.referenceImageUrl;
         let textX = pageMargin;
         let headerStartY = yPos;
         
         if (hasImage) {
             try {
-                const img = new Image();
+                const img = new (window as any).Image();
                 img.crossOrigin = 'anonymous';
                 img.src = sim.ppo!.referenceImageUrl!;
                 await new Promise(resolve => { img.onload = resolve; img.onerror = () => resolve(null); });
@@ -321,7 +319,6 @@ export function PricingSimulator() {
             yPos += 25;
         }
     
-        // ---------- INFORMAÇÕES DE VENDA E FISCAIS ----------
         const infoItems: Array<{label: string; value: string}> = [
             { label: 'Preço de Venda', value: formatCurrency(sim.salePrice) },
             { label: 'Markup', value: `${sim.markup.toFixed(2)}x` },
@@ -378,7 +375,6 @@ export function PricingSimulator() {
         }
         yPos += boxH_info + 8;
     
-        // ---------- COMPOSIÇÃO (CMV) ----------
         const ingredients = simulationItems
             .filter(item => item.simulationId === sim.id)
             .map(item => {
@@ -405,7 +401,6 @@ export function PricingSimulator() {
             yPos = (doc as any).lastAutoTable.finalY + 10;
         }
     
-        // ---------- MODO DE MONTAGEM (sem círculos, sem imagens, com medidas) ----------
         if (sim.ppo?.assemblyInstructions && sim.ppo.assemblyInstructions.length > 0) {
             yPos = addSectionTitle('Modo de Montagem', yPos);
             let blockY = yPos;
@@ -415,13 +410,11 @@ export function PricingSimulator() {
             const lineColor = 226;
         
             for (const fase of sim.ppo.assemblyInstructions) {
-                // Título da fase (caixa suave)
                 ensureSpace(phaseTitleH + 6);
                 doc.setFillColor(248, 250, 252);
                 doc.setDrawColor(226);
                 (doc as any).roundedRect(pageMargin, blockY, pageContentWidth, phaseTitleH, 3, 3, 'DF');
         
-                // Título centralizado VERTICALMENTE e justificado
                 doc.setFontSize(10);
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(39, 51, 68);
@@ -432,9 +425,8 @@ export function PricingSimulator() {
                     maxWidth: pageContentWidth - 12
                 });
         
-                blockY += phaseTitleH + 4; // respiro abaixo do título
+                blockY += phaseTitleH + 4;
         
-                // Etapas (somente texto, sem imagens nem badges)
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(0);
 
@@ -457,13 +449,10 @@ export function PricingSimulator() {
 
                     const qty = (etapa.quantity ?? (etapa as any).qty ?? (etapa as any).quantidade ?? (etapa as any).amount ?? (etapa as any).medida ?? (etapa as any).qtd) as number | string | undefined;
                     const unit = (etapa.unit ?? (etapa as any).unidade ?? (etapa as any).units ?? (etapa as any).sigla) as string | undefined;
-                    const extraSize = (etapa as any).size as string | undefined;
-              
+                    
                     let measureStr = '';
                     if (qty !== undefined && qty !== null && `${qty}`.trim() !== '') {
                       measureStr = `${qty}${unit ? ` ${unit}` : ''}`;
-                    } else if (extraSize) {
-                      measureStr = extraSize;
                     }
               
                     const coreText = (etapa.text || '').trim();
@@ -508,7 +497,6 @@ export function PricingSimulator() {
             yPos = blockY;
         }
 
-        // ---------- VÍDEO ----------
         if (sim.ppo?.assemblyVideoUrl) {
             const boxH = 24;
             ensureSpace(boxH + 4);
@@ -526,7 +514,6 @@ export function PricingSimulator() {
             yPos += boxH + 6;
         }
     
-        // ---------- DETALHES ADICIONAIS ----------
         const detalhesBrutos = [
             sim.ppo?.preparationTime ? { label: 'Tempo de Preparo', value: `${sim.ppo.preparationTime} seg` } : null,
             sim.ppo?.portionWeight ? { label: 'Peso da Porção', value: `${sim.ppo.portionWeight}g (±${sim.ppo.portionTolerance || 0}g)` } : null,
@@ -573,7 +560,6 @@ export function PricingSimulator() {
             yPos += innerH2 + 6;
         }
     
-        // ---------- FOOTER ----------
         const pages = (doc as any).getNumberOfPages();
         for (let p = 1; p <= pages; p++) {
             doc.setPage(p);
@@ -932,7 +918,7 @@ export function PricingSimulator() {
                                                     let cost = 0;
                                                     try {
                                                         const valueInBase = item.useDefault 
-                                                            ? 1 // Already in base units
+                                                            ? 1
                                                             : convertValue(1, item.overrideUnit || baseProduct.unit, baseProduct.unit, baseProduct.category);
                                                         
                                                         const effectiveCostPerUnit = item.useDefault ? costPerUnit : (item.overrideCostPerUnit || 0) / valueInBase;

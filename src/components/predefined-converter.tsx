@@ -78,32 +78,16 @@ export function PredefinedConverter() {
 
   const handleSaveCount = (list: PredefinedList) => {
     if (!user) return;
-    const values = listValues[list.id];
-    const items = list.items.map(item => {
-        const product = products.find(p => p.id === item.productId);
-        return {
-            productId: item.productId,
-            productName: product ? getProductFullName(product) : 'Produto desconhecido',
-            fromUnit: item.fromUnit,
-            toUnit: item.toUnit,
-            value: values[item.id]?.value || '0',
-            result: values[item.id]?.result || '0',
-        };
-    });
-
-    addStockCount({
-        listId: list.id,
-        listName: list.name,
-        userId: user.id,
-        username: user.username,
-        kioskId: user.assignedKioskIds[0] || 'N/A', // Assuming primary kiosk
-        createdAt: new Date().toISOString(),
-        items,
-    });
+    
+    // This functionality is now part of the StockCountManagement component,
+    // which uses a more complex data structure (StockAuditSession).
+    // This component's save functionality is now deprecated as it uses
+    // an outdated data model (StockCount).
     
     toast({
-        title: "Contagem salva!",
-        description: `A contagem "${list.name}" foi salva no histórico.`,
+        variant: "destructive",
+        title: "Função Descontinuada",
+        description: "A contagem de estoque foi movida. Use a funcionalidade em 'Gestão de Estoque > Contagem de Estoque'.",
     });
   };
 

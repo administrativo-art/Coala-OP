@@ -24,7 +24,7 @@ import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { type LotEntry, type Product, type BaseProduct } from '@/types';
-import { LotCard, type GroupedProduct } from './lot-card';
+import { LotCard } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -35,11 +35,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickProjectionModal } from './quick-projection-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
-
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
   { ssr: false }
 );
+
+export type GroupedProduct = {
+  product: Product;
+  lots: LotEntry[];
+};
 
 export type GroupedByBrand = {
   brandName: string;
@@ -54,7 +58,6 @@ export type GroupedByBaseProduct = {
   brands: GroupedByBrand[];
   hasLeadTime: boolean;
 };
-
 
 function ExpiryControlContent() {
   const { user, permissions } = useAuth();
@@ -186,7 +189,6 @@ function ExpiryControlContent() {
         const lotsByKey: Record<string, LotEntry> = {};
 
         productLots.forEach(lot => {
-            // The key now includes the kioskId to prevent incorrect grouping across kiosks
             const key = `${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}-${lot.kioskId}`;
             if (lotsByKey[key]) {
                 lotsByKey[key].quantity += lot.quantity;
@@ -220,7 +222,7 @@ function ExpiryControlContent() {
         groups.set(baseProductId, {
           isBaseProduct: isBaseProdGroup,
           baseProductId: product.baseProductId || null,
-          baseProduct: baseProduct,
+          baseProduct: baseProduct ?? null,
           name: groupName,
           brands: [],
           hasLeadTime,
@@ -245,7 +247,6 @@ function ExpiryControlContent() {
       productGroup.lots.push(lot);
     });
 
-    // Sort lots within each product group by expiry date
     groups.forEach(baseGroup => {
         baseGroup.brands.forEach(brandGroup => {
             brandGroup.products.forEach(productGroup => {

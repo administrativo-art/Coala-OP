@@ -150,7 +150,6 @@ function AuditForm({
 }) {
   const { products, getProductFullName } = useProducts();
   const { user } = useAuth();
-  const [isCancelling, setIsCancelling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -163,7 +162,7 @@ function AuditForm({
     defaultValues: {
       items: session.items.map(i => ({
         productId: i.productId, lotId: i.lotId, systemQuantity: i.systemQuantity,
-        finalQuantity: i.finalQuantity, adjustment: i.adjustment || null, divergences: i.divergences || [],
+        finalQuantity: i.finalQuantity, adjustment: i.adjustment ?? null, divergences: i.divergences || [],
       })),
     },
   });
@@ -329,66 +328,6 @@ function AuditForm({
         />
     </>
   )
-}
-
-export function AuditHistory() {
-    const { auditSessions, deleteAuditSession, loading } = useStockAudit();
-    const { permissions } = useAuth();
-    const [sessionToDelete, setSessionToDelete] = useState<StockAuditSession | null>(null);
-
-    const completedAudits = useMemo(() => {
-        return auditSessions.filter(s => s.status === 'completed');
-    }, [auditSessions]);
-    
-    const handleDeleteConfirm = () => {
-        if(sessionToDelete) {
-            deleteAuditSession(sessionToDelete.id);
-            setSessionToDelete(null);
-        }
-    }
-
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Histórico de contagens</CardTitle>
-                <CardDescription>Visualize todas as contagens que foram concluídas.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {loading ? <Skeleton className="h-40 w-full" /> : completedAudits.length === 0 ? (
-                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                        <Inbox className="h-12 w-12 mx-auto mb-4" />
-                        <p className="font-semibold">Nenhuma contagem concluída.</p>
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        {completedAudits.map(session => (
-                            <div key={session.id} className="p-3 border rounded-md flex justify-between items-center">
-                                <div>
-                                    <p className="font-medium">{session.kioskName}</p>
-                                    <p className="text-xs text-muted-foreground">Concluída por {session.auditedBy.username} em {session.completedAt ? format(parseISO(session.completedAt), 'dd/MM/yy HH:mm') : '-'}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Badge>Concluída</Badge>
-                                    {permissions.stock.audit.approve && (
-                                        <DeleteConfirmationDialog 
-                                            open={false} onOpenChange={()=>{}}
-                                            onConfirm={handleDeleteConfirm}
-                                            itemName={`a contagem de "${sessionToDelete?.kioskName}"`}
-                                            triggerButton={
-                                              <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => setSessionToDelete(session)}>
-                                                  <Trash2 className="h-4 w-4" />
-                                              </Button>
-                                            }
-                                        />
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
 }
 
 function KioskSelectionModal({
