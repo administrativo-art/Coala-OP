@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo, useState, useRef } from 'react';
@@ -44,7 +43,6 @@ const simulationItemSchema = z.object({
 
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
-  status: z.boolean().default(true),
   kioskIds: z.array(z.string()).optional(),
   sku: z.string().optional(),
   categoryIds: z.array(z.string()),
@@ -110,7 +108,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
     resolver: zodResolver(simulationSchema),
     defaultValues: { 
         name: '', 
-        status: true,
         kioskIds: [],
         sku: '',
         categoryIds: [], 
@@ -164,11 +161,8 @@ useEffect(() => {
                 overrideUnit: item.overrideUnit,
             }));
         
-        const isActive = simulationToEdit.status === 'active';
-
         form.reset({
             name: simulationToEdit.name,
-            status: isActive,
             kioskIds: simulationToEdit.kioskIds || [],
             sku: simulationToEdit.ppo?.sku || '',
             categoryIds: simulationToEdit.categoryIds || [],
@@ -185,7 +179,6 @@ useEffect(() => {
     } else {
         form.reset({ 
             name: '', 
-            status: true,
             kioskIds: [],
             sku: '',
             categoryIds: [], 
@@ -221,7 +214,6 @@ useEffect(() => {
 
     form.reset({
         name: `${sourceSimulation.name} (cópia)`,
-        status: true,
         kioskIds: sourceSimulation.kioskIds || [],
         sku: '', // SKU is unique, should not be copied
         categoryIds: sourceSimulation.categoryIds || [],
@@ -351,13 +343,10 @@ useEffect(() => {
         sku: values.sku,
     };
     
-    const finalStatus: 'active' | 'archived' = values.status ? 'active' : 'archived';
-    
     if (simulationToEdit) {
       const simulationData = { 
         ...simulationToEdit, 
         ...values,
-        status: finalStatus,
         operationPercentage: values.operationPercentage,
         salePrice: values.salePrice,
         profitGoal: values.profitGoal,
@@ -374,7 +363,6 @@ useEffect(() => {
     } else {
        const finalData = {
         ...values,
-        status: finalStatus,
         items: values.items,
         totalCmv: cmv,
         grossCost,
@@ -456,7 +444,7 @@ useEffect(() => {
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
             <ScrollArea className="flex-1 pr-6">
               <div className="space-y-4">
-                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-4 items-end">
+                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
                     <FormField control={form.control} name="name" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Nome da mercadoria</FormLabel>
@@ -471,22 +459,6 @@ useEffect(() => {
                             <FormMessage />
                         </FormItem>
                     )}/>
-                    <FormField
-                      control={form.control}
-                      name="status"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col items-center gap-2">
-                          <FormLabel>Status</FormLabel>
-                          <FormControl>
-                            <Switch
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                           <span className="text-xs text-muted-foreground">{field.value ? 'Ativa' : 'Inativa'}</span>
-                        </FormItem>
-                      )}
-                    />
                  </div>
 
                 {!simulationToEdit && (
@@ -916,5 +888,3 @@ useEffect(() => {
     </>
   );
 }
-
-    

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -29,7 +28,6 @@ interface SimulationData {
     profitGoal?: number | null;
     notes?: string;
     ppo?: ProductSimulation['ppo'];
-    status?: 'active' | 'archived';
 }
 
 interface BulkUpdatePayload {
@@ -168,7 +166,6 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
         const newSimulation: Omit<ProductSimulation, 'id' | 'totalCmv' | 'grossCost' | 'profitValue' | 'profitPercentage' | 'markup'> = {
             ...simulationHeader,
-            status: data.status === 'archived' ? 'archived' : 'active',
             userId: user.id,
             createdAt: now,
             updatedAt: now,
@@ -325,11 +322,6 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                 updatedBy: { userId: user.id, username: user.username },
                 ppo: { ...ppo }
             };
-
-            // Handle Status
-            if (updates.status.action === 'set' && updates.status.value) {
-                updatePayload.status = updates.status.value;
-            }
 
             // Handle Kiosk
             if (updates.kiosk.action === 'set') {

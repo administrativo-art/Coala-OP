@@ -1,4 +1,3 @@
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade"] as const;
 
@@ -286,7 +285,6 @@ export type PPO = {
 export type ProductSimulation = {
   id: string;
   name: string;
-  status: 'active' | 'archived';
   kioskIds?: string[];
   categoryIds: string[];
   lineId: string | null;
