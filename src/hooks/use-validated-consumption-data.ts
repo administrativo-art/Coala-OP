@@ -1,4 +1,3 @@
-
 // src/hooks/useValidatedConsumptionData.ts
 import { useEffect, useMemo, useCallback } from 'react';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
@@ -16,7 +15,8 @@ export function useValidatedConsumptionData() {
 
   const { reports, baseProducts, integrityReport } = useMemo(() => {
     const validBaseProducts = validateBaseProducts(rawBaseProducts || []);
-    const validReports = validateConsumptionReports(rawReports || []);
+    // Directly use the validated and complete reports.
+    const validReports: ConsumptionReport[] = validateConsumptionReports(rawReports || []);
     const report = generateDataIntegrityReport(validReports, validBaseProducts);
     
     const baseProductMap = new Map(validBaseProducts.map(bp => [bp.name.toLowerCase(), bp.id]));
