@@ -160,7 +160,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         };
     }, [loadingBases]);
 
-    const addSimulation = useCallback(async (data: Omit<SimulationData, 'totalCmv' | 'grossCost' | 'profitValue' | 'profitPercentage' | 'markup'>) => {
+    const addSimulation = useCallback(async (data: SimulationData) => {
         if (!user) return;
         
         const now = new Date().toISOString();
