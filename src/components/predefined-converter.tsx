@@ -8,7 +8,6 @@ import { Edit, Trash2, ClipboardList, ListPlus, Save } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
-import { useStockCount } from '@/hooks/use-stock-count';
 import { type PredefinedList, type StockCountItem } from '@/types';
 import { AddEditPredefinedListModal } from './add-edit-predefined-list-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -21,8 +20,7 @@ import { Separator } from './ui/separator';
 export function PredefinedConverter() {
   const { products, loading: productsLoading, getProductFullName } = useProducts();
   const { lists, loading: listsLoading, addList, updateList, deleteList } = usePredefinedLists();
-  const { addStockCount } = useStockCount();
-  const { permissions, user } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -105,7 +103,7 @@ export function PredefinedConverter() {
             <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
                 Crie modelos de contagem para agilizar as tarefas do dia a dia.
             </p>
-            <Button size="lg" onClick={handleAddNew} disabled={!permissions.stock.predefinedLists}>
+            <Button size="lg" onClick={handleAddNew}>
                 <ListPlus className="mr-2 h-5 w-5" /> Criar seu primeiro modelo
             </Button>
         </div>
@@ -121,16 +119,12 @@ export function PredefinedConverter() {
                   <div className="flex justify-between items-center w-full">
                     <span className="text-lg font-semibold">{list.name}</span>
                     <div className="flex items-center gap-1">
-                        {permissions.stock.predefinedLists && (
                           <Button asChild variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEdit(list); }}>
                               <span><Edit className="h-4 w-4" /></span>
                           </Button>
-                        )}
-                        {permissions.stock.predefinedLists && (
                           <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(list); }}>
                                <span><Trash2 className="h-4 w-4" /></span>
                           </Button>
-                        )}
                     </div>
                   </div>
               </AccordionTrigger>
@@ -177,11 +171,9 @@ export function PredefinedConverter() {
           <CardDescription className="text-center">Use modelos de contagem para agilizar as tarefas comuns.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
-          {permissions.stock.predefinedLists && (
-            <Button onClick={handleAddNew} className="w-full">
-                <ListPlus className="mr-2 h-4 w-4" /> Criar novo modelo de contagem
-            </Button>
-          )}
+          <Button onClick={handleAddNew} className="w-full">
+              <ListPlus className="mr-2 h-4 w-4" /> Criar novo modelo de contagem
+          </Button>
           <div className="mt-6">
             {renderContent()}
           </div>
