@@ -111,5 +111,3 @@ export default function RootLayout({
   );
 }
 // trigger)
-
-
