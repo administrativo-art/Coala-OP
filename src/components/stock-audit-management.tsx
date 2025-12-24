@@ -151,7 +151,6 @@ function AuditForm({
 }) {
   const { products, getProductFullName } = useProducts();
   const { user } = useAuth();
-  const [isCancelling, setIsCancelling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
