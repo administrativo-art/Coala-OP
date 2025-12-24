@@ -268,7 +268,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const purchasingViewWatch = form.watch('permissions.stock.purchasing.view');
   const returnsViewWatch = form.watch('permissions.stock.returns.view');
   const registrationViewWatch = form.watch('permissions.registration.view');
-  const teamViewWatch = form.watch('permissions.team.view');
   const pricingViewWatch = form.watch('permissions.pricing.view');
   const settingsViewWatch = form.watch('permissions.settings.view');
   const tasksViewWatch = form.watch('permissions.tasks.view');
@@ -400,14 +399,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                         {renderPermissionSwitch("permissions.reposition.cancel", "Cancelar Atividade", "Permite cancelar uma atividade de reposição em andamento.", !stockViewWatch)}
                                     </div>
 
-                                </AccordionContent>
-                            </AccordionItem>
-
-                            <AccordionItem value="team">
-                                <AccordionTrigger className="text-lg font-semibold"><Users className="mr-2 h-5 w-5" /> Equipe</AccordionTrigger>
-                                <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.team.view", "Ver Módulo de Equipe")}
-                                    {renderPermissionSwitch("permissions.team.manage", "Gerenciar Escalas", "Permite criar e editar as escalas de trabalho.", !teamViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>
 

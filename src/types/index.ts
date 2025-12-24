@@ -350,7 +350,6 @@ export type PermissionSet = {
     conversions: { view: boolean; }; 
     predefinedLists: { view: boolean; manage: boolean; }
   };
-  team: { view: boolean; manage: boolean; };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; impersonate: boolean; };
   tasks: { view: boolean; manage: boolean; };
@@ -642,7 +641,6 @@ export const defaultGuestPermissions: PermissionSet = {
     dashboard: { view: false, operational: false, pricing: false, audit: false, technicalSheets: false },
     registration: { view: false, items: { add: false, edit: false, delete: false }, baseProducts: { add: false, edit: false, delete: false }, entities: { add: false, edit: false, delete: false } },
     stock: { view: false, inventoryControl: { view: false, addLot: false, editLot: false, writeDown: false, transfer: false, viewHistory: false }, stockCount: { view: false, perform: false, approve: false, requestItem: false }, audit: { view: false, start: false, approve: false }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: false, suggest: false, approve: false, deleteHistory: false }, returns: { view: false, add: false, updateStatus: false, delete: false }, conversions: { view: true }, predefinedLists: { view: false, manage: false }},
-    team: { view: false, manage: false },
     pricing: { view: false, simulate: false, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, impersonate: false },
     tasks: { view: false, manage: false },
@@ -656,7 +654,6 @@ export const defaultAdminPermissions: PermissionSet = {
     dashboard: { view: true, operational: true, pricing: true, audit: true, technicalSheets: true },
     registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
     stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true }, predefinedLists: { view: true, manage: true } },
-    team: { view: true, manage: true },
     pricing: { view: true, simulate: true, manageParameters: true },
     settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true, impersonate: true },
     tasks: { view: true, manage: true },
