@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useMemo, useState } from 'react';
@@ -32,7 +33,7 @@ const MOVEMENT_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
     'SAIDA_CONSUMO': { label: 'Saída consumo', color: 'bg-red-100 text-red-800' },
     'SAIDA_DESCARTE_VENCIMENTO': { label: 'Descarte Vencimento', color: 'bg-red-100 text-red-800' },
     'SAIDA_DESCARTE_AVARIA': { label: 'Descarte Avaria', color: 'bg-red-100 text-red-800' },
-    'SAIDA_DESCARTE_PERDA': { label: 'Descarte Perda', color: 'bg-red-100 text-red-800' },
+    'SAIDA_DESCARTE_PERDA': { label: 'Extravio de mercadoria', color: 'bg-red-100 text-red-800' },
     'SAIDA_DESCARTE_OUTROS': { label: 'Descarte Outros', color: 'bg-red-100 text-red-800' },
     'SAIDA_CORRECAO': { label: 'Ajuste saída', color: 'bg-red-100 text-red-800' },
     'ENTRADA_CORRECAO': { label: 'Ajuste entrada', color: 'bg-green-100 text-green-800' },

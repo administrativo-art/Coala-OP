@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -40,7 +41,7 @@ const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
     { value: 'SAIDA_CONSUMO', label: 'Consumo / Venda' },
     { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por Vencimento' },
     { value: 'SAIDA_DESCARTE_AVARIA', label: 'Descarte por Avaria/Quebra' },
-    { value: 'SAIDA_DESCARTE_PERDA', label: 'Descarte por Perda/Extravio' },
+    { value: 'SAIDA_DESCARTE_PERDA', label: 'Extravio de mercadoria' },
     { value: 'SAIDA_DESCARTE_OUTROS', label: 'Outros (especificar)'},
 ];
 
