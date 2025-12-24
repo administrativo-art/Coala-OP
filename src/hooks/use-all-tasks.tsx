@@ -6,7 +6,7 @@ import { useAuth } from './use-auth';
 import { useTasks } from './use-tasks';
 import { useReposition } from './use-reposition';
 import { useReturnRequests } from './use-return-requests';
-import { useStockCount } from './use-stock-count';
+import { useStockAudit } from './use-stock-audit';
 import { useItemAddition } from './use-item-addition';
 import { ClipboardCheck, Truck, ShieldAlert, ListOrdered, PackagePlus } from 'lucide-react';
 import { type Task } from '@/types';
@@ -39,10 +39,10 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const { tasks, loading: tasksLoading } = useTasks();
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   const { requests: returnRequests, loading: returnsLoading } = useReturnRequests();
-  const { counts, loading: countsLoading } = useStockCount();
+  const { auditSessions, loading: auditLoading } = useStockAudit();
   const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
 
-  const loading = authLoading || tasksLoading || repositionLoading || returnsLoading || countsLoading || itemAdditionLoading;
+  const loading = authLoading || tasksLoading || repositionLoading || returnsLoading || auditLoading || itemAdditionLoading;
 
   const allTasks: Task[] = useMemo(() => {
     if (loading || !user) return [];
@@ -63,14 +63,14 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     
     const allLegacyTasks: LegacyTask[] = [];
 
-    if (permissions.stock.stockCount.approve) {
-        counts.forEach(count => {
-            if (count.status === 'pending') {
+    if (permissions.stock.audit.approve) {
+        auditSessions.forEach(session => {
+            if (session.status === 'pending_review') {
                 allLegacyTasks.push({
-                    id: `count-${count.id}`,
+                    id: `count-${session.id}`,
                     type: 'Contagem',
-                    title: `Contagem de ${count.kioskName}`,
-                    description: `Enviada por ${count.countedBy.username} com ${count.items.filter(i => i.difference !== 0).length} divergência(s).`,
+                    title: `Contagem de ${session.kioskName}`,
+                    description: `Enviada por ${session.auditedBy.username} com ${session.items.filter(i => i.finalQuantity !== i.systemQuantity).length} divergência(s).`,
                     link: '/dashboard/stock/count',
                     icon: ListOrdered
                 });
@@ -142,7 +142,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     }
     
     return allLegacyTasks;
-  }, [user, permissions, counts, repositionActivities, returnRequests, itemAdditionRequests, loading]);
+  }, [user, permissions, auditSessions, repositionActivities, returnRequests, itemAdditionRequests, loading]);
   
   const value = {
     allTasks,
@@ -152,3 +152,5 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
   return <AllTasksContext.Provider value={value}>{children}</AllTasksContext.Provider>;
 };
+
+    
