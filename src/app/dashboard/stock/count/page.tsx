@@ -1,4 +1,3 @@
-
 "use client"
 
 import Link from "next/link";
@@ -10,7 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useItemAddition } from "@/hooks/use-item-addition";
 import { Badge } from "@/components/ui/badge";
 import { useMemo, useState } from "react";
-import { StockCountManagement } from "@/components/stock-count-management";
+import { StockSessionManagement } from "@/components/stock-session-management";
 import { useRouter } from 'next/navigation';
 
 
@@ -55,7 +54,7 @@ export default function StockCountPage() {
                     )}
                 </TabsList>
                 <TabsContent value="count" className="mt-4">
-                    <StockCountManagement />
+                    <StockSessionManagement />
                 </TabsContent>
                 {canManageRequests && (
                     <TabsContent value="requests" className="mt-4">

@@ -102,8 +102,8 @@ service cloud.firestore {
     }
 
     match /stockAuditSessions/{sessionId} {
-        allow read: if isAuth() && (isAdmin() || getPerms().stock.stockCount.view == true);
-        allow write: if isAuth() && (isAdmin() || getPerms().stock.stockCount.perform == true || getPerms().stock.stockCount.approve == true);
+        allow read: if isAuth() && (isAdmin() || getPerms().stock.stockCount.view == true || getPerms().stock.audit.view == true);
+        allow write: if isAuth() && (isAdmin() || getPerms().stock.stockCount.perform == true || getPerms().stock.stockCount.approve == true || getPerms().stock.audit.start == true || getPerms().stock.audit.approve == true);
     }
 
     match /purchaseSessions/{sessionId} {

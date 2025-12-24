@@ -12,7 +12,6 @@ import { BaseProductsProvider } from '@/components/base-products-provider';
 import { ConsumptionAnalysisProvider } from '@/components/consumption-analysis-provider';
 import { MovementHistoryProvider } from '@/components/movement-history-provider';
 import { ReturnsProvider } from '@/components/return-request-provider';
-import { StockCountProvider } from '@/components/stock-count-provider';
 import { CompanySettingsProvider } from '@/components/company-settings-provider';
 import { EntitiesProvider } from '@/components/entities-provider';
 import { PurchaseProvider } from '@/components/purchase-provider';
@@ -71,7 +70,6 @@ export default function RootLayout({
                                       <MovementHistoryProvider>
                                         <PredefinedListsProvider>
                                             <ConsumptionAnalysisProvider>
-                                                <StockCountProvider>
                                                     <ReturnsProvider>
                                                         <RepositionProvider>
                                                             <StockAuditProvider>
@@ -91,7 +89,6 @@ export default function RootLayout({
                                                             </StockAuditProvider>
                                                         </RepositionProvider>
                                                     </ReturnsProvider>
-                                                </StockCountProvider>
                                             </ConsumptionAnalysisProvider>
                                         </PredefinedListsProvider>
                                       </MovementHistoryProvider>
@@ -114,4 +111,5 @@ export default function RootLayout({
   );
 }
 // trigger)
+
 

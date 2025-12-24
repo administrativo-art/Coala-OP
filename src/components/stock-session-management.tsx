@@ -367,11 +367,11 @@ function KioskSelectionModal({
   );
 }
 
-interface StockCountManagementProps {
+interface StockSessionManagementProps {
   showExportButton?: boolean;
 }
 
-export function StockCountManagement({ showExportButton = false }: StockCountManagementProps) {
+export function StockSessionManagement({ showExportButton = false }: StockSessionManagementProps) {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
