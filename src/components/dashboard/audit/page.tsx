@@ -1,10 +1,10 @@
 
 "use client";
 
-import { StockCountManagement } from "@/components/stock-count-management";
+import { StockSessionManagement } from "@/components/stock-session-management";
 import { GlassCard, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/glass-card";
 
-export default function AuditPage() {
+export default function UnifiedAuditPage() {
     return (
         <GlassCard>
             <CardHeader>
@@ -14,7 +14,7 @@ export default function AuditPage() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <StockCountManagement showExportButton={true} />
+                <StockSessionManagement showExportButton={true} />
             </CardContent>
         </GlassCard>
     );
