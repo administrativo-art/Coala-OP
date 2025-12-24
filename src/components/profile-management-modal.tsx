@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -225,11 +226,44 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     />
   );
 
+  const createSyncedSwitch = (
+    primaryPath: FieldPath<ProfileFormValues>,
+    secondaryPath: FieldPath<ProfileFormValues>,
+    label: string,
+    description: string,
+    disabled: boolean = false,
+    indented: boolean = false
+  ) => {
+    return (
+      <FormField
+        control={form.control}
+        name={primaryPath}
+        render={({ field }) => (
+          <FormItem className={`flex flex-row items-center justify-between rounded-lg border p-3 ${indented ? 'ml-6 bg-muted/30' : ''}`}>
+            <div className="space-y-0.5">
+              <FormLabel>{label}</FormLabel>
+              <FormDescription className="text-xs">{description}</FormDescription>
+            </div>
+            <FormControl>
+              <Switch
+                checked={!!field.value}
+                onCheckedChange={(checked) => {
+                  field.onChange(checked);
+                  form.setValue(secondaryPath, checked);
+                }}
+                disabled={disabled}
+              />
+            </FormControl>
+          </FormItem>
+        )}
+      />
+    );
+  };
+
   const dashboardViewWatch = form.watch('permissions.dashboard.view');
   const stockViewWatch = form.watch('permissions.stock.view');
   const inventoryControlViewWatch = form.watch('permissions.stock.inventoryControl.view');
   const stockCountViewWatch = form.watch('permissions.stock.stockCount.view');
-  const auditViewWatch = form.watch('permissions.stock.audit.view');
   const analysisViewWatch = form.watch('permissions.stock.analysis.view');
   const purchasingViewWatch = form.watch('permissions.stock.purchasing.view');
   const returnsViewWatch = form.watch('permissions.stock.returns.view');
@@ -315,22 +349,13 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <h4 className="font-semibold text-md mb-2">Contagem</h4>
-                                        {renderPermissionSwitch("permissions.stock.stockCount.view", "Visualizar Contagem de Estoque", "Permite ver a tela de contagem.", !stockViewWatch)}
-                                         <div className="pl-6 space-y-2">
-                                            {renderPermissionSwitch("permissions.stock.stockCount.perform", "Realizar Contagem", "Permite registrar contagens parciais de estoque.", !stockCountViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.stockCount.approve", "Aprovar Contagem", "Permite aprovar divergências, ajustando o estoque.", !stockCountViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.stockCount.requestItem", "Solicitar Novo Insumo", "Permite solicitar cadastro de um item não encontrado.", !stockCountViewWatch, true)}
-                                         </div>
-                                    </div>
-
-                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <h4 className="font-semibold text-md mb-2">Auditoria</h4>
-                                        {renderPermissionSwitch("permissions.stock.audit.view", "Visualizar Auditoria de Estoque", "Permite ver a tela de auditoria.", !stockViewWatch)}
-                                         <div className="pl-6 space-y-2">
-                                            {renderPermissionSwitch("permissions.stock.audit.start", "Iniciar Auditoria", "Permite iniciar uma auditoria completa de um quiosque.", !auditViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.audit.approve", "Aprovar Auditoria", "Permite finalizar uma auditoria, efetivando os ajustes.", !auditViewWatch, true)}
-                                         </div>
+                                        <h4 className="font-semibold text-md mb-2">Sessões de Contagem e Auditoria</h4>
+                                        {createSyncedSwitch("permissions.stock.stockCount.view", "permissions.stock.audit.view", "Visualizar Histórico", "Permite ver as sessões salvas.", !stockViewWatch)}
+                                        <div className="pl-6 space-y-2">
+                                            {createSyncedSwitch("permissions.stock.stockCount.perform", "permissions.stock.audit.start", "Realizar Contagem/Auditoria", "Permite iniciar uma nova sessão de contagem.", !stockCountViewWatch, true)}
+                                            {createSyncedSwitch("permissions.stock.stockCount.approve", "permissions.stock.audit.approve", "Aprovar e Ajustar Estoque", "Permite aprovar divergências, ajustando o estoque.", !stockCountViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.stockCount.requestItem", "Solicitar Novos Itens", "Permite solicitar cadastro de um item não encontrado.", !stockCountViewWatch, true)}
+                                        </div>
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">

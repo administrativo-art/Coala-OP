@@ -1,4 +1,5 @@
 
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -337,7 +338,18 @@ export type DailyLog = {
 export type PermissionSet = {
   dashboard: { view: boolean; operational: boolean; pricing: boolean; audit: boolean; technicalSheets: boolean; };
   registration: { view: boolean; items: { add: boolean; edit: boolean; delete: boolean; }; baseProducts: { add: boolean; edit: boolean; delete: boolean; }; entities: { add: boolean; edit: boolean; delete: boolean; }; };
-  stock: { view: boolean; inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; }; stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; }; audit: { view: boolean; start: boolean; approve: boolean; }; analysis: { view: boolean; restock: boolean; consumption: boolean; projection: boolean; valuation: boolean; }; purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; conversions: { view: boolean; }; predefinedLists: { view: boolean; manage: boolean; }};
+  stock: { 
+    view: boolean; 
+    inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; }; 
+    // The `audit` keys are kept for backward compatibility with firestore.rules, but the UI now uses `stockCount` which syncs to both.
+    stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; }; 
+    audit: { view: boolean; start: boolean; approve: boolean; }; 
+    analysis: { view: boolean; restock: boolean; consumption: boolean; projection: boolean; valuation: boolean; }; 
+    purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; 
+    returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; 
+    conversions: { view: boolean; }; 
+    predefinedLists: { view: boolean; manage: boolean; }
+  };
   team: { view: boolean; manage: boolean; };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; impersonate: boolean; };
