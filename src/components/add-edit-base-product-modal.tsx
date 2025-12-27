@@ -62,8 +62,6 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   const { permissions } = useAuth();
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
   
-  const lastInitKeyRef = useRef<string | null>(null);
-
   const productToEdit = useMemo(() => {
     if (!productToEditId) return null;
     return baseProducts.find(p => p.id === productToEditId) || null;
@@ -82,54 +80,39 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     defaultValues: { name: '', classification: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: {}, consumptionMonths: 0 }
   });
   
-  const isDirty = form.formState.isDirty;
-
   useEffect(() => {
-    if (!open) {
-      lastInitKeyRef.current = null;
-      return;
+    if (open) {
+      const stockLevelsObject: Record<string, any> = {};
+      sortedKiosks.forEach(kiosk => {
+        const level = productToEdit?.stockLevels?.[kiosk.id];
+        stockLevelsObject[kiosk.id] = {
+            min: level?.min ?? 0,
+            safetyStock: level?.safetyStock ?? 0,
+            leadTime: level?.leadTime ?? 0,
+            override: level?.override ?? false,
+        };
+      });
+  
+      form.reset({
+        name: productToEdit?.name ?? '',
+        classification: productToEdit?.classification || 'none',
+        category: productToEdit?.category ?? 'Massa',
+        unit: productToEdit?.unit ?? 'g',
+        initialCostPerUnit: productToEdit?.initialCostPerUnit ?? 0,
+        stockLevels: stockLevelsObject,
+        consumptionMonths: productToEdit?.consumptionMonths ?? 0,
+      });
     }
-
-    const initKey = productToEdit ? `edit:${productToEdit.id}` : 'create';
-
-    if (lastInitKeyRef.current === initKey) return;
-    
-    if (isDirty && initKey === lastInitKeyRef.current) return;
-    
-    const stockLevelsObject: Record<string, any> = {};
-    sortedKiosks.forEach(kiosk => {
-      const level = productToEdit?.stockLevels?.[kiosk.id];
-      stockLevelsObject[kiosk.id] = {
-          min: level?.min ?? 0,
-          safetyStock: level?.safetyStock ?? 0,
-          leadTime: level?.leadTime ?? 0,
-          override: level?.override ?? false,
-      };
-    });
-
-    form.reset({
-      name: productToEdit?.name ?? '',
-      classification: productToEdit?.classification || 'none',
-      category: productToEdit?.category ?? 'Massa',
-      unit: productToEdit?.unit ?? 'g',
-      initialCostPerUnit: productToEdit?.initialCostPerUnit ?? 0,
-      stockLevels: stockLevelsObject,
-      consumptionMonths: productToEdit?.consumptionMonths ?? 0,
-    });
-    
-    lastInitKeyRef.current = initKey;
-
-  }, [open, productToEdit, sortedKiosks, form, isDirty]);
+  }, [open, productToEdit, sortedKiosks, form]);
 
 
   const categoryWatch = form.watch('category');
 
-  useEffect(() => {
-    if (form.formState.isDirty || !productToEdit) {
-        const availableUnits = Object.keys(units[categoryWatch]);
-        form.setValue('unit', availableUnits[0] || '');
-    }
-  }, [categoryWatch, form, productToEdit]);
+  const handleCategoryChange = (value: UnitCategory) => {
+      form.setValue('category', value);
+      const availableUnits = Object.keys(units[value]);
+      form.setValue('unit', availableUnits[0] || '');
+  };
 
   const onSubmit = (values: BaseProductFormValues) => {
     const finalClassification = values.classification === 'none' ? '' : values.classification;
@@ -205,7 +188,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="category" render={({ field }) => (
                           <FormItem><FormLabel>Categoria da unidade</FormLabel>
-                              <Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}>
+                              <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value}>
                                   <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                   <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
                               </Select>
