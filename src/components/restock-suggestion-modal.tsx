@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, type UnitCategory, type RepositionSuggestedLot } from '@/types';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -175,47 +176,61 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
             <div className="flex-1 overflow-auto pr-2">
               <ScrollArea className="h-full">
-                <div className="space-y-3">
-                  {fields.map((field, index) => {
-                    const lot = lots.find(l => l.id === field.lotId);
-                    if (!lot) return null;
-                    const product = products.find(p => p.id === lot.productId);
-                    if (!product) return null;
-                    
-                    return (
-                      <div key={field.id} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-4 p-3 border rounded-lg bg-muted/50">
-                        <div>
-                          <p className="font-semibold">{getProductFullName(product)}</p>
-                          <p className="text-sm text-muted-foreground">Lote: {lot.lotNumber} | Val: {lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy', {locale: ptBR}) : 'N/A'}</p>
-                          <p className="text-xs text-muted-foreground">Disponível na Matriz: {formatAvailableStock(lot.quantity - (lot.reservedQuantity || 0), product)}</p>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground"/>
-                        <div className="space-y-1">
-                            <Label htmlFor={`items.${index}.quantity`} className="text-xs">Qtd. a Mover</Label>
-                             <FormField
-                              control={form.control}
-                              name={`items.${index}.quantity`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormControl>
-                                    <Input 
-                                        id={`items.${index}.quantity`} 
-                                        type="number" {...field} 
-                                        max={lot.quantity} 
-                                        className="bg-background"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <p className="text-xs text-center text-primary font-medium">{formatQuantity(watchedItems[index]?.quantity, product)}</p>
-                        </div>
-                        <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}><Trash2 className="h-4 w-4"/></Button>
-                      </div>
-                    );
-                  })}
-                </div>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Insumo vinculado</TableHead>
+                            <TableHead>Lote</TableHead>
+                            <TableHead className="text-right">Quant. Estoque</TableHead>
+                            <TableHead>Qtd. Mover (Pct)</TableHead>
+                            <TableHead></TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {fields.map((field, index) => {
+                            const lot = lots.find(l => l.id === field.lotId);
+                            if (!lot) return null;
+                            const product = products.find(p => p.id === lot.productId);
+                            if (!product) return null;
+                            
+                            let stockInBaseUnit = 0;
+                            try {
+                                stockInBaseUnit = convertValue(lot.quantity, product.unit, suggestionResult.baseProduct.unit, product.category);
+                            } catch {}
+
+                            return (
+                                <TableRow key={field.id}>
+                                    <TableCell>
+                                        <p className="font-semibold">{getProductFullName(product)}</p>
+                                    </TableCell>
+                                    <TableCell>{lot.lotNumber}</TableCell>
+                                    <TableCell className="text-right">{stockInBaseUnit.toLocaleString()} {suggestionResult.baseProduct.unit}</TableCell>
+                                    <TableCell>
+                                        <FormField
+                                            control={form.control}
+                                            name={`items.${index}.quantity`}
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormControl>
+                                                        <Input 
+                                                            type="number" {...field} 
+                                                            max={lot.quantity - (lot.reservedQuantity || 0)} 
+                                                            className="bg-background w-24"
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                         <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}><Trash2 className="h-4 w-4"/></Button>
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })}
+                    </TableBody>
+                </Table>
 
                 <div className="mt-4 pt-4 border-t border-dashed">
                   <p className="font-semibold mb-2">Adicionar outro lote</p>
