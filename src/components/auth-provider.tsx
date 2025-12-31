@@ -77,9 +77,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (userDocSnap.exists()) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
-           if (!appUser || JSON.stringify(userData) !== JSON.stringify(appUser)) {
-              setAppUser(userData);
-           }
+          
+          // Check if we are currently impersonating
+          const isImpersonating = !!originalUser && appUser?.id !== originalUser.id;
+
+          // Only sync with Firestore if NOT impersonating, to prevent overwriting the impersonated state
+          if (!isImpersonating && (!appUser || JSON.stringify(userData) !== JSON.stringify(appUser))) {
+            setAppUser(userData);
+          }
         } else {
            console.warn(`Firestore document not found for authenticated user ${user.uid}. Logging out.`);
            await signOut(auth);
@@ -99,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => unsubscribeAuth();
-  }, [profilesLoading, profiles, adminProfileId, appUser]);
+  }, [profilesLoading, profiles, adminProfileId, appUser, originalUser]);
 
   useEffect(() => {
     if (profilesLoading) return; 
@@ -249,6 +254,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const impersonate = (userId: string) => {
+    if (!permissions.settings.impersonate) {
+        console.error("Permissão negada: você não pode personificar usuários.");
+        return;
+    }
     const userToImpersonate = users.find(u => u.id === userId);
     if (userToImpersonate && appUser && !originalUser) {
       setOriginalUser(appUser);
