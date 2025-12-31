@@ -74,15 +74,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.error("CRITICAL: Admin Profile ID not found. Cannot create admin user document.");
           }
         }
-
+        
         if (userDocSnap.exists()) {
-          const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
-          
-          const isImpersonating = !!originalUser && appUser?.id !== originalUser.id;
-
-          if (!isImpersonating && (!appUser || JSON.stringify(userData) !== JSON.stringify(appUser))) {
-            setAppUser(userData);
-          }
+            const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
+            
+            // isImpersonating is checked against the state variable, not a local calculation
+            const isImpersonating = !!originalUser; 
+            
+            if (!isImpersonating) {
+                // Simplified update logic. If user data from Firestore is different, update the state.
+                // This check is imperfect with objects but better than a blind update.
+                setAppUser(currentAppUser => {
+                    if (!currentAppUser || JSON.stringify(userData) !== JSON.stringify(currentAppUser)) {
+                        return userData;
+                    }
+                    return currentAppUser;
+                });
+            }
         } else {
            console.warn(`Firestore document not found for authenticated user ${user.uid}. Logging out.`);
            await signOut(auth);
@@ -102,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => unsubscribeAuth();
-  }, [profilesLoading, profiles, adminProfileId, appUser, originalUser]);
+  }, [profilesLoading, profiles, adminProfileId, originalUser]);
 
   useEffect(() => {
     if (profilesLoading) return; 
@@ -163,12 +171,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const stopImpersonating = useCallback(() => {
+    if (originalUser) {
+      setAppUser(originalUser);
+      setOriginalUser(null);
+      localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
+    }
+  }, [originalUser]);
+
   const logout = useCallback(async () => {
     stopImpersonating();
     adminCredentials.current = null;
     await signOut(auth);
     router.push('/login');
-  }, [router]);
+  }, [router, stopImpersonating]);
 
   const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
     const originalAdminAuth = auth.currentUser;
@@ -265,14 +281,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(appUser));
     }
   }, [appUser, originalUser, users, permissions.settings.impersonate]);
-
-  const stopImpersonating = useCallback(() => {
-    if (originalUser) {
-      setAppUser(originalUser);
-      setOriginalUser(null);
-      localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
-    }
-  }, [originalUser]);
 
   const value = useMemo(() => ({
     user: appUser,
