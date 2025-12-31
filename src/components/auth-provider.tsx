@@ -76,21 +76,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         
         if (userDocSnap.exists()) {
-            const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
-            
-            // isImpersonating is checked against the state variable, not a local calculation
-            const isImpersonating = !!originalUser; 
-            
-            if (!isImpersonating) {
-                // Simplified update logic. If user data from Firestore is different, update the state.
-                // This check is imperfect with objects but better than a blind update.
-                setAppUser(currentAppUser => {
-                    if (!currentAppUser || JSON.stringify(userData) !== JSON.stringify(currentAppUser)) {
-                        return userData;
-                    }
-                    return currentAppUser;
-                });
+          const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
+          
+          // 1. Verifica se existe um usuário original e se o ID atual é diferente (Indica personificação ativa)
+          const isImpersonating = !!originalUser && appUser?.id !== originalUser.id;
+          
+          // 2. SÓ atualiza o appUser se NÃO estivermos personificando.
+          // Isso evita que o Firestore "force" a volta para a conta do admin.
+          if (!isImpersonating) {
+            if (!appUser || JSON.stringify(userData) !== JSON.stringify(appUser)) {
+              setAppUser(userData);
             }
+          }
         } else {
            console.warn(`Firestore document not found for authenticated user ${user.uid}. Logging out.`);
            await signOut(auth);
@@ -110,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => unsubscribeAuth();
-  }, [profilesLoading, profiles, adminProfileId, originalUser]);
+  }, [profilesLoading, adminProfileId]);
 
   useEffect(() => {
     if (profilesLoading) return; 
