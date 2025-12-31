@@ -166,7 +166,7 @@ export function LotCard({
   const { permissions } = useAuth();
   const canEdit = permissions.stock.inventoryControl.editLot;
   const canMove = permissions.stock.inventoryControl.transfer;
-  const canDelete = permissions.stock.inventoryControl.writeDown; // Assuming writeDown and delete are linked
+  const canDelete = permissions.stock.inventoryControl.writeDown;
   
   const { labelSizeId } = useCompanySettings();
   const { consumeFromLot } = useExpiryProducts();

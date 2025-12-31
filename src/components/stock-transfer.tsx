@@ -35,7 +35,7 @@ export function StockTransfer() {
   const { products, getProductFullName, loading: productsLoading } = useProducts();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { createRepositionActivity, loading: repositionLoading } = useReposition();
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
   const { toast } = useToast();
 
   const [originKioskId, setOriginKioskId] = useState<string>('');
@@ -142,6 +142,17 @@ export function StockTransfer() {
   }, [originKioskId, lots, products, getProductFullName]);
   
   const isTransferReady = originKioskId && destinationKioskId && transferItems.length > 0 && transferItems.some(item => item.lots.some(lot => lot.quantity > 0));
+
+  if (!permissions.stock.inventoryControl.transfer) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Acesso Negado</CardTitle>
+                <CardDescription>Você não tem permissão para realizar transferências de estoque.</CardDescription>
+            </CardHeader>
+        </Card>
+    );
+  }
 
   if (loading) {
       return <Skeleton className="h-96 w-full" />
