@@ -107,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => unsubscribeAuth();
-  }, [profilesLoading, adminProfileId]);
+  }, [profilesLoading, adminProfileId, originalUser]);
 
   useEffect(() => {
     if (profilesLoading) return; 
