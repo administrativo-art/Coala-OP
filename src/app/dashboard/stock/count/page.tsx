@@ -19,7 +19,7 @@ export default function StockCountPage() {
     const [activeTab, setActiveTab] = useState('count');
     const router = useRouter();
     
-    const canManageRequests = permissions.itemRequests?.approve;
+    const canManageRequests = permissions.stock.stockCount.approve;
     const pendingRequestsCount = useMemo(() => {
         if (loading) return 0;
         return requests.filter(r => r.status === 'pending').length;

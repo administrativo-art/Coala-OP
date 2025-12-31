@@ -430,14 +430,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.tasks.manage", "Gerenciar Tarefas", "Permite criar, atribuir, editar e excluir tarefas.", !tasksViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>
-                            
-                             <AccordionItem value="itemRequests">
-                                <AccordionTrigger className="text-lg font-semibold"><PackagePlus className="mr-2 h-5 w-5" /> Solicitação de Itens</AccordionTrigger>
-                                <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderPermissionSwitch("permissions.itemRequests.add", "Solicitar Cadastro", "Permite solicitar o cadastro de um novo insumo durante a contagem.")}
-                                    {renderPermissionSwitch("permissions.itemRequests.approve", "Aprovar Solicitação", "Permite aprovar e cadastrar um novo insumo a partir de uma solicitação.")}
-                                </AccordionContent>
-                            </AccordionItem>
 
                             <AccordionItem value="help">
                                 <AccordionTrigger className="text-lg font-semibold"><BookOpen className="mr-2 h-5 w-5" /> Ajuda</AccordionTrigger>

@@ -56,7 +56,11 @@ service cloud.firestore {
     match /lots/{lotId} {
       allow read: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.view == true);
       allow create: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.addLot == true);
-      allow update: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.editLot == true);
+      allow update: if isAuth() && (
+        isAdmin() || 
+        getPerms().stock.inventoryControl.editLot == true ||
+        getPerms().stock.stockCount.approve == true
+      );
       allow delete: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.writeDown == true);
     }
 
@@ -102,18 +106,19 @@ service cloud.firestore {
     }
 
     match /stockAuditSessions/{sessionId} {
-      allow read: if isAuth() && (
-        isAdmin() || 
-        getPerms().stock.audit.view == true || 
-        getPerms().stock.stockCount.view == true
-      );
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.stockCount.view == true);
       allow write: if isAuth() && (
         isAdmin() || 
-        getPerms().stock.audit.start == true || 
-        getPerms().stock.audit.approve == true ||
-        getPerms().stock.stockCount.perform == true ||
+        getPerms().stock.stockCount.perform == true || 
         getPerms().stock.stockCount.approve == true
       );
+    }
+    
+     match /itemAdditionRequests/{requestId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && getPerms().stock.stockCount.requestItem == true;
+      allow update: if isAuth() && getPerms().stock.stockCount.approve == true;
+      allow delete: if isAuth() && isAdmin();
     }
 
     match /purchaseSessions/{sessionId} {
