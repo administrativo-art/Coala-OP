@@ -33,12 +33,12 @@ import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 
 const BarcodeScannerModal = dynamic(
-  () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
+  () => import('@/components/barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
   { ssr: false }
 );
 
 const PhotoCaptureModal = dynamic(
-  () => import('./photo-capture-modal').then(mod => mod.PhotoCaptureModal),
+  () => import('@/components/photo-capture-modal').then(mod => mod.PhotoCaptureModal),
   { ssr: false }
 );
 

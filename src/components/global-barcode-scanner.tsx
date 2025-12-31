@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 
 
 const BarcodeScannerModal = dynamic(
-  () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
+  () => import('@/components/barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
   { ssr: false }
 );
 

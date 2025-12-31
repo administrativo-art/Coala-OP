@@ -31,7 +31,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 
 
 const BarcodeScannerModal = dynamic(
-  () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
+  () => import('@/components/barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
   { ssr: false }
 );
 
