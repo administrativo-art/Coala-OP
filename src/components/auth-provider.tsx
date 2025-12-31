@@ -78,10 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (userDocSnap.exists()) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
           
-          // Check if we are currently impersonating
           const isImpersonating = !!originalUser && appUser?.id !== originalUser.id;
 
-          // Only sync with Firestore if NOT impersonating, to prevent overwriting the impersonated state
           if (!isImpersonating && (!appUser || JSON.stringify(userData) !== JSON.stringify(appUser))) {
             setAppUser(userData);
           }
@@ -152,25 +150,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPermissions(finalPermissions);
   }, [appUser, profiles, loading, profilesLoading]);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      adminCredentials.current = { email, password };
+      if (email === 'administrativo@coalashakes.com') {
+        adminCredentials.current = { email, password };
+      }
       return true;
     } catch (error) {
       console.error("Login error:", error);
       return false;
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     stopImpersonating();
     adminCredentials.current = null;
     await signOut(auth);
     router.push('/login');
-  };
+  }, [router]);
 
-  const addUser = async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
+  const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
     const originalAdminAuth = auth.currentUser;
     if (!originalAdminAuth) {
         console.error("Admin not logged in, cannot create user.");
@@ -205,20 +205,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return null;
     }
-  };
+  }, [router]);
 
-  const updateUser = async (updatedUser: User) => {
+  const updateUser = useCallback(async (updatedUser: User) => {
     const userRef = doc(db, "users", updatedUser.id);
     const { id, email, ...dataToUpdate } = updatedUser as any;
     delete dataToUpdate.password;
     await updateDoc(userRef, dataToUpdate);
-  };
+  }, []);
   
-  const deleteUser = async (userId: string) => {
+  const deleteUser = useCallback(async (userId: string) => {
     await deleteDoc(doc(db, "users", userId));
-  };
+  }, []);
   
-  const resetPassword = async (email: string): Promise<boolean> => {
+  const resetPassword = useCallback(async (email: string): Promise<boolean> => {
     try {
       await sendPasswordResetEmail(auth, email);
       return true;
@@ -226,9 +226,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Password reset error:", error);
       return false;
     }
-  };
+  }, []);
 
-  const changePassword = async (oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+  const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
     const user = auth.currentUser;
     if (!user || !user.email) {
       return { success: false, error: 'Usuário não autenticado.' };
@@ -251,9 +251,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return { success: false, error: errorMessage };
     }
-  };
+  }, []);
 
-  const impersonate = (userId: string) => {
+  const impersonate = useCallback((userId: string) => {
     if (!permissions.settings.impersonate) {
         console.error("Permissão negada: você não pode personificar usuários.");
         return;
@@ -264,15 +264,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAppUser(userToImpersonate);
       localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(appUser));
     }
-  };
+  }, [appUser, originalUser, users, permissions.settings.impersonate]);
 
-  const stopImpersonating = () => {
+  const stopImpersonating = useCallback(() => {
     if (originalUser) {
       setAppUser(originalUser);
       setOriginalUser(null);
       localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
     }
-  };
+  }, [originalUser]);
 
   const value = useMemo(() => ({
     user: appUser,
@@ -292,7 +292,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     impersonate,
     stopImpersonating,
   }), [
-    appUser, firebaseUser, originalUser, users, loading, profiles, profilesLoading, permissions, login, logout, addUser, updateUser, deleteUser, resetPassword, impersonate, stopImpersonating
+    appUser, firebaseUser, originalUser, users, loading, profilesLoading, permissions, login, logout, addUser, updateUser, deleteUser, resetPassword, changePassword, impersonate, stopImpersonating
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
