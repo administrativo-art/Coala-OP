@@ -348,12 +348,11 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <h4 className="font-semibold text-md mb-2">Sessões de Contagem e Auditoria</h4>
+                                        <h4 className="font-semibold text-md mb-2">Contagem de estoque</h4>
                                         {createSyncedSwitch("permissions.stock.stockCount.view", "permissions.stock.audit.view", "Visualizar Histórico", "Permite ver as sessões salvas.", !stockViewWatch)}
                                         <div className="pl-6 space-y-2">
-                                            {createSyncedSwitch("permissions.stock.stockCount.perform", "permissions.stock.audit.start", "Realizar Contagem/Auditoria", "Permite iniciar uma nova sessão de contagem.", !stockCountViewWatch, true)}
-                                            {createSyncedSwitch("permissions.stock.stockCount.approve", "permissions.stock.audit.approve", "Aprovar e Ajustar Estoque", "Permite aprovar divergências, ajustando o estoque.", !stockCountViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.stockCount.requestItem", "Solicitar Novos Itens", "Permite solicitar cadastro de um item não encontrado.", !stockCountViewWatch, true)}
+                                            {createSyncedSwitch("permissions.stock.stockCount.perform", "permissions.stock.audit.start", "Realizar contagem", "Permite iniciar uma nova sessão de contagem.", !stockCountViewWatch, true)}
+                                            {createSyncedSwitch("permissions.stock.stockCount.approve", "permissions.stock.audit.approve", "Concluir contagem", "Permite aprovar divergências, ajustando o estoque.", !stockCountViewWatch, true)}
                                         </div>
                                     </div>
 
