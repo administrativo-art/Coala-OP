@@ -24,8 +24,6 @@ import { type LotEntry, type BaseProduct, type Product, type Task, type UnitCate
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { QuickProjectionModal } from './quick-projection-modal';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -460,46 +458,6 @@ export function ConsumptionProjection() {
         return '';
     };
     
-     const handleExportPdf = () => {
-        const doc = new jsPDF();
-        const kioskName = kiosks.find(k => k.id === 'matriz')?.name || 'Matriz';
-
-        doc.setFontSize(18);
-        doc.text(`Projeção de Consumo - ${kioskName}`, 14, 22);
-        
-        let yPos = 30;
-
-        finalFilteredAndSortedResults.forEach(group => {
-            if (yPos > 250) {
-                doc.addPage();
-                yPos = 20;
-            }
-            doc.setFontSize(14);
-            doc.text(group.baseProductName, 14, yPos);
-            yPos += 5;
-
-            const tableData = group.lots.map(result => [
-                result.productName,
-                result.lot.lotNumber,
-                result.projectedConsumptionDate ? format(result.projectedConsumptionDate, 'dd/MM/yy') : 'N/A',
-                result.expiryDate ? format(result.expiryDate, 'dd/MM/yy') : 'N/A',
-                result.projectedLoss > 0 ? `${result.projectedLoss.toFixed(2)} ${result.baseUnit}` : '-',
-                result.status
-            ]);
-            
-            autoTable(doc, {
-                startY: yPos,
-                head: [['Insumo', 'Lote', 'Consumo até', 'Vencimento', 'Perda', 'Status']],
-                body: tableData,
-                theme: 'striped',
-                headStyles: { fillColor: '#273344' }
-            });
-            yPos = (doc as any).lastAutoTable.finalY + 10;
-        });
-
-        doc.save(`projecao_consumo_${kioskName.replace(/\s/g, '_')}.pdf`);
-    };
-    
     const getOrderStatusBadge = (status: GroupedProjectionResult['orderStatus']) => {
         switch(status) {
             case 'ok': return <Badge variant="secondary" className="bg-green-600 text-white">OK</Badge>;
@@ -539,11 +497,6 @@ export function ConsumptionProjection() {
                             <DropdownMenuItem onSelect={() => setShowOnlyAtRisk(prev => !prev)}>
                                 <DropdownMenuCheckboxItem checked={showOnlyAtRisk} onCheckedChange={() => {}} onSelect={e => e.preventDefault()} />
                                 Mostrar somente em risco
-                            </DropdownMenuItem>
-                             <DropdownMenuSeparator />
-                             <DropdownMenuItem onSelect={handleExportPdf} disabled={finalFilteredAndSortedResults.length === 0}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Exportar PDF
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
@@ -695,5 +648,3 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
-
-    

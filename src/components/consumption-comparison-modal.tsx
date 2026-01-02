@@ -14,8 +14,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { type ConsumptionReport, type Kiosk, type BaseProduct } from "@/types";
 import { Scale, TrendingUp, TrendingDown, Minus, AlertCircle, Info, Download, Copy } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useProducts } from '@/hooks/use-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { format, parseISO } from 'date-fns';
@@ -171,52 +169,6 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, basePr
         });
     };
 
-    const handleExportPdf = () => {
-        if (!comparisonResults) return;
-
-        const kioskName = kiosks.find(k => k.id === kioskId)?.name || 'N/A';
-        const periodALabel = `${getMonthLabel(periodA.month)}/${periodA.year}`;
-        const periodBLabel = `${getMonthLabel(periodB.month)}/${periodB.year}`;
-
-        const doc = new jsPDF();
-        doc.setFontSize(18);
-        doc.text(`Comparativo de consumo - ${kioskName}`, 14, 22);
-        doc.setFontSize(11);
-        doc.setTextColor(100);
-        doc.text(`Período A: ${periodALabel}`, 14, 30);
-        doc.text(`Período B: ${periodBLabel}`, 14, 36);
-
-        const tableHead = [['Produto base', `Consumo A`, `Consumo B`, 'Variação absoluta', 'Variação %']];
-        const tableBody = comparisonResults.map(item => {
-            let percentageText: string;
-            if (item.percentageChange === null) {
-                percentageText = '0.0%';
-            } else if (item.percentageChange === Infinity) {
-                percentageText = 'Novo';
-            } else {
-                percentageText = `${item.percentageChange.toFixed(1)}%`;
-            }
-
-            return [
-                item.productName,
-                item.consumptionA.toLocaleString(undefined, { maximumFractionDigits: 2 }),
-                item.consumptionB.toLocaleString(undefined, { maximumFractionDigits: 2 }),
-                item.variation.toLocaleString(undefined, { maximumFractionDigits: 2 }),
-                percentageText
-            ];
-        });
-
-        autoTable(doc, {
-            startY: 45,
-            head: tableHead,
-            body: tableBody,
-            theme: 'grid',
-            headStyles: { fillColor: '#3F51B5' },
-        });
-        
-        doc.save(`comparativo_consumo_${kioskName.replace(/\s/g, '_')}_${periodA.month}-${periodA.year}_vs_${periodB.month}-${periodB.year}.pdf`);
-    };
-
     const getVariationCell = (variation: number, percentage: number | null) => {
         let Icon = Minus;
         let colorClass = "text-muted-foreground";
@@ -319,10 +271,6 @@ export function ConsumptionComparisonModal({ open, onOpenChange, history, basePr
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between">
                                     <CardTitle>Resultados da comparação</CardTitle>
-                                    <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={!comparisonResults || comparisonResults.length === 0}>
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Exportar PDF
-                                    </Button>
                                 </CardHeader>
                                 <CardContent>
                                     <ScrollArea className="h-[25vh]">

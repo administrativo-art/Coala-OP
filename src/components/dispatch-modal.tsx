@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
@@ -8,8 +7,6 @@ import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { type RepositionActivity, type SignatureData } from '@/types';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -55,85 +52,12 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
             setIsSignatureEmpty(sigCanvas.current.isEmpty());
         }
     }, [useDigitalSignature, currentStep]);
-
-    const generatePDF = (signatureUrl?: string, name?: string) => {
-        const doc = new jsPDF();
-        
-        doc.setFontSize(18);
-        doc.text("Documento de transporte de mercadoria", 14, 22);
-
-        doc.setFontSize(11);
-        doc.text(`Atividade ID: ${activity.id}`, 14, 32);
-        doc.text(`Data de emissão: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, 14, 38);
-        doc.text(`Origem: ${activity.kioskOriginName}`, 14, 44);
-        doc.text(`Destino: ${activity.kioskDestinationName}`, 14, 50);
-
-        const tableColumn = ["Produto", "Lote", "Qtd. Pacotes", "Qtd. Caixas"];
-        const tableRows: any[][] = [];
-
-        activity.items.forEach(item => {
-            item.suggestedLots.forEach(lot => {
-                const product = products.find(p => p.id === lot.productId);
-                let boxQuantityText = '-';
-                if (product && product.multiplo_caixa && product.multiplo_caixa > 0) {
-                    const boxes = Math.floor(lot.quantityToMove / product.multiplo_caixa);
-                    const units = lot.quantityToMove % product.multiplo_caixa;
-                    if (boxes > 0) {
-                        boxQuantityText = `${boxes} ${product.rotulo_caixa || 'cx'}(s)`;
-                        if (units > 0) {
-                            boxQuantityText += ` + ${units} un`;
-                        }
-                    } else {
-                        boxQuantityText = `${units} un`;
-                    }
-                }
-
-                tableRows.push([
-                    lot.productName,
-                    lot.lotNumber,
-                    lot.quantityToMove,
-                    boxQuantityText
-                ]);
-            });
-        });
-
-        autoTable(doc, {
-            startY: 60,
-            head: [tableColumn],
-            body: tableRows,
-            theme: 'grid'
-        });
-
-        const finalY = (doc as any).lastAutoTable.finalY || 100;
-
-        doc.setFontSize(10);
-        const declarationText = "Declaro que conferi a mercadoria descrita neste documento e que a responsabilidade pelo transporte, até a entrega integral no destino, é minha a partir deste momento.";
-        const splitText = doc.splitTextToSize(declarationText, 180);
-        doc.text(splitText, 14, finalY + 15);
-        
-        doc.line(14, finalY + 40, 100, finalY + 40);
-        doc.text("Assinatura do transportador", 14, finalY + 45);
-
-        if (signatureUrl) {
-            doc.addImage(signatureUrl, 'PNG', 14, finalY + 20, 60, 20);
-        }
-
-        doc.line(110, finalY + 40, 196, finalY + 40);
-        doc.text("Nome do transportador", 110, finalY + 45);
-        
-        if (name) {
-            doc.text(name, 110, finalY + 35);
-        }
-
-        return doc;
-    };
     
     const handleConfirmDispatch = async () => {
         if (!user) return;
         setIsLoading(true);
 
         let signatureData: SignatureData = { signedBy: transporterName, signedAt: new Date().toISOString() };
-        let signatureUrlForPdf: string | undefined = undefined;
 
         if (useDigitalSignature) {
             if (!signatureDataUrl) {
@@ -141,8 +65,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                  setIsLoading(false);
                  return;
             }
-            signatureUrlForPdf = signatureDataUrl;
-            signatureData.dataUrl = signatureUrlForPdf;
+            signatureData.dataUrl = signatureDataUrl;
         } else {
              if (!physicalCopyUrl) {
                 alert("A foto do documento assinado é obrigatória.");
@@ -156,9 +79,6 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
             status: 'Aguardando recebimento',
             transportSignature: signatureData,
         });
-
-        const doc = generatePDF(signatureUrlForPdf, transporterName);
-        doc.save(`despacho_${activity.id.slice(0, 8)}.pdf`);
 
         setIsLoading(false);
         onOpenChange(false);
@@ -257,23 +177,13 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                 </div>
             ) : (
                 <div className="space-y-3">
-                    <Button variant="outline" className="w-full" onClick={() => generatePDF().output('dataurlnewwindow')}>
-                        <Printer className="mr-2" />
-                        Imprimir documento para assinatura
-                    </Button>
-                     <div className="rounded-md border p-4 text-center">
-                        {physicalCopyUrl ? (
-                            <div className="relative mx-auto w-48 h-64">
-                                <Image src={physicalCopyUrl} alt="Documento assinado" layout="fill" objectFit="contain" />
-                            </div>
-                        ) : (
-                             <p className="text-sm text-muted-foreground mb-2">Após assinar, anexe uma foto do documento.</p>
-                        )}
-                        <Button variant="secondary" onClick={() => setIsPhotoModalOpen(true)}>
-                           <Camera className="mr-2" />
-                           {physicalCopyUrl ? "Tirar outra foto" : "Anexar foto"}
-                       </Button>
-                    </div>
+                     <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Função Indisponível</AlertTitle>
+                        <AlertDescription>
+                            A impressão de documentos para assinatura física foi descontinuada. Por favor, utilize a assinatura digital.
+                        </AlertDescription>
+                    </Alert>
                 </div>
             )}
         </div>
@@ -284,7 +194,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
             <Alert>
                 <AlertTitle className="flex items-center gap-2"><Send /> Tudo pronto para o despacho!</AlertTitle>
                 <AlertDescription>
-                    Ao confirmar, a atividade de reposição será atualizada para "Aguardando recebimento" e um PDF do documento assinado será gerado para download.
+                    Ao confirmar, a atividade de reposição será atualizada para "Aguardando recebimento".
                 </AlertDescription>
             </Alert>
              <div className="p-4 rounded-md border bg-muted/50">
@@ -334,7 +244,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                         ) : (
                             <Button onClick={handleConfirmDispatch} disabled={isLoading}>
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
-                                {isLoading ? "Confirmando..." : "Confirmar e gerar PDF"}
+                                {isLoading ? "Confirmando..." : "Confirmar e Despachar"}
                             </Button>
                         )}
                     </div>
