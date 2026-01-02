@@ -1,16 +1,23 @@
+
 "use client";
 
 import React, { useMemo } from 'react';
-import { type ProductSimulation, type SimulationCategory, type ProductSimulationItem } from '@/types';
+import dynamic from 'next/dynamic';
+import { type ProductSimulation } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Image from 'next/image';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useBaseProducts } from '@/hooks/use-base-products';
-import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
-import { Video, Info, Utensils, Award, Clock } from 'lucide-react';
+import { Video, Info, Utensils, Award, Clock, Download } from 'lucide-react';
+import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
+
+const PDFDownloadLink = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
+  { ssr: false }
+);
 
 interface TechnicalSheetViewerModalProps {
   open: boolean;
@@ -42,6 +49,11 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
     }, [simulation, simulationItems, baseProducts]);
 
     if (!simulation) return null;
+    
+    const pdfData = {
+        ...simulation,
+        ingredients: ingredients
+    };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -177,7 +189,18 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
 
                     </div>
                 </ScrollArea>
-                <DialogFooter>
+                <DialogFooter className="pt-4 border-t flex justify-between w-full">
+                    <PDFDownloadLink
+                        document={<FichaTecnicaDocument data={pdfData} />}
+                        fileName={`ficha_tecnica_${simulation.name.replace(/ /g, '_')}.pdf`}
+                    >
+                        {({ loading }) => (
+                            <Button variant="secondary" disabled={loading}>
+                                <Download className="mr-2 h-4 w-4"/>
+                                {loading ? 'Gerando...' : 'Baixar PDF'}
+                            </Button>
+                        )}
+                    </PDFDownloadLink>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
                 </DialogFooter>
             </DialogContent>
