@@ -31,13 +31,6 @@ const formatCurrency = (value: number | undefined | null) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-const DownloadLink = ({ loading }: { loading: boolean }) => (
-    <Button variant="secondary" disabled={loading}>
-        <Download className="mr-2 h-4 w-4"/>
-        {loading ? 'Gerando...' : 'Baixar PDF'}
-    </Button>
-);
-
 export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: TechnicalSheetViewerModalProps) {
     const { simulationItems } = useProductSimulation();
     const { baseProducts } = useBaseProducts();
@@ -203,7 +196,12 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                             document={<FichaTecnicaDocument data={pdfData} />}
                             fileName={`ficha_tecnica_${simulation.name.replace(/ /g, '_')}.pdf`}
                         >
-                            {DownloadLink}
+                           {({ loading }) => (
+                                <Button variant="secondary" disabled={loading}>
+                                    <Download className="mr-2 h-4 w-4"/>
+                                    {loading ? 'Gerando...' : 'Baixar PDF'}
+                                </Button>
+                            )}
                         </PDFDownloadLink>
                     )}
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
