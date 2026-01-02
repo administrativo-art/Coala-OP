@@ -17,8 +17,6 @@ import { Button } from "./ui/button";
 import { DispatchModal } from "./dispatch-modal";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { AuditReceiptModal } from "./audit-receipt-modal";
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useProducts } from "@/hooks/use-products";
 
 
@@ -75,54 +73,7 @@ export function RepositionManagement() {
     }
     
     const handleExportSeparationList = (activity: RepositionActivity) => {
-        const doc = new jsPDF();
-        
-        doc.setFontSize(18);
-        doc.text("Lista de Separação de Estoque", 14, 22);
-
-        doc.setFontSize(11);
-        doc.text(`Origem: ${activity.kioskOriginName}`, 14, 32);
-        doc.text(`Destino: ${activity.kioskDestinationName}`, 14, 38);
-        doc.text(`Data da Solicitação: ${format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, 14, 44);
-
-        const tableColumn = ["Produto", "Lote", "Qtd. Pacotes", "Qtd. Caixas"];
-        const tableRows: any[][] = [];
-
-        activity.items.forEach(item => {
-            item.suggestedLots.forEach(lot => {
-                const product = products.find(p => p.id === lot.productId);
-                let boxQuantityText = '-';
-                if (product && product.multiplo_caixa && product.multiplo_caixa > 0) {
-                    const boxes = Math.floor(lot.quantityToMove / product.multiplo_caixa);
-                    const units = lot.quantityToMove % product.multiplo_caixa;
-                    if (boxes > 0) {
-                        boxQuantityText = `${boxes} ${product.rotulo_caixa || 'cx'}(s)`;
-                        if (units > 0) {
-                            boxQuantityText += ` + ${units} un`;
-                        }
-                    } else {
-                        boxQuantityText = `${units} un`;
-                    }
-                }
-
-                tableRows.push([
-                    lot.productName,
-                    lot.lotNumber,
-                    lot.quantityToMove,
-                    boxQuantityText
-                ]);
-            });
-        });
-
-        autoTable(doc, {
-            startY: 55,
-            head: [tableColumn],
-            body: tableRows,
-            theme: 'striped',
-            headStyles: { fillColor: '#273344' }
-        });
-
-        doc.save(`lista_separacao_${activity.id.slice(0, 8)}.pdf`);
+        alert("A exportação de PDF está em manutenção.");
     };
 
     const handleCancelConfirm = async () => {
@@ -242,7 +193,7 @@ export function RepositionManagement() {
                                             Auditar Recebimento
                                         </Button>
                                     )}
-                                    {(activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.stock.audit.approve && (
+                                    {(activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.stock.stockCount.approve && (
                                         <>
                                             <Button variant="outline" onClick={() => handleReopenAudit(activity)}>
                                                 <Undo2 className="mr-2 h-4 w-4" />

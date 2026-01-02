@@ -16,8 +16,6 @@ import { Building, Calendar, ShoppingCart, User, Trash2, Download } from 'lucide
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { convertValue } from '@/lib/conversion';
 import { PriceComparisonTable } from './price-comparison-table';
 
@@ -103,39 +101,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     };
     
     const handleExportPdf = () => {
-        const doc = new jsPDF();
-        const title = `Ordem de Compra: ${session.description}`;
-        const confirmedItems = sessionItems.filter(item => selectedItems.has(item.id));
-
-        doc.setFontSize(18);
-        doc.text(title, 14, 22);
-        doc.setFontSize(11);
-        doc.setTextColor(100);
-        doc.text(`Data: ${format(new Date(), 'dd/MM/yyyy', { locale: ptBR })}`, 14, 29);
-        if (user) doc.text(`Gerado por: ${user.username}`, 14, 35);
-
-        const tableHead = [['Insumo', 'Fornecedor', 'Preço Unitário (R$)', 'Custo Efetivo/unid.']];
-        const tableBody = confirmedItems.map(item => {
-            const product = products.find(p => p.id === item.productId);
-            const entity = entities.find(e => e.id === item.entityId);
-            const pricePerUnit = findPricePerUnit(item);
-            return [
-                product ? getProductFullName(product) : 'N/A',
-                entity?.name || 'N/A',
-                item.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-                pricePerUnit ? pricePerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'N/A'
-            ];
-        });
-
-        autoTable(doc, {
-            startY: 45,
-            head: tableHead,
-            body: tableBody,
-            theme: 'grid',
-            headStyles: { fillColor: '#3F51B5' },
-        });
-
-        doc.save(`ordem_de_compra_${session.id.slice(0, 8)}.pdf`);
+        alert("A exportação de PDF está em manutenção.");
     };
 
     const finalizePurchase = async (downloadPdf: boolean) => {
