@@ -196,12 +196,12 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                             document={<FichaTecnicaDocument data={pdfData} />}
                             fileName={`ficha_tecnica_${simulation.name.replace(/ /g, '_')}.pdf`}
                         >
-                            {({ loading }: BlobProviderParams) => (
+                            {(({ loading }: BlobProviderParams) => (
                                 <Button variant="secondary" disabled={loading}>
                                     <Download className="mr-2 h-4 w-4"/>
                                     {loading ? 'Gerando...' : 'Baixar PDF'}
                                 </Button>
-                            )}
+                            )) as any}
                         </PDFDownloadLink>
                     )}
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
