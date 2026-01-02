@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -244,10 +243,6 @@ function AuditForm({
         </CardHeader>
           <Form {...form}><form>
               <CardContent>
-                  <Button variant="outline" className="mb-4" onClick={() => setIsRequestModalOpen(true)}>
-                      <PackagePlus className="mr-2 h-4 w-4" />
-                      Solicitar Cadastro de Insumo
-                  </Button>
                   <ScrollArea className="h-[calc(80vh-280px)] pr-2">
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           {fields.map((field, index) => {
@@ -502,10 +497,10 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
             </CardHeader>
             <CardContent className="space-y-6">
                 {permissions.stock.stockCount.perform && (
-                    <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Nova contagem</Button>
+                    <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Realizar contagem</Button>
                 )}
                 <div className="space-y-3 pt-4 border-t">
-                    <h3 className="text-sm font-bold uppercase text-muted-foreground">Contagens em aberto</h3>
+                    <h3 className="text-sm font-bold uppercase text-muted-foreground">Concluir contagem</h3>
                     {loading ? <Skeleton className="h-24 w-full" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
                         pendingAudits.map(s => (
                             <div key={s.id} className="p-3 border rounded-md flex justify-between items-center bg-muted/10">

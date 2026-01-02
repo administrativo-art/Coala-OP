@@ -125,21 +125,6 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
             }
         });
     }
-
-    if (permissions.itemRequests?.approve) {
-      itemAdditionRequests.forEach(req => {
-        if (req.status === 'pending') {
-          allLegacyTasks.push({
-            id: `item-request-${req.id}`,
-            type: 'Cadastro',
-            title: `Solicitação de cadastro de insumo`,
-            description: `Enviada por ${req.requestedBy.username} para o quiosque ${req.kioskName}.`,
-            link: '/dashboard/stock/count',
-            icon: PackagePlus,
-          });
-        }
-      });
-    }
     
     return allLegacyTasks;
   }, [user, permissions, auditSessions, repositionActivities, returnRequests, itemAdditionRequests, loading]);
@@ -152,5 +137,4 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
   return <AllTasksContext.Provider value={value}>{children}</AllTasksContext.Provider>;
 };
-
     

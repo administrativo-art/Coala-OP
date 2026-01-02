@@ -57,7 +57,7 @@ export function StockManagement() {
                                 <ListOrdered className="h-10 w-10 text-primary" />
                             </div>
                             <CardTitle className="text-2xl mb-2">Contagem de estoque</CardTitle>
-                            <CardDescription>Realize contagens parciais do estoque e gerencie solicitações de novos insumos.</CardDescription>
+                            <CardDescription>Realize contagens parciais ou completas do estoque e gerencie divergências.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                             <Link href="/dashboard/stock/count" className="w-full">

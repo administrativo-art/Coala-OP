@@ -56,10 +56,6 @@ const helpTopics = [
             {
                 question: "Para que serve a 'Contagem de Estoque'?",
                 answer: "Use esta funcionalidade para fazer contagens parciais ou completas do seu estoque. Selecione um quiosque, e o sistema listará todos os lotes presentes. Você pode então inserir a quantidade contada. Se houver divergência, a contagem será enviada para aprovação do administrador, que poderá ajustar o estoque no sistema."
-            },
-            {
-                question: "Um insumo não está na lista durante a contagem. O que eu faço?",
-                answer: "Se você encontrar um item no estoque físico que não está no sistema, clique no botão 'Solicitar Cadastro de Insumo' na tela de contagem. Preencha os detalhes do produto encontrado. A solicitação será enviada para um administrador aprovar e cadastrar o novo insumo."
             }
         ]
     },

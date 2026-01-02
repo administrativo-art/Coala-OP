@@ -44,23 +44,12 @@ export default function StockCountPage() {
             </div>
             
             <Tabs defaultValue="count" value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-1">
                     <TabsTrigger value="count">Contagem e Auditoria</TabsTrigger>
-                    {canManageRequests && (
-                        <TabsTrigger value="requests">
-                            Solicitações
-                            {pendingRequestsCount > 0 && <Badge className="ml-2">{pendingRequestsCount}</Badge>}
-                        </TabsTrigger>
-                    )}
                 </TabsList>
                 <TabsContent value="count" className="mt-4">
                     <StockSessionManagement />
                 </TabsContent>
-                {canManageRequests && (
-                    <TabsContent value="requests" className="mt-4">
-                        <ItemAdditionRequestManagement />
-                    </TabsContent>
-                )}
             </Tabs>
         </div>
     )
