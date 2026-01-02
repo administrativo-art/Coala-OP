@@ -196,7 +196,7 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                             document={<FichaTecnicaDocument data={pdfData} />}
                             fileName={`ficha_tecnica_${simulation.name.replace(/ /g, '_')}.pdf`}
                         >
-                           {({ loading }) => (
+                            {({ loading }: { loading: boolean }) => (
                                 <Button variant="secondary" disabled={loading}>
                                     <Download className="mr-2 h-4 w-4"/>
                                     {loading ? 'Gerando...' : 'Baixar PDF'}
