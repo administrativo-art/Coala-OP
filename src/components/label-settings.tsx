@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from 'react';
-import jsPDF from 'jspdf';
+
 import QRCode from 'qrcode';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useToast } from '@/hooks/use-toast';
@@ -34,56 +34,7 @@ export function LabelSettingsModal({ isOpen, onClose }: LabelSettingsModalProps)
     };
 
     const handlePrintSample = async () => {
-        const selectedSize = labelSizes.find(s => s.id === labelSizeId) || labelSizes.find(s => s.id === '6080') || labelSizes[0];
-        
-        const doc = new jsPDF({
-          orientation: 'landscape',
-          unit: 'mm',
-          format: [selectedSize.width, selectedSize.height]
-        });
-
-        const margin = 2;
-        const availableWidth = selectedSize.width - 2 * margin;
-        const availableHeight = selectedSize.height - 2 * margin;
-        const qrCodeSize = Math.min(availableHeight, availableWidth * 0.3);
-        const qrCodeX = selectedSize.width - qrCodeSize - margin;
-        const qrCodeY = (selectedSize.height - qrCodeSize) / 2;
-
-        try {
-          const qrCodeDataUrl = await QRCode.toDataURL('https://coala.com', { errorCorrectionLevel: 'H', margin: 1, width: 256 });
-          doc.addImage(qrCodeDataUrl, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize);
-        } catch (err) {
-          console.error("Failed to generate QR Code", err);
-        }
-
-        const textBlockWidth = availableWidth - qrCodeSize - margin;
-        const separatorX = qrCodeX - margin / 2;
-        doc.setDrawColor(200, 200, 200);
-        doc.line(separatorX, margin, separatorX, selectedSize.height - margin);
-
-        let currentY = margin + 4;
-        
-        const productName = "Produto Exemplo - 500g";
-        const lotNumber = "LOTE-12345";
-        const expiryDate = "31/12/2099";
-        const locationText = "Quiosque Teste / Prateleira A";
-
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.text(productName, margin, currentY, { maxWidth: textBlockWidth - margin });
-        currentY += doc.getTextDimensions(productName, { maxWidth: textBlockWidth - margin }).h + 3;
-
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Lote: ${lotNumber}`, margin, currentY);
-        currentY += 4;
-        
-        const locationDimensions = doc.getTextDimensions(locationText, { maxWidth: textBlockWidth - margin });
-        doc.text(locationText, margin, currentY, { maxWidth: textBlockWidth - margin });
-        currentY += locationDimensions.h + 4; 
-        
-        doc.text(`Validade: ${expiryDate}`, margin, currentY, { maxWidth: textBlockWidth - margin });
-
-        doc.save(`etiqueta_exemplo_${selectedSize.name.replace(/\s/g, '_')}.pdf`);
+        toast({ title: "Impressão de etiquetas em atualização." });
     };
 
     return (

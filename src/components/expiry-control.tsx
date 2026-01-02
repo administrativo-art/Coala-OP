@@ -7,8 +7,7 @@ import dynamic from 'next/dynamic';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from 'next/link';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+
 import Papa from 'papaparse';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -259,7 +258,7 @@ function ExpiryControlContent() {
             });
             brandGroup.products.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)))
         });
-        baseGroup.brands.sort((a,b) => a.brandName.localeCompare(b.brandName));
+        baseGroup.brands.sort((a,b) => a.name.localeCompare(b.name));
     });
 
     return Array.from(groups.values()).sort((a,b) => a.name.localeCompare(b.name));
@@ -327,42 +326,7 @@ function ExpiryControlContent() {
   const canManageProducts = permissions.registration.items.add || permissions.registration.items.edit || permissions.registration.items.delete;
 
   const handleExportPdf = () => {
-    const doc = new jsPDF();
-    const kioskName = selectedKioskId === 'all' ? 'Todos os Quiosques' : kiosks.find(k => k.id === selectedKioskId)?.name || 'Quiosque Desconhecido';
-
-    doc.setFontSize(18);
-    doc.text(`Relatório de Estoque - ${kioskName}`, 14, 22);
-
-    groupedData.forEach(baseGroup => {
-        autoTable(doc, {
-            head: [[{ content: baseGroup.name, colSpan: 5, styles: { fontStyle: 'bold', fillColor: '#f4f4f5', textColor: '#000000' } }]],
-            startY: (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 2 : 30,
-            theme: 'grid'
-        });
-
-        baseGroup.brands.forEach(brandGroup => {
-            brandGroup.products.forEach(productGroup => {
-                const productRows = productGroup.lots.map(lot => [
-                    getProductFullName(productGroup.product),
-                    lot.lotNumber,
-                    lot.quantity,
-                    lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'N/A',
-                    selectedKioskId === 'all' ? (kiosks.find(k => k.id === lot.kioskId)?.name || 'N/A') : locations.find(l => l.id === lot.locationId)?.name || 'N/A',
-                ]);
-
-                autoTable(doc, {
-                    head: [['Insumo', 'Lote', 'Qtd', 'Validade', 'Localização']],
-                    body: productRows,
-                    startY: (doc as any).lastAutoTable.finalY,
-                    theme: 'striped',
-                    headStyles: { fillColor: '#e4e4e7', textColor: '#000000' },
-                    bodyStyles: { textColor: '#000000' },
-                });
-            });
-        });
-    });
-
-    doc.save(`estoque_${kioskName.replace(/\s/g, '_')}.pdf`);
+    alert("A exportação de PDF está em manutenção.");
   };
   
   const handleExportCsv = () => {

@@ -43,8 +43,7 @@ import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PriceHistoryModal } from "./price-history-modal";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Badge } from "./ui/badge";
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { PpoModal } from "./ppo-modal";
@@ -194,72 +193,11 @@ export function PricingSimulator() {
     };
 
     const handleExportGerencialPdf = () => {
-        const doc = new jsPDF('landscape');
-        doc.setFontSize(18);
-        doc.text(`Relatório Gerencial de Mercadorias`, 14, 22);
-    
-        const head = [['Mercadoria', 'SKU', 'Preço Venda', 'Custo Bruto', 'Lucro %', 'Markup', 'Meta Lucro %', 'NCM', 'CEST', 'CFOP']];
-        const body = filteredSimulations.map(sim => [
-            sim.name,
-            sim.ppo?.sku || '',
-            formatCurrency(sim.salePrice),
-            formatCurrency(sim.grossCost),
-            `${sim.profitPercentage.toFixed(2)}%`,
-            `${sim.markup.toFixed(1)}x`,
-            sim.profitGoal ? `${sim.profitGoal}%` : '-',
-            sim.ppo?.ncm || '',
-            sim.ppo?.cest || '',
-            sim.ppo?.cfop || '',
-        ]);
-    
-        autoTable(doc, {
-            startY: 30,
-            head: head,
-            body: body,
-            theme: 'grid',
-            headStyles: { fillColor: [39, 51, 68] },
-            styles: { fontSize: 8 },
-        });
-    
-        doc.save(`relatorio_gerencial_${new Date().toISOString().slice(0, 10)}.pdf`);
+        alert("Exportação de PDF em atualização.");
     };
 
     const handleExportFichaTecnicaSimplificadaPdf = () => {
-        const doc = new jsPDF();
-        doc.setFontSize(18);
-        doc.text('Ficha Técnica Simplificada', 14, 22);
-
-        let yPos = 30;
-
-        filteredSimulations.forEach(sim => {
-            if (yPos > 260) {
-                doc.addPage();
-                yPos = 20;
-            }
-            doc.setFontSize(14);
-            doc.text(sim.name, 14, yPos);
-            yPos += 8;
-
-            const ingredients = simulationItems
-                .filter(item => item.simulationId === sim.id)
-                .map(item => {
-                    const bp = baseProductMap.get(item.baseProductId);
-                    return [bp ? bp.name : 'N/A', `${item.quantity} ${item.overrideUnit || bp?.unit || ''}`];
-                });
-
-            autoTable(doc, {
-                startY: yPos,
-                head: [['Ingrediente', 'Quantidade']],
-                body: ingredients,
-                theme: 'grid',
-                headStyles: { fillColor: '#f1f5f9' },
-                styles: { fontSize: 10 },
-            });
-
-            yPos = (doc as any).lastAutoTable.finalY + 15;
-        });
-
-        doc.save('fichas_tecnicas_simplificadas.pdf');
+        alert("Exportação de PDF em atualização.");
     };
 
     const handleExportFichaTecnicaSimplificadaCsv = () => {
@@ -354,26 +292,7 @@ export function PricingSimulator() {
     };
 
     const handleExportPriceListPdf = () => {
-        const doc = new jsPDF();
-        doc.setFontSize(18);
-        doc.text('Lista de Preços', 14, 22);
-
-        const head = [['Mercadoria', 'Preço de Venda', 'Lucro %']];
-        const body = filteredSimulations.map(sim => [
-            sim.name,
-            formatCurrency(sim.salePrice),
-            `${sim.profitPercentage.toFixed(2)}%`,
-        ]);
-
-        autoTable(doc, {
-            startY: 30,
-            head: head,
-            body: body,
-            theme: 'grid',
-            headStyles: { fillColor: [39, 51, 68] },
-        });
-
-        doc.save(`lista_de_precos_${new Date().toISOString().slice(0,10)}.pdf`);
+        alert("Exportação de PDF em atualização.");
     };
 
     const handleExportPriceListCsv = () => {
@@ -542,7 +461,7 @@ export function PricingSimulator() {
                                                 <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" />Ver Ficha Técnica</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => generateFichaTecnicaCompletaPdf(sim, { simulationItems, baseProducts })}><Download className="mr-2 h-4 w-4" />Baixar Ficha Completa</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => alert("Exportação de PDF em atualização.")}><Download className="mr-2 h-4 w-4" />Baixar Ficha Completa</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
                                             </DropdownMenuContent>
@@ -642,7 +561,7 @@ export function PricingSimulator() {
                                     <DropdownMenuItem onSelect={handleExportPriceListPdf}>Lista de Preços (PDF)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportPriceListCsv}>Lista de Preços (CSV)</DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem onSelect={() => generateFichaTecnicaCompletaPdf(filteredSimulations[0], { simulationItems, baseProducts })} disabled={filteredSimulations.length !== 1}>
+                                    <DropdownMenuItem onClick={() => alert("Exportação de PDF em atualização.")} disabled={filteredSimulations.length !== 1}>
                                       Ficha Completa (PDF)
                                       {filteredSimulations.length !== 1 && <span className="text-xs text-muted-foreground ml-2">(Selecione 1)</span>}
                                     </DropdownMenuItem>
