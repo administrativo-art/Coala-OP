@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { FileText, Loader2, Send, Signature, Eraser, Printer, Camera, ArrowRight, ArrowLeft } from 'lucide-react';
+import { FileText, Loader2, Send, Signature, Eraser, Printer, Camera, ArrowRight, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Switch } from './ui/switch';
 import { PhotoCaptureModal } from './photo-capture-modal';

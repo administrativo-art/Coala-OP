@@ -11,8 +11,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { type Kiosk, type BaseProduct, type MovementRecord } from "@/types";
 import { Scale, Info, Loader2 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useMovementHistory } from '@/hooks/use-movement-history';

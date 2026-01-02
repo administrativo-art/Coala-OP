@@ -13,6 +13,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { Video, Info, Utensils, Award, Clock, Download } from 'lucide-react';
 import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
+import type { BlobProviderParams } from '@react-pdf/renderer';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -29,6 +30,13 @@ const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
+
+const DownloadLink = ({ loading }: { loading: boolean }) => (
+    <Button variant="secondary" disabled={loading}>
+        <Download className="mr-2 h-4 w-4"/>
+        {loading ? 'Gerando...' : 'Baixar PDF'}
+    </Button>
+);
 
 export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: TechnicalSheetViewerModalProps) {
     const { simulationItems } = useProductSimulation();
@@ -190,17 +198,14 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                     </div>
                 </ScrollArea>
                 <DialogFooter className="pt-4 border-t flex justify-between w-full">
-                    <PDFDownloadLink
-                        document={<FichaTecnicaDocument data={pdfData} />}
-                        fileName={`ficha_tecnica_${simulation.name.replace(/ /g, '_')}.pdf`}
-                    >
-                        {({ loading }) => (
-                            <Button variant="secondary" disabled={loading}>
-                                <Download className="mr-2 h-4 w-4"/>
-                                {loading ? 'Gerando...' : 'Baixar PDF'}
-                            </Button>
-                        )}
-                    </PDFDownloadLink>
+                    {PDFDownloadLink && (
+                        <PDFDownloadLink
+                            document={<FichaTecnicaDocument data={pdfData} />}
+                            fileName={`ficha_tecnica_${simulation.name.replace(/ /g, '_')}.pdf`}
+                        >
+                            {DownloadLink}
+                        </PDFDownloadLink>
+                    )}
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
                 </DialogFooter>
             </DialogContent>

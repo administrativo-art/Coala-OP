@@ -8,7 +8,7 @@ import { Edit, Trash2, ClipboardList, ListPlus, Save } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
-import { type PredefinedList, type StockCountItem } from '@/types';
+import { type PredefinedList } from '@/types';
 import { AddEditPredefinedListModal } from './add-edit-predefined-list-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";

@@ -258,7 +258,7 @@ function ExpiryControlContent() {
             });
             brandGroup.products.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)))
         });
-        baseGroup.brands.sort((a,b) => a.name.localeCompare(b.name));
+        baseGroup.brands.sort((a,b) => a.brandName.localeCompare(b.brandName));
     });
 
     return Array.from(groups.values()).sort((a,b) => a.name.localeCompare(b.name));

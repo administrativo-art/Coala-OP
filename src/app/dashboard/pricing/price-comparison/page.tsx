@@ -13,7 +13,6 @@ import { useCompetitors } from '@/hooks/use-competitors';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import jsPDF from 'jspdf';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CompetitorSelectionModal } from '@/components/competitor-selection-modal';
 import { Badge } from '@/components/ui/badge';
