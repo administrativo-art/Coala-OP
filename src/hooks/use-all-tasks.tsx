@@ -63,7 +63,8 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     
     const allLegacyTasks: LegacyTask[] = [];
 
-    if (permissions.stock.audit.approve) {
+    // Tarefas de contagem/auditoria pendentes
+    if (permissions.stock.stockCount.approve) {
         auditSessions.forEach(session => {
             if (session.status === 'pending_review') {
                 allLegacyTasks.push({
@@ -99,7 +100,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
                 icon: ClipboardCheck
             });
         }
-         if ((activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.stock.audit.approve) {
+         if ((activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.stock.stockCount.approve) {
              allLegacyTasks.push({
                 id: `finalize-${activity.id}`,
                 type: 'Reposição',

@@ -344,7 +344,7 @@ export type PermissionSet = {
     // `audit` permissions are now synced with `stockCount` for backward compatibility with Firestore rules, but UI uses `stockCount`.
     stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; }; 
     audit: { view: boolean; start: boolean; approve: boolean; }; 
-    analysis: { view: boolean; restock: boolean; consumption: boolean; projection: boolean; valuation: boolean; }; 
+    analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, 
     purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; 
     returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; 
     conversions: { view: boolean; }; 
@@ -354,8 +354,9 @@ export type PermissionSet = {
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; impersonate: boolean; };
   tasks: { view: boolean; manage: boolean; };
   help: { view: boolean; };
-  itemRequests: { add: boolean; approve: boolean; };
   reposition: { cancel: boolean; };
+  // itemRequests is now managed under stock.stockCount
+  itemRequests: { add: boolean; approve: boolean; };
 };
 
 export type Profile = {
@@ -386,36 +387,6 @@ export type PredefinedList = {
   id: string;
   name: string;
   items: PredefinedConversionItem[];
-};
-
-export type StockCountItem = {
-    productId: string;
-    productName: string;
-    lotId: string;
-    lotNumber: string;
-    expiryDate: string; // ISO String
-    systemQuantity: number;
-    countedQuantity: number;
-    difference: number;
-    notes?: string;
-};
-
-export type StockCount = {
-    id: string;
-    kioskId: string;
-    kioskName: string;
-    status: 'pending' | 'approved' | 'rejected';
-    countedBy: {
-        userId: string;
-        username: string;
-    };
-    countedAt: string; // ISO String
-    reviewedBy?: {
-        userId: string;
-        username: string;
-    };
-    reviewedAt?: string; // ISO String
-    items: StockCountItem[];
 };
 
 export type StockAuditDivergence = {
@@ -771,3 +742,4 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+
