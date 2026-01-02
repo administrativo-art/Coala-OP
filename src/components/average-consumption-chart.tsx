@@ -7,8 +7,6 @@ import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData
 import { useKiosks } from "@/hooks/use-kiosks"
 import { format, parseISO, getDaysInMonth } from "date-fns"
 import { ptBR } from 'date-fns/locale'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import Papa from 'papaparse';
 import { DateRange } from "react-day-picker"
 import { type ConsumptionReport } from "@/types"
@@ -142,35 +140,6 @@ export function AverageConsumptionChart() {
     });
 
   }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig, hideZeroConsumption, classificationFilter]);
-
-  const handleExportPdf = () => {
-    if (chartData.length === 0) return;
-    
-    const doc = new jsPDF();
-    const kioskName = selectedKiosk === 'matriz' ? 'Todos os quiosques (soma)' : kiosks.find(k => k.id === selectedKiosk)?.name || 'Quiosque desconhecido';
-    
-    doc.setFontSize(18);
-    doc.text(`Relatório de consumo médio mensal`, 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Quiosque: ${kioskName}`, 14, 29);
-
-    const tableHead = [['Produto base (unidade)', 'Consumo médio']];
-    const tableBody = chartData.map(item => [
-        item.name,
-        formatNumberForDisplay(item.Consumo),
-    ]);
-
-    autoTable(doc, {
-        startY: 45,
-        head: tableHead,
-        body: tableBody,
-        theme: 'grid',
-        headStyles: { fillColor: '#3F51B5' },
-    });
-    
-    doc.save(`consumo_medio_base_${kioskName.replace(/\s/g, '_')}_${format(new Date(), 'MM-yyyy')}.pdf`);
-  };
 
   const handleExportCsv = () => {
     if (chartData.length === 0) return;
@@ -425,7 +394,6 @@ export function AverageConsumptionChart() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                        <DropdownMenuItem onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
                         <DropdownMenuItem onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
                         <DropdownMenuItem onSelect={handleExportJson}>Exportar como JSON</DropdownMenuItem>
                     </DropdownMenuContent>

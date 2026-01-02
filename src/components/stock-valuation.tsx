@@ -13,8 +13,6 @@ import { Skeleton } from './ui/skeleton';
 import { DollarSign, Download, Package, Warehouse, Inbox, Scale } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { Button } from './ui/button';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { ScrollArea } from './ui/scroll-area';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue } from '@/lib/conversion';
@@ -122,46 +120,6 @@ export function StockValuation() {
     const totalSkuCount = useMemo(() => {
         return new Set(valuedLots.map(lot => lot.baseProductId)).size;
     }, [valuedLots]);
-
-    const handleExportPdf = () => {
-        if (!selectedKioskId) return;
-        const kioskName = kiosks.find(k => k.id === selectedKioskId)?.name || 'Quiosque Desconhecido';
-
-        const doc = new jsPDF();
-        doc.setFontSize(18);
-        doc.text(`Avaliação financeira do estoque - ${kioskName}`, 14, 22);
-        doc.setFontSize(12);
-        doc.text(`Valor total do estoque: ${formatCurrency(totalStockValue)}`, 14, 30);
-        
-        doc.setFontSize(14);
-        doc.text("Resumo por insumo base", 14, 45);
-        autoTable(doc, {
-            startY: 50,
-            head: [['Insumo Base', 'Quantidade total (pacotes)', 'Valor Total (R$)']],
-            body: summaryByBaseProduct.map(item => [
-                item.name,
-                `${item.quantity.toLocaleString()} pct`,
-                formatCurrency(item.value)
-            ]),
-        });
-        
-        doc.addPage();
-        doc.setFontSize(14);
-        doc.text("Detalhes por lote", 14, 20);
-        autoTable(doc, {
-             startY: 25,
-            head: [['Lote', 'Insumo', 'Quantidade (pct)', 'R$/pct.', 'Valor do lote (R$)']],
-            body: valuedLots.map(item => [
-                item.lotNumber,
-                item.productName,
-                item.quantity,
-                formatCurrency(item.pricePerPackage),
-                formatCurrency(item.totalValue)
-            ]),
-        });
-
-        doc.save(`avaliacao_estoque_${kioskName.replace(/\s/g, '_')}.pdf`);
-    };
     
     const sortedKiosks = useMemo(() => {
         return [...kiosks].sort((a, b) => {
@@ -202,10 +160,6 @@ export function StockValuation() {
                     <Button variant="outline" onClick={() => setIsAnalysisModalOpen(true)}>
                         <Scale className="mr-2" />
                         Análise por período
-                    </Button>
-                    <Button onClick={handleExportPdf} disabled={!selectedKioskId || valuedLots.length === 0}>
-                        <Download className="mr-2" />
-                        Exportar PDF
                     </Button>
                 </div>
             </div>

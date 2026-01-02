@@ -1,11 +1,11 @@
 
+
 "use client";
 
 import { useState, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import Papa from 'papaparse';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -278,28 +278,34 @@ function AnalysisTab() {
     return new Map(stagedItems.map(item => [item.baseProductId, item]));
   }, [stagedItems]);
 
-  const handleExportPdf = () => {
-    const doc = new jsPDF();
-    const kioskName = kiosks.find(k => k.id === selectedKioskId)?.name || 'Quiosque Desconhecido';
+  const handleExportCsv = () => {
+    const dataForCsv = analysisResults
+      .filter(item => item.restockNeeded > 0)
+      .map(item => ({
+        'Produto Base': item.baseProduct.name,
+        'Quantidade Necessária': item.restockNeeded.toLocaleString('pt-BR', { maximumFractionDigits: 2 }),
+        'Unidade': item.baseProduct.unit,
+      }));
 
-    doc.setFontSize(18);
-    doc.text(`Lista de Compras - ${kioskName}`, 14, 22);
+    if (dataForCsv.length === 0) {
+        toast({
+            variant: "destructive",
+            title: "Nada para exportar",
+            description: "Não há itens com necessidade de compra para exportar.",
+        });
+        return;
+    }
 
-    const body = analysisResults
-        .filter(item => item.restockNeeded > 0)
-        .map(item => [
-            item.baseProduct.name,
-            `${item.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${item.baseProduct.unit}`
-        ]);
-        
-    autoTable(doc, {
-      startY: 30,
-      head: [['Produto Base', 'Quantidade Necessária']],
-      body,
-      theme: 'striped',
-    });
-
-    doc.save(`lista_compras_${kioskName.replace(/\s/g, '_')}.pdf`);
+    const csv = Papa.unparse(dataForCsv);
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const kioskName = kiosks.find(k => k.id === selectedKioskId)?.name || 'Quiosque_Desconhecido';
+    link.setAttribute("href", url);
+    link.setAttribute("download", `lista_compras_${kioskName.replace(/\s/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -338,7 +344,7 @@ function AnalysisTab() {
                 )}
             </div>
             {isMatrizSelected && (
-                <Button variant="outline" onClick={handleExportPdf} disabled={analysisResults.filter(item => item.restockNeeded > 0).length === 0}>
+                <Button variant="outline" onClick={handleExportCsv} disabled={analysisResults.filter(item => item.restockNeeded > 0).length === 0}>
                     <Download className="mr-2 h-4 w-4" /> Exportar Lista de Compras
                 </Button>
             )}

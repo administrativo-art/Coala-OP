@@ -11,8 +11,6 @@ import { Badge } from "./ui/badge";
 import { Skeleton } from "./ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Wand2, Download, Inbox } from "lucide-react";
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -63,52 +61,6 @@ export function PriceComparisonTable({ selectedCompetitorIds = [] }: PriceCompar
 
     }, [simulations, selectedCompetitorIds, competitorProductMap]);
     
-    const handleExportPdf = () => {
-        const doc = new jsPDF();
-        const selectedCompetitors = competitors.filter(c => selectedCompetitorIds.includes(c.id));
-
-        doc.setFontSize(18);
-        doc.text(`Análise de Preços vs Concorrência`, 14, 22);
-        doc.setFontSize(11);
-        doc.setTextColor(100);
-        doc.text(`Concorrentes: ${selectedCompetitors.map(c => c.name).join(', ')}`, 14, 29);
-
-        const head = [['Sua Mercadoria', 'Seu Preço', ...selectedCompetitors.map(c => c.name)]];
-        const body = correlatedSimulations.map(sim => {
-             const row = [sim.name, formatCurrency(sim.salePrice)];
-             selectedCompetitors.forEach(c => {
-                const competitorProds = competitorProductMap.get(c.id) || [];
-                const correlatedProd = competitorProds.find(p => p.ksProductId === sim.id);
-                const latestPrice = correlatedProd ? priceMap.get(correlatedProd.id) : undefined;
-                
-                let cellText = '-';
-                if (latestPrice) {
-                    cellText = formatCurrency(latestPrice.price);
-                    if (sim.salePrice > 0) {
-                        const impact = ((sim.salePrice / latestPrice.price) - 1) * 100;
-                        if (impact > 5) {
-                            cellText += `\n(+${impact.toFixed(0)}% Acima)`;
-                        } else if (impact < -5) {
-                            cellText += `\n(${impact.toFixed(0)}% Abaixo)`;
-                        }
-                    }
-                }
-                row.push(cellText);
-             });
-             return row;
-        });
-
-        autoTable(doc, {
-            startY: 40,
-            head: head,
-            body: body,
-            theme: 'grid',
-            headStyles: { fillColor: '#3F51B5' },
-        });
-
-        doc.save(`analise_precos_${new Date().toISOString().slice(0,10)}.pdf`);
-    };
-
     if (loading) {
         return <Skeleton className="h-64 w-full" />;
     }
@@ -135,11 +87,6 @@ export function PriceComparisonTable({ selectedCompetitorIds = [] }: PriceCompar
 
     return (
         <div className="space-y-4">
-             <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={handleExportPdf}>
-                    <Download className="mr-2" /> Exportar Análise em PDF
-                </Button>
-            </div>
             <div className="rounded-md border">
                 <Table>
                     <TableHeader>

@@ -25,8 +25,6 @@ import { Calendar } from './ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Input } from './ui/input';
 import { Card, CardContent } from './ui/card';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 const MOVEMENT_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
     'ENTRADA': { label: 'Entrada', color: 'bg-green-100 text-green-800' },
@@ -152,44 +150,6 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
       setSortDirection('asc');
     }
   };
-  
-  const handleExportPdf = () => {
-    const doc = new jsPDF('landscape');
-    doc.setFontSize(18);
-    doc.text(`Auditoria de Movimentações de Estoque`, 14, 22);
-
-    const head = [['Data', 'Produto', 'Lote', 'Tipo', 'Quiosque', 'Qtd.', 'Usuário', 'Notas']];
-    const body = filteredAndSortedHistory.map(item => {
-        let kioskDisplay = '';
-        const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
-        if (item.type?.includes('TRANSFERENCIA')) {
-            kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
-        } else {
-            kioskDisplay = item.kioskName || 'N/A';
-        }
-        return [
-            timestampDate && isValid(timestampDate) ? format(timestampDate, 'dd/MM/yy HH:mm', { locale: ptBR }) : 'N/A',
-            item.productName,
-            item.lotNumber,
-            (item.type && MOVEMENT_TYPE_CONFIG[item.type]?.label) || item.type || 'N/A',
-            kioskDisplay,
-            (item.quantityChange ?? 0).toLocaleString('pt-BR'),
-            item.username,
-            item.notes || ''
-        ];
-    });
-
-    autoTable(doc, {
-        startY: 30,
-        head: head,
-        body: body,
-        theme: 'grid',
-        headStyles: { fillColor: '#3F51B5' },
-        styles: { fontSize: 8 }
-    });
-    
-    doc.save('auditoria_movimentacoes.pdf');
-  };
 
   const { totalEntradas, totalSaidas, totalTransferencias } = useMemo(() => {
     return filteredAndSortedHistory.reduce((acc, item) => {
@@ -246,10 +206,6 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
                     {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                 </SelectContent>
             </Select>
-             <Button variant="outline" onClick={handleExportPdf} disabled={filteredAndSortedHistory.length === 0}>
-                <Download className="mr-2 h-4 w-4" />
-                Exportar
-            </Button>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
