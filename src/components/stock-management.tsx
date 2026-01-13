@@ -77,7 +77,7 @@ export function StockManagement() {
                         <CardTitle className="text-2xl mb-2">Análise de estoque</CardTitle>
                         <CardDescription>Analise relatórios de reposição de estoque e visualize o consumo médio dos produtos.</CardDescription>
                     </CardHeader>
-                     <CardContent className="flex-grow flex items-end">
+                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/analysis" className="w-full">
                              <Button className="w-full text-lg py-6">
                                 Acessar análise <ArrowRight className="ml-2" />
