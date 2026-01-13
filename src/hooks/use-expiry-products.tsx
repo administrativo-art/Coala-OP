@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
@@ -338,53 +339,33 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     if (!approvedBy) throw new Error("Usuário de aprovação não autenticado.");
     
     await runTransaction(db, async (transaction) => {
-      // 1. Handle Adjustments (Reconciliation)
-      const adjustmentItems = session.items.filter(item => item.adjustment && item.adjustment.quantity > 0);
-      for (const item of adjustmentItems) {
-        const lotRef = doc(db, 'lots', item.lotId);
-        const change = item.adjustment!.type === 'positive' ? item.adjustment!.quantity : -item.adjustment!.quantity;
-        transaction.update(lotRef, { quantity: increment(change) });
-  
-        const movementType: MovementType = item.adjustment!.type === 'positive' ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
-        addMovementRecord(transaction, {
-          lotId: item.lotId,
-          productId: item.productId,
-          productName: item.productName,
-          lotNumber: item.lotNumber,
-          type: movementType,
-          quantityChange: item.adjustment!.quantity,
-          fromKioskId: session.kioskId,
-          userId: approvedBy.id,
-          username: approvedBy.username,
-          timestamp: new Date().toISOString(),
-          notes: `Reconciliação de turno. ${item.adjustment?.notes || ''}`.trim(),
-        });
-      }
-      
-      // 2. Handle Divergences (turn's exits)
-      const divergenceItems = session.items.filter(item => item.divergences && item.divergences.length > 0);
-      for (const item of divergenceItems) {
-        for (const divergence of item.divergences) {
-          const lotRef = doc(db, 'lots', item.lotId);
-          transaction.update(lotRef, { quantity: increment(-divergence.quantity) });
-  
-          addMovementRecord(transaction, {
-            lotId: item.lotId,
-            productId: item.productId,
-            productName: item.productName,
-            lotNumber: item.lotNumber,
-            type: divergence.reason as MovementType,
-            quantityChange: divergence.quantity,
-            fromKioskId: session.kioskId,
-            userId: session.auditedBy.userId, 
-            username: session.auditedBy.username,
-            timestamp: new Date().toISOString(),
-            notes: `Auditoria. Aprovado por ${approvedBy.username}. Obs: ${divergence.notes || ''}`.trim(),
-          });
+        // 1. Handle Adjustments (Entries or Exits to reconcile stock)
+        const adjustmentItems = session.items.filter(item => item.adjustment && item.adjustment.quantity > 0);
+        for (const item of adjustmentItems) {
+            const lotRef = doc(db, 'lots', item.lotId);
+            const change = item.adjustment!.type === 'positive' ? item.adjustment!.quantity : -item.adjustment!.quantity;
+            transaction.update(lotRef, { quantity: increment(change) });
+
+            const movementType: MovementType = item.adjustment!.type === 'positive' ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
+            
+            addMovementRecord(transaction, {
+                lotId: item.lotId,
+                productId: item.productId,
+                productName: item.productName,
+                lotNumber: item.lotNumber,
+                type: movementType,
+                quantityChange: item.adjustment!.quantity,
+                fromKioskId: session.kioskId,
+                toKioskId: movementType === 'ENTRADA_CORRECAO' ? session.kioskId : undefined,
+                userId: approvedBy.id,
+                username: approvedBy.username,
+                timestamp: new Date().toISOString(),
+                notes: `Ajuste de contagem. ${item.adjustment?.notes || ''}`.trim(),
+            });
         }
-      }
     });
   }, []);
+
 
 const revertMovement = useCallback(async (movement: MovementRecord) => {
     if (!user) throw new Error("User not authenticated to revert movement.");
