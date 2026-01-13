@@ -14,6 +14,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
 import { type StockAuditItem, type StockAuditSession, type MovementType, type LotEntry } from '@/types';
+import { useStockAudit } from '@/hooks/use-stock-audit';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
