@@ -396,6 +396,13 @@ export type StockAuditDivergence = {
     notes?: string;
 };
 
+export type StockAuditAdjustment = {
+    id: string;
+    reason: 'ENTRADA_CORRECAO';
+    quantity: number;
+    notes?: string;
+};
+
 export type StockAuditItem = {
     productId: string;
     productName: string;
@@ -404,12 +411,14 @@ export type StockAuditItem = {
     expiryDate: string; // ISO String
     systemQuantity: number;
     finalQuantity: number;
-    adjustment?: {
+    countedQuantity: number; // Legacy, kept for compatibility. `finalQuantity` is the source of truth.
+    adjustment?: { // Kept for compatibility, but `adjustments` array is the new source of truth.
         type: 'positive' | 'negative';
         quantity: number;
         notes?: string;
     } | null;
     divergences: StockAuditDivergence[];
+    adjustments: StockAuditAdjustment[]; // New field for positive adjustments
 };
 
 export type StockAuditSession = {

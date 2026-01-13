@@ -42,13 +42,25 @@ const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
     { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por vencimento' },
     { value: 'SAIDA_DESCARTE_AVARIA', label: 'Descarte por Avaria/Quebra' },
     { value: 'SAIDA_DESCARTE_PERDA', label: 'Extravio de mercadoria' },
+    { value: 'SAIDA_CORRECAO', label: 'Divergência na contagem - decréscimo' },
     { value: 'SAIDA_DESCARTE_OUTROS', label: 'Outros (especificar)'},
+];
+
+const ADJUSTMENT_REASONS: { value: 'ENTRADA_CORRECAO', label: string }[] = [
+    { value: 'ENTRADA_CORRECAO', label: 'Divergência na contagem - acréscimo' },
 ];
 
 const divergenceSchema = z.object({
     id: z.string(),
     reason: z.custom<MovementType>(val => typeof val === 'string' && DIVERGENCE_REASONS.some(r => r.value === val), "Selecione um motivo válido."),
-    quantity: z.coerce.number().min(0.01, "A quantidade deve ser maior que 0."),
+    quantity: z.coerce.number().min(0.01, "A quantidade deve ser maior que 0.").optional().or(z.literal(undefined)),
+    notes: z.string().optional(),
+});
+
+const adjustmentSchema = z.object({
+    id: z.string(),
+    reason: z.literal('ENTRADA_CORRECAO'),
+    quantity: z.coerce.number().min(0.01, "A quantidade deve ser maior que 0.").optional().or(z.literal(undefined)),
     notes: z.string().optional(),
 });
 
@@ -57,6 +69,7 @@ const auditItemSchema = z.object({
     lotId: z.string(),
     systemQuantity: z.number(),
     divergences: z.array(divergenceSchema),
+    adjustments: z.array(adjustmentSchema), // New field for positive adjustments
 });
 
 const auditFormSchema = z.object({
@@ -65,17 +78,26 @@ const auditFormSchema = z.object({
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
 
-function JustificationSection({ itemIndex, control }: { itemIndex: number, control: any }) {
-  const { fields, append, remove } = useFieldArray({ control, name: `items.${itemIndex}.divergences` });
+function JustificationSection({ itemIndex, control, type }: { itemIndex: number, control: any, type: 'divergence' | 'adjustment' }) {
+  const name = type === 'divergence' ? `items.${itemIndex}.divergences` : `items.${itemIndex}.adjustments`;
+  const { fields, append, remove } = useFieldArray({ control, name });
+  
+  const reasons = type === 'divergence' ? DIVERGENCE_REASONS : ADJUSTMENT_REASONS;
+  const cardClass = type === 'divergence' ? "bg-red-500/5 text-red-800/80" : "bg-green-500/5 text-green-800/80";
+  const title = type === 'divergence' ? "Registrar saídas do turno" : "Registrar entradas do turno";
+  const buttonLabel = type === 'divergence' ? "Adicionar saída" : "Adicionar entrada";
+  const defaultReason = type === 'divergence' ? 'SAIDA_CONSUMO' : 'ENTRADA_CORRECAO';
+
+
   return (
-    <Card className="mt-3 p-3 space-y-3 bg-red-500/5">
-        <h4 className="font-semibold text-destructive/80 flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>Registrar saídas do turno</h4>
+    <Card className={cn("p-3 space-y-3", cardClass)}>
+        <h4 className="font-semibold flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>{title}</h4>
         <div className="space-y-2">
             {fields.map((field, divIndex) => (
                 <div key={field.id} className="p-3 border rounded-md space-y-2 bg-background/50 relative shadow-sm">
                     <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive h-7 w-7" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
                     <div className="grid grid-cols-2 gap-2 items-start">
-                        <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field: qtyField }) => (
+                        <FormField control={control} name={`${name}.${divIndex}.quantity`} render={({ field: qtyField }) => (
                             <FormItem><FormLabel className="text-xs">Quantidade</FormLabel>
                                 <FormControl>
                                     <Input
@@ -89,23 +111,23 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
                                 </FormControl>
                             </FormItem>
                         )}/>
-                        <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field: reasonField }) => (
+                        <FormField control={control} name={`${name}.${divIndex}.reason`} render={({ field: reasonField }) => (
                             <FormItem><FormLabel className="text-xs">Motivo</FormLabel>
                                 <Select onValueChange={reasonField.onChange} value={reasonField.value}>
                                     <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="..." /></SelectTrigger></FormControl>
-                                    <SelectContent>{DIVERGENCE_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
+                                    <SelectContent>{reasons.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
                                 </Select>
                             </FormItem>
                         )}/>
                     </div>
-                     <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.notes`} render={({ field: notesField }) => (
+                     <FormField control={control} name={`${name}.${divIndex}.notes`} render={({ field: notesField }) => (
                         <FormItem><FormControl><Textarea {...notesField} placeholder="Observação (opcional)" rows={1} className="text-sm min-h-[38px]" /></FormControl></FormItem>
                     )}/>
                 </div>
             ))}
         </div>
-        <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: 'SAIDA_CONSUMO', quantity: undefined, notes: '' })}>
-            <PlusCircle className="mr-2 h-3 w-3"/> Adicionar saída
+        <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: defaultReason, quantity: undefined, notes: '' })}>
+            <PlusCircle className="mr-2 h-3 w-3"/> {buttonLabel}
         </Button>
     </Card>
   );
@@ -137,6 +159,7 @@ function AuditForm({
       items: session.items.map(i => ({
         productId: i.productId, lotId: i.lotId, systemQuantity: i.systemQuantity,
         divergences: i.divergences || [],
+        adjustments: i.adjustments || [], // Initialize new field
       })),
     },
   });
@@ -148,13 +171,15 @@ function AuditForm({
     return session.items.map((originalItem, index) => {
       const formItem = values.items[index];
       const totalDivergence = (formItem?.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
-      const finalQuantity = originalItem.systemQuantity - totalDivergence;
+      const totalAdjustment = (formItem?.adjustments || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+      const finalQuantity = originalItem.systemQuantity - totalDivergence + totalAdjustment;
       
       return {
         ...originalItem,
         finalQuantity: finalQuantity,
-        countedQuantity: finalQuantity, // Legacy field, keeping it aligned
+        countedQuantity: finalQuantity,
         divergences: formItem?.divergences || [],
+        adjustments: formItem?.adjustments || [],
       };
     });
   };
@@ -213,7 +238,8 @@ function AuditForm({
                               
                               const formItem = watchedItems?.[index];
                               const totalDivergence = (formItem?.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
-                              const adjustedQuantity = item.systemQuantity - totalDivergence;
+                              const totalAdjustment = (formItem?.adjustments || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+                              const adjustedQuantity = item.systemQuantity - totalDivergence + totalAdjustment;
 
                               return (
                                   <Card key={item.lotId} className="flex flex-col">
@@ -243,7 +269,8 @@ function AuditForm({
                                                   <p className="text-lg font-bold text-primary">{adjustedQuantity}</p>
                                                 </div>
                                           </div>
-                                          <JustificationSection itemIndex={index} control={form.control} />
+                                          <JustificationSection itemIndex={index} control={form.control} type="divergence" />
+                                          <JustificationSection itemIndex={index} control={form.control} type="adjustment" />
                                       </div>
                                   </Card>
                               );
@@ -254,8 +281,8 @@ function AuditForm({
                         </Button>
                   </ScrollArea>
               </CardContent>
-              <CardContent>
-                  <div className="flex justify-between items-center pt-4 border-t">
+              <CardFooter>
+                  <div className="flex justify-between items-center pt-4 border-t w-full">
                   <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isFinalizing || isSaving}>Cancelar contagem</Button>
                   <div className="flex gap-2">
                        <Button type="button" variant="secondary" onClick={handleSaveAndExit} disabled={isSaving || isFinalizing}>
@@ -264,7 +291,7 @@ function AuditForm({
                        <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving}><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
                   </div>
                   </div>
-              </CardContent>
+              </CardFooter>
           </form></Form>
       </Card>
       <RequestItemAdditionModal
@@ -278,7 +305,7 @@ function AuditForm({
             onConfirm={handleFinalizeConfirm}
             isDeleting={isFinalizing}
             title="Tem certeza que quer concluir?"
-            description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída. Deseja continuar?"
+            description="Esta ação é irreversível. O estoque será atualizado com base nas justificativas de saída e entrada. Deseja continuar?"
             confirmButtonText={isFinalizing ? 'Concluindo...' : 'Sim, concluir contagem'}
         />
         <DeleteConfirmationDialog 
@@ -384,7 +411,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
             countedQuantity: systemQuantity,
             finalQuantity: systemQuantity,
             divergences: [],
-            adjustment: null,
+            adjustments: [],
         };
     });
     
@@ -450,7 +477,9 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <div>
-                        <CardTitle className="flex items-center gap-2"><ShieldCheck/>Contagem de estoque</CardTitle>
+                        <CardTitle className="flex items-center gap-2">
+                           <ListOrdered /> Contagem de estoque
+                        </CardTitle>
                         <CardDescription>Inicie uma nova contagem ou continue uma sessão salva para revisão.</CardDescription>
                     </div>
                      {showExportButton && (

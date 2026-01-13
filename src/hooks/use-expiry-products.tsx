@@ -3,7 +3,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
-import { type LotEntry, type MovementRecord, type MovementType, type User, type StockAuditSession } from '@/types';
+import { type LotEntry, type MovementRecord, type MovementType, type User, type StockAuditSession, type StockAuditAdjustment } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -339,29 +339,44 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     if (!approvedBy) throw new Error("Usuário de aprovação não autenticado.");
     
     await runTransaction(db, async (transaction) => {
-        // 1. Handle Adjustments (Entries or Exits to reconcile stock)
-        const adjustmentItems = session.items.filter(item => item.adjustment && item.adjustment.quantity > 0);
-        for (const item of adjustmentItems) {
-            const lotRef = doc(db, 'lots', item.lotId);
-            const change = item.adjustment!.type === 'positive' ? item.adjustment!.quantity : -item.adjustment!.quantity;
-            transaction.update(lotRef, { quantity: increment(change) });
+        for (const item of session.items) {
+             const lotRef = doc(db, 'lots', item.lotId);
+             let totalChange = 0;
+             const now = new Date().toISOString();
 
-            const movementType: MovementType = item.adjustment!.type === 'positive' ? 'ENTRADA_CORRECAO' : 'SAIDA_CORRECAO';
+            // Process negative adjustments (divergences)
+            for (const divergence of item.divergences || []) {
+                if (divergence.quantity > 0) {
+                    totalChange -= divergence.quantity;
+                    addMovementRecord(transaction, {
+                        lotId: item.lotId, productId: item.productId, productName: item.productName, lotNumber: item.lotNumber,
+                        type: divergence.reason,
+                        quantityChange: divergence.quantity,
+                        fromKioskId: session.kioskId,
+                        userId: approvedBy.id, username: approvedBy.username, timestamp: now,
+                        notes: `Ajuste de contagem: ${divergence.notes || ''}`.trim(),
+                    });
+                }
+            }
+
+            // Process positive adjustments
+            for (const adjustment of item.adjustments || []) {
+                 if (adjustment.quantity > 0) {
+                    totalChange += adjustment.quantity;
+                    addMovementRecord(transaction, {
+                        lotId: item.lotId, productId: item.productId, productName: item.productName, lotNumber: item.lotNumber,
+                        type: 'ENTRADA_CORRECAO',
+                        quantityChange: adjustment.quantity,
+                        toKioskId: session.kioskId,
+                        userId: approvedBy.id, username: approvedBy.username, timestamp: now,
+                        notes: `Ajuste de contagem: ${adjustment.notes || ''}`.trim(),
+                    });
+                }
+            }
             
-            addMovementRecord(transaction, {
-                lotId: item.lotId,
-                productId: item.productId,
-                productName: item.productName,
-                lotNumber: item.lotNumber,
-                type: movementType,
-                quantityChange: item.adjustment!.quantity,
-                fromKioskId: session.kioskId,
-                toKioskId: movementType === 'ENTRADA_CORRECAO' ? session.kioskId : undefined,
-                userId: approvedBy.id,
-                username: approvedBy.username,
-                timestamp: new Date().toISOString(),
-                notes: `Ajuste de contagem. ${item.adjustment?.notes || ''}`.trim(),
-            });
+            if (totalChange !== 0) {
+                transaction.update(lotRef, { quantity: increment(totalChange) });
+            }
         }
     });
   }, []);
