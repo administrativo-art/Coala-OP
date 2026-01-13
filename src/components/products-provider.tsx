@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -151,10 +152,8 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
   
   const getProductFullName = useCallback((product: Product | null | undefined) => {
     if (!product) return '';
-    const space = product.unit?.toLowerCase() === 'pacote' ? ' ' : '';
-    const sizePart = (product.packageSize && product.unit) ? ` ${product.packageSize}${space}${product.unit}` : '';
     const brandPart = product.brand ? ` - ${product.brand}` : '';
-    return `${product.baseName}${sizePart}${brandPart}`;
+    return `${product.baseName}${brandPart}`;
   }, []);
 
   const value: ProductsContextType = useMemo(() => ({

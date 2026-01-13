@@ -13,3 +13,4 @@ export const useProducts = (): ProductsContextType => {
   return context;
 };
 
+
