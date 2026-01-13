@@ -68,13 +68,24 @@ const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
 }).refine(data => {
     for (const item of data.items) {
-        const adjQty = item.adjustment?.type === 'negative' ? -(Number(item.adjustment?.quantity) || 0) : (Number(item.adjustment?.quantity) || 0);
+        const adjQty = item.adjustment?.type === 'negative' 
+            ? -(Number(item.adjustment?.quantity) || 0) 
+            : (Number(item.adjustment?.quantity) || 0);
+            
         const totalDiv = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
-        const calcFinal = item.systemQuantity + adjQty - totalDiv;
-        if (Math.abs(calcFinal - item.finalQuantity) > 0.001) return false;
+        
+        const calculatedFinal = item.systemQuantity + adjQty - totalDiv;
+
+        // Compare the calculated final quantity with the one in the form state.
+        // Allow for a small tolerance for floating point inaccuracies.
+        if (Math.abs(calculatedFinal - item.finalQuantity) > 0.001) {
+            return false;
+        }
     }
     return true;
-}, { message: 'O cálculo do estoque final não corresponde às saídas e ajustes.' });
+}, { 
+    message: 'A matemática não fecha. A soma das saídas e ajustes não corresponde à diferença de estoque.',
+});
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
 
@@ -206,8 +217,9 @@ function AuditForm({
 
     const isValid = await form.trigger();
     if (!isValid) {
-      let errorMessage = 'Ajuste os valores dos itens com divergência.';
       const formErrors = form.formState.errors.items;
+      let errorMessage = 'Ajuste os valores dos itens com divergência.';
+
       if (formErrors && Array.isArray(formErrors)) {
         const firstErrorIndex = formErrors.findIndex(e => e);
         if (firstErrorIndex !== -1) {
