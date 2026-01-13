@@ -80,7 +80,7 @@ export function StockManagement() {
                      <CardContent className="flex-grow flex items-end">
                         <Link href="/dashboard/stock/analysis" className="w-full">
                              <Button className="w-full text-lg py-6">
-                                Acessar análises <ArrowRight className="ml-2" />
+                                Acessar análise <ArrowRight className="ml-2" />
                             </Button>
                         </Link>
                     </CardContent>
