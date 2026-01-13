@@ -116,7 +116,8 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
         filtered = filtered.filter(item => 
             (item.productName || '').toLowerCase().includes(lowerCaseSearch) ||
             (item.lotNumber || '').toLowerCase().includes(lowerCaseSearch) ||
-            (item.username || '').toLowerCase().includes(lowerCaseSearch)
+            (item.username || '').toLowerCase().includes(lowerCaseSearch) ||
+            (item.notes || '').toLowerCase().includes(lowerCaseSearch)
         );
     }
 
@@ -179,7 +180,7 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
         <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-grow">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Buscar produto, lote, usuário..." className="pl-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <Input placeholder="Buscar produto, lote, usuário, observação..." className="pl-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
             <Popover>
                 <PopoverTrigger asChild>
@@ -222,8 +223,8 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
                   <Table>
                       <TableHeader className="sticky top-0 bg-muted z-10">
                       <TableRow>
-                          {['timestamp', 'productName', 'lotNumber', 'type', 'fromKioskId', 'quantityChange', 'username'].map(key => {
-                              const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário' };
+                          {['timestamp', 'productName', 'lotNumber', 'type', 'fromKioskId', 'quantityChange', 'username', 'notes'].map(key => {
+                              const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário', notes: 'Observação' };
                               return (
                                   <TableHead key={key} className="cursor-pointer hover:bg-muted-foreground/10" onClick={() => handleSort(key as SortKey)}>
                                       <div className="flex items-center gap-2">
@@ -267,10 +268,11 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
                                   <TableCell className="text-xs">{kioskDisplay}</TableCell>
                                   <TableCell className="text-right font-bold">{(item.quantityChange ?? 0).toLocaleString('pt-BR')}</TableCell>
                                   <TableCell>{item.username}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground italic">{item.notes}</TableCell>
                               </TableRow>
                           )
                       }) : (
-                          <TableRow><TableCell colSpan={7} className="h-24 text-center">Nenhum registro encontrado com os filtros atuais.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={8} className="h-24 text-center">Nenhum registro encontrado com os filtros atuais.</TableCell></TableRow>
                       )}
                       </TableBody>
                   </Table>
