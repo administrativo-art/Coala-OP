@@ -143,7 +143,8 @@ export type MovementType =
     | 'TRANSFERENCIA_SAIDA' 
     | 'TRANSFERENCIA_ENTRADA' 
     | 'ENTRADA_ESTORNO' 
-    | 'SAIDA_ESTORNO';
+    | 'SAIDA_ESTORNO'
+    | 'Divergência na contagem do turno - decréscimo';
 
 
 export type MovementRecord = {
@@ -411,8 +412,7 @@ export type StockAuditItem = {
     expiryDate: string; // ISO String
     systemQuantity: number;
     finalQuantity: number;
-    countedQuantity: number; // Legacy, kept for compatibility. `finalQuantity` is the source of truth.
-    adjustment?: { // Kept for compatibility, but `adjustments` array is the new source of truth.
+    adjustment?: { // Kept for compatibility, but `divergences` array is the new source of truth.
         type: 'positive' | 'negative';
         quantity: number;
         notes?: string;
@@ -623,6 +623,7 @@ export const defaultGuestPermissions: PermissionSet = {
     stock: { 
       view: false, 
       inventoryControl: { view: false, addLot: false, editLot: false, writeDown: false, transfer: false, viewHistory: false }, 
+      // `audit` permissions are now synced with `stockCount` for backward compatibility with Firestore rules, but UI uses `stockCount`.
       stockCount: { view: false, perform: false, approve: false, requestItem: false }, 
       audit: { view: false, start: false, approve: false }, 
       analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, 

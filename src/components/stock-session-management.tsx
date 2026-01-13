@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -38,15 +39,15 @@ import { RequestItemAdditionModal } from './request-item-addition-modal';
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
     { value: 'SAIDA_CONSUMO', label: 'Venda/Consumo' },
+    { value: 'Divergência na contagem do turno - decréscimo', label: 'Divergência na contagem do turno - decréscimo' },
     { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por vencimento' },
     { value: 'SAIDA_DESCARTE_AVARIA', label: 'Descarte por Avaria/Quebra' },
     { value: 'SAIDA_DESCARTE_PERDA', label: 'Extravio de mercadoria' },
-    { value: 'SAIDA_CORRECAO', label: 'Divergência na contagem - decréscimo' },
     { value: 'SAIDA_DESCARTE_OUTROS', label: 'Outros (especificar)'},
 ];
 
 const ADJUSTMENT_REASONS: { value: 'ENTRADA_CORRECAO', label: string }[] = [
-    { value: 'ENTRADA_CORRECAO', label: 'Divergência na contagem - acréscimo' },
+    { value: 'ENTRADA_CORRECAO', label: 'Divergência na contagem do turno - acréscimo' },
 ];
 
 const divergenceSchema = z.object({
@@ -177,7 +178,6 @@ function AuditForm({
       return {
         ...originalItem,
         finalQuantity: finalQuantity,
-        countedQuantity: finalQuantity,
         divergences: formItem?.divergences || [],
         adjustments: formItem?.adjustments || [],
       };
@@ -408,7 +408,6 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
             lotNumber: lot.lotNumber,
             expiryDate: lot.expiryDate || '',
             systemQuantity: systemQuantity,
-            countedQuantity: systemQuantity,
             finalQuantity: systemQuantity,
             divergences: [],
             adjustments: [],
