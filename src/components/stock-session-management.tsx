@@ -76,7 +76,18 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
                     <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive h-7 w-7" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
                     <div className="grid grid-cols-2 gap-2 items-start">
                         <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field: qtyField }) => (
-                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} value={qtyField.value ?? ''} /></FormControl></FormItem>
+                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel>
+                                <FormControl>
+                                    <Input
+                                        type="number"
+                                        {...qtyField}
+                                        value={qtyField.value ?? ''}
+                                        onWheel={(e) => (e.target as HTMLElement).blur()}
+                                        onKeyDown={(e) => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); } }}
+                                        onFocus={(e) => e.target.select()}
+                                    />
+                                </FormControl>
+                            </FormItem>
                         )}/>
                         <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field: reasonField }) => (
                             <FormItem><FormLabel className="text-xs">Motivo</FormLabel>
@@ -473,3 +484,4 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     </>
   );
 }
+
