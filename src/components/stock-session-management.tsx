@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -75,7 +76,7 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
                     <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive h-7 w-7" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
                     <div className="grid grid-cols-2 gap-2 items-start">
                         <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.quantity`} render={({ field: qtyField }) => (
-                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} /></FormControl></FormItem>
+                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...qtyField} value={qtyField.value ?? ''} /></FormControl></FormItem>
                         )}/>
                         <FormField control={control} name={`items.${itemIndex}.divergences.${divIndex}.reason`} render={({ field: reasonField }) => (
                             <FormItem><FormLabel className="text-xs">Motivo</FormLabel>
@@ -92,7 +93,7 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
                 </div>
             ))}
         </div>
-        <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: 'SAIDA_CONSUMO', quantity: 0, notes: '' })}>
+        <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: 'SAIDA_CONSUMO', quantity: undefined, notes: '' })}>
             <PlusCircle className="mr-2 h-3 w-3"/> Adicionar Saída
         </Button>
     </Card>
@@ -472,4 +473,3 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     </>
   );
 }
-
