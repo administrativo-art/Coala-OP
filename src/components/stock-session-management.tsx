@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -16,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { type StockAuditItem, type StockAuditSession, type MovementType, type LotEntry } from '@/types';
 import { useStockAudit } from '@/hooks/use-stock-audit';
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -84,7 +83,7 @@ function JustificationSection({ itemIndex, control, type }: { itemIndex: number,
   
   const reasons = type === 'divergence' ? DIVERGENCE_REASONS : ADJUSTMENT_REASONS;
   const cardClass = type === 'divergence' ? "bg-red-500/5 text-red-800/80" : "bg-green-500/5 text-green-800/80";
-  const title = type === 'divergence' ? "Registrar saídas do turno" : "Registrar entradas do turno";
+  const title = type === 'divergence' ? "Registrar saídas do turno" : "Registrar entrada";
   const buttonLabel = type === 'divergence' ? "Adicionar saída" : "Adicionar entrada";
   const defaultReason = type === 'divergence' ? 'SAIDA_CONSUMO' : 'ENTRADA_CORRECAO';
 
@@ -107,6 +106,7 @@ function JustificationSection({ itemIndex, control, type }: { itemIndex: number,
                                         onWheel={(e) => (e.target as HTMLElement).blur()}
                                         onKeyDown={(e) => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); } }}
                                         onFocus={(e) => e.target.select()}
+                                        placeholder=""
                                     />
                                 </FormControl>
                             </FormItem>
