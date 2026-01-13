@@ -345,13 +345,13 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
             // Correct calculation: sum all exits and all entries
             const totalDivergence = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
-            const totalAdjustment = (item.adjustments || []).reduce((sum, a) => sum + (Number(a.quantity) || 0), 0);
+            const totalAdjustment = (item.adjustments || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
             
             const totalChange = totalAdjustment - totalDivergence;
 
             // Process negative adjustments (divergences)
             for (const divergence of item.divergences || []) {
-                if (divergence.quantity > 0) {
+                if (divergence.quantity && divergence.quantity > 0) {
                     addMovementRecord(transaction, {
                         lotId: item.lotId, productId: item.productId, productName: item.productName, lotNumber: item.lotNumber,
                         type: divergence.reason,
@@ -365,7 +365,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
             // Process positive adjustments
             for (const adjustment of item.adjustments || []) {
-                 if (adjustment.quantity > 0) {
+                 if (adjustment.quantity && adjustment.quantity > 0) {
                     addMovementRecord(transaction, {
                         lotId: item.lotId, productId: item.productId, productName: item.productName, lotNumber: item.lotNumber,
                         type: 'ENTRADA_CORRECAO',
