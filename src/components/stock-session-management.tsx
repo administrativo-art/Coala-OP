@@ -170,19 +170,6 @@ function AuditForm({
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
   const watchedItems = useWatch({ control: form.control, name: 'items' });
 
-  useEffect(() => {
-    if (!watchedItems) return;
-    watchedItems.forEach((item, index) => {
-        if (!item) return;
-        const adj = item.adjustment?.type === 'negative' ? -(Number(item.adjustment?.quantity) || 0) : (Number(item.adjustment?.quantity) || 0);
-        const divs = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
-        const newFinal = item.systemQuantity + adj - divs;
-        if (Math.abs(newFinal - (item.finalQuantity || 0)) > 0.001) {
-            form.setValue(`items.${index}.finalQuantity`, newFinal, { shouldValidate: true });
-        }
-    });
-  }, [watchedItems, form]);
-
   const getUpdatedItems = (values: AuditFormValues): StockAuditItem[] => {
     return session.items.map((originalItem, index) => {
       const formItem = values.items[index];
@@ -203,12 +190,36 @@ function AuditForm({
   
   const handleFinalizeClick = async () => {
     if (!user) return;
+
+    // Manually sync finalQuantity before validation
+    const currentValues = form.getValues();
+    const updatedItems = currentValues.items.map(item => {
+        const adj = item.adjustment?.type === 'negative' ? -(Number(item.adjustment?.quantity) || 0) : (Number(item.adjustment?.quantity) || 0);
+        const divs = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+        return {
+            ...item,
+            finalQuantity: item.systemQuantity + adj - divs,
+        };
+    });
+    form.setValue('items', updatedItems, { shouldValidate: false });
+
+
     const isValid = await form.trigger();
     if (!isValid) {
+      let errorMessage = 'Ajuste os valores dos itens com divergência.';
+      const formErrors = form.formState.errors.items;
+      if (formErrors && Array.isArray(formErrors)) {
+        const firstErrorIndex = formErrors.findIndex(e => e);
+        if (firstErrorIndex !== -1) {
+            const errorItemName = session.items[firstErrorIndex]?.productName;
+            errorMessage = `Verifique os dados para "${errorItemName}". A matemática não fecha.`;
+        }
+      }
+
       toast({
           variant: "destructive",
           title: "Dados inválidos",
-          description: "A soma das justificativas deve ser igual à diferença total para cada item divergente."
+          description: errorMessage
       });
       return;
     }
@@ -232,7 +243,6 @@ function AuditForm({
           await onCancel();
       }
   };
-  
 
   return (
     <>
@@ -248,7 +258,10 @@ function AuditForm({
                           {fields.map((field, index) => {
                               const item = session.items[index];
                               const product = products.find(p => p.id === item.productId);
-                              const finalQty = watchedItems[index]?.finalQuantity;
+                              
+                              const adj = watchedItems[index]?.adjustment?.type === 'negative' ? -(Number(watchedItems[index]?.adjustment?.quantity) || 0) : (Number(watchedItems[index]?.adjustment?.quantity) || 0);
+                              const divs = (watchedItems[index]?.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+                              const finalQty = item.systemQuantity + adj - divs;
 
                               return (
                                   <Card key={item.lotId} className="flex flex-col">
