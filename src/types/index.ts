@@ -393,14 +393,14 @@ export type PredefinedList = {
 export type StockAuditDivergence = {
     id: string;
     reason: MovementType;
-    quantity: number;
+    quantity?: number;
     notes?: string;
 };
 
 export type StockAuditAdjustment = {
     id: string;
     reason: 'ENTRADA_CORRECAO';
-    quantity: number;
+    quantity?: number;
     notes?: string;
 };
 
@@ -752,3 +752,4 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+
