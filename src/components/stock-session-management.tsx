@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -55,12 +54,7 @@ const auditItemSchema = z.object({
     productId: z.string(),
     lotId: z.string(),
     systemQuantity: z.number(),
-    finalQuantity: z.number(),
-    adjustment: z.object({
-        type: z.enum(['positive', 'negative']),
-        quantity: z.coerce.number().min(0),
-        notes: z.string().optional()
-    }).nullable(),
+    countedQuantity: z.coerce.number().min(0, "A quantidade contada deve ser um número positivo."),
     divergences: z.array(divergenceSchema),
 });
 
@@ -68,23 +62,17 @@ const auditFormSchema = z.object({
   items: z.array(auditItemSchema)
 }).refine(data => {
     for (const item of data.items) {
-        const adjQty = item.adjustment?.type === 'negative' 
-            ? -(Number(item.adjustment?.quantity) || 0) 
-            : (Number(item.adjustment?.quantity) || 0);
-            
-        const totalDiv = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+        const totalDivergence = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
+        const difference = item.systemQuantity - item.countedQuantity;
         
-        const calculatedFinal = item.systemQuantity + adjQty - totalDiv;
-
-        // Compare the calculated final quantity with the one in the form state.
-        // Allow for a small tolerance for floating point inaccuracies.
-        if (Math.abs(calculatedFinal - item.finalQuantity) > 0.001) {
+        if (Math.abs(difference - totalDivergence) > 0.001) {
             return false;
         }
     }
     return true;
 }, { 
-    message: 'A matemática não fecha. A soma das saídas e ajustes não corresponde à diferença de estoque.',
+    message: 'A soma das justificativas deve ser igual à diferença total para cada item divergente.',
+    path: ['items'],
 });
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
@@ -124,30 +112,6 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
   );
 }
 
-function ReconciliationSection({ itemIndex, control, form }: { itemIndex: number, control: any, form: any }) {
-    const [showForm, setShowForm] = useState(!!form.getValues(`items.${itemIndex}.adjustment`));
-    if (showForm) {
-        return (
-             <Card className="p-3 space-y-3 bg-amber-500/10">
-                 <h4 className="font-semibold text-amber-800 text-sm">Reconciliação de Turno Anterior</h4>
-                <div className="grid grid-cols-2 gap-4">
-                     <FormField control={control} name={`items.${itemIndex}.adjustment.quantity`} render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">Quantidade</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl></FormItem>
-                    )}/>
-                     <FormField control={control} name={`items.${itemIndex}.adjustment.type`} render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger></FormControl><SelectContent><SelectItem value="positive">Acréscimo</SelectItem><SelectItem value="negative">Decréscimo</SelectItem></SelectContent></Select></FormItem>
-                    )}/>
-                </div>
-                <FormField control={control} name={`items.${itemIndex}.adjustment.notes`} render={({ field }) => (
-                    <FormItem><FormControl><Textarea {...field} placeholder="Ex: Encontrado no freezer" rows={1} className="text-sm min-h-[38px]" /></FormControl></FormItem>
-                )}/>
-                <Button type="button" variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => { form.setValue(`items.${itemIndex}.adjustment`, null); setShowForm(false); }}>Remover ajuste</Button>
-            </Card>
-        )
-    }
-    return <div className="text-center p-2"><Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setShowForm(true)}>Identificou divergência do turno anterior?</Button></div>
-}
-
 function AuditForm({
   session,
   onSave,
@@ -173,7 +137,7 @@ function AuditForm({
     defaultValues: {
       items: session.items.map(i => ({
         productId: i.productId, lotId: i.lotId, systemQuantity: i.systemQuantity,
-        finalQuantity: i.finalQuantity, adjustment: i.adjustment ?? null, divergences: i.divergences || [],
+        countedQuantity: i.countedQuantity ?? i.systemQuantity, divergences: i.divergences || [],
       })),
     },
   });
@@ -186,8 +150,9 @@ function AuditForm({
       const formItem = values.items[index];
       return {
         ...originalItem,
-        finalQuantity: formItem?.finalQuantity ?? originalItem.systemQuantity,
-        adjustment: formItem?.adjustment,
+        countedQuantity: formItem?.countedQuantity ?? originalItem.systemQuantity,
+        finalQuantity: formItem?.countedQuantity ?? originalItem.systemQuantity,
+        adjustment: null,
         divergences: formItem?.divergences || [],
       };
     });
@@ -202,19 +167,6 @@ function AuditForm({
   const handleFinalizeClick = async () => {
     if (!user) return;
 
-    // Manually sync finalQuantity before validation
-    const currentValues = form.getValues();
-    const updatedItems = currentValues.items.map(item => {
-        const adj = item.adjustment?.type === 'negative' ? -(Number(item.adjustment?.quantity) || 0) : (Number(item.adjustment?.quantity) || 0);
-        const divs = (item.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
-        return {
-            ...item,
-            finalQuantity: item.systemQuantity + adj - divs,
-        };
-    });
-    form.setValue('items', updatedItems, { shouldValidate: false });
-
-
     const isValid = await form.trigger();
     if (!isValid) {
       const formErrors = form.formState.errors.items;
@@ -224,7 +176,7 @@ function AuditForm({
         const firstErrorIndex = formErrors.findIndex(e => e);
         if (firstErrorIndex !== -1) {
             const errorItemName = session.items[firstErrorIndex]?.productName;
-            errorMessage = `Verifique os dados para "${errorItemName}". A matemática não fecha.`;
+            errorMessage = `Verifique os dados para "${errorItemName}". A justificativa não bate com a diferença de estoque.`;
         }
       }
 
@@ -271,10 +223,9 @@ function AuditForm({
                               const item = session.items[index];
                               const product = products.find(p => p.id === item.productId);
                               
-                              const adj = watchedItems[index]?.adjustment?.type === 'negative' ? -(Number(watchedItems[index]?.adjustment?.quantity) || 0) : (Number(watchedItems[index]?.adjustment?.quantity) || 0);
-                              const divs = (watchedItems[index]?.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
-                              const finalQty = item.systemQuantity + adj - divs;
-
+                              const countedQty = watchedItems[index]?.countedQuantity ?? item.systemQuantity;
+                              const difference = item.systemQuantity - countedQty;
+                              
                               return (
                                   <Card key={item.lotId} className="flex flex-col">
                                       <div className="p-4 flex gap-4 items-center">
@@ -298,18 +249,28 @@ function AuditForm({
                                                   <Label className="text-xs text-muted-foreground">Estoque Sistema</Label>
                                                   <p className="text-lg font-bold">{item.systemQuantity}</p>
                                               </div>
-                                              <div className="p-2 border rounded-md">
-                                                  <Label className="text-xs text-muted-foreground">Estoque Final</Label>
-                                                  <p className="text-lg font-bold">{finalQty}</p>
-                                              </div>
+                                                <FormField
+                                                  control={form.control}
+                                                  name={`items.${index}.countedQuantity`}
+                                                  render={({ field }) => (
+                                                      <FormItem>
+                                                          <FormLabel>Estoque Contado</FormLabel>
+                                                          <FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl>
+                                                      </FormItem>
+                                                  )}
+                                                />
                                           </div>
-                                          <ReconciliationSection itemIndex={index} control={form.control} form={form} />
-                                          <JustificationSection itemIndex={index} control={form.control} />
+                                          {difference !== 0 && (
+                                              <JustificationSection itemIndex={index} control={form.control} />
+                                          )}
                                       </div>
                                   </Card>
                               );
                           })}
                       </div>
+                       <Button variant="outline" size="sm" className="mt-4" onClick={() => setIsRequestModalOpen(true)}>
+                            <PackagePlus className="mr-2 h-4 w-4"/> Insumo não encontrado
+                        </Button>
                   </ScrollArea>
               </CardContent>
               <CardContent>
@@ -439,6 +400,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
             lotNumber: lot.lotNumber,
             expiryDate: lot.expiryDate || '',
             systemQuantity: systemQuantity,
+            countedQuantity: systemQuantity, // Initialize counted with system
             finalQuantity: systemQuantity,
             divergences: [],
             adjustment: null,
@@ -513,7 +475,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
                         <CardDescription>Inicie uma nova contagem ou continue uma sessão salva para revisão.</CardDescription>
                     </div>
                      {showExportButton && (
-                        <Button onClick={handleExport} variant="outline" size="sm" className="w-full sm:w-auto">
+                        <Button onClick={() => handleExport} variant="outline" size="sm" className="w-full sm:w-auto">
                             <Download className="mr-2 h-4 w-4" />
                             Exportar
                         </Button>
