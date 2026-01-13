@@ -12,7 +12,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
-import { useStockAudit } from '@/hooks/use-stock-audit';
 import { useToast } from '@/hooks/use-toast';
 import { type StockAuditItem, type StockAuditSession, type MovementType, type LotEntry } from '@/types';
 
@@ -38,8 +37,8 @@ import { RequestItemAdditionModal } from './request-item-addition-modal';
 
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
-    { value: 'SAIDA_CONSUMO', label: 'Consumo / Venda' },
-    { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por Vencimento' },
+    { value: 'SAIDA_CONSUMO', label: 'Venda/Consumo' },
+    { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por vencimento' },
     { value: 'SAIDA_DESCARTE_AVARIA', label: 'Descarte por Avaria/Quebra' },
     { value: 'SAIDA_DESCARTE_PERDA', label: 'Extravio de mercadoria' },
     { value: 'SAIDA_DESCARTE_OUTROS', label: 'Outros (especificar)'},
@@ -484,4 +483,3 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     </>
   );
 }
-
