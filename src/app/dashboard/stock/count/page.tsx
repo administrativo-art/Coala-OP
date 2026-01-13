@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ItemAdditionRequestManagement } from "@/components/item-addition-request-management";
 import { useAuth } from "@/hooks/use-auth";
 import { useItemAddition } from "@/hooks/use-item-addition";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +14,6 @@ import { useRouter } from 'next/navigation';
 export default function StockCountPage() {
     const { permissions } = useAuth();
     const { requests, loading } = useItemAddition();
-    const [activeTab, setActiveTab] = useState('count');
     const router = useRouter();
     
     const canManageRequests = permissions.stock.stockCount.approve;
@@ -43,14 +40,9 @@ export default function StockCountPage() {
               </div>
             </div>
             
-            <Tabs defaultValue="count" value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-1">
-                    <TabsTrigger value="count">Contagem e Auditoria</TabsTrigger>
-                </TabsList>
-                <TabsContent value="count" className="mt-4">
-                    <StockSessionManagement />
-                </TabsContent>
-            </Tabs>
+            <div className="mt-4">
+                <StockSessionManagement />
+            </div>
         </div>
     )
 }
