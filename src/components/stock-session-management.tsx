@@ -69,7 +69,7 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
   const { fields, append, remove } = useFieldArray({ control, name: `items.${itemIndex}.divergences` });
   return (
     <Card className="mt-3 p-3 space-y-3 bg-red-500/5">
-        <h4 className="font-semibold text-destructive/80 flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>Registrar Saídas do Turno</h4>
+        <h4 className="font-semibold text-destructive/80 flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>Registrar saídas do turno</h4>
         <div className="space-y-2">
             {fields.map((field, divIndex) => (
                 <div key={field.id} className="p-3 border rounded-md space-y-2 bg-background/50 relative shadow-sm">
@@ -105,7 +105,7 @@ function JustificationSection({ itemIndex, control }: { itemIndex: number, contr
             ))}
         </div>
         <Button type="button" variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => append({ id: `div-${Date.now()}`, reason: 'SAIDA_CONSUMO', quantity: undefined, notes: '' })}>
-            <PlusCircle className="mr-2 h-3 w-3"/> Adicionar Saída
+            <PlusCircle className="mr-2 h-3 w-3"/> Adicionar saída
         </Button>
     </Card>
   );
@@ -235,11 +235,11 @@ function AuditForm({
                                       <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
                                           <div className="grid grid-cols-2 gap-4">
                                               <div className="p-2 border rounded-md">
-                                                  <Label className="text-xs text-muted-foreground">Estoque Sistema</Label>
+                                                  <Label className="text-xs text-muted-foreground">Estoque sistema</Label>
                                                   <p className="text-lg font-bold">{item.systemQuantity}</p>
                                               </div>
                                                 <div className="p-2 border rounded-md bg-muted/30">
-                                                  <Label className="text-xs text-muted-foreground">Estoque Ajustado</Label>
+                                                  <Label className="text-xs text-muted-foreground">Estoque ajustado</Label>
                                                   <p className="text-lg font-bold text-primary">{adjustedQuantity}</p>
                                                 </div>
                                           </div>
@@ -256,10 +256,10 @@ function AuditForm({
               </CardContent>
               <CardContent>
                   <div className="flex justify-between items-center pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isFinalizing || isSaving}>Cancelar Contagem</Button>
+                  <Button type="button" variant="outline" onClick={handleCancelClick} disabled={isFinalizing || isSaving}>Cancelar contagem</Button>
                   <div className="flex gap-2">
                        <Button type="button" variant="secondary" onClick={handleSaveAndExit} disabled={isSaving || isFinalizing}>
-                           {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Salvar e Sair
+                           {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Salvar e sair
                        </Button>
                        <Button type="button" onClick={handleFinalizeClick} disabled={isFinalizing || isSaving}><Check className="mr-2 h-4 w-4"/> Concluir contagem</Button>
                   </div>
