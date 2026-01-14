@@ -167,7 +167,12 @@ function AnalysisTab() {
                  const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                  valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
             } else {
-                throw new Error(`Cannot convert from category ${product.category} to ${baseProduct.category} without a secondary unit.`);
+                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                 if (isFinite(valueOfOnePackageInBase)) {
+                     valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
+                 } else {
+                     throw new Error(`Cannot convert from category ${product.category} to ${baseProduct.category} without a secondary unit.`);
+                 }
             }
 
             currentStock += valueInBaseUnit;
