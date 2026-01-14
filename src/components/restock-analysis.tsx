@@ -1,10 +1,13 @@
 
+
 "use client";
 
 import { useState, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Papa from 'papaparse';
+import dynamic from 'next/dynamic';
+
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -29,6 +32,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/t
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
+
+
+const PDFDownloadLink = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
+  { ssr: false }
+);
+
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -306,6 +317,8 @@ function AnalysisTab() {
     link.click();
     document.body.removeChild(link);
   };
+  
+    const selectedKiosk = useMemo(() => kiosks.find(k => k.id === selectedKioskId), [kiosks, selectedKioskId]);
 
   return (
     <>
@@ -342,11 +355,26 @@ function AnalysisTab() {
                     </TooltipProvider>
                 )}
             </div>
-            {isMatrizSelected && (
-                <Button variant="outline" onClick={handleExportCsv} disabled={analysisResults.filter(item => item.restockNeeded > 0).length === 0}>
-                    <Download className="mr-2 h-4 w-4" /> Exportar Lista de Compras
-                </Button>
-            )}
+            <div className="flex items-center gap-2">
+                {isMatrizSelected && (
+                    <Button variant="outline" onClick={handleExportCsv} disabled={analysisResults.filter(item => item.restockNeeded > 0).length === 0}>
+                        <Download className="mr-2 h-4 w-4" /> Exportar Lista de Compras
+                    </Button>
+                )}
+                {selectedKioskId && !isMatrizSelected && analysisResults.length > 0 && (
+                    <PDFDownloadLink
+                        document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
+                        fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
+                    >
+                        {({ blob, url, loading, error }) => (
+                            <Button variant="outline" disabled={loading}>
+                                <Download className="mr-2 h-4 w-4" />
+                                {loading ? 'Gerando PDF...' : 'Exportar PDF'}
+                            </Button>
+                        )}
+                    </PDFDownloadLink>
+                )}
+            </div>
         </div>
       </CardHeader>
       <CardContent>
