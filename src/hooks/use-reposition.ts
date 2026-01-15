@@ -20,18 +20,6 @@ export interface RepositionContextType {
 
 export const RepositionContext = createContext<RepositionContextType | undefined>(undefined);
 
-// Helper to generate the unique key for a lot
-const destLotIdKey = (params: {
-  productId: string;
-  kioskId: string;
-  expiryDate?: string | null;
-  lotNumber: string;
-}) => {
-  const { productId, kioskId, lotNumber, expiryDate = 'null' } = params;
-  const cleanLotNumber = lotNumber.replace(/[\/\s]/g, '_');
-  return `prod_${productId}__kiosk_${kioskId}__lot_${cleanLotNumber}__exp_${expiryDate}`;
-};
-
 export function RepositionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [activities, setActivities] = useState<RepositionActivity[]>([]);
@@ -172,7 +160,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
                 productName: lot.productName,
                 lotNumber: lot.lotNumber,
                 quantityToMove: receivedQty,
-                originalSentQuantity: lot.quantityToMove, // Pass the original sent quantity
+                originalSentQuantity: lot.quantityToMove,
                 fromKioskId: activity.kioskOriginId,
                 fromKioskName: activity.kioskOriginName,
                 toKioskId: activity.kioskDestinationId,
@@ -302,7 +290,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     finalizeRepositionActivity,
     revertRepositionActivity
   }), [activities, loading, createRepositionActivity, updateRepositionActivity, cancelRepositionActivity, finalizeRepositionActivity, revertRepositionActivity]);
-  
+
   return (
     <RepositionContext.Provider value={value}>
       {children}
