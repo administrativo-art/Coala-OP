@@ -293,27 +293,24 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     }
   }, [user, activities]);
 
-  const value = useMemo(
-    () => ({
-      activities,
-      loading,
-      createRepositionActivity,
-      updateRepositionActivity,
-      cancelRepositionActivity,
-      finalizeRepositionActivity,
-      revertRepositionActivity,
-    }),
-    [
-      activities,
-      loading,
-      createRepositionActivity,
-      updateRepositionActivity,
-      cancelRepositionActivity,
-      finalizeRepositionActivity,
-      revertRepositionActivity,
-    ]
-  );
-  
+  const value = useMemo(() => ({
+    activities,
+    loading,
+    createRepositionActivity,
+    updateRepositionActivity,
+    cancelRepositionActivity,
+    finalizeRepositionActivity,
+    revertRepositionActivity
+  }), [
+    activities,
+    loading,
+    createRepositionActivity,
+    updateRepositionActivity,
+    cancelRepositionActivity,
+    finalizeRepositionActivity,
+    revertRepositionActivity
+  ]);
+
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
 
