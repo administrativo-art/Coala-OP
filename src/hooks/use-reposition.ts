@@ -301,15 +301,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     cancelRepositionActivity,
     finalizeRepositionActivity,
     revertRepositionActivity
-  }), [
-    activities,
-    loading,
-    createRepositionActivity,
-    updateRepositionActivity,
-    cancelRepositionActivity,
-    finalizeRepositionActivity,
-    revertRepositionActivity
-  ]);
+  }), [activities, loading, createRepositionActivity, updateRepositionActivity, cancelRepositionActivity, finalizeRepositionActivity, revertRepositionActivity]);
 
   return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
 }
@@ -321,3 +313,5 @@ export const useReposition = (): RepositionContextType => {
   }
   return context;
 };
+
+    
