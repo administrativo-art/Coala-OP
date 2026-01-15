@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
-import { type RepositionActivity, type RepositionItem, type LotEntry, type MovementRecord, type MovementType } from '@/types';
+import { type RepositionActivity, type RepositionItem, type LotEntry, type MovementRecord, type MovementType, type User } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc, where, getDocs, increment, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -302,7 +302,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     finalizeRepositionActivity,
     revertRepositionActivity
   }), [activities, loading, createRepositionActivity, updateRepositionActivity, cancelRepositionActivity, finalizeRepositionActivity, revertRepositionActivity]);
-  
+
   return (
     <RepositionContext.Provider value={value}>
       {children}
