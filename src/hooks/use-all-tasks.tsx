@@ -63,7 +63,6 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     
     const allLegacyTasks: LegacyTask[] = [];
 
-    // Tarefas de contagem/auditoria pendentes
     if (permissions.stock.stockCount.approve) {
         auditSessions.forEach(session => {
             if (session.status === 'pending_review') {
