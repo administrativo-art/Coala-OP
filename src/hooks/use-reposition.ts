@@ -228,7 +228,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
                 where('reverted', '!=', true) // Only find non-reverted movements
             );
             const movementDocs = (await getDocs(movementsQuery)).docs;
-            const entryMovements = movementDocs.map(d => d.data() as MovementRecord).filter(m => m.type === 'TRANSFERENCIA_ENTRADA');
+            const entryMovements = movementDocs.map(d => ({id: d.id, ...d.data()} as MovementRecord)).filter(m => m.type === 'TRANSFERENCIA_ENTRADA');
 
             if (entryMovements.length === 0) {
                  console.log("No entry movements found to revert for this activity. Updating status only.");
