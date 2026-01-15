@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from './ui/skeleton';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from './ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2, PlusCircle, Inbox } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory, type RepositionActivity } from '@/types';
@@ -146,7 +146,9 @@ function AnalysisTab() {
 
         try {
             let valueInBaseUnit = 0;
-            const quantityInPackages = lot.quantity;
+            // Use available quantity for analysis (total - reserved)
+            const availableQuantity = (lot.quantity || 0) - (lot.reservedQuantity || 0);
+            if (availableQuantity <= 0) continue;
 
             if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
                  let secondaryUnitCategory: UnitCategory | undefined;
@@ -160,19 +162,10 @@ function AnalysisTab() {
                     throw new Error(`Unidade secundária inválida ou não categorizada: ${product.secondaryUnit}`);
                 }
                 const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
-            } else if (baseProduct.category === 'Unidade') {
-                valueInBaseUnit = quantityInPackages * product.packageSize;
-            } else if (product.category === baseProduct.category) {
-                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                 valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
+                valueInBaseUnit = availableQuantity * valueOfOnePackageInBase;
             } else {
                  const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                 if (isFinite(valueOfOnePackageInBase)) {
-                     valueInBaseUnit = quantityInPackages * valueOfOnePackageInBase;
-                 } else {
-                     throw new Error(`Cannot convert from category ${product.category} to ${baseProduct.category} without a secondary unit.`);
-                 }
+                 valueInBaseUnit = availableQuantity * valueOfOnePackageInBase;
             }
 
             currentStock += valueInBaseUnit;
@@ -229,12 +222,8 @@ function AnalysisTab() {
                         }
                        if (!secondaryUnitCategory) continue;
                        unitsPerPackage = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                    } else if (baseProduct.category === 'Unidade') {
-                       unitsPerPackage = product.packageSize;
-                    } else if (product.category === baseProduct.category) {
-                       unitsPerPackage = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                     } else {
-                        continue;
+                       unitsPerPackage = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                     }
                 } catch {
                     continue;
