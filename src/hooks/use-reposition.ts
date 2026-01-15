@@ -20,6 +20,18 @@ export interface RepositionContextType {
 
 export const RepositionContext = createContext<RepositionContextType | undefined>(undefined);
 
+// Helper to generate the unique key for a lot
+const destLotIdKey = (params: {
+  productId: string;
+  kioskId: string;
+  expiryDate?: string | null;
+  lotNumber: string;
+}) => {
+  const { productId, kioskId, lotNumber, expiryDate = 'null' } = params;
+  const cleanLotNumber = lotNumber.replace(/[\/\s]/g, '_');
+  return `prod_${productId}__kiosk_${kioskId}__lot_${cleanLotNumber}__exp_${expiryDate}`;
+};
+
 export function RepositionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [activities, setActivities] = useState<RepositionActivity[]>([]);
