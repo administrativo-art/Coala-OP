@@ -293,7 +293,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     }
   }, [user, activities]);
 
-  const value: RepositionContextType = useMemo(() => ({
+  const value = useMemo(() => ({
     activities,
     loading,
     createRepositionActivity,
@@ -303,7 +303,11 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     revertRepositionActivity
   }), [activities, loading, createRepositionActivity, updateRepositionActivity, cancelRepositionActivity, finalizeRepositionActivity, revertRepositionActivity]);
   
-  return <RepositionContext.Provider value={value}>{children}</RepositionContext.Provider>;
+  return (
+    <RepositionContext.Provider value={value}>
+      {children}
+    </RepositionContext.Provider>
+  );
 }
 
 export const useReposition = (): RepositionContextType => {
@@ -313,4 +317,3 @@ export const useReposition = (): RepositionContextType => {
   }
   return context;
 };
-    
