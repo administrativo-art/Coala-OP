@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type RepositionActivity, type RepositionItem, type LotEntry, type MovementRecord } from '@/types';
+import { type RepositionActivity, type RepositionItem, type LotEntry, type MovementRecord, type MovementType } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc, where, getDocs, increment } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
