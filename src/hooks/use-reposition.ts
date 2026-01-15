@@ -138,6 +138,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   
     try {
       await runTransaction(db, async (transaction) => {
+        // 1. Mark the activity as cancelled
         const activityRef = doc(db, 'repositionActivities', activityId);
         transaction.update(activityRef, { status: 'Cancelada', updatedAt: new Date().toISOString() });
         
@@ -302,7 +303,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     finalizeRepositionActivity,
     revertRepositionActivity
   }), [activities, loading, createRepositionActivity, updateRepositionActivity, cancelRepositionActivity, finalizeRepositionActivity, revertRepositionActivity]);
-
+  
   return (
     <RepositionContext.Provider value={value}>
       {children}
@@ -317,3 +318,5 @@ export const useReposition = (): RepositionContextType => {
   }
   return context;
 };
+
+  
