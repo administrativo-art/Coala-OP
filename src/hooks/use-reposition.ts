@@ -293,7 +293,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     }
   }, [user, activities]);
 
-  const value = useMemo(() => ({
+  const value: RepositionContextType = useMemo(() => ({
     activities,
     loading,
     createRepositionActivity,
@@ -313,3 +313,4 @@ export const useReposition = (): RepositionContextType => {
   }
   return context;
 };
+    
