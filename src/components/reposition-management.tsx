@@ -123,19 +123,13 @@ export function RepositionManagement() {
                                 </div>
                             </AccordionTrigger>
                             {permissions.reposition.cancel && (
-                                <DeleteConfirmationDialog
-                                    open={false}
-                                    onOpenChange={()=>{}}
-                                    onConfirm={handleCancelConfirm}
-                                    itemName={`a atividade de reposição`}
-                                    description="Esta ação não pode ser desfeita. O estoque reservado será liberado e a atividade será movida para o histórico como cancelada."
-                                    confirmButtonText="Sim, cancelar atividade"
-                                    triggerButton={
-                                        <Button variant="ghost" size="icon" className="ml-2 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setActivityToCancel(activity); }}>
-                                            <Ban className="h-4 w-4" />
-                                        </Button>
-                                    }
-                                />
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="ml-2 text-destructive hover:text-destructive" 
+                                    onClick={(e) => { e.stopPropagation(); setActivityToCancel(activity); }}>
+                                    <Ban className="h-4 w-4" />
+                                </Button>
                             )}
                         </div>
                         <AccordionContent className="p-4 pt-0">
@@ -224,6 +218,17 @@ export function RepositionManagement() {
             <AuditReceiptModal
                 activity={activityToAudit}
                 onOpenChange={() => setActivityToAudit(null)}
+            />
+        )}
+        
+        {activityToCancel && (
+            <DeleteConfirmationDialog
+                open={!!activityToCancel}
+                onOpenChange={() => setActivityToCancel(null)}
+                onConfirm={handleCancelConfirm}
+                itemName={`a atividade de reposição`}
+                description="Esta ação não pode ser desfeita. O estoque reservado será liberado e a atividade será movida para o histórico como cancelada."
+                confirmButtonText="Sim, cancelar atividade"
             />
         )}
 
