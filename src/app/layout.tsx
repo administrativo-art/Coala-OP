@@ -16,7 +16,7 @@ import { CompanySettingsProvider } from '@/components/company-settings-provider'
 import { EntitiesProvider } from '@/components/entities-provider';
 import { PurchaseProvider } from '@/components/purchase-provider';
 import { ItemAdditionProvider } from '@/components/item-addition-provider';
-import { RepositionProvider } from '@/components/reposition-provider';
+import { RepositionProvider } from '@/hooks/use-reposition';
 import { ProductSimulationProvider } from '@/components/product-simulation-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ProductSimulationCategoryProvider } from '@/components/product-simulation-category-provider';

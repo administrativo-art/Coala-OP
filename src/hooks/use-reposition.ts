@@ -1,1 +1,1 @@
-// This file has been renamed to use-reposition.tsx
+// This file is obsolete and has been removed.
