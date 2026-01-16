@@ -40,9 +40,6 @@ const PDFDownloadLink = dynamic(
   { ssr: false }
 );
 
-const PDFDownloadLinkWithAny = PDFDownloadLink as any;
-
-
 interface SuggestedLot {
     lot: LotEntry;
     quantityToMove: number;
@@ -357,8 +354,8 @@ function AnalysisTab() {
                         <Download className="mr-2 h-4 w-4" /> Exportar Lista de Compras
                     </Button>
                 )}
-                {selectedKioskId && !isMatrizSelected && analysisResults.length > 0 && (
-                    <PDFDownloadLinkWithAny
+                {selectedKioskId && !isMatrizSelected && analysisResults.length > 0 && PDFDownloadLink && (
+                    <PDFDownloadLink
                         document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
                         fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
                     >
@@ -368,7 +365,7 @@ function AnalysisTab() {
                                 {loading ? 'Gerando PDF...' : 'Exportar PDF'}
                             </Button>
                         )}
-                    </PDFDownloadLinkWithAny>
+                    </PDFDownloadLink>
                 )}
             </div>
         </div>
@@ -491,9 +488,10 @@ function AnalysisTab() {
 }
 
 function RepositionHistory() {
-    const { activities, loading } = useReposition();
-    const { permissions } = useAuth();
+    const { activities, loading, revertRepositionActivity } = useReposition();
+    const { user, permissions } = useAuth();
     const [isReverting, setIsReverting] = useState(false);
+    const [activityToRevert, setActivityToRevert] = useState<RepositionActivity | null>(null);
     const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
 
     const historicalActivities = useMemo(() => {
@@ -506,6 +504,19 @@ function RepositionHistory() {
     }, [activities, statusFilter]);
 
     if (loading) return <Skeleton className="h-64 w-full" />;
+    
+    const handleRevertConfirm = async () => {
+        if (!activityToRevert) return;
+        setIsReverting(true);
+        try {
+            await revertRepositionActivity(activityToRevert.id);
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setIsReverting(false);
+            setActivityToRevert(null);
+        }
+    };
     
     const hasAnyHistory = activities.some((a: RepositionActivity) => a.status === 'Concluído' || a.status === 'Cancelada');
 
@@ -598,6 +609,13 @@ function RepositionHistory() {
                                         </TableBody>
                                     </Table>
                                     </div>
+                                    <div className="flex justify-end pt-2">
+                                        {activity.status === 'Concluído' && permissions.reposition.cancel && (
+                                            <Button variant="outline" size="sm" onClick={() => setActivityToRevert(activity)}>
+                                                <Undo2 className="mr-2 h-4 w-4" /> Reverter Movimentação
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                                 </AccordionContent>
                             </AccordionItem>
@@ -606,6 +624,17 @@ function RepositionHistory() {
                 )}
             </CardContent>
         </Card>
+        {activityToRevert && (
+            <DeleteConfirmationDialog
+                open={!!activityToRevert}
+                onOpenChange={() => setActivityToRevert(null)}
+                onConfirm={handleRevertConfirm}
+                isDeleting={isReverting}
+                title="Reverter Movimentação?"
+                description={<p>Esta ação irá estornar esta transferência e reabrir a atividade de reposição. <strong>Esta ação é irreversível.</strong></p>}
+                confirmButtonText="Sim, reverter"
+            />
+        )}
     </>
     );
 }
@@ -630,5 +659,3 @@ export function RestockAnalysis() {
     </Tabs>
   );
 }
-
-    
