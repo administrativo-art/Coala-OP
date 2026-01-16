@@ -36,9 +36,10 @@ import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 
 
 const PDFDownloadLinkWithAny = dynamic(
-  () => import('@react-pdf/renderer').then(mod => mod => mod.PDFDownloadLink),
+  () => import('@react-pdf/renderer').then((mod) => mod.PDFDownloadLink),
   { ssr: false }
 ) as any;
+
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -518,7 +519,7 @@ function RepositionHistory() {
         }
     };
     
-    const hasAnyHistory = activities.some((a: RepositionActivity) => a.status === 'Concluído' || a.status === 'Cancelada');
+    const hasAnyHistory = activities.some((a) => a.status === 'Concluído' || a.status === 'Cancelada');
 
     if (!hasAnyHistory) {
          return (
