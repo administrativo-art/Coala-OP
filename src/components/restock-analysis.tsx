@@ -33,7 +33,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
-import type { BlobProviderParams } from '@react-pdf/renderer';
 
 
 const PDFDownloadLink = dynamic(
@@ -361,7 +360,7 @@ function AnalysisTab() {
                         document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
                         fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
                     >
-                        {({ blob, url, loading, error }: BlobProviderParams) => (
+                        {({ loading }) => (
                             <Button variant="outline" disabled={loading}>
                                 <Download className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando PDF...' : 'Exportar PDF'}
@@ -577,7 +576,7 @@ function RepositionHistory() {
                                         <TableBody>
                                             {activity.items.flatMap((item: RepositionItem) => 
                                                 item.suggestedLots.map((lot: RepositionSuggestedLot) => {
-                                                    const receivedLot = activity.items.flatMap((i: RepositionItem) => i.receivedLots || []).find((rl: RepositionSuggestedLot & { receivedQuantity: number }) => rl.lotId === lot.lotId);
+                                                    const receivedLot = activity.items.flatMap((i: RepositionItem) => i.receivedLots || []).find((rl) => rl.lotId === lot.lotId);
                                                     const receivedQty = receivedLot?.receivedQuantity;
                                                     const sentQty = lot.quantityToMove;
                                                     const isDivergent = receivedQty !== undefined && sentQty !== receivedQty;

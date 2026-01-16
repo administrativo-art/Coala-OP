@@ -751,3 +751,13 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
+
+export interface RepositionContextType {
+  activities: RepositionActivity[];
+  loading: boolean;
+  createRepositionActivity: (data: Omit<RepositionActivity, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'requestedBy'>) => Promise<string | null>;
+  updateRepositionActivity: (activityId: string, updates: Partial<RepositionActivity>) => Promise<void>;
+  cancelRepositionActivity: (activityId: string) => Promise<void>;
+  finalizeRepositionActivity: (activity: RepositionActivity) => Promise<void>;
+  revertRepositionActivity: (activityId: string) => Promise<void>;
+}
