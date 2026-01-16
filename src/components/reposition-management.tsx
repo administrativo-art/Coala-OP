@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "./ui/skeleton";
 import { Card } from "./ui/card";
 import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban } from "lucide-react";
-import { type RepositionActivity } from "@/types";
+import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot } from "@/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -58,7 +58,7 @@ export function RepositionManagement() {
         )
     }
     
-    const activeActivities = activities.filter(activity => activity.status !== 'Concluído' && activity.status !== 'Cancelada');
+    const activeActivities = activities.filter((activity: RepositionActivity) => activity.status !== 'Concluído' && activity.status !== 'Cancelada');
 
     if (activeActivities.length === 0) {
         return (
@@ -105,7 +105,7 @@ export function RepositionManagement() {
     return (
         <>
         <div className="space-y-3">
-            {activeActivities.map(activity => (
+            {activeActivities.map((activity: RepositionActivity) => (
                 <Accordion type="single" collapsible key={activity.id}>
                     <AccordionItem value={activity.id} className="border rounded-lg">
                         <div className="flex items-center p-4">
@@ -134,17 +134,17 @@ export function RepositionManagement() {
                         </div>
                         <AccordionContent className="p-4 pt-0">
                              <div className="space-y-4">
-                                {activity.items.map((item, index) => {
+                                {activity.items.map((item: RepositionItem, index: number) => {
                                     const hasBeenAudited = activity.status.startsWith('Recebido');
 
                                     return (
                                         <div key={index} className="p-3 border rounded-md bg-muted/50">
                                             <p className="font-semibold">{item.productName}</p>
                                             <ul className="list-disc pl-5 mt-1 text-sm space-y-1">
-                                                {(hasBeenAudited ? item.receivedLots : item.suggestedLots)?.map(lot => {
-                                                    const originalLot = item.suggestedLots.find(sl => sl.lotId === lot.lotId);
+                                                {(hasBeenAudited ? item.receivedLots : item.suggestedLots)?.map((lot: RepositionSuggestedLot & { receivedQuantity?: number }) => {
+                                                    const originalLot = item.suggestedLots.find((sl: RepositionSuggestedLot) => sl.lotId === lot.lotId);
                                                     const sentQty = originalLot?.quantityToMove || 0;
-                                                    const receivedQty = (lot as any).receivedQuantity;
+                                                    const receivedQty = lot.receivedQuantity;
                                                     const hasDivergence = hasBeenAudited && receivedQty !== sentQty;
                                                     
                                                     return (

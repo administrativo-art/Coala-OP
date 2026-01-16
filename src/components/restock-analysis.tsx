@@ -20,7 +20,7 @@ import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2, PlusCircle, Inbox } from 'lucide-react';
-import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory, type RepositionActivity } from '@/types';
+import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory, type RepositionActivity, type RepositionSuggestedLot } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { RestockSuggestionModal } from './restock-suggestion-modal';
@@ -33,6 +33,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
+import type { BlobProviderParams } from '@react-pdf/renderer';
 
 
 const PDFDownloadLink = dynamic(
@@ -360,7 +361,7 @@ function AnalysisTab() {
                         document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
                         fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
                     >
-                        {({ blob, url, loading, error }) => (
+                        {({ blob, url, loading, error }: BlobProviderParams) => (
                             <Button variant="outline" disabled={loading}>
                                 <Download className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando PDF...' : 'Exportar PDF'}
@@ -495,7 +496,7 @@ function RepositionHistory() {
     const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
 
     const historicalActivities = useMemo(() => {
-        return activities.filter(activity => {
+        return activities.filter((activity: RepositionActivity) => {
             if (statusFilter === 'all') {
                 return activity.status === 'Concluído' || activity.status === 'Cancelada';
             }
@@ -505,7 +506,7 @@ function RepositionHistory() {
 
     if (loading) return <Skeleton className="h-64 w-full" />;
     
-    const hasAnyHistory = activities.some(a => a.status === 'Concluído' || a.status === 'Cancelada');
+    const hasAnyHistory = activities.some((a: RepositionActivity) => a.status === 'Concluído' || a.status === 'Cancelada');
 
     if (!hasAnyHistory) {
          return (
@@ -540,7 +541,7 @@ function RepositionHistory() {
                     </div>
                 ) : (
                     <Accordion type="multiple" className="w-full space-y-3">
-                        {historicalActivities.map(activity => {
+                        {historicalActivities.map((activity: RepositionActivity) => {
                             const hasDivergence = activity.status === 'Recebido com divergência';
                             
                             return (
@@ -574,9 +575,9 @@ function RepositionHistory() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {activity.items.flatMap(item => 
-                                                item.suggestedLots.map(lot => {
-                                                    const receivedLot = activity.items.flatMap(i => i.receivedLots || []).find(rl => rl.lotId === lot.lotId);
+                                            {activity.items.flatMap((item: RepositionItem) => 
+                                                item.suggestedLots.map((lot: RepositionSuggestedLot) => {
+                                                    const receivedLot = activity.items.flatMap((i: RepositionItem) => i.receivedLots || []).find((rl: RepositionSuggestedLot & { receivedQuantity: number }) => rl.lotId === lot.lotId);
                                                     const receivedQty = receivedLot?.receivedQuantity;
                                                     const sentQty = lot.quantityToMove;
                                                     const isDivergent = receivedQty !== undefined && sentQty !== receivedQty;

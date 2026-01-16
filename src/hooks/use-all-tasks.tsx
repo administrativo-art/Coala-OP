@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useContext, useMemo } from 'react';
@@ -9,7 +10,7 @@ import { useReturnRequests } from './use-return-requests';
 import { useStockAudit } from './use-stock-audit';
 import { useItemAddition } from './use-item-addition';
 import { ClipboardCheck, Truck, ShieldAlert, ListOrdered, PackagePlus } from 'lucide-react';
-import { type Task } from '@/types';
+import { type Task, type RepositionActivity } from '@/types';
 
 export interface LegacyTask {
   id: string;
@@ -78,7 +79,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
         });
     }
 
-    repositionActivities.forEach(activity => {
+    repositionActivities.forEach((activity: RepositionActivity) => {
         if (activity.status === 'Aguardando despacho' && user.username === 'Tiago Brasil') {
              allLegacyTasks.push({
                 id: `dispatch-${activity.id}`,

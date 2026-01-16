@@ -1,5 +1,4 @@
 
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 
@@ -752,4 +751,3 @@ export type PriceDecision = {
     changedAt: string; // ISO String
     origin: 'manual' | 'sugerido';
 };
-

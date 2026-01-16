@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
@@ -268,7 +269,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
             
             for (const item of activityToRevert.items) {
                 for (const lot of item.suggestedLots) {
-                     const lotRef = doc(db, 'lots', lot.id);
+                     const lotRef = doc(db, 'lots', lot.lotId);
                      transaction.update(lotRef, { reservedQuantity: increment(lot.quantityToMove) });
                 }
             }

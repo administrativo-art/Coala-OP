@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import Image from 'next/image';
@@ -10,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Pencil, Trash2, Truck, History, QrCode, MinusCircle, Eye, LineChart, Shield, Database, Copy } from 'lucide-react';
-import { type Kiosk, type LotEntry, type Product, type Location, type BaseProduct, type RepositionActivity, type MovementType } from '@/types';
+import { type Kiosk, type LotEntry, type Product, type Location, type BaseProduct, type RepositionActivity, type MovementType, type RepositionItem, type RepositionSuggestedLot } from '@/types';
 import { useMemo, useState } from 'react';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { labelSizes } from '@/lib/label-sizes';
@@ -218,19 +219,19 @@ export function LotCard({
     if (!lot.reservedQuantity || lot.reservedQuantity <= 0) {
       return null;
     }
-  
-    const reservationDetails: { [kioskName: string]: number } = {};
-  
-    const relevantActivities = activities.filter(act => 
+
+    const relevantActivities = activities.filter((act: RepositionActivity) => 
         (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento') &&
-        act.items.some(item => 
-          item.suggestedLots.some(sl => sl.lotId === lot.id)
+        act.items.some((item: RepositionItem) => 
+          item.suggestedLots.some((sl: RepositionSuggestedLot) => sl.lotId === lot.id)
         )
     );
   
-    relevantActivities.forEach(act => {
-      act.items.forEach(item => {
-        item.suggestedLots.forEach(sl => {
+    const reservationDetails: { [kioskName: string]: number } = {};
+  
+    relevantActivities.forEach((act: RepositionActivity) => {
+      act.items.forEach((item: RepositionItem) => {
+        item.suggestedLots.forEach((sl: RepositionSuggestedLot) => {
           if (sl.lotId === lot.id) {
             const destName = act.kioskDestinationName.split(' ')[1] || act.kioskDestinationName;
             reservationDetails[destName] = (reservationDetails[destName] || 0) + sl.quantityToMove;
