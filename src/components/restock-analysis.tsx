@@ -6,6 +6,7 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Papa from 'papaparse';
 import dynamic from 'next/dynamic';
+import type { BlobProviderParams } from '@react-pdf/renderer';
 
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -32,7 +33,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
-import type { BlobProviderParams } from '@react-pdf/renderer';
 
 
 const PDFDownloadLink = dynamic(
@@ -313,6 +313,13 @@ function AnalysisTab() {
   
     const selectedKiosk = useMemo(() => kiosks.find(k => k.id === selectedKioskId), [kiosks, selectedKioskId]);
 
+    const renderDownloadButton = ({ loading }: BlobProviderParams) => (
+      <Button variant="outline" disabled={loading}>
+          <Download className="mr-2 h-4 w-4" />
+          {loading ? 'Gerando PDF...' : 'Exportar PDF'}
+      </Button>
+    );
+
   return (
     <>
     <Card>
@@ -359,12 +366,7 @@ function AnalysisTab() {
                         document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
                         fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
                     >
-                        {({ loading }: BlobProviderParams) => (
-                            <Button variant="outline" disabled={loading}>
-                                <Download className="mr-2 h-4 w-4" />
-                                {loading ? 'Gerando PDF...' : 'Exportar PDF'}
-                            </Button>
-                        ) as any}
+                        {renderDownloadButton}
                     </PDFDownloadLink>
                 )}
             </div>
@@ -495,7 +497,7 @@ function RepositionHistory() {
     const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
 
     const historicalActivities = useMemo(() => {
-        return activities.filter((activity) => {
+        return activities.filter((activity: RepositionActivity) => {
             if (statusFilter === 'all') {
                 return activity.status === 'Concluído' || activity.status === 'Cancelada';
             }
@@ -518,7 +520,7 @@ function RepositionHistory() {
         }
     };
     
-    const hasAnyHistory = activities.some((a) => a.status === 'Concluído' || a.status === 'Cancelada');
+    const hasAnyHistory = activities.some((a: RepositionActivity) => a.status === 'Concluído' || a.status === 'Cancelada');
 
     if (!hasAnyHistory) {
          return (
