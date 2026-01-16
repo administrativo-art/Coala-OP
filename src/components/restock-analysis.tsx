@@ -365,7 +365,7 @@ function AnalysisTab() {
                                 <Download className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando PDF...' : 'Exportar PDF'}
                             </Button>
-                        )}
+                        ) as any}
                     </PDFDownloadLink>
                 )}
             </div>
@@ -628,3 +628,5 @@ export function RestockAnalysis() {
     </Tabs>
   );
 }
+
+    
