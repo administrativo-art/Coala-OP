@@ -40,6 +40,8 @@ const PDFDownloadLink = dynamic(
   { ssr: false }
 );
 
+const PDFDownloadLinkWithAny = PDFDownloadLink as any;
+
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -356,7 +358,7 @@ function AnalysisTab() {
                     </Button>
                 )}
                 {selectedKioskId && !isMatrizSelected && analysisResults.length > 0 && (
-                    <PDFDownloadLink
+                    <PDFDownloadLinkWithAny
                         document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
                         fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
                     >
@@ -365,8 +367,8 @@ function AnalysisTab() {
                                 <Download className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando PDF...' : 'Exportar PDF'}
                             </Button>
-                        ) as any}
-                    </PDFDownloadLink>
+                        )}
+                    </PDFDownloadLinkWithAny>
                 )}
             </div>
         </div>
