@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Papa from 'papaparse';
@@ -364,7 +364,7 @@ function AnalysisTab() {
                                 <Download className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando PDF...' : 'Exportar PDF'}
                             </Button>
-                        )}
+                        ) as any}
                     </PDFDownloadLink>
                 )}
             </div>
@@ -495,7 +495,7 @@ function RepositionHistory() {
     const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
 
     const historicalActivities = useMemo(() => {
-        return activities.filter((activity: RepositionActivity) => {
+        return activities.filter((activity) => {
             if (statusFilter === 'all') {
                 return activity.status === 'Concluído' || activity.status === 'Cancelada';
             }
@@ -518,7 +518,7 @@ function RepositionHistory() {
         }
     };
     
-    const hasAnyHistory = activities.some((a: RepositionActivity) => a.status === 'Concluído' || a.status === 'Cancelada');
+    const hasAnyHistory = activities.some((a) => a.status === 'Concluído' || a.status === 'Cancelada');
 
     if (!hasAnyHistory) {
          return (
@@ -553,7 +553,7 @@ function RepositionHistory() {
                     </div>
                 ) : (
                     <Accordion type="multiple" className="w-full space-y-3">
-                        {historicalActivities.map((activity: RepositionActivity) => {
+                        {historicalActivities.map((activity) => {
                             const hasDivergence = activity.status === 'Recebido com divergência';
                             
                             return (
