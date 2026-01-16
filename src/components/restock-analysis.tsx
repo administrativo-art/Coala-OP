@@ -35,10 +35,10 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 
 
-const PDFDownloadLink = dynamic(
-  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
+const PDFDownloadLinkWithAny = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod => mod.PDFDownloadLink),
   { ssr: false }
-);
+) as any;
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -313,13 +313,6 @@ function AnalysisTab() {
   
     const selectedKiosk = useMemo(() => kiosks.find(k => k.id === selectedKioskId), [kiosks, selectedKioskId]);
 
-    const renderDownloadButton = ({ loading }: BlobProviderParams) => (
-      <Button variant="outline" disabled={loading}>
-          <Download className="mr-2 h-4 w-4" />
-          {loading ? 'Gerando PDF...' : 'Exportar PDF'}
-      </Button>
-    );
-
   return (
     <>
     <Card>
@@ -361,13 +354,18 @@ function AnalysisTab() {
                         <Download className="mr-2 h-4 w-4" /> Exportar Lista de Compras
                     </Button>
                 )}
-                {selectedKioskId && !isMatrizSelected && analysisResults.length > 0 && PDFDownloadLink && (
-                    <PDFDownloadLink
+                {selectedKioskId && !isMatrizSelected && analysisResults.length > 0 && PDFDownloadLinkWithAny && (
+                    <PDFDownloadLinkWithAny
                         document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
                         fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
                     >
-                        {renderDownloadButton}
-                    </PDFDownloadLink>
+                        {({ loading }: BlobProviderParams) => (
+                            <Button variant="outline" disabled={loading}>
+                                <Download className="mr-2 h-4 w-4" />
+                                {loading ? 'Gerando PDF...' : 'Exportar PDF'}
+                            </Button>
+                        )}
+                    </PDFDownloadLinkWithAny>
                 )}
             </div>
         </div>
@@ -661,3 +659,5 @@ export function RestockAnalysis() {
     </Tabs>
   );
 }
+
+    
