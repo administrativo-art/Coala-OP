@@ -3,7 +3,7 @@
 
 import * as React from 'react';
 import { useState, useMemo, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -35,7 +35,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickProjectionModal } from './quick-projection-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useReposition } from '@/hooks/use-reposition';
-import { useRouter } from 'next/navigation';
+import { ToastAction } from './ui/toast';
+import { useToast } from '@/hooks/use-toast';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -114,15 +115,16 @@ function ActiveReservationsSummary() {
     <Card className="mb-6 bg-blue-500/10 border-blue-500/20">
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-blue-800 dark:text-blue-300">
-          <Shield /> Reservas Ativas na Matriz ({summary.total} itens)
+          <Shield /> Reservas Ativas na Matriz
         </CardTitle>
         <CardDescription>
-          Os itens abaixo estão reservados na Matriz e aguardando para serem enviados aos quiosques.
+          Existem itens reservados na Matriz aguardando envio para os quiosques. O total de itens reservados é de <strong>{summary.total}</strong>.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {summary.destinations.length > 0 && (
            <div className="flex flex-wrap gap-x-4 gap-y-1">
+             <p className="text-sm font-medium">Destinos:</p>
              {summary.destinations.map(dest => (
                <p key={dest.name} className="text-sm">
                  <span className="font-semibold">{dest.name}:</span> {dest.count} itens
@@ -148,10 +150,13 @@ function ExpiryControlContent() {
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots } = useExpiryProducts();
   const { products, loading: productsLoading, getProductFullName } = useProducts();
-  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { locations, loading: locationsLoading } = useLocations();
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
 
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { toast } = useToast();
+
   const scannedLotId = searchParams.get('lotId');
   const searchQuery = searchParams.get('search');
   const kioskQuery = searchParams.get('kioskId');
@@ -416,7 +421,11 @@ function ExpiryControlContent() {
   const canManageProducts = permissions.registration.items.add || permissions.registration.items.edit || permissions.registration.items.delete;
 
   const handleExportPdf = () => {
-    alert("A exportação de PDF está em manutenção.");
+    toast({
+        title: "Exportação em manutenção",
+        description: "A função de exportar para PDF está sendo atualizada. Tente a exportação para CSV.",
+        variant: "destructive",
+    })
   };
   
   const handleExportCsv = () => {
