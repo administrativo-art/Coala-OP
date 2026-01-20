@@ -215,39 +215,44 @@ export function LotCard({
     );
   };
   
-  const getReservationDetails = (lot: LotEntry) => {
-    if (!lot.reservedQuantity || lot.reservedQuantity <= 0) {
-      return null;
-    }
+    const getReservationDetails = (lot: LotEntry) => {
+        if (!lot.reservedQuantity || lot.reservedQuantity <= 0) {
+            return null;
+        }
 
-    const relevantActivities = activities.filter((act: RepositionActivity) => 
-        (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento') &&
-        act.items.some((item: RepositionItem) => 
-          item.suggestedLots.some((sl: RepositionSuggestedLot) => sl.lotId === lot.id)
-        )
-    );
-  
-    const reservationDetails: { [kioskName: string]: number } = {};
-  
-    relevantActivities.forEach((act: RepositionActivity) => {
-      act.items.forEach((item: RepositionItem) => {
-        item.suggestedLots.forEach((sl: RepositionSuggestedLot) => {
-          if (sl.lotId === lot.id) {
-            const destName = act.kioskDestinationName.split(' ')[1] || act.kioskDestinationName;
-            reservationDetails[destName] = (reservationDetails[destName] || 0) + sl.quantityToMove;
-          }
+        const relevantActivities = activities.filter((act: RepositionActivity) => 
+            (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento') &&
+            act.items.some((item: RepositionItem) => 
+            item.suggestedLots.some((sl: RepositionSuggestedLot) => sl.lotId === lot.id)
+            )
+        );
+    
+        const reservationDetails: { [kioskName: string]: { quantity: number; status: string } } = {};
+    
+        relevantActivities.forEach((act: RepositionActivity) => {
+        act.items.forEach((item: RepositionItem) => {
+            item.suggestedLots.forEach((sl: RepositionSuggestedLot) => {
+            if (sl.lotId === lot.id) {
+                const destName = act.kioskDestinationName;
+                if (!reservationDetails[destName]) {
+                    reservationDetails[destName] = { quantity: 0, status: act.status };
+                }
+                reservationDetails[destName].quantity += sl.quantityToMove;
+            }
+            });
         });
-      });
-    });
-  
-    if (Object.keys(reservationDetails).length === 0) {
-      return 'em processo';
-    }
-  
-    return Object.entries(reservationDetails)
-      .map(([name, qty]) => `${name}: ${qty}`)
-      .join(', ');
-  };
+        });
+    
+        if (Object.keys(reservationDetails).length === 0) {
+        return null;
+        }
+    
+        return Object.entries(reservationDetails).map(([destination, data]) => ({
+            destination,
+            quantity: data.quantity,
+            status: data.status,
+        }));
+    };
 
 
   return (
@@ -302,7 +307,7 @@ export function LotCard({
             {productGroup.lots.map(lot => {
                 const locationName = getLocationName(lot.locationId);
                 const status = getStatus(lot, product);
-                const reservationInfo = getReservationDetails(lot);
+                const reservationDetails = getReservationDetails(lot);
                 
                 let totalUnits: number;
                 let totalUnitsLabel: string;
@@ -321,66 +326,78 @@ export function LotCard({
                 }
 
                 return (
-                    <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 border rounded-md bg-muted/50">
-                        <div>
-                            <div className="flex items-center gap-2 mb-1">
-                                <div className="font-semibold flex items-center gap-1">
-                                    Lote: {lot.lotNumber}
-                                   {user?.username === 'Tiago Brasil' && (
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger>
-                                                  <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleCopyId(lot.id)}>
-                                                    <Database className="h-3 w-3 text-muted-foreground" />
-                                                    <Copy className="h-3 w-3 text-muted-foreground" />
-                                                  </div>
-                                                </TooltipTrigger>
-                                                <TooltipContent className="flex items-center gap-2">
-                                                    <p className="font-mono text-xs">{lot.id}</p>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                    )}
-                                </div>
-                                <Badge variant={status.variant as any} className={status.className}>
-                                    {status.text}
-                                </Badge>
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                <p><strong>Local:</strong> {getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
-                                {lot.expiryDate && <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>}
-                                {lot.reservedQuantity && lot.reservedQuantity > 0 && (
-                                    <div className="text-blue-600 font-bold flex items-center gap-1">
-                                        <Shield className="h-3 w-3"/>
-                                        Reserva: {lot.reservedQuantity} {reservationInfo && <span className="text-xs font-normal text-muted-foreground">({reservationInfo})</span>}
+                    <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-1 items-center gap-4 p-3 border rounded-md bg-muted/50">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="font-semibold flex items-center gap-1">
+                                        Lote: {lot.lotNumber}
+                                    {user?.username === 'Tiago Brasil' && (
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleCopyId(lot.id)}>
+                                                        <Database className="h-3 w-3 text-muted-foreground" />
+                                                        <Copy className="h-3 w-3 text-muted-foreground" />
+                                                    </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="flex items-center gap-2">
+                                                        <p className="font-mono text-xs">{lot.id}</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        )}
                                     </div>
+                                    <Badge variant={status.variant as any} className={status.className}>
+                                        {status.text}
+                                    </Badge>
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                    <p><strong>Local:</strong> {getKioskName(lot.kioskId)}{locationName && ` / ${locationName}`}</p>
+                                    {lot.expiryDate && <p><strong>Validade:</strong> {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}</p>}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {isRedundant ? (
+                                    <div className="text-center p-2 rounded-md bg-background w-28">
+                                        <div className="text-2xl font-bold">{lot.quantity.toLocaleString('pt-BR')}</div>
+                                        <div className="text-xs text-muted-foreground">unidades</div>
+                                    </div>
+                                ) : (
+                                    <>
+                                    <div className="text-center p-2 rounded-md bg-background w-28">
+                                        <div className="text-2xl font-bold">{formatQuantity(totalUnits, totalUnitsLabel)}</div>
+                                        <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
+                                    </div>
+                                    <div className="text-center p-2 rounded-md bg-background w-24">
+                                        <div className="text-2xl font-bold">{lot.quantity.toLocaleString('pt-BR')}</div>
+                                        <div className="text-xs text-muted-foreground">pacotes</div>
+                                    </div>
+                                    </>
                                 )}
+                                <div className="flex flex-col gap-0.5 border-l pl-1 h-full justify-around">
+                                    {renderActionButton(lot, Pencil, "Editar", () => onEdit(lot.id), canEdit)}
+                                    {renderActionButton(lot, QrCode, "Imprimir Etiqueta", () => handlePrintLabel(lot, product), true)}
+                                    {renderActionButton(lot, Trash2, "Excluir", () => onDelete(lot.id), canDelete, true)}
+                                </div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            {isRedundant ? (
-                                <div className="text-center p-2 rounded-md bg-background w-28">
-                                    <div className="text-2xl font-bold">{lot.quantity.toLocaleString('pt-BR')}</div>
-                                    <div className="text-xs text-muted-foreground">unidades</div>
-                                </div>
-                            ) : (
-                                <>
-                                <div className="text-center p-2 rounded-md bg-background w-28">
-                                    <div className="text-2xl font-bold">{formatQuantity(totalUnits, totalUnitsLabel)}</div>
-                                    <div className="text-xs text-muted-foreground">{totalUnitsLabel}</div>
-                                </div>
-                                <div className="text-center p-2 rounded-md bg-background w-24">
-                                    <div className="text-2xl font-bold">{lot.quantity.toLocaleString('pt-BR')}</div>
-                                    <div className="text-xs text-muted-foreground">pacotes</div>
-                                </div>
-                                </>
-                            )}
-                             <div className="flex flex-col gap-0.5 border-l pl-1 h-full justify-around">
-                                {renderActionButton(lot, Pencil, "Editar", () => onEdit(lot.id), canEdit)}
-                                {renderActionButton(lot, QrCode, "Imprimir Etiqueta", () => handlePrintLabel(lot, product), true)}
-                                {renderActionButton(lot, Trash2, "Excluir", () => onDelete(lot.id), canDelete, true)}
+
+                         {reservationDetails && lot.reservedQuantity && lot.reservedQuantity > 0 && (
+                            <div className="mt-2 pt-2 border-t border-dashed">
+                                <h4 className="font-semibold text-sm flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                    <Shield className="h-4 w-4"/>
+                                    Reserva Ativa: {lot.reservedQuantity}
+                                </h4>
+                                <ul className="text-xs text-muted-foreground mt-1 pl-4 space-y-0.5">
+                                    {reservationDetails.map(detail => (
+                                        <li key={detail.destination}>
+                                            <span className="font-medium">{detail.destination}:</span> {detail.quantity} un. ({detail.status})
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
-                        </div>
+                        )}
                     </div>
                 )
             })}

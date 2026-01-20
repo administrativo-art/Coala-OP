@@ -33,12 +33,14 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
+import { useRouter } from 'next/navigation';
+import { ToastAction } from "@/components/ui/toast"
 
 
-const PDFDownloadLinkWithAny = dynamic(
-  () => import('@react-pdf/renderer').then((mod) => mod.PDFDownloadLink),
+const PDFDownloadLink = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
   { ssr: false }
-) as any;
+);
 
 
 interface SuggestedLot {
@@ -64,6 +66,8 @@ function AnalysisTab() {
   const { products, loading: productsLoading } = useProducts();
   const { createRepositionActivity, loading: repositionLoading } = useReposition();
   const { toast } = useToast();
+  const router = useRouter();
+
 
   const [selectedKioskId, setSelectedKioskId] = useState<string>('');
   const [suggestionToView, setSuggestionToView] = useState<AnalysisResult | null>(null);
@@ -107,16 +111,31 @@ function AnalysisTab() {
     const destinationKiosk = kiosks.find(k => k.id === selectedKioskId);
     if (!destinationKiosk) return;
     
-    await createRepositionActivity({
-        kioskOriginId: 'matriz',
-        kioskOriginName: 'Centro de distribuição - Matriz',
-        kioskDestinationId: destinationKiosk.id,
-        kioskDestinationName: destinationKiosk.name,
-        items: stagedItems,
-    });
-    
-    toast({ title: 'Atividade de reposição criada', description: 'O pedido foi enviado para a tela de gerenciamento de reposição.' });
-    setStagedItems([]);
+    try {
+        await createRepositionActivity({
+            kioskOriginId: 'matriz',
+            kioskOriginName: 'Centro de distribuição - Matriz',
+            kioskDestinationId: destinationKiosk.id,
+            kioskDestinationName: destinationKiosk.name,
+            items: stagedItems,
+        });
+        
+        const totalItems = stagedItems.reduce((acc, item) => acc + item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0), 0);
+
+        toast({
+            title: "Reserva registrada na Matriz",
+            description: `${totalItems} unidades foram reservadas para ${destinationKiosk.name}.`,
+            action: <ToastAction altText="Ver" onClick={() => router.push('/dashboard/inventory-control?kioskId=matriz')}>Ver</ToastAction>,
+        });
+
+        setStagedItems([]);
+    } catch (error: any) {
+         toast({
+            variant: 'destructive',
+            title: 'Erro ao criar atividade',
+            description: error.message || "Não foi possível criar a atividade de reposição.",
+        });
+    }
   };
 
   const analysisResults = useMemo((): AnalysisResult[] => {
@@ -355,8 +374,8 @@ function AnalysisTab() {
                         <Download className="mr-2 h-4 w-4" /> Exportar Lista de Compras
                     </Button>
                 )}
-                {selectedKioskId && !isMatrizSelected && analysisResults.length > 0 && PDFDownloadLinkWithAny && (
-                    <PDFDownloadLinkWithAny
+                {selectedKioskId && !isMatrizSelected && analysisResults.length > 0 && (
+                    <PDFDownloadLink
                         document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
                         fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
                     >
@@ -365,8 +384,8 @@ function AnalysisTab() {
                                 <Download className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando PDF...' : 'Exportar PDF'}
                             </Button>
-                        )}
-                    </PDFDownloadLinkWithAny>
+                        ) as any}
+                    </PDFDownloadLink>
                 )}
             </div>
         </div>
@@ -661,4 +680,3 @@ export function RestockAnalysis() {
   );
 }
 
-    

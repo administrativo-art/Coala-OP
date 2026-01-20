@@ -9,20 +9,20 @@ import { ptBR } from 'date-fns/locale';
 import Link from 'next/link';
 
 import Papa from 'papaparse';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download, Shield } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
 import { useBaseProducts } from '@/hooks/use-base-products';
-import { type LotEntry, type Product, type BaseProduct } from '@/types';
+import { type LotEntry, type Product, type BaseProduct, type RepositionActivity } from '@/types';
 import { LotCard } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
@@ -33,6 +33,7 @@ import { convertValue } from '@/lib/conversion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickProjectionModal } from './quick-projection-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { useReposition } from '@/hooks/use-reposition';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -58,6 +59,81 @@ export type GroupedByBaseProduct = {
   hasLeadTime: boolean;
 };
 
+function ActiveReservationsSummary() {
+  const { lots } = useExpiryProducts();
+  const { activities } = useReposition();
+  const { selectedKioskId } = useExpiryControlContext();
+
+  const summary = useMemo(() => {
+    const activeActivities = activities.filter(act => 
+      act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento'
+    );
+
+    if (activeActivities.length === 0) return null;
+
+    const aggregatedByDestination: { [kioskName: string]: number } = {};
+    let totalReservedCount = 0;
+    
+    for(const activity of activeActivities) {
+        // Se um quiosque está selecionado, só nos importamos com as reservas para ele.
+        if (selectedKioskId !== 'all' && activity.kioskDestinationId !== selectedKioskId) {
+            continue;
+        }
+
+        const destName = activity.kioskDestinationName;
+        if(!aggregatedByDestination[destName]) {
+            aggregatedByDestination[destName] = 0;
+        }
+        const activityTotal = activity.items.reduce((sum, item) => sum + item.suggestedLots.reduce((s, l) => s + l.quantityToMove, 0), 0);
+        aggregatedByDestination[destName] += activityTotal;
+        totalReservedCount += activityTotal;
+    }
+
+    if (totalReservedCount === 0) return null;
+
+    return {
+      total: totalReservedCount,
+      destinations: Object.entries(aggregatedByDestination).map(([name, count]) => ({ name, count })).filter(d => d.count > 0)
+    };
+  }, [lots, activities, selectedKioskId]);
+
+  if (!summary) return null;
+
+  return (
+    <Card className="mb-6 bg-blue-500/10 border-blue-500/20">
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-blue-800 dark:text-blue-300">
+          <Shield /> Reservas Ativas na Matriz ({summary.total} itens)
+        </CardTitle>
+        <CardDescription>
+          Os itens abaixo estão reservados na Matriz e aguardando para serem enviados aos quiosques.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {summary.destinations.length > 0 && (
+           <div className="flex flex-wrap gap-x-4 gap-y-1">
+             {summary.destinations.map(dest => (
+               <p key={dest.name} className="text-sm">
+                 <span className="font-semibold">{dest.name}:</span> {dest.count} itens
+               </p>
+             ))}
+           </div>
+        )}
+      </CardContent>
+      <CardFooter>
+        <Link href="/dashboard/inventory-control?kioskId=matriz">
+          <Button variant="outline" size="sm">
+            Ver lotes reservados na Matriz
+          </Button>
+        </Link>
+      </CardFooter>
+    </Card>
+  );
+}
+
+const ExpiryControlContext = React.createContext<{ selectedKioskId: string }>({ selectedKioskId: '' });
+const useExpiryControlContext = () => React.useContext(ExpiryControlContext);
+
 function ExpiryControlContent() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
@@ -69,6 +145,8 @@ function ExpiryControlContent() {
   const searchParams = useSearchParams();
   const scannedLotId = searchParams.get('lotId');
   const searchQuery = searchParams.get('search');
+  const kioskQuery = searchParams.get('kioskId');
+
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -89,7 +167,10 @@ function ExpiryControlContent() {
     if (searchQuery) {
         setSearchTerm(searchQuery);
     }
-  }, [searchQuery]);
+    if (kioskQuery) {
+        setSelectedKioskId(kioskQuery);
+    }
+  }, [searchQuery, kioskQuery]);
 
 
   const visibleLots = useMemo(() => {
@@ -107,14 +188,14 @@ function ExpiryControlContent() {
   }, [kiosks]);
   
   useEffect(() => {
-    if (kiosks.length > 0 && !selectedKioskId) {
+    if (!kioskQuery && kiosks.length > 0 && !selectedKioskId) {
       if (user?.username === 'Tiago Brasil') {
         setSelectedKioskId('all');
       } else if (user?.assignedKioskIds && user.assignedKioskIds.length > 0) {
         setSelectedKioskId(user.assignedKioskIds[0]);
       }
     }
-  }, [kiosks, selectedKioskId, user]);
+  }, [kiosks, selectedKioskId, user, kioskQuery]);
   
   useEffect(() => {
     if (scannedLotId) {
@@ -501,7 +582,8 @@ function ExpiryControlContent() {
   };
 
   return (
-    <>
+    <ExpiryControlContext.Provider value={{ selectedKioskId }}>
+      <ActiveReservationsSummary />
       <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
         <div className='p-6 space-y-4'>
             <div className="relative w-full">
@@ -644,7 +726,7 @@ function ExpiryControlContent() {
             onOpenChange={() => setQuickProjectionProduct(null)}
         />
       )}
-    </>
+    </ExpiryControlContext.Provider>
   );
 }
 
