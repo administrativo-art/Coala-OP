@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -381,7 +382,7 @@ function AnalysisTab() {
                         document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
                         fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
                     >
-                        {({ loading }) => (
+                        {({ loading }: { loading: boolean; }) => (
                             <Button variant="outline" disabled={loading}>
                                 <Download className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando PDF...' : 'Exportar PDF'}
@@ -681,4 +682,3 @@ export function RestockAnalysis() {
     </Tabs>
   );
 }
-
