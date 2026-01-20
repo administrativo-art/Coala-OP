@@ -27,7 +27,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   const { user } = useAuth();
   const [activities, setActivities] = useState<RepositionActivity[]>([]);
   const [loading, setLoading] = useState(true);
-  const { moveMultipleLots } = useExpiryProducts();
+  const { moveMultipleLots, optimisticallyUpdateLotReservation } = useExpiryProducts();
 
   useEffect(() => {
     const q = query(collection(db, "repositionActivities"));
@@ -96,12 +96,19 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         }
       });
 
+      // Optimistically update UI state after successful transaction
+      for (const item of data.items) {
+        for (const lotToMove of item.suggestedLots) {
+          optimisticallyUpdateLotReservation(lotToMove.lotId, lotToMove.quantityToMove);
+        }
+      }
+
       return activityRef.id;
     } catch (error) {
       console.error("Error creating reposition activity:", error);
       throw error;
     }
-  }, [user]);
+  }, [user, optimisticallyUpdateLotReservation]);
 
   const updateRepositionActivity = useCallback(async (activityId: string, updates: Partial<RepositionActivity>) => {
     const activityRef = doc(db, 'repositionActivities', activityId);

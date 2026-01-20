@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
@@ -49,6 +48,7 @@ export interface ExpiryProductsContextType {
     approvedBy: User
   ) => Promise<void>;
   revertMovement: (movement: MovementRecord) => Promise<void>;
+  optimisticallyUpdateLotReservation: (lotId: string, quantityToReserve: number) => void;
 }
 
 // --- CONTEXT CREATION ---
@@ -432,6 +432,21 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
     });
 }, [user]);
 
+  const optimisticallyUpdateLotReservation = useCallback((lotId: string, quantityToReserve: number) => {
+    setLots(prevLots => 
+        prevLots.map(lot => {
+            if (lot.id === lotId) {
+                const currentReserved = lot.reservedQuantity || 0;
+                return {
+                    ...lot,
+                    reservedQuantity: currentReserved + quantityToReserve,
+                };
+            }
+            return lot;
+        })
+    );
+  }, []);
+
   const value = useMemo(() => ({
       lots,
       loading,
@@ -443,7 +458,8 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
       consumeFromLot,
       adjustLotQuantity,
       revertMovement,
-  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity, revertMovement]);
+      optimisticallyUpdateLotReservation,
+  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity, revertMovement, optimisticallyUpdateLotReservation]);
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
