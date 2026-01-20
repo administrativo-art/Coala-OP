@@ -309,6 +309,9 @@ export function LotCard({
                 const status = getStatus(lot, product);
                 const reservationDetails = getReservationDetails(lot);
                 
+                const hasActiveReservation = (lot.reservedQuantity || 0) > 0 || !!reservationDetails;
+
+
                 let totalUnits: number;
                 let totalUnitsLabel: string;
                 let isRedundant = false;
@@ -383,12 +386,13 @@ export function LotCard({
                             </div>
                         </div>
 
-                         {reservationDetails && lot.reservedQuantity && lot.reservedQuantity > 0 && (
+                         {hasActiveReservation && (
                             <div className="mt-2 pt-2 border-t border-dashed">
                                 <h4 className="font-semibold text-sm flex items-center gap-1 text-blue-600 dark:text-blue-400">
                                     <Shield className="h-4 w-4"/>
-                                    Reserva Ativa: {lot.reservedQuantity}
+                                    Reserva Ativa: {lot.reservedQuantity || 'Calculando...'}
                                 </h4>
+                                {reservationDetails && (
                                 <ul className="text-xs text-muted-foreground mt-1 pl-4 space-y-0.5">
                                     {reservationDetails.map(detail => (
                                         <li key={detail.destination}>
@@ -396,6 +400,7 @@ export function LotCard({
                                         </li>
                                     ))}
                                 </ul>
+                                )}
                             </div>
                         )}
                     </div>

@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import * as React from 'react';
@@ -62,32 +63,31 @@ export type GroupedByBaseProduct = {
   hasLeadTime: boolean;
 };
 
-function ActiveReservationsSummary() {
-  const { lots } = useExpiryProducts();
+function ActiveReservationsSummary({ selectedKioskId }: { selectedKioskId: string }) {
   const { activities } = useReposition();
-  const { selectedKioskId } = useExpiryControlContext();
   const router = useRouter();
 
   const summary = useMemo(() => {
+    // We are only interested in reservations FROM the Matriz
     const activeActivities = activities.filter(act => 
-      act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento'
+      act.kioskOriginId === 'matriz' &&
+      (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento')
     );
 
     if (activeActivities.length === 0) return null;
 
-    let destinationFilter: string | undefined = undefined;
+    let relevantActivities = activeActivities;
+    // If a specific destination kiosk is selected, filter for it
     if (selectedKioskId !== 'all' && selectedKioskId !== 'matriz') {
-        destinationFilter = selectedKioskId;
+        relevantActivities = activeActivities.filter(act => act.kioskDestinationId === selectedKioskId);
     }
     
+    if (relevantActivities.length === 0) return null;
+
     const aggregatedByDestination: { [kioskName: string]: number } = {};
     let totalReservedCount = 0;
     
-    for(const activity of activeActivities) {
-        if (destinationFilter && activity.kioskDestinationId !== destinationFilter) {
-            continue;
-        }
-
+    for(const activity of relevantActivities) {
         const destName = activity.kioskDestinationName;
         if(!aggregatedByDestination[destName]) {
             aggregatedByDestination[destName] = 0;
@@ -101,9 +101,10 @@ function ActiveReservationsSummary() {
 
     return {
       total: totalReservedCount,
+      count: relevantActivities.length,
       destinations: Object.entries(aggregatedByDestination).map(([name, count]) => ({ name, count })).filter(d => d.count > 0)
     };
-  }, [lots, activities, selectedKioskId]);
+  }, [activities, selectedKioskId]);
 
   const handleCTAClick = () => {
     router.push('/dashboard/inventory-control?kioskId=matriz');
@@ -112,38 +113,22 @@ function ActiveReservationsSummary() {
   if (!summary) return null;
 
   return (
-    <Card className="mb-6 bg-blue-500/10 border-blue-500/20">
-      <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2 text-blue-800 dark:text-blue-300">
-          <Shield /> Reservas Ativas na Matriz
-        </CardTitle>
-        <CardDescription>
-          Existem itens reservados na Matriz aguardando envio para os quiosques. O total de itens reservados é de <strong>{summary.total}</strong>.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {summary.destinations.length > 0 && (
-           <div className="flex flex-wrap gap-x-4 gap-y-1">
-             <p className="text-sm font-medium">Destinos:</p>
-             {summary.destinations.map(dest => (
-               <p key={dest.name} className="text-sm">
-                 <span className="font-semibold">{dest.name}:</span> {dest.count} itens
-               </p>
-             ))}
-           </div>
-        )}
-      </CardContent>
-      <CardFooter>
-        <Button variant="outline" size="sm" onClick={handleCTAClick}>
-          Ver lotes reservados na Matriz
-        </Button>
-      </CardFooter>
-    </Card>
+    <div className="mx-6 mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-500/10 rounded-lg flex items-center justify-between animate-in slide-in-from-top-2">
+      <div className="flex items-center gap-3">
+        <div className="bg-blue-500 p-2 rounded-full">
+          <Shield className="h-5 w-5 text-white" />
+        </div>
+        <div>
+          <h4 className="font-bold text-blue-900 dark:text-blue-200">Reservas Ativas na Matriz</h4>
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            Existem {summary.count} atividades aguardando movimentação ({summary.total} itens reservados).
+          </p>
+        </div>
+      </div>
+      <Button variant="ghost" size="sm" onClick={handleCTAClick}>Ver lotes reservados</Button>
+    </div>
   );
 }
-
-const ExpiryControlContext = React.createContext<{ selectedKioskId: string }>({ selectedKioskId: '' });
-const useExpiryControlContext = () => React.useContext(ExpiryControlContext);
 
 function ExpiryControlContent() {
   const { user, permissions } = useAuth();
@@ -600,8 +585,8 @@ function ExpiryControlContent() {
   };
 
   return (
-    <ExpiryControlContext.Provider value={{ selectedKioskId }}>
-      <ActiveReservationsSummary />
+    <>
+      <ActiveReservationsSummary selectedKioskId={selectedKioskId} />
       <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
         <div className='p-6 space-y-4'>
             <div className="relative w-full">
@@ -744,7 +729,7 @@ function ExpiryControlContent() {
             onOpenChange={() => setQuickProjectionProduct(null)}
         />
       )}
-    </ExpiryControlContext.Provider>
+    </>
   );
 }
 

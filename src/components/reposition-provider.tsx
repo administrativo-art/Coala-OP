@@ -27,7 +27,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   const { user } = useAuth();
   const [activities, setActivities] = useState<RepositionActivity[]>([]);
   const [loading, setLoading] = useState(true);
-  const { moveMultipleLots, optimisticallyUpdateLotReservation } = useExpiryProducts();
+  const { moveMultipleLots, optimisticallyUpdateLots } = useExpiryProducts();
 
   useEffect(() => {
     const q = query(collection(db, "repositionActivities"));
@@ -50,8 +50,11 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     }
 
     const now = new Date().toISOString();
-    const newActivity: Omit<RepositionActivity, 'id'> = {
+    const activityRef = doc(collection(db, 'repositionActivities'));
+    
+    const newActivityData: RepositionActivity = {
       ...data,
+      id: activityRef.id,
       status: 'Aguardando despacho',
       requestedBy: {
         userId: user.id,
@@ -59,11 +62,9 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       },
       createdAt: now,
       updatedAt: now,
-    };
+    } as RepositionActivity;
 
     try {
-      const activityRef = await addDoc(collection(db, 'repositionActivities'), newActivity);
-      
       await runTransaction(db, async (transaction) => {
         const lotRefsToRead = data.items.flatMap(item => item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId)));
         const uniqueLotRefs = Array.from(new Map(lotRefsToRead.map(ref => [ref.path, ref])).values());
@@ -86,6 +87,8 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
           }
         }
         
+        transaction.set(activityRef, newActivityData);
+
         for (const item of data.items) {
             for (const lotToMove of item.suggestedLots) {
                 const lotRef = doc(db, 'lots', lotToMove.lotId);
@@ -96,25 +99,23 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         }
       });
 
-      // Optimistically update UI state after successful transaction
-      for (const item of data.items) {
-        for (const lotToMove of item.suggestedLots) {
-          optimisticallyUpdateLotReservation(lotToMove.lotId, lotToMove.quantityToMove);
-        }
-      }
+      // Optimistic UI updates after successful transaction
+      setActivities(prev => [newActivityData, ...prev].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       
-      setActivities(prevActivities => [
-        { id: activityRef.id, ...newActivity },
-        ...prevActivities
-      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-
+      const lotUpdates = data.items.flatMap(item => 
+        item.suggestedLots.map(lot => ({
+          lotId: lot.lotId,
+          quantityToReserve: lot.quantityToMove
+        }))
+      );
+      optimisticallyUpdateLots(lotUpdates);
 
       return activityRef.id;
     } catch (error) {
       console.error("Error creating reposition activity:", error);
       throw error;
     }
-  }, [user, optimisticallyUpdateLotReservation]);
+  }, [user, optimisticallyUpdateLots]);
 
   const updateRepositionActivity = useCallback(async (activityId: string, updates: Partial<RepositionActivity>) => {
     const activityRef = doc(db, 'repositionActivities', activityId);

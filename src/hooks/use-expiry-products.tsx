@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
@@ -48,7 +49,7 @@ export interface ExpiryProductsContextType {
     approvedBy: User
   ) => Promise<void>;
   revertMovement: (movement: MovementRecord) => Promise<void>;
-  optimisticallyUpdateLotReservation: (lotId: string, quantityToReserve: number) => void;
+  optimisticallyUpdateLots: (updates: { lotId: string; quantityToReserve: number }[]) => void;
 }
 
 // --- CONTEXT CREATION ---
@@ -432,19 +433,23 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
     });
 }, [user]);
 
-  const optimisticallyUpdateLotReservation = useCallback((lotId: string, quantityToReserve: number) => {
-    setLots(prevLots => 
-        prevLots.map(lot => {
-            if (lot.id === lotId) {
-                const currentReserved = lot.reservedQuantity || 0;
-                return {
-                    ...lot,
-                    reservedQuantity: currentReserved + quantityToReserve,
-                };
-            }
-            return lot;
-        })
-    );
+  const optimisticallyUpdateLots = useCallback((updates: { lotId: string; quantityToReserve: number }[]) => {
+    setLots(prevLots => {
+      const updatesByLotId = new Map<string, number>();
+      for (const update of updates) {
+        updatesByLotId.set(update.lotId, (updatesByLotId.get(update.lotId) || 0) + update.quantityToReserve);
+      }
+
+      return prevLots.map(lot => {
+        if (updatesByLotId.has(lot.id)) {
+          return {
+            ...lot,
+            reservedQuantity: (lot.reservedQuantity || 0) + updatesByLotId.get(lot.id)!
+          };
+        }
+        return lot;
+      });
+    });
   }, []);
 
   const value = useMemo(() => ({
@@ -458,8 +463,8 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
       consumeFromLot,
       adjustLotQuantity,
       revertMovement,
-      optimisticallyUpdateLotReservation,
-  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity, revertMovement, optimisticallyUpdateLotReservation]);
+      optimisticallyUpdateLots,
+  }), [lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots, consumeFromLot, adjustLotQuantity, revertMovement, optimisticallyUpdateLots]);
 
   return <ExpiryProductsContext.Provider value={value}>{children}</ExpiryProductsContext.Provider>;
 }
