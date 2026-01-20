@@ -1,6 +1,7 @@
 
 "use client"
 
+import * as React from 'react';
 import { useState, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -34,6 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickProjectionModal } from './quick-projection-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useReposition } from '@/hooks/use-reposition';
+import { useRouter } from 'next/navigation';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -63,6 +65,7 @@ function ActiveReservationsSummary() {
   const { lots } = useExpiryProducts();
   const { activities } = useReposition();
   const { selectedKioskId } = useExpiryControlContext();
+  const router = useRouter();
 
   const summary = useMemo(() => {
     const activeActivities = activities.filter(act => 
@@ -71,12 +74,16 @@ function ActiveReservationsSummary() {
 
     if (activeActivities.length === 0) return null;
 
+    let destinationFilter: string | undefined = undefined;
+    if (selectedKioskId !== 'all' && selectedKioskId !== 'matriz') {
+        destinationFilter = selectedKioskId;
+    }
+    
     const aggregatedByDestination: { [kioskName: string]: number } = {};
     let totalReservedCount = 0;
     
     for(const activity of activeActivities) {
-        // Se um quiosque está selecionado, só nos importamos com as reservas para ele.
-        if (selectedKioskId !== 'all' && activity.kioskDestinationId !== selectedKioskId) {
+        if (destinationFilter && activity.kioskDestinationId !== destinationFilter) {
             continue;
         }
 
@@ -96,6 +103,10 @@ function ActiveReservationsSummary() {
       destinations: Object.entries(aggregatedByDestination).map(([name, count]) => ({ name, count })).filter(d => d.count > 0)
     };
   }, [lots, activities, selectedKioskId]);
+
+  const handleCTAClick = () => {
+    router.push('/dashboard/inventory-control?kioskId=matriz');
+  };
 
   if (!summary) return null;
 
@@ -121,11 +132,9 @@ function ActiveReservationsSummary() {
         )}
       </CardContent>
       <CardFooter>
-        <Link href="/dashboard/inventory-control?kioskId=matriz">
-          <Button variant="outline" size="sm">
-            Ver lotes reservados na Matriz
-          </Button>
-        </Link>
+        <Button variant="outline" size="sm" onClick={handleCTAClick}>
+          Ver lotes reservados na Matriz
+        </Button>
       </CardFooter>
     </Card>
   );
