@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download, Shield } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download, Shield, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -63,69 +63,52 @@ export type GroupedByBaseProduct = {
   hasLeadTime: boolean;
 };
 
+const ExpiryControlContext = React.createContext<{ selectedKioskId: string }>({ selectedKioskId: '' });
+const useExpiryControlContext = () => React.useContext(ExpiryControlContext);
+
 function ActiveReservationsSummary({ selectedKioskId }: { selectedKioskId: string }) {
   const { activities } = useReposition();
-  const router = useRouter();
-
+  
   const summary = useMemo(() => {
-    // We are only interested in reservations FROM the Matriz
-    const activeActivities = activities.filter(act => 
-      act.kioskOriginId === 'matriz' &&
+    // Só mostramos o resumo se um quiosque específico (como Matriz) estiver selecionado
+    if (!selectedKioskId || selectedKioskId === 'all') return null;
+
+    const activeOutbound = activities.filter(act => 
+      act.kioskOriginId === selectedKioskId &&
       (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento')
     );
 
-    if (activeActivities.length === 0) return null;
+    if (activeOutbound.length === 0) return null;
 
-    let relevantActivities = activeActivities;
-    // If a specific destination kiosk is selected, filter for it
-    if (selectedKioskId !== 'all' && selectedKioskId !== 'matriz') {
-        relevantActivities = activeActivities.filter(act => act.kioskDestinationId === selectedKioskId);
-    }
-    
-    if (relevantActivities.length === 0) return null;
-
-    const aggregatedByDestination: { [kioskName: string]: number } = {};
-    let totalReservedCount = 0;
-    
-    for(const activity of relevantActivities) {
-        const destName = activity.kioskDestinationName;
-        if(!aggregatedByDestination[destName]) {
-            aggregatedByDestination[destName] = 0;
-        }
-        const activityTotal = activity.items.reduce((sum, item) => sum + item.suggestedLots.reduce((s, l) => s + l.quantityToMove, 0), 0);
-        aggregatedByDestination[destName] += activityTotal;
-        totalReservedCount += activityTotal;
-    }
-
-    if (totalReservedCount === 0) return null;
+    const totalReservedItems = activeOutbound.reduce((sum, act) => {
+      const itemsQty = act.items.reduce((iSum, item) => 
+        iSum + item.suggestedLots.reduce((lSum, l) => lSum + l.quantityToMove, 0), 0
+      );
+      return sum + itemsQty;
+    }, 0);
 
     return {
-      total: totalReservedCount,
-      count: relevantActivities.length,
-      destinations: Object.entries(aggregatedByDestination).map(([name, count]) => ({ name, count })).filter(d => d.count > 0)
+      activityCount: activeOutbound.length,
+      itemCount: totalReservedItems
     };
   }, [activities, selectedKioskId]);
-
-  const handleCTAClick = () => {
-    router.push('/dashboard/inventory-control?kioskId=matriz');
-  };
 
   if (!summary) return null;
 
   return (
-    <div className="mx-6 mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-500/10 rounded-lg flex items-center justify-between animate-in slide-in-from-top-2">
+    <div className="mx-6 mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between animate-in slide-in-from-top-2">
       <div className="flex items-center gap-3">
         <div className="bg-blue-500 p-2 rounded-full">
           <Shield className="h-5 w-5 text-white" />
         </div>
         <div>
-          <h4 className="font-bold text-blue-900 dark:text-blue-200">Reservas Ativas na Matriz</h4>
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            Existem {summary.count} atividades aguardando movimentação ({summary.total} itens reservados).
+          <h4 className="font-bold text-blue-900">Reservas Ativas neste Centro</h4>
+          <p className="text-sm text-blue-700">
+            {summary.activityCount} atividade(s) pendente(s) com {summary.itemCount} itens reservados.
           </p>
         </div>
       </div>
-      <Button variant="ghost" size="sm" onClick={handleCTAClick}>Ver lotes reservados</Button>
+      <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-100">🛡️ Stock Protegido</Badge>
     </div>
   );
 }
@@ -338,7 +321,7 @@ function ExpiryControlContent() {
             });
             brandGroup.products.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)))
         });
-        baseGroup.brands.sort((a,b) => a.brandName.localeCompare(b.brandName));
+        baseGroup.brands.sort((a,b) => a.name.localeCompare(b.name));
     });
 
     return Array.from(groups.values()).sort((a,b) => a.name.localeCompare(b.name));

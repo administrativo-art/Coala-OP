@@ -215,43 +215,37 @@ export function LotCard({
     );
   };
   
-    const getReservationDetails = (lot: LotEntry) => {
-        if (!lot.reservedQuantity || lot.reservedQuantity <= 0) {
-            return null;
-        }
+  const getReservationDetails = (lot: LotEntry) => {
+      const reservationDetails: { [kioskName: string]: number } = {};
+      let totalCalculated = 0;
 
-        const relevantActivities = activities.filter((act: RepositionActivity) => 
-            (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento') &&
-            act.items.some((item: RepositionItem) => 
-            item.suggestedLots.some((sl: RepositionSuggestedLot) => sl.lotId === lot.id)
-            )
-        );
-    
-        const reservationDetails: { [kioskName: string]: { quantity: number; status: string } } = {};
-    
-        relevantActivities.forEach((act: RepositionActivity) => {
-        act.items.forEach((item: RepositionItem) => {
-            item.suggestedLots.forEach((sl: RepositionSuggestedLot) => {
+      const relevantActivities = activities.filter(act => 
+        (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento') &&
+        act.items.some(item => 
+          item.suggestedLots.some(sl => sl.lotId === lot.id)
+        )
+      );
+
+      relevantActivities.forEach(act => {
+        act.items.forEach(item => {
+          item.suggestedLots.forEach(sl => {
             if (sl.lotId === lot.id) {
-                const destName = act.kioskDestinationName;
-                if (!reservationDetails[destName]) {
-                    reservationDetails[destName] = { quantity: 0, status: act.status };
-                }
-                reservationDetails[destName].quantity += sl.quantityToMove;
+              const destName = act.kioskDestinationName.split(' ')[1] || act.kioskDestinationName;
+              reservationDetails[destName] = (reservationDetails[destName] || 0) + sl.quantityToMove;
+              totalCalculated += sl.quantityToMove;
             }
-            });
+          });
         });
-        });
-    
-        if (Object.keys(reservationDetails).length === 0) {
-        return null;
-        }
-    
-        return Object.entries(reservationDetails).map(([destination, data]) => ({
-            destination,
-            quantity: data.quantity,
-            status: data.status,
-        }));
+      });
+
+      const detailText = Object.entries(reservationDetails)
+        .map(([name, qty]) => `${name}: ${qty}`)
+        .join(', ');
+
+      return {
+        text: detailText || (totalCalculated > 0 ? 'em processamento' : null),
+        totalQty: totalCalculated
+      };
     };
 
 
@@ -307,11 +301,9 @@ export function LotCard({
             {productGroup.lots.map(lot => {
                 const locationName = getLocationName(lot.locationId);
                 const status = getStatus(lot, product);
-                const reservationDetails = getReservationDetails(lot);
+                const { text: reservationInfo, totalQty: derivedReservedQty } = getReservationDetails(lot);
+                const displayReservedQty = Math.max(lot.reservedQuantity || 0, derivedReservedQty);
                 
-                const hasActiveReservation = (lot.reservedQuantity || 0) > 0 || !!reservationDetails;
-
-
                 let totalUnits: number;
                 let totalUnitsLabel: string;
                 let isRedundant = false;
@@ -386,21 +378,15 @@ export function LotCard({
                             </div>
                         </div>
 
-                         {hasActiveReservation && (
+                         {displayReservedQty > 0 && (
                             <div className="mt-2 pt-2 border-t border-dashed">
-                                <h4 className="font-semibold text-sm flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                                    <Shield className="h-4 w-4"/>
-                                    Reserva Ativa: {lot.reservedQuantity || 'Calculando...'}
-                                </h4>
-                                {reservationDetails && (
-                                <ul className="text-xs text-muted-foreground mt-1 pl-4 space-y-0.5">
-                                    {reservationDetails.map(detail => (
-                                        <li key={detail.destination}>
-                                            <span className="font-medium">{detail.destination}:</span> {detail.quantity} un. ({detail.status})
-                                        </li>
-                                    ))}
-                                </ul>
-                                )}
+                               <div className="text-blue-600 font-bold flex items-center gap-1">
+                                    <Shield className="h-3 w-3"/>
+                                    Reserva Ativa: {displayReservedQty} 
+                                    {reservationInfo && (
+                                    <span className="text-xs font-normal text-muted-foreground">({reservationInfo})</span>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
