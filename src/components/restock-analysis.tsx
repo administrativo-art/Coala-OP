@@ -112,13 +112,15 @@ function AnalysisTab() {
     if (!destinationKiosk) return;
     
     try {
-        await createRepositionActivity({
+        const activityId = await createRepositionActivity({
             kioskOriginId: 'matriz',
             kioskOriginName: 'Centro de distribuição - Matriz',
             kioskDestinationId: destinationKiosk.id,
             kioskDestinationName: destinationKiosk.name,
             items: stagedItems,
         });
+
+        if (!activityId) throw new Error("A criação da atividade falhou e não retornou um ID.");
         
         const totalItems = stagedItems.reduce((acc, item) => acc + item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0), 0);
 
@@ -379,12 +381,12 @@ function AnalysisTab() {
                         document={<RestockAnalysisDocument data={analysisResults} kioskName={selectedKiosk?.name || 'Quiosque'} />}
                         fileName={`analise_reposicao_${selectedKiosk?.name.replace(/\s+/g, '_') || 'Quiosque'}_${new Date().toISOString().slice(0, 10)}.pdf`}
                     >
-                        {({ loading }: BlobProviderParams) => (
+                        {({ loading }) => (
                             <Button variant="outline" disabled={loading}>
                                 <Download className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando PDF...' : 'Exportar PDF'}
                             </Button>
-                        ) as any}
+                        )}
                     </PDFDownloadLink>
                 )}
             </div>
