@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -19,7 +18,6 @@ import { ptBR } from 'date-fns/locale'
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { type ProductSimulation } from "@/types"
 import { cn } from "@/lib/utils"
-import { AverageConsumptionChart } from "@/components/average-consumption-chart"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PricingDashboard } from "@/components/pricing-dashboard"
 import { useProductSimulation } from "@/hooks/use-product-simulation"
@@ -194,8 +192,6 @@ function OperationalDashboard() {
          <PurchaseAlertCard />
       </div>
       
-      <AverageConsumptionChart />
-
     </>
   )
 }
