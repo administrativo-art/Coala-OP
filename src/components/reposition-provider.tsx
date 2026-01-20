@@ -64,6 +64,12 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     try {
       const activityRef = await addDoc(collection(db, 'repositionActivities'), newActivity);
       
+      // Optimistically update the activities list to prevent race conditions on UI updates
+      setActivities(prevActivities => [
+        { id: activityRef.id, ...newActivity },
+        ...prevActivities
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+
       await runTransaction(db, async (transaction) => {
         const lotRefsToRead = data.items.flatMap(item => item.suggestedLots.map(lot => doc(db, 'lots', lot.lotId)));
         const uniqueLotRefs = Array.from(new Map(lotRefsToRead.map(ref => [ref.path, ref])).values());
