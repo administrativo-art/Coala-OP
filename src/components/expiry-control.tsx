@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import * as React from 'react';
@@ -102,13 +101,17 @@ function ActiveReservationsSummary({ selectedKioskId }: { selectedKioskId: strin
           <Shield className="h-5 w-5 text-white" />
         </div>
         <div>
-          <h4 className="font-bold text-blue-900">Reservas Ativas neste Centro</h4>
+          <h4 className="font-bold text-blue-900">Reservas Ativas na Matriz</h4>
           <p className="text-sm text-blue-700">
-            {summary.activityCount} atividade(s) pendente(s) com {summary.itemCount} itens reservados.
+            {summary.activityCount} atividade(s) aguardando movimentação.
           </p>
         </div>
       </div>
-      <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-100">🛡️ Stock Protegido</Badge>
+      <Link href="/dashboard/stock/analysis">
+          <Button variant="outline" size="sm">
+              Ver atividades <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+      </Link>
     </div>
   );
 }
@@ -311,17 +314,9 @@ function ExpiryControlContent() {
 
     groups.forEach(baseGroup => {
         baseGroup.brands.forEach(brandGroup => {
-            brandGroup.products.forEach(productGroup => {
-                productGroup.lots.sort((a,b) => {
-                    if (!a.expiryDate && !b.expiryDate) return 0;
-                    if (!a.expiryDate) return 1;
-                    if (!b.expiryDate) return -1;
-                    return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
-                });
-            });
             brandGroup.products.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)))
         });
-        baseGroup.brands.sort((a,b) => a.name.localeCompare(b.name));
+        baseGroup.brands.sort((a,b) => a.brandName.localeCompare(b.brandName));
     });
 
     return Array.from(groups.values()).sort((a,b) => a.name.localeCompare(b.name));
@@ -569,7 +564,6 @@ function ExpiryControlContent() {
 
   return (
     <>
-      <ActiveReservationsSummary selectedKioskId={selectedKioskId} />
       <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
         <div className='p-6 space-y-4'>
             <div className="relative w-full">
@@ -655,6 +649,7 @@ function ExpiryControlContent() {
             </div>
         </div>
         <div className="px-6 pb-6 pt-0 flex-1 overflow-hidden">
+                <ActiveReservationsSummary selectedKioskId={selectedKioskId} />
                 {renderContent()}
         </div>
       </div>
