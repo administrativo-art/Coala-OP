@@ -1,18 +1,9 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Permite que qualquer pessoa leia arquivos dentro da pasta 'settings/company/'.
-    // Isso é necessário para que a logo da empresa seja publicamente visível na aplicação.
-    match /settings/company/{allPaths=**} {
+    match /{allPaths=**} {
+      // Permite a leitura pública de todos os arquivos.
       allow read;
-      allow write: if request.auth != null; // Apenas usuários autenticados podem escrever.
-    }
-
-    // Regra para todos os outros caminhos (todo o resto no bucket).
-    // Esta regra NÃO se aplicará à pasta 'settings/company/' porque a regra acima é mais específica.
-    match /{path=**} {
-      // Nega a leitura pública por padrão, exigindo autenticação.
-      allow read: if request.auth != null;
       // Permite a escrita apenas para usuários autenticados.
       allow write: if request.auth != null;
     }
