@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, Building2 } from 'lucide-react';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LocationManagementModal } from './location-management-modal';
@@ -27,8 +27,12 @@ import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
-import { resizeImage } from '@/lib/image-utils';
+import { resizeImage, dataURLtoFile } from '@/lib/image-utils';
 import { Label } from '@/components/ui/label';
+import { useCompanySettings } from '@/hooks/use-company-settings';
+import { uploadFile } from '@/lib/storage';
+import Image from 'next/image';
+
 
 const userSchema = z.object({
   username: z.string().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
@@ -45,6 +49,90 @@ const userSchema = z.object({
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
+
+function LogoUploader() {
+  const { logoUrl, updateLogoUrl } = useCompanySettings();
+  const { toast } = useToast();
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleUpload = async (dataUrl: string) => {
+    setIsUploading(true);
+    try {
+      const resizedDataUrl = await resizeImage(dataUrl, 512, 512);
+      const imageFile = dataURLtoFile(resizedDataUrl, 'logo.png');
+      const newUrl = await uploadFile(imageFile, 'settings/company/logo.png');
+      await updateLogoUrl(newUrl);
+      toast({ title: 'Logo atualizada com sucesso!' });
+    } catch (error) {
+      console.error("Logo upload failed:", error);
+      toast({ variant: 'destructive', title: 'Falha no upload', description: 'Não foi possível salvar a nova logo.' });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handlePhotoCaptured = async (dataUrl: string) => {
+    setIsPhotoModalOpen(false);
+    await handleUpload(dataUrl);
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        toast({ variant: 'destructive', title: 'Arquivo muito grande' });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        handleUpload(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Building2 /> Identidade Visual</CardTitle>
+        <CardDescription>Personalize a logo da empresa que aparece na barra lateral.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/50">
+          <div className="w-24 h-16 relative bg-muted rounded-md flex items-center justify-center">
+            {logoUrl ? (
+              <Image src={logoUrl} alt="Logo Atual" fill className="object-contain" />
+            ) : <p className="text-xs text-muted-foreground">Sem logo</p>}
+          </div>
+          <div className="flex-grow">
+            <h4 className="font-semibold">Logo Atual</h4>
+            <p className="text-sm text-muted-foreground">Esta é a logo exibida na barra de navegação.</p>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={() => setIsPhotoModalOpen(true)} disabled={isUploading}>
+            {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+            Tirar Foto
+          </Button>
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+             {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+            Carregar Imagem
+          </Button>
+        </div>
+        <Input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+      </CardContent>
+
+      <PhotoCaptureModal
+        open={isPhotoModalOpen}
+        onOpenChange={setIsPhotoModalOpen}
+        onPhotoCaptured={handlePhotoCaptured}
+      />
+    </Card>
+  );
+}
+
 
 export function UserManagement() {
   const { permissions, users, addUser, deleteUser, user: currentUser, updateUser, resetPassword } = useAuth();
@@ -234,256 +322,264 @@ export function UserManagement() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Usuários e perfis
-          </CardTitle>
-          <CardDescription>Adicione ou edite usuários e atribua perfis e escalas.</CardDescription>
-        </CardHeader>
-        <CardContent className="p-6">
-          {showForm ? (
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <Button variant="outline" onClick={() => setShowForm(false)}>
-                    Voltar para Configurações
-                </Button>
-                <h3 className="text-lg font-medium">{editingUser ? `Editando ${editingUser.username}` : 'Adicionar novo usuário'}</h3>
-                <div className="space-y-4 p-1">
-                 <div className="flex flex-col md:flex-row gap-6 items-start">
-                    <div className="space-y-2">
-                        <Label>Foto do perfil</Label>
-                        <Avatar className="h-24 w-24">
-                           <AvatarImage src={form.watch('avatarUrl') || undefined} />
-                           <AvatarFallback className="text-3xl bg-primary text-primary-foreground">
-                             {form.watch('username')?.charAt(0).toUpperCase() || '?'}
-                           </AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col gap-1.5">
-                            <Button type="button" size="sm" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2 h-4 w-4"/> Tirar foto</Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4"/> Carregar</Button>
+      {showForm ? (
+        <Card>
+            <CardHeader>
+                <CardTitle>
+                    {editingUser ? `Editando ${editingUser.username}` : 'Adicionar novo usuário'}
+                </CardTitle>
+                <CardDescription>
+                    Preencha os detalhes do usuário abaixo.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <div className="space-y-4 p-1">
+                    <div className="flex flex-col md:flex-row gap-6 items-start">
+                        <div className="space-y-2">
+                            <Label>Foto do perfil</Label>
+                            <Avatar className="h-24 w-24">
+                            <AvatarImage src={form.watch('avatarUrl') || undefined} />
+                            <AvatarFallback className="text-3xl bg-primary text-primary-foreground">
+                                {form.watch('username')?.charAt(0).toUpperCase() || '?'}
+                            </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col gap-1.5">
+                                <Button type="button" size="sm" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2 h-4 w-4"/> Tirar foto</Button>
+                                <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4"/> Carregar</Button>
+                            </div>
+                            <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
                         </div>
-                        <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow">
-                        <FormField control={form.control} name="username" render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>Nome de usuário</FormLabel>
-                            <FormControl><Input placeholder="ex: joao.silva" {...field} /></FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                        />
-                        <FormField control={form.control} name="email" render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>E-mail</FormLabel>
-                            <FormControl><Input type="email" placeholder="email@dominio.com" {...field} disabled={!!editingUser} /></FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                        />
-                         {!editingUser &&
-                            <div className="col-span-full">
-                               <FormField
-                                    control={form.control}
-                                    name="password"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Senha</FormLabel>
-                                            <div className="relative">
-                                                <FormControl>
-                                                    <Input
-                                                        type={showPassword ? 'text' : 'password'}
-                                                        placeholder="Senha com no mínimo 6 caracteres"
-                                                        {...field}
-                                                    />
-                                                </FormControl>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowPassword(!showPassword)}
-                                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
-                                                >
-                                                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                                </button>
-                                            </div>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                           </div>
-                        }
-                    </div>
-                </div>
-
-                  <Separator />
-                  <h4 className="font-medium text-muted-foreground">Permissões e alocação</h4>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField control={form.control} name="profileId" render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Perfil de permissão</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={profilesLoading}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione um perfil"/></SelectTrigger></FormControl>
-                            <SelectContent>
-                                {profiles.map(p => <SelectItem key={p.id} value={p.id} disabled={p.isDefaultAdmin && currentUser?.profileId !== adminProfileId}>{p.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                    <Controller
-                        control={form.control}
-                        name="assignedKioskIds"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Quiosques</FormLabel>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <FormControl>
-                                            <Button variant="outline" className="w-full justify-between font-normal">
-                                                {field.value?.length > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
-                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                            </Button>
-                                        </FormControl>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                                        <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        <ScrollArea className="h-48">
-                                            {kiosks.map((kiosk) => (
-                                                <DropdownMenuCheckboxItem
-                                                    key={kiosk.id}
-                                                    checked={field.value?.includes(kiosk.id)}
-                                                    onCheckedChange={(checked) => {
-                                                        const selected = field.value || [];
-                                                        return checked
-                                                            ? field.onChange([...selected, kiosk.id])
-                                                            : field.onChange(selected.filter((id) => id !== kiosk.id));
-                                                    }}
-                                                    onSelect={(e) => e.preventDefault()}
-                                                >
-                                                    {kiosk.name}
-                                                </DropdownMenuCheckboxItem>
-                                            ))}
-                                        </ScrollArea>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow">
+                            <FormField control={form.control} name="username" render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>Nome de usuário</FormLabel>
+                                <FormControl><Input placeholder="ex: joao.silva" {...field} /></FormControl>
                                 <FormMessage />
+                                </FormItem>
+                            )}
+                            />
+                            <FormField control={form.control} name="email" render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>E-mail</FormLabel>
+                                <FormControl><Input type="email" placeholder="email@dominio.com" {...field} disabled={!!editingUser} /></FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                            />
+                            {!editingUser &&
+                                <div className="col-span-full">
+                                <FormField
+                                        control={form.control}
+                                        name="password"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Senha</FormLabel>
+                                                <div className="relative">
+                                                    <FormControl>
+                                                        <Input
+                                                            type={showPassword ? 'text' : 'password'}
+                                                            placeholder="Senha com no mínimo 6 caracteres"
+                                                            {...field}
+                                                        />
+                                                    </FormControl>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowPassword(!showPassword)}
+                                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                                                    >
+                                                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                                    </button>
+                                                </div>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                            </div>
+                            }
+                        </div>
+                    </div>
+
+                    <Separator />
+                    <h4 className="font-medium text-muted-foreground">Permissões e alocação</h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField control={form.control} name="profileId" render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Perfil de permissão</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value} disabled={profilesLoading}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione um perfil"/></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    {profiles.map(p => <SelectItem key={p.id} value={p.id} disabled={p.isDefaultAdmin && currentUser?.profileId !== adminProfileId}>{p.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
                             </FormItem>
                         )}
                         />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                  <Button type="submit">{editingUser ? 'Salvar alterações' : 'Criar usuário'}</Button>
-                </div>
-              </form>
-            </Form>
-          ) : (
-            <>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={handleAddNew} className="flex-grow" disabled={!permissions.settings.manageUsers}>
-                  <PlusCircle className="mr-2" /> Adicionar usuário
-                </Button>
-                 <Button variant="outline" onClick={() => setIsProfilesModalOpen(true)} className="flex-grow" disabled={!permissions.settings.manageProfiles}>
-                    <Shield className="mr-2" /> Gerenciar perfis
-                </Button>
-                 <Button variant="outline" onClick={() => setIsKiosksModalOpen(true)} className="flex-grow" disabled={!canManageKiosks}>
-                    <Warehouse className="mr-2" /> Gerenciar quiosques
-                </Button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-2 mt-4 p-3 border rounded-lg bg-muted/50">
-                  <div className="relative flex-grow w-full">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                          placeholder="Buscar por nome..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-10 w-full"
-                      />
-                  </div>
-                  <Select value={profileFilter} onValueChange={setProfileFilter}>
-                      <SelectTrigger className="w-full sm:w-[180px]">
-                          <SelectValue placeholder="Perfil" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          <SelectItem value="all">Todos os Perfis</SelectItem>
-                          {profiles.map(profile => (
-                              <SelectItem key={profile.id} value={profile.id}>{profile.name}</SelectItem>
-                          ))}
-                      </SelectContent>
-                  </Select>
-                  <Select value={kioskFilter} onValueChange={setKioskFilter}>
-                      <SelectTrigger className="w-full sm:w-[220px]">
-                          <SelectValue placeholder="Quiosque" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          <SelectItem value="all">Todos os Quiosques</SelectItem>
-                          {kiosks.map(kiosk => (
-                              <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
-                          ))}
-                      </SelectContent>
-                  </Select>
-                  <Button variant="ghost" onClick={() => {
-                      setSearchTerm('');
-                      setProfileFilter('all');
-                      setKioskFilter('all');
-                  }}>
-                      <Eraser className="mr-2 h-4 w-4" />
-                      Limpar
-                  </Button>
-              </div>
-              
-              <Separator className="my-4" />
-              <div className="space-y-2">
-                <ScrollArea className="h-[40vh]">
-                  <div className="pr-4 space-y-2">
-                    {filteredUsers.map(user => (
-                      <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-4">
-                        <div className="font-medium">
-                          <span className="md:hidden text-muted-foreground">Usuário: </span>
-                          {user.username}
-                        </div>
-                        <div>
-                          <span className="md:hidden text-muted-foreground">Perfil: </span>
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${profileIsAdmin(user.profileId) ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>
-                            {getProfileName(user.profileId)}
-                          </span>
-                        </div>
-                        <div className="text-muted-foreground text-sm truncate">
-                          <span className="md:hidden font-medium text-card-foreground">Quiosque(s): </span>
-                          {getKioskNames(user.assignedKioskIds)}
-                        </div>
-                        <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
-                            {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
-                            {permissions.settings.manageUsers && (
-                              <DeleteConfirmationDialog
-                                  open={false}
-                                  onOpenChange={() => {}}
-                                  onConfirm={() => setUserToResetPassword(user)}
-                                  title={`Redefinir senha de ${user.username}?`}
-                                  description={`Um e-mail será enviado para ${user.email} com instruções para redefinir a senha.`}
-                                  confirmButtonText="Sim, enviar e-mail"
-                                  confirmButtonVariant="default"
-                                  triggerButton={<Button variant="ghost" size="icon"><KeyRound className="h-4 w-4" /></Button>}
-                              />
+                        <Controller
+                            control={form.control}
+                            name="assignedKioskIds"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Quiosques</FormLabel>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <FormControl>
+                                                <Button variant="outline" className="w-full justify-between font-normal">
+                                                    {field.value?.length > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </Button>
+                                            </FormControl>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                            <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                            <ScrollArea className="h-48">
+                                                {kiosks.map((kiosk) => (
+                                                    <DropdownMenuCheckboxItem
+                                                        key={kiosk.id}
+                                                        checked={field.value?.includes(kiosk.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            const selected = field.value || [];
+                                                            return checked
+                                                                ? field.onChange([...selected, kiosk.id])
+                                                                : field.onChange(selected.filter((id) => id !== kiosk.id));
+                                                        }}
+                                                        onSelect={(e) => e.preventDefault()}
+                                                    >
+                                                        {kiosk.name}
+                                                    </DropdownMenuCheckboxItem>
+                                                ))}
+                                            </ScrollArea>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                    <FormMessage />
+                                </FormItem>
                             )}
-                            {permissions.settings.manageUsers && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}><Trash2 className="h-4 w-4" /></Button>}
+                            />
+                    </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-4">
+                    <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+                    <Button type="submit">{editingUser ? 'Salvar alterações' : 'Criar usuário'}</Button>
+                    </div>
+                </form>
+                </Form>
+            </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+            <LogoUploader />
+
+            <Card>
+                <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Users /> Usuários</CardTitle>
+                <CardDescription>Adicione ou edite usuários e atribua perfis de permissão.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <Button onClick={handleAddNew} className="flex-grow" disabled={!permissions.settings.manageUsers}>
+                    <PlusCircle className="mr-2" /> Adicionar usuário
+                    </Button>
+                    <Button variant="outline" onClick={() => setIsProfilesModalOpen(true)} className="flex-grow" disabled={!permissions.settings.manageProfiles}>
+                        <Shield className="mr-2" /> Gerenciar perfis
+                    </Button>
+                    <Button variant="outline" onClick={() => setIsKiosksModalOpen(true)} className="flex-grow" disabled={!canManageKiosks}>
+                        <Warehouse className="mr-2" /> Gerenciar quiosques
+                    </Button>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-2 mt-4 p-3 border rounded-lg bg-muted/50">
+                    <div className="relative flex-grow w-full">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            placeholder="Buscar por nome..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10 w-full"
+                        />
+                    </div>
+                    <Select value={profileFilter} onValueChange={setProfileFilter}>
+                        <SelectTrigger className="w-full sm:w-[180px]">
+                            <SelectValue placeholder="Perfil" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos os Perfis</SelectItem>
+                            {profiles.map(profile => (
+                                <SelectItem key={profile.id} value={profile.id}>{profile.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select value={kioskFilter} onValueChange={setKioskFilter}>
+                        <SelectTrigger className="w-full sm:w-[220px]">
+                            <SelectValue placeholder="Quiosque" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos os Quiosques</SelectItem>
+                            {kiosks.map(kiosk => (
+                                <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button variant="ghost" onClick={() => {
+                        setSearchTerm('');
+                        setProfileFilter('all');
+                        setKioskFilter('all');
+                    }}>
+                        <Eraser className="mr-2 h-4 w-4" />
+                        Limpar
+                    </Button>
+                </div>
+                
+                <Separator className="my-4" />
+                <div className="space-y-2">
+                    <ScrollArea className="h-[40vh]">
+                    <div className="pr-4 space-y-2">
+                        {filteredUsers.map(user => (
+                        <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-4">
+                            <div className="font-medium">
+                            <span className="md:hidden text-muted-foreground">Usuário: </span>
+                            {user.username}
+                            </div>
+                            <div>
+                            <span className="md:hidden text-muted-foreground">Perfil: </span>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${profileIsAdmin(user.profileId) ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>
+                                {getProfileName(user.profileId)}
+                            </span>
+                            </div>
+                            <div className="text-muted-foreground text-sm truncate">
+                            <span className="md:hidden font-medium text-card-foreground">Quiosque(s): </span>
+                            {getKioskNames(user.assignedKioskIds)}
+                            </div>
+                            <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
+                                {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
+                                {permissions.settings.manageUsers && (
+                                <DeleteConfirmationDialog
+                                    open={false}
+                                    onOpenChange={() => {}}
+                                    onConfirm={() => setUserToResetPassword(user)}
+                                    title={`Redefinir senha de ${user.username}?`}
+                                    description={`Um e-mail será enviado para ${user.email} com instruções para redefinir a senha.`}
+                                    confirmButtonText="Sim, enviar e-mail"
+                                    confirmButtonVariant="default"
+                                    triggerButton={<Button variant="ghost" size="icon"><KeyRound className="h-4 w-4" /></Button>}
+                                />
+                                )}
+                                {permissions.settings.manageUsers && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}><Trash2 className="h-4 w-4" /></Button>}
+                            </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                        ))}
+                    </div>
+                    </ScrollArea>
+                </div>
+                </CardContent>
+            </Card>
+        </div>
+      )}
       
       <ProfileManagementModal 
         open={isProfilesModalOpen}

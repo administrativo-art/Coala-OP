@@ -40,7 +40,7 @@ export default function SettingsPage() {
                 </Button>
                 <div>
                     <h1 className="text-3xl font-bold">Configurações</h1>
-                    <p className="text-sm text-muted-foreground">Gerencie usuários, perfis e outras configurações do sistema.</p>
+                    <p className="text-sm text-muted-foreground">Gerencie usuários, perfis, identidade visual e outras configurações do sistema.</p>
                 </div>
             </div>
             
