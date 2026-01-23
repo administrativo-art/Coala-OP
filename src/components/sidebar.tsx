@@ -3,6 +3,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Link from "next/link"
+import Image from "next/image";
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
@@ -115,15 +116,14 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
         {/* TOPO: LOGO E BUSCA */}
         <div className="px-8 pt-10 pb-6 border-b border-black/5 dark:border-white/5">
             <div className="flex items-center justify-between mb-8">
-                <Link href="/dashboard" className="flex flex-col group transition-all active:scale-95">
-                    <div className="flex flex-col">
-                      <span className="text-2xl font-bold tracking-tighter text-slate-800 dark:text-white">
-                        coala<span className="text-primary">shakes</span>
-                      </span>
-                      <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground/60 leading-none mt-1">
-                        Management System
-                      </span>
-                    </div>
+                <Link href="/dashboard" className="block relative w-[180px] h-[45px]">
+                  <Image
+                    src="/logo.png"
+                    alt="Coala Shakes Logo"
+                    fill
+                    className="object-contain object-left"
+                    priority
+                  />
                 </Link>
                 <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5">
                     <X className="h-4 w-4" />
