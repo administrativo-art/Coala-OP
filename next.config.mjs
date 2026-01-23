@@ -2,25 +2,26 @@
 const nextConfig = {
   reactStrictMode: true,
   typescript: {
-    ignoreBuildErrors: true, // Mantendo sua config anterior
+    ignoreBuildErrors: true,
   },
   eslint: {
-    ignoreDuringBuilds: true, // Mantendo sua config anterior
+    ignoreDuringBuilds: true,
   },
   images: {
     remotePatterns: [
-      { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
-      { protocol: 'https', hostname: 'storage.googleapis.com' },
-      { protocol: 'https', hostname: 'images.openfoodfacts.org' },
-      { protocol: 'https', hostname: 'placehold.co' },
+      {
+        protocol: 'https',
+        hostname: 'images.openfoodfacts.org',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'placehold.co',
+        port: '',
+        pathname: '/**',
+      }
     ],
-  },
-  // Se o aviso de 'Unrecognized key' persistir e travar o dev, 
-  // comente este bloco experimental.
-  experimental: {
-    allowedDevOrigins: [
-      '6000-firebase-studio-1750786823522.cluster-duylic2g3fbzerqpzxxbw6helm.cloudworkstations.dev'
-    ]
   },
 };
 
