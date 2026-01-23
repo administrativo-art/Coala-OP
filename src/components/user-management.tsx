@@ -1,5 +1,3 @@
-
-
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -41,6 +39,7 @@ const userSchema = z.object({
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
   assignedKioskIds: z.array(z.string()).min(1, 'Selecione pelo menos um quiosque.'),
   avatarUrl: z.string().optional(),
+  operacional: z.boolean().optional(),
 }).refine(data => {
     return !data.password || data.password.length >= 6;
 }, {
@@ -78,6 +77,7 @@ export function UserManagement() {
         profileId: '',
         assignedKioskIds: [],
         avatarUrl: '',
+        operacional: false,
     }
   });
 
@@ -100,6 +100,7 @@ export function UserManagement() {
       profileId: '',
       assignedKioskIds: [],
       avatarUrl: '',
+      operacional: false,
     });
     setShowForm(true);
   };
@@ -113,6 +114,7 @@ export function UserManagement() {
       profileId: user.profileId,
       assignedKioskIds: user.assignedKioskIds || [],
       avatarUrl: user.avatarUrl || '',
+      operacional: user.operacional || false,
     });
     setShowForm(true);
   };
@@ -166,6 +168,7 @@ export function UserManagement() {
           profileId: values.profileId,
           assignedKioskIds: values.assignedKioskIds,
           avatarUrl: values.avatarUrl,
+          operacional: values.operacional,
       }, values.email, values.password);
     }
     setShowForm(false);
@@ -315,6 +318,28 @@ export function UserManagement() {
                                     />
                             </div>
                             }
+                             <div className="col-span-full">
+                                 <FormField
+                                    control={form.control}
+                                    name="operacional"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                            <div className="space-y-0.5">
+                                                <FormLabel>Usuário Operacional</FormLabel>
+                                                <FormDescription className="text-xs">
+                                                    Marque se este usuário deve aparecer nas escalas de trabalho.
+                                                </FormDescription>
+                                            </div>
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                             </div>
                         </div>
                     </div>
 
@@ -390,7 +415,7 @@ export function UserManagement() {
       ) : (
         <Card>
             <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Users /> Usuários</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Building2 /> Empresas</CardTitle>
             <CardDescription>Adicione ou edite usuários e atribua perfis de permissão.</CardDescription>
             </CardHeader>
             <CardContent>
