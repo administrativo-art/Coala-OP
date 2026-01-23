@@ -1,1 +1,2 @@
-// This component has been removed as the feature was deprecated.
+
+// This component has been removed as per user request.

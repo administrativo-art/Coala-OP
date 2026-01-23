@@ -115,16 +115,7 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
         
         {/* TOPO: LOGO E BUSCA */}
         <div className="px-8 pt-10 pb-6 border-b border-black/5 dark:border-white/5">
-            <div className="flex items-center justify-between mb-8">
-                <Link href="/dashboard" className="block relative w-[180px] h-[45px]">
-                  <Image
-                    src="/logo.png"
-                    alt="Coala Shakes Logo"
-                    fill
-                    className="object-contain object-left"
-                    priority
-                  />
-                </Link>
+            <div className="flex items-center justify-end mb-8">
                 <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5">
                     <X className="h-4 w-4" />
                 </Button>
@@ -171,7 +162,7 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
                         </div>
                         <div className="flex flex-col min-w-0">
                             <span className="text-sm font-bold text-slate-800 dark:text-white leading-none truncate">{user?.username}</span>
-                            <span className="text-[10px] font-medium text-muted-foreground mt-1">Administrador</span>
+                            <span className="text-[10px] font-medium text-muted-foreground">Administrador</span>
                         </div>
                     </div>
                     <Button 
