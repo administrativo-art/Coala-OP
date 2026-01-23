@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import { CompanyLogoSettings } from '@/components/company-logo-settings';
 
 export default function SettingsPage() {
     const { permissions } = useAuth();
@@ -44,6 +45,10 @@ export default function SettingsPage() {
                 </div>
             </div>
             
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <CompanyLogoSettings />
+            </div>
+
             <UserManagement />
         </div>
     )
