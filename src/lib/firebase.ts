@@ -6,9 +6,9 @@ import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCn2V94gjX_Y1n4IOY40Y0JBKgXl--Sgns",
-  authDomain: "smart-converter-752gf.firebaseapp.com",
-  projectId: "smart-converter-752gf",
-  storageBucket: "smart-converter-752gf.firebasestorage.app",
+  authDomain: "smart-converter-752qf.firebaseapp.com",
+  projectId: "smart-converter-752qf",
+  storageBucket: "smart-converter-752qf.firebasestorage.app",
   messagingSenderId: "787876557774",
   appId: "1:787876557774:web:cf2b2c3d7d0aae313a319f"
 };
@@ -24,4 +24,3 @@ const storage = getStorage(app);
 const auth = getAuth(app);
 
 export { db, storage, auth };
-

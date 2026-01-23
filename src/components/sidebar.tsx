@@ -126,8 +126,8 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
                         alt="Logo Empresa" 
                         fill 
                         className="object-contain object-left transition-opacity duration-500 opacity-0"
-                        onLoadingComplete={(img) => img.classList.remove('opacity-0')}
-                        priority // Carrega a logo com prioridade máxima
+                        onLoad={(e) => e.currentTarget.classList.remove('opacity-0')} 
+                        priority 
                       />
                     </div>
                   ) : (
