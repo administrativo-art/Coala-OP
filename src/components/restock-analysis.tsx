@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -12,7 +13,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { convertValue, units } from '@/lib/conversion';
+import { convertValue, units, type UnitCategory } from '@/lib/conversion';
 import { GlassCard, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/glass-card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,7 +21,7 @@ import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2, PlusCircle, Inbox, Loader2, ArrowRight } from 'lucide-react';
-import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory, type RepositionActivity, type RepositionSuggestedLot } from '@/types';
+import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { RestockSuggestionModal } from './restock-suggestion-modal';
@@ -35,7 +36,7 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { useRouter } from 'next/navigation';
 import { ToastAction } from "@/components/ui/toast"
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { Card } from './ui/card';
 
@@ -66,6 +67,7 @@ function RestockSummaryModal({
     open,
     onOpenChange,
     stagedItems,
+    analysisResults,
     onConfirm,
     onCancel,
     kioskName,
@@ -74,17 +76,67 @@ function RestockSummaryModal({
     open: boolean;
     onOpenChange: (open: boolean) => void;
     stagedItems: RepositionItem[];
+    analysisResults: AnalysisResult[];
     onConfirm: () => void;
     onCancel: () => void;
     kioskName: string;
     isLoading: boolean;
 }) {
+    const { products } = useProducts();
+    const { baseProducts } = useBaseProducts();
+
+    const itemsWithDetails = useMemo(() => {
+        return stagedItems.map(item => {
+            const analysisInfo = analysisResults.find(ar => ar.baseProduct.id === item.baseProductId);
+            const totalPackages = item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0);
+            
+            let totalInBaseUnit = 0;
+            const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
+
+            if(baseProduct) {
+                item.suggestedLots.forEach(lot => {
+                    const product = products.find(p => p.id === lot.productId);
+                    if (!product) return;
+                    
+                    try {
+                        let valueOfOnePackageInBase = 0;
+                        if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                            let secondaryUnitCategory: UnitCategory | undefined;
+                            for (const category in units) {
+                                if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
+                                    secondaryUnitCategory = category as UnitCategory;
+                                    break;
+                                }
+                            }
+                            if (!secondaryUnitCategory) return;
+                            valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+                        } else {
+                           valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                        }
+                        totalInBaseUnit += lot.quantityToMove * valueOfOnePackageInBase;
+                    } catch (e) {
+                        console.error('Conversion error in summary modal', e);
+                    }
+                });
+            }
+
+            return {
+                ...item,
+                minimumStock: analysisInfo?.minimumStock || 0,
+                currentStock: analysisInfo?.currentStock || 0,
+                totalPackages,
+                totalInBaseUnit,
+                baseUnit: baseProduct?.unit || ''
+            };
+        });
+    }, [stagedItems, analysisResults, products, baseProducts]);
+    
     const totalLots = useMemo(() => stagedItems.reduce((acc, item) => acc + item.suggestedLots.length, 0), [stagedItems]);
-    const totalUnits = useMemo(() => stagedItems.reduce((acc, item) => acc + item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0), 0), [stagedItems]);
+    const totalUnits = useMemo(() => itemsWithDetails.reduce((acc, item) => acc + item.totalPackages, 0), [itemsWithDetails]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent className="max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>Resumo da Reposição</DialogTitle>
                     <DialogDescription>
@@ -98,14 +150,21 @@ function RestockSummaryModal({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Produto Base</TableHead>
-                                    <TableHead className="text-right">Total (pacotes)</TableHead>
+                                    <TableHead className="text-right">Mínimo</TableHead>
+                                    <TableHead className="text-right">Atual</TableHead>
+                                    <TableHead className="text-right">A Repor</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {stagedItems.map(item => (
+                                {itemsWithDetails.map(item => (
                                     <TableRow key={item.baseProductId}>
                                         <TableCell className="font-medium">{item.productName}</TableCell>
-                                        <TableCell className="text-right">{item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0)}</TableCell>
+                                        <TableCell className="text-right">{item.minimumStock} {item.baseUnit}</TableCell>
+                                        <TableCell className="text-right">{item.currentStock.toFixed(1)} {item.baseUnit}</TableCell>
+                                        <TableCell className="text-right font-semibold">
+                                            <div>{item.totalPackages} pct</div>
+                                            <div className="text-xs text-muted-foreground">({item.totalInBaseUnit.toFixed(1)} {item.baseUnit})</div>
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -113,10 +172,10 @@ function RestockSummaryModal({
                     </ScrollArea>
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" onClick={onCancel}>Voltar e editar</Button>
+                    <Button variant="outline" onClick={onCancel}>Voltar</Button>
                     <Button onClick={onConfirm} disabled={isLoading}>
                         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Confirmar e criar atividade
+                        Confirmar
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -533,11 +592,18 @@ function AnalysisTab() {
     </Card>
     
     {!isMatrizSelected && stagedItems.length > 0 && (
-        <div className="flex items-center justify-between border-t pt-4 mt-6">
-            <Button variant="outline" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
-            <Button onClick={() => setIsSummaryModalOpen(true)}>
-                Próximo <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-4xl p-4">
+             <Card className="bg-background/90 backdrop-blur-sm shadow-2xl animate-in slide-in-from-bottom-4">
+                <CardContent className="p-4 flex items-center justify-between">
+                    <p className="font-semibold">{stagedItems.length} item(s) pronto(s) para reposição.</p>
+                     <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
+                        <Button onClick={() => setIsSummaryModalOpen(true)}>
+                            Próximo <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                    </div>
+                </CardContent>
+             </Card>
         </div>
     )}
 
@@ -554,6 +620,7 @@ function AnalysisTab() {
         open={isSummaryModalOpen}
         onOpenChange={setIsSummaryModalOpen}
         stagedItems={stagedItems}
+        analysisResults={analysisResults}
         onConfirm={handleCreateRepositionActivity}
         onCancel={() => setIsSummaryModalOpen(false)}
         kioskName={kiosks.find(k => k.id === selectedKioskId)?.name || ''}
