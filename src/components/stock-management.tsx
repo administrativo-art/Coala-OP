@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Inbox, Repeat, ShieldCheck as AuditIcon, Truck } from 'lucide-react';
+import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Truck, Repeat } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from './ui/skeleton';
 
@@ -13,7 +13,7 @@ export function StockManagement() {
     if (loading) {
       return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-64" />)}
+            {[...Array(7)].map((_, i) => <Skeleton key={i} className="h-64" />)}
         </div>
       );
     }
@@ -24,6 +24,7 @@ export function StockManagement() {
     const canViewPurchasing = permissions.stock.purchasing.view;
     const canViewReturns = permissions.stock.returns.view;
     const canViewConversions = permissions.stock.conversions.view;
+    const canViewReposition = permissions.stock.analysis.restock; // Assuming this permission governs reposition
 
     return (
         <div className="w-full max-w-7xl mx-auto">
@@ -38,7 +39,7 @@ export function StockManagement() {
                             <ClipboardCheck className="h-10 w-10 text-primary" />
                         </div>
                         <CardTitle className="text-2xl mb-2">Controle de estoque</CardTitle>
-                        <CardDescription>Acompanhe a validade dos lotes, adicione novos insumos e faça transferências entre quiosques.</CardDescription>
+                        <CardDescription>Acompanhe a validade, adicione lotes e faça transferências entre quiosques.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/inventory-control" className="w-full">
@@ -68,22 +69,40 @@ export function StockManagement() {
                     </Card>
                 )}
                 
+                {canViewReposition && <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="p-0 items-center">
+                        <div className="p-4 bg-primary/10 rounded-full mb-4">
+                            <Truck className="h-10 w-10 text-primary" />
+                        </div>
+                        <CardTitle className="text-2xl mb-2">Reposição</CardTitle>
+                        <CardDescription>Analise necessidades de reposição e gerencie as transferências de estoque.</CardDescription>
+                    </CardHeader>
+                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                        <Link href="/dashboard/stock/analysis" className="w-full">
+                             <Button className="w-full text-lg py-6">
+                                Acessar reposição <ArrowRight className="ml-2" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>}
+                
                 {canViewAnalysis && <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <BarChart3 className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Análise de estoque</CardTitle>
-                        <CardDescription>Analise relatórios de reposição de estoque e visualize o consumo médio dos produtos.</CardDescription>
+                        <CardTitle className="text-2xl mb-2">Análise Estratégica</CardTitle>
+                        <CardDescription>Relatórios de consumo, projeção de estoque e avaliação financeira.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
-                        <Link href="/dashboard/stock/analysis" className="w-full">
+                        <Link href="/dashboard/reports" className="w-full">
                              <Button className="w-full text-lg py-6">
                                 Acessar análise <ArrowRight className="ml-2" />
                             </Button>
                         </Link>
                     </CardContent>
                 </Card>}
+
                  {canViewPurchasing && (
                     <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                         <CardHeader className="p-0 items-center">
