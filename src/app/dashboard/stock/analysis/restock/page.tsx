@@ -23,7 +23,7 @@ function RestockAnalysisContent() {
                     <ArrowLeft className="w-6 h-6" />
                 </Button>
                 <div>
-                    <h1 className="text-3xl font-bold">Análise de Reposição</h1>
+                    <h1 className="text-3xl font-bold">Atividade de reposição</h1>
                     <p className="text-sm text-muted-foreground">Selecione os produtos e as quantidades para iniciar uma atividade de reposição.</p>
                 </div>
             </div>

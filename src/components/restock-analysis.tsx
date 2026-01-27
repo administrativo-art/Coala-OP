@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -172,14 +173,8 @@ function RestockSummaryModal({
 export function RestockAnalysis() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
-  const { kiosks, loading: kiosksLoading } = useKiosks();
-  const { lots, loading: lotsLoading } = useExpiryProducts();
-  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
-  const { products, loading: productsLoading } = useProducts();
-  const { createRepositionActivity, loading: repositionLoading } = useReposition();
   const { toast } = useToast();
-
+  
   const [selectedKioskId, setSelectedKioskId] = useState<string>('');
   const [suggestionToView, setSuggestionToView] = useState<AnalysisResult | null>(null);
   const [stagedItems, setStagedItems] = useState<RepositionItem[]>([]);
@@ -191,6 +186,12 @@ export function RestockAnalysis() {
       setSelectedKioskId(kioskIdFromUrl);
     }
   }, [searchParams]);
+
+  const { kiosks, loading: kiosksLoading } = useKiosks();
+  const { lots, loading: lotsLoading } = useExpiryProducts();
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+  const { products, loading: productsLoading } = useProducts();
+  const { createRepositionActivity, loading: repositionLoading } = useReposition();
 
   const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
   
@@ -408,13 +409,15 @@ export function RestockAnalysis() {
     return new Map(stagedItems.map(item => [item.baseProductId, item]));
   }, [stagedItems]);
   
+  const kiosk = kiosks.find(k => k.id === selectedKioskId);
+
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Análise de reposição</CardTitle>
+          <CardTitle>Atividade de reposição</CardTitle>
           <CardDescription>
-            {kiosks.find(k => k.id === selectedKioskId)?.name || 'Carregando...'}
+            {kiosk?.name || 'Carregando...'}
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
