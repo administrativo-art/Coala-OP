@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -442,7 +441,7 @@ function RepositionHistory() {
             />
         )}
     </>
-    );
+  );
 }
 
 export default function RepositionPage() {
@@ -458,6 +457,9 @@ export default function RepositionPage() {
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Voltar para reposição
                 </Button>
+            </div>
+            <div className="mb-4">
+                <h1 className="text-3xl font-bold">Gerenciamento da reposição</h1>
             </div>
              <Tabs defaultValue="management" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
