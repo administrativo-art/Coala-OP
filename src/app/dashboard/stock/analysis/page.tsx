@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -48,7 +47,7 @@ export default function RepositionHubPage() {
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end">
                             <Button className="w-full" onClick={() => setIsKioskModalOpen(true)}>
-                                Iniciar Reposição <ArrowRight className="ml-2" />
+                                Iniciar Análise <ArrowRight className="ml-2" />
                             </Button>
                         </CardContent>
                     </Card>
@@ -73,11 +72,11 @@ export default function RepositionHubPage() {
             <Dialog open={isKioskModalOpen} onOpenChange={setIsKioskModalOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Iniciar Reposição</DialogTitle>
-                        <DialogDescription>Selecione o quiosque de destino para analisar a necessidade de reposição.</DialogDescription>
+                        <DialogTitle>Iniciar Análise de Reposição</DialogTitle>
+                        <DialogDescription>Selecione o quiosque ou a matriz para analisar a necessidade de reposição.</DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-2">
-                        {kiosks.filter(k => k.id !== 'matriz').map(kiosk => (
+                        {kiosks.map(kiosk => (
                             <Button key={kiosk.id} variant="outline" className="w-full justify-start text-base py-6" onClick={() => handleKioskSelect(kiosk.id)}>
                                 {kiosk.name}
                             </Button>

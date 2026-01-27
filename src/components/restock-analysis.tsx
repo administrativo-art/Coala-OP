@@ -13,7 +13,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue, units, type UnitCategory } from '@/lib/conversion';
-import { CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
@@ -28,8 +28,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
-import { GlassCard } from './ui/glass-card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Checkbox } from './ui/checkbox';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -174,17 +174,12 @@ export function RestockAnalysis() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   
-  const [selectedKioskId, setSelectedKioskId] = useState<string>('');
+  const kioskId = searchParams.get('kioskId');
+  const isMatriz = kioskId === 'matriz';
+  
   const [suggestionToView, setSuggestionToView] = useState<AnalysisResult | null>(null);
   const [stagedItems, setStagedItems] = useState<RepositionItem[]>([]);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
-
-  useEffect(() => {
-    const kioskIdFromUrl = searchParams.get('kioskId');
-    if (kioskIdFromUrl) {
-      setSelectedKioskId(kioskIdFromUrl);
-    }
-  }, [searchParams]);
 
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
@@ -206,15 +201,39 @@ export function RestockAnalysis() {
     });
     setSuggestionToView(null);
   };
+  
+  const handleStageItemToggle = (result: AnalysisResult, checked: boolean) => {
+    if (checked) {
+      if (result.suggestion) {
+        const repositionItem: RepositionItem = {
+          baseProductId: result.baseProduct.id,
+          productName: result.baseProduct.name,
+          quantityNeeded: result.restockNeeded,
+          suggestedLots: result.suggestion.map(s => ({
+            lotId: s.lot.id,
+            productId: s.lot.productId,
+            productName: products.find(p => p.id === s.lot.productId)?.baseName || '',
+            lotNumber: s.lot.lotNumber,
+            quantityToMove: s.quantityToMove,
+          }))
+        };
+        handleStageItem(repositionItem);
+      } else {
+        setSuggestionToView(result);
+      }
+    } else {
+      handleRemoveStagedItem(result.baseProduct.id);
+    }
+  };
 
   const handleRemoveStagedItem = (baseProductId: string) => {
     setStagedItems(prev => prev.filter(i => i.baseProductId !== baseProductId));
   };
   
   const handleCreateRepositionActivity = async () => {
-    if (stagedItems.length === 0 || !selectedKioskId || selectedKioskId === 'matriz') return;
+    if (stagedItems.length === 0 || !kioskId || isMatriz) return;
 
-    const destinationKiosk = kiosks.find(k => k.id === selectedKioskId);
+    const destinationKiosk = kiosks.find(k => k.id === kioskId);
     if (!destinationKiosk) return;
     
     try {
@@ -245,16 +264,46 @@ export function RestockAnalysis() {
         setIsSummaryModalOpen(false);
     }
   };
+  
+    const handleExport = () => {
+    const dataToExport = analysisResults
+      .filter(item => item.status === 'repor')
+      .map(item => ({
+        'Produto Base': item.baseProduct.name,
+        'Unidade': item.baseProduct.unit,
+        'Estoque Mínimo': item.minimumStock,
+        'Estoque Atual': item.currentStock.toFixed(2),
+        'Necessidade de Reposição': item.restockNeeded.toFixed(2),
+      }));
+
+    if (dataToExport.length === 0) {
+      toast({
+        title: "Nenhum item para exportar",
+        description: "Não há itens com necessidade de reposição no momento.",
+      });
+      return;
+    }
+
+    const csv = Papa.unparse(dataToExport);
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `reposicao_matriz_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
 
   const analysisResults = useMemo((): AnalysisResult[] => {
-    if (!selectedKioskId || loading) return [];
+    if (!kioskId || loading) return [];
     
     const productMap = new Map(products.map(p => [p.id, p]));
-    const lotsInKiosk = lots.filter(lot => lot.kioskId === selectedKioskId);
+    const lotsInKiosk = lots.filter(lot => lot.kioskId === kioskId);
     const lotsInMatriz = lots.filter(lot => lot.kioskId === 'matriz');
 
     return baseProducts.map(baseProduct => {
-      const minimumStock = baseProduct.stockLevels?.[selectedKioskId]?.min;
+      const minimumStock = baseProduct.stockLevels?.[kioskId]?.min;
       
       let currentStock = 0;
       let hasConversionError = false;
@@ -319,7 +368,7 @@ export function RestockAnalysis() {
             stockPercentage = Math.min(100, (currentStock / minimumStock) * 100);
         }
 
-        if (status === 'repor' && restockNeeded > 0 && selectedKioskId !== 'matriz') {
+        if (status === 'repor' && restockNeeded > 0 && !isMatriz) {
             const availableMatrizLots = lotsInMatriz
                 .filter(lot => {
                     const p = productMap.get(lot.productId);
@@ -397,7 +446,7 @@ export function RestockAnalysis() {
         }
         return a.baseProduct.name.localeCompare(b.baseProduct.name);
     });
-  }, [selectedKioskId, baseProducts, products, lots, loading]);
+  }, [kioskId, baseProducts, products, lots, loading, isMatriz]);
   
   const getStatusBadge = (result: AnalysisResult) => {
     if (result.hasConversionError) {
@@ -419,99 +468,120 @@ export function RestockAnalysis() {
     return new Map(stagedItems.map(item => [item.baseProductId, item]));
   }, [stagedItems]);
   
-  const kiosk = kiosks.find(k => k.id === selectedKioskId);
+  const kiosk = kiosks.find(k => k.id === kioskId);
 
   return (
     <>
-      <div className="space-y-4">
-        {loading ? (
-          <Skeleton className="h-64 w-full" />
-        ) : !selectedKioskId ? (
-          <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-            <p>Carregando quiosque...</p>
-          </div>
-        ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {analysisResults.length > 0 ? analysisResults.map(result => {
-                    const isStaged = stagedItemMap.has(result.baseProduct.id);
-                    return (
-                        <GlassCard key={result.baseProduct.id} variant={result.status === 'repor' ? 'red' : 'default'} className="flex flex-col">
-                            <CardHeader className="flex-row items-start justify-between gap-4">
-                                <div>
-                                    <CardTitle>{result.baseProduct.name}</CardTitle>
-                                    <CardDescription>{result.baseProduct.unit}</CardDescription>
-                                </div>
-                                {getStatusBadge(result)}
-                            </CardHeader>
-                            <CardContent className="flex-grow space-y-4">
-                                <div className="flex justify-between items-baseline">
-                                    <span className="text-sm text-muted-foreground">Estoque atual</span>
-                                    <span className="text-2xl font-bold">{result.hasConversionError ? 'N/A' : result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                                </div>
-                                <div className="flex justify-between items-baseline">
-                                    <span className="text-sm text-muted-foreground">Meta mínima</span>
-                                    <span className="text-lg">{result.minimumStock > 0 ? result.minimumStock : '-'}</span>
-                                </div>
-                                {result.stockPercentage !== null && (
-                                    <div>
-                                        <Progress value={result.stockPercentage} className={cn(result.stockPercentage < 50 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
-                                        <p className="text-xs text-right text-muted-foreground mt-1">{result.stockPercentage.toFixed(0)}% da meta</p>
-                                    </div>
+      <Card>
+          <CardHeader>
+              <CardTitle>Análise de Reposição</CardTitle>
+              <CardDescription>
+                  {isMatriz
+                    ? "Visualize a necessidade de compra de insumos para a Matriz com base no estoque mínimo definido."
+                    : `Compare o estoque atual de ${kiosk?.name || '...'} com a meta e crie uma atividade de reposição.`}
+              </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+                <Skeleton className="h-64 w-full" />
+            ) : analysisResults.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground">
+                    <Inbox className="mx-auto h-12 w-12" />
+                    <p className="mt-4 font-semibold">Nenhum produto base encontrado para este quiosque.</p>
+                </div>
+            ) : (
+                <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            {!isMatriz && <TableHead className="w-10">Sel.</TableHead>}
+                            <TableHead>Produto Base</TableHead>
+                            <TableHead className="text-right">Estoque Mínimo</TableHead>
+                            <TableHead className="text-right">Estoque Atual</TableHead>
+                            <TableHead className="text-right">Necessidade</TableHead>
+                            <TableHead className="text-center">Status</TableHead>
+                            {!isMatriz && <TableHead className="text-right">Ações</TableHead>}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {analysisResults.map(result => {
+                           const isStaged = !isMatriz && stagedItemMap.has(result.baseProduct.id);
+                           return (
+                            <TableRow key={result.baseProduct.id} className={isStaged ? 'bg-primary/10' : ''}>
+                                 {!isMatriz && (
+                                     <TableCell>
+                                        {result.suggestion && (
+                                            <Checkbox
+                                                checked={isStaged}
+                                                onCheckedChange={(checked) => handleStageItemToggle(result, !!checked)}
+                                            />
+                                        )}
+                                    </TableCell>
+                                 )}
+                                <TableCell className="font-medium">{result.baseProduct.name} ({result.baseProduct.unit})</TableCell>
+                                <TableCell className="text-right">{result.minimumStock > 0 ? result.minimumStock : '-'}</TableCell>
+                                <TableCell className="text-right">{result.hasConversionError ? 'Erro' : result.currentStock.toFixed(2)}</TableCell>
+                                <TableCell className="text-right font-bold text-destructive">
+                                    {result.restockNeeded > 0 ? result.restockNeeded.toFixed(2) : '-'}
+                                </TableCell>
+                                <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
+                                {!isMatriz && (
+                                <TableCell className="text-right">
+                                    {result.suggestion ? (
+                                        isStaged ? (
+                                            <div className="flex items-center justify-end gap-1">
+                                                <Badge variant="secondary">Na reposição</Badge>
+                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRemoveStagedItem(result.baseProduct.id)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setSuggestionToView(result)}
+                                            >
+                                                <Wand2 className="mr-2 h-4 w-4" />
+                                                Sugerir
+                                            </Button>
+                                        )
+                                    ) : null}
+                                </TableCell>
                                 )}
-                            </CardContent>
-                            <CardFooter>
-                                {selectedKioskId !== 'matriz' && (
-                                  isStaged ? (
-                                    <div className="flex items-center justify-center gap-2 w-full">
-                                        <Badge variant="secondary">Na reposição</Badge>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => handleRemoveStagedItem(result.baseProduct.id)}>
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                  ) : (
-                                      <Button
-                                          variant={result.suggestion ? "default" : "secondary"}
-                                          size="sm"
-                                          className="w-full"
-                                          onClick={() => setSuggestionToView(result)}
-                                          disabled={result.status === 'ok' || result.status === 'sem_meta'}
-                                      >
-                                          {result.suggestion ? (
-                                              <><Wand2 className="mr-2 h-4 w-4" /> Ver sugestão</>
-                                          ) : (
-                                              <><PlusCircle className="mr-2 h-4 w-4" /> Adicionar</>
-                                          )}
-                                      </Button>
-                                  )
-                                )}
-                            </CardFooter>
-                        </GlassCard>
-                    )
-                }) : (
-                    <div className="col-span-full text-center py-16 text-muted-foreground">
-                        <Inbox className="mx-auto h-12 w-12" />
-                        <p className="mt-4 font-semibold">Nenhum produto base encontrado para análise.</p>
-                    </div>
-                )}
-            </div>
-        )}
-      </div>
-      
-      {selectedKioskId && selectedKioskId !== 'matriz' && stagedItems.length > 0 && (
-          <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg p-4 z-40">
-              <div className="bg-background/80 backdrop-blur-lg rounded-xl p-3 border shadow-2xl flex justify-center items-center gap-4">
-                  <Button variant="destructive" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
-                  <Button onClick={() => setIsSummaryModalOpen(true)}>
-                      Próximo <ArrowRight className="ml-2 h-4 w-4" />
+                            </TableRow>
+                        )})}
+                    </TableBody>
+                </Table>
+                </div>
+            )}
+          </CardContent>
+          <CardFooter className="flex justify-end gap-2 border-t pt-4">
+              {isMatriz ? (
+                  <Button onClick={handleExport}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Exportar Lista para Compra
                   </Button>
-              </div>
-          </div>
-      )}
-  
+              ) : (
+                  <>
+                      <Button variant="outline" onClick={() => setStagedItems([])} disabled={stagedItems.length === 0}>
+                          Limpar Seleção
+                      </Button>
+                      <Button
+                          onClick={() => setIsSummaryModalOpen(true)}
+                          disabled={stagedItems.length === 0 || repositionLoading}
+                      >
+                          {repositionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Truck className="mr-2 h-4 w-4" />}
+                          Finalizar e criar atividade ({stagedItems.length})
+                      </Button>
+                  </>
+              )}
+          </CardFooter>
+      </Card>
+      
       {suggestionToView && (
           <RestockSuggestionModal
               suggestionResult={suggestionToView}
-              targetKiosk={kiosks.find(k => k.id === selectedKioskId)!}
+              targetKiosk={kiosks.find(k => k.id === kioskId)!}
               onOpenChange={() => setSuggestionToView(null)}
               onStage={handleStageItem}
           />
@@ -524,11 +594,9 @@ export function RestockAnalysis() {
           analysisResults={analysisResults}
           onConfirm={handleCreateRepositionActivity}
           onCancel={() => setIsSummaryModalOpen(false)}
-          kioskName={kiosks.find(k => k.id === selectedKioskId)?.name || ''}
+          kioskName={kiosks.find(k => k.id === kioskId)?.name || ''}
           isLoading={repositionLoading}
       />
       </>
   );
 }
-
-    
