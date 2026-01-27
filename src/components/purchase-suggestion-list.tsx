@@ -96,7 +96,7 @@ export function PurchaseSuggestionList() {
                 status = 'attention';
             }
             
-            const suggestedQty = networkDailyAvg * (bp.consumptionMonths || 30);
+            const suggestedQty = monthlyAvg * (bp.consumptionMonths || 1);
 
             return {
                 baseProductId: bp.id,
