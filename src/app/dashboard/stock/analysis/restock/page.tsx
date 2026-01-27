@@ -25,7 +25,7 @@ function RestockAnalysisContent() {
                     variant="outline"
                 >
                     <ArrowLeft className="w-4 h-4 mr-2" />
-                    Voltar para Reposição
+                    Voltar para reposição
                 </Button>
             </div>
             <div className="space-y-1 mb-6">

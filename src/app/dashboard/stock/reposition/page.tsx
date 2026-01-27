@@ -409,19 +409,14 @@ export default function RepositionPage() {
 
     return (
         <div className="space-y-4">
-             <div className="flex items-center gap-4 mb-2">
+             <div className="mb-4">
                 <Button 
                     onClick={() => router.push('/dashboard/stock/analysis')}
-                    variant="ghost"
-                    className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                    aria-label="Voltar para análises"
+                    variant="outline"
                 >
-                    <ArrowLeft className="w-6 h-6" />
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Voltar para reposição
                 </Button>
-                <div>
-                    <h1 className="text-3xl font-bold">Atividades de reposição</h1>
-                    <p className="text-sm text-muted-foreground">Gerencie o fluxo de transferência de insumos entre os quiosques.</p>
-                </div>
             </div>
              <Tabs defaultValue="management" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
