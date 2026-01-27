@@ -42,8 +42,8 @@ export default function RepositionHubPage() {
                 {permissions.stock.analysis.restock && (
                     <Card className="flex flex-col">
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><RefreshCw /> Análise de reposição</CardTitle>
-                            <CardDescription>Compare o estoque atual com as metas e veja o que precisa ser reposto.</CardDescription>
+                            <CardTitle className="flex items-center gap-2"><RefreshCw /> Atividade de reposição</CardTitle>
+                            <CardDescription>Compare o estoque atual com as metas e crie uma atividade de reposição.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end">
                             <Button className="w-full" onClick={() => setIsKioskModalOpen(true)}>
