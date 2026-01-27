@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -56,7 +57,7 @@ export default function RepositionHubPage() {
                     <Card className="flex flex-col">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2"><Truck /> Gerenciamento da reposição</CardTitle>
-                            <CardDescription>Gerencie despachos e recebimentos de transferências entre quiosques.</CardDescription>
+                            <CardDescription>Gerencie o fluxo de envio e recebimento de insumos para as atividades de reposição.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end">
                             <Link href="/dashboard/stock/reposition" className="w-full">
