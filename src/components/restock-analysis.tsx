@@ -13,7 +13,8 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue, units } from '@/lib/conversion';
-import { GlassCard, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/glass-card';
+import { GlassCard } from '@/components/ui/glass-card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from './ui/skeleton';
@@ -35,7 +36,8 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { useRouter } from 'next/navigation';
 import { ToastAction } from "@/components/ui/toast"
-import { Dialog } from './ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from './ui/scroll-area';
 
 
 const PDFDownloadLink = dynamic(
