@@ -441,11 +441,11 @@ export function RestockAnalysis() {
                               </CardHeader>
                               <CardContent className="flex-grow space-y-4">
                                   <div className="flex justify-between items-baseline">
-                                      <span className="text-sm text-muted-foreground">Estoque Atual</span>
+                                      <span className="text-sm text-muted-foreground">Estoque atual</span>
                                       <span className="text-2xl font-bold">{result.hasConversionError ? 'N/A' : result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                                   </div>
                                   <div className="flex justify-between items-baseline">
-                                      <span className="text-sm text-muted-foreground">Meta Mínima</span>
+                                      <span className="text-sm text-muted-foreground">Meta mínima</span>
                                       <span className="text-lg">{result.minimumStock > 0 ? result.minimumStock : '-'}</span>
                                   </div>
                                   {result.stockPercentage !== null && (
