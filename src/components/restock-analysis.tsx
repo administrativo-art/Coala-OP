@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -19,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, ArrowRight, Loader2, Inbox } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, ArrowRight, Loader2, Inbox, PlusCircle } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -33,12 +32,10 @@ import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { GlassCard } from './ui/glass-card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
-
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
   { ssr: false }
 );
-
 
 interface SuggestedLot {
     lot: LotEntry;
@@ -139,8 +136,8 @@ function RestockSummaryModal({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Produto Base</TableHead>
-                                    <TableHead className="text-right">Mínimo</TableHead>
-                                    <TableHead className="text-right">Atual</TableHead>
+                                    <TableHead className="text-right">Estoque Mínimo</TableHead>
+                                    <TableHead className="text-right">Estoque Atual</TableHead>
                                     <TableHead className="text-right">A Repor</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -171,6 +168,7 @@ function RestockSummaryModal({
         </Dialog>
     );
 }
+
 
 export function RestockAnalysis() {
   const router = useRouter();
@@ -418,6 +416,12 @@ export function RestockAnalysis() {
   return (
     <>
       <Card>
+        <CardHeader>
+          <CardTitle>Análise de reposição</CardTitle>
+          <CardDescription>
+            {kiosks.find(k => k.id === selectedKioskId)?.name || 'Carregando...'}
+          </CardDescription>
+        </CardHeader>
         <CardContent className="pt-6">
           {loading ? (
             <Skeleton className="h-64 w-full" />
@@ -494,15 +498,14 @@ export function RestockAnalysis() {
       </Card>
       
       {selectedKioskId && selectedKioskId !== 'matriz' && stagedItems.length > 0 && (
-          <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-4xl p-4">
-               <Card className="bg-background/90 backdrop-blur-sm shadow-2xl animate-in slide-in-from-bottom-4">
-                  <CardContent className="p-4 flex items-center justify-between">
-                      <p className="font-semibold">{stagedItems.length} item(s) pronto(s) para reposição.</p>
-                       <div className="flex gap-2">
-                          <Button variant="outline" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
-                          <Button onClick={() => setIsSummaryModalOpen(true)}>
-                              Próximo <ArrowRight className="ml-2 h-4 w-4" />
-                          </Button>
+          <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg p-4 z-40">
+               <Card className="bg-background/95 shadow-2xl">
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="flex gap-2">
+                            <Button variant="destructive" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
+                            <Button onClick={() => setIsSummaryModalOpen(true)}>
+                                Próximo <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
                       </div>
                   </CardContent>
                </Card>
