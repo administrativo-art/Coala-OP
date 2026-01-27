@@ -9,7 +9,6 @@ import { ArrowLeft } from 'lucide-react';
 import { Suspense } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 function RestockAnalysisContent() {
     const router = useRouter();
@@ -20,19 +19,18 @@ function RestockAnalysisContent() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-4 mb-2">
-                <Button 
+            <div className="mb-4">
+                 <Button 
                     onClick={() => router.push('/dashboard/stock/analysis')}
-                    variant="ghost"
-                    className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                    aria-label="Voltar para análises"
+                    variant="outline"
                 >
-                    <ArrowLeft className="w-6 h-6" />
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Voltar para Análise
                 </Button>
-                <div>
-                     <h1 className="text-3xl font-bold">{kiosk?.name.replace('Quiosque', 'Unidade') || 'Atividade de reposição'}</h1>
-                    <p className="text-sm text-muted-foreground">Selecione os produtos e as quantidades para iniciar uma atividade de reposição.</p>
-                </div>
+            </div>
+            <div className="space-y-1 mb-6">
+                 <h1 className="text-3xl font-bold">{kiosk?.name.replace('Quiosque', 'Unidade') || 'Atividade de reposição'}</h1>
+                <p className="text-sm text-muted-foreground">Selecione os produtos para incluir na atividade de reposição</p>
             </div>
             <RestockAnalysis />
         </div>

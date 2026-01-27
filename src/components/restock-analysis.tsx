@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -13,7 +14,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue, units, type UnitCategory } from '@/lib/conversion';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
@@ -412,87 +413,79 @@ export function RestockAnalysis() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Atividade de reposição</CardTitle>
-          <CardDescription>
-            {kiosk?.name.replace('Quiosque', 'Unidade') || 'Carregando...'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {loading ? (
-            <Skeleton className="h-64 w-full" />
-          ) : !selectedKioskId ? (
-            <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-              <p>Carregando quiosque...</p>
-            </div>
-          ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {analysisResults.length > 0 ? analysisResults.map(result => {
-                      const isStaged = stagedItemMap.has(result.baseProduct.id);
-                      return (
-                          <GlassCard key={result.baseProduct.id} variant={result.status === 'repor' ? 'red' : 'default'} className="flex flex-col">
-                              <CardHeader className="flex-row items-start justify-between gap-4">
-                                  <div>
-                                      <CardTitle>{result.baseProduct.name}</CardTitle>
-                                      <CardDescription>{result.baseProduct.unit}</CardDescription>
-                                  </div>
-                                  {getStatusBadge(result)}
-                              </CardHeader>
-                              <CardContent className="flex-grow space-y-4">
-                                  <div className="flex justify-between items-baseline">
-                                      <span className="text-sm text-muted-foreground">Estoque atual</span>
-                                      <span className="text-2xl font-bold">{result.hasConversionError ? 'N/A' : result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                                  </div>
-                                  <div className="flex justify-between items-baseline">
-                                      <span className="text-sm text-muted-foreground">Meta mínima</span>
-                                      <span className="text-lg">{result.minimumStock > 0 ? result.minimumStock : '-'}</span>
-                                  </div>
-                                  {result.stockPercentage !== null && (
-                                      <div>
-                                          <Progress value={result.stockPercentage} className={cn(result.stockPercentage < 50 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
-                                          <p className="text-xs text-right text-muted-foreground mt-1">{result.stockPercentage.toFixed(0)}% da meta</p>
-                                      </div>
-                                  )}
-                              </CardContent>
-                              <CardFooter>
-                                  {selectedKioskId !== 'matriz' && (
-                                    isStaged ? (
-                                      <div className="flex items-center justify-center gap-2 w-full">
-                                          <Badge variant="secondary">Na reposição</Badge>
-                                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => handleRemoveStagedItem(result.baseProduct.id)}>
-                                              <Trash2 className="h-4 w-4" />
-                                          </Button>
-                                      </div>
-                                    ) : (
-                                        <Button
-                                            variant={result.suggestion ? "default" : "secondary"}
-                                            size="sm"
-                                            className="w-full"
-                                            onClick={() => setSuggestionToView(result)}
-                                            disabled={result.status === 'ok' || result.status === 'sem_meta'}
-                                        >
-                                            {result.suggestion ? (
-                                                <><Wand2 className="mr-2 h-4 w-4" /> Ver sugestão</>
-                                            ) : (
-                                                <><PlusCircle className="mr-2 h-4 w-4" /> Adicionar</>
-                                            )}
+      <div className="space-y-4">
+        {loading ? (
+          <Skeleton className="h-64 w-full" />
+        ) : !selectedKioskId ? (
+          <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+            <p>Carregando quiosque...</p>
+          </div>
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {analysisResults.length > 0 ? analysisResults.map(result => {
+                    const isStaged = stagedItemMap.has(result.baseProduct.id);
+                    return (
+                        <GlassCard key={result.baseProduct.id} variant={result.status === 'repor' ? 'red' : 'default'} className="flex flex-col">
+                            <CardHeader className="flex-row items-start justify-between gap-4">
+                                <div>
+                                    <CardTitle>{result.baseProduct.name}</CardTitle>
+                                    <CardDescription>{result.baseProduct.unit}</CardDescription>
+                                </div>
+                                {getStatusBadge(result)}
+                            </CardHeader>
+                            <CardContent className="flex-grow space-y-4">
+                                <div className="flex justify-between items-baseline">
+                                    <span className="text-sm text-muted-foreground">Estoque atual</span>
+                                    <span className="text-2xl font-bold">{result.hasConversionError ? 'N/A' : result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between items-baseline">
+                                    <span className="text-sm text-muted-foreground">Meta mínima</span>
+                                    <span className="text-lg">{result.minimumStock > 0 ? result.minimumStock : '-'}</span>
+                                </div>
+                                {result.stockPercentage !== null && (
+                                    <div>
+                                        <Progress value={result.stockPercentage} className={cn(result.stockPercentage < 50 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
+                                        <p className="text-xs text-right text-muted-foreground mt-1">{result.stockPercentage.toFixed(0)}% da meta</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                            <CardFooter>
+                                {selectedKioskId !== 'matriz' && (
+                                  isStaged ? (
+                                    <div className="flex items-center justify-center gap-2 w-full">
+                                        <Badge variant="secondary">Na reposição</Badge>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => handleRemoveStagedItem(result.baseProduct.id)}>
+                                            <Trash2 className="h-4 w-4" />
                                         </Button>
-                                    )
-                                  )}
-                              </CardFooter>
-                          </GlassCard>
-                      )
-                  }) : (
-                      <div className="col-span-full text-center py-16 text-muted-foreground">
-                          <Inbox className="mx-auto h-12 w-12" />
-                          <p className="mt-4 font-semibold">Nenhum produto base encontrado para análise.</p>
-                      </div>
-                  )}
-              </div>
-          )}
-        </CardContent>
-      </Card>
+                                    </div>
+                                  ) : (
+                                      <Button
+                                          variant={result.suggestion ? "default" : "secondary"}
+                                          size="sm"
+                                          className="w-full"
+                                          onClick={() => setSuggestionToView(result)}
+                                          disabled={result.status === 'ok' || result.status === 'sem_meta'}
+                                      >
+                                          {result.suggestion ? (
+                                              <><Wand2 className="mr-2 h-4 w-4" /> Ver sugestão</>
+                                          ) : (
+                                              <><PlusCircle className="mr-2 h-4 w-4" /> Adicionar</>
+                                          )}
+                                      </Button>
+                                  )
+                                )}
+                            </CardFooter>
+                        </GlassCard>
+                    )
+                }) : (
+                    <div className="col-span-full text-center py-16 text-muted-foreground">
+                        <Inbox className="mx-auto h-12 w-12" />
+                        <p className="mt-4 font-semibold">Nenhum produto base encontrado para análise.</p>
+                    </div>
+                )}
+            </div>
+        )}
+      </div>
       
       {selectedKioskId && selectedKioskId !== 'matriz' && stagedItems.length > 0 && (
           <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg p-4 z-40">
@@ -525,5 +518,5 @@ export function RestockAnalysis() {
           isLoading={repositionLoading}
       />
       </>
-    );
+  );
 }
