@@ -116,7 +116,7 @@ function RepositionManagement() {
                           <AccordionTrigger className="p-0 hover:no-underline flex-1 text-left">
                               <div className="flex justify-between items-center w-full">
                                   <div>
-                                      <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
+                                      <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName.replace('Quiosque', 'Unidade')}</p>
                                       <p className="text-sm text-muted-foreground">
                                           Solicitado em {format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                                       </p>
@@ -242,7 +242,7 @@ function RepositionManagement() {
               onOpenChange={() => setActivityToFinalize(null)}
               onConfirm={handleFinalizeConfirm}
               isDeleting={isFinalizing}
-              title="Efetivar Movimentação de Estoque?"
+              title="Efetivar movimentação de estoque?"
               description="Esta ação é irreversível. O estoque será debitado da origem e creditado no destino conforme a auditoria. Deseja continuar?"
               confirmButtonText="Sim, efetivar"
               confirmButtonVariant="default"
@@ -298,7 +298,7 @@ function RepositionHistory() {
     <>
         <Card>
             <CardHeader>
-                <CardTitle>Histórico de Reposições</CardTitle>
+                <CardTitle>Histórico de reposições</CardTitle>
                 <CardDescription>Consulte todas as atividades de reposição que já foram concluídas ou canceladas.</CardDescription>
                 <div className="pt-2">
                     <Tabs defaultValue="all" value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)} className="w-full sm:w-auto">
@@ -347,8 +347,8 @@ function RepositionHistory() {
                                             <TableRow>
                                                 <TableHead>Insumo</TableHead>
                                                 <TableHead>Lote</TableHead>
-                                                <TableHead className="text-center">Qtd. Enviada</TableHead>
-                                                <TableHead className="text-center">Qtd. Recebida</TableHead>
+                                                <TableHead className="text-center">Qtd. enviada</TableHead>
+                                                <TableHead className="text-center">Qtd. recebida</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -377,7 +377,7 @@ function RepositionHistory() {
                                     <div className="flex justify-end pt-2">
                                         {activity.status === 'Concluído' && permissions.reposition.cancel && (
                                             <Button variant="outline" size="sm" onClick={() => setActivityToRevert(activity)}>
-                                                <Undo2 className="mr-2 h-4 w-4" /> Reverter Movimentação
+                                                <Undo2 className="mr-2 h-4 w-4" /> Reverter movimentação
                                             </Button>
                                         )}
                                     </div>
@@ -395,7 +395,7 @@ function RepositionHistory() {
                 onOpenChange={() => setActivityToRevert(null)}
                 onConfirm={handleRevertConfirm}
                 isDeleting={isReverting}
-                title="Reverter Movimentação?"
+                title="Reverter movimentação?"
                 description={<p>Esta ação irá estornar esta transferência e reabrir a atividade de reposição. <strong>Esta ação é irreversível.</strong></p>}
                 confirmButtonText="Sim, reverter"
             />
@@ -419,7 +419,7 @@ export default function RepositionPage() {
                     <ArrowLeft className="w-6 h-6" />
                 </Button>
                 <div>
-                    <h1 className="text-3xl font-bold">Atividades de Reposição</h1>
+                    <h1 className="text-3xl font-bold">Atividades de reposição</h1>
                     <p className="text-sm text-muted-foreground">Gerencie o fluxo de transferência de insumos entre os quiosques.</p>
                 </div>
             </div>
