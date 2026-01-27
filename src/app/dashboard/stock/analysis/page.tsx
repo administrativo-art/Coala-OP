@@ -1,16 +1,25 @@
-
 "use client";
 
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight, TrendingUp, DollarSign, RefreshCw, LineChart } from 'lucide-react';
+import { ArrowLeft, ArrowRight, TrendingUp, DollarSign, RefreshCw, LineChart, Truck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { useKiosks } from '@/hooks/use-kiosks';
 
 export default function AnalysisPage() {
     const router = useRouter();
     const { permissions } = useAuth();
+    const { kiosks } = useKiosks();
+    const [isKioskModalOpen, setIsKioskModalOpen] = useState(false);
+
+    const handleKioskSelect = (kioskId: string) => {
+        router.push(`/dashboard/stock/analysis/restock?kioskId=${kioskId}`);
+        setIsKioskModalOpen(false);
+    };
     
     return (
         <div className="w-full">
@@ -37,9 +46,22 @@ export default function AnalysisPage() {
                             <CardDescription>Compare o estoque atual com as metas e veja o que precisa ser reposto.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end">
-                            <Link href="/dashboard/stock/analysis/restock" className="w-full">
+                            <Button className="w-full" onClick={() => setIsKioskModalOpen(true)}>
+                                Iniciar Reposição <ArrowRight className="ml-2" />
+                            </Button>
+                        </CardContent>
+                    </Card>
+                 )}
+                 {permissions.stock.analysis.restock && (
+                    <Card className="flex flex-col">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2"><Truck /> Atividades de Reposição</CardTitle>
+                            <CardDescription>Gerencie despachos e recebimentos de transferências entre quiosques.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-grow flex items-end">
+                             <Link href="/dashboard/stock/reposition" className="w-full">
                                 <Button className="w-full">
-                                    Analisar reposição <ArrowRight className="ml-2" />
+                                    Gerenciar Atividades <ArrowRight className="ml-2" />
                                 </Button>
                             </Link>
                         </CardContent>
@@ -91,6 +113,22 @@ export default function AnalysisPage() {
                     </Card>
                 )}
             </div>
+
+            <Dialog open={isKioskModalOpen} onOpenChange={setIsKioskModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Iniciar Reposição</DialogTitle>
+                        <DialogDescription>Selecione o quiosque de destino para analisar a necessidade de reposição.</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-2">
+                        {kiosks.filter(k => k.id !== 'matriz').map(kiosk => (
+                            <Button key={kiosk.id} variant="outline" className="w-full justify-start text-base py-6" onClick={() => handleKioskSelect(kiosk.id)}>
+                                {kiosk.name}
+                            </Button>
+                        ))}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

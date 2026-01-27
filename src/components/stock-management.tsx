@@ -1,10 +1,9 @@
-
 "use client";
 
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Inbox, Repeat, ShieldCheck as AuditIcon } from 'lucide-react';
+import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Inbox, Repeat, ShieldCheck as AuditIcon, Truck } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from './ui/skeleton';
 

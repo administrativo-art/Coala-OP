@@ -2,12 +2,14 @@
 
 "use client";
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { RestockAnalysis } from '@/components/restock-analysis';
 import { ArrowLeft } from 'lucide-react';
+import { Suspense } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export default function RestockAnalysisPage() {
+function RestockAnalysisContent() {
     const router = useRouter();
     return (
         <div className="space-y-4">
@@ -22,10 +24,18 @@ export default function RestockAnalysisPage() {
                 </Button>
                 <div>
                     <h1 className="text-3xl font-bold">Análise de Reposição</h1>
-                    <p className="text-sm text-muted-foreground">Voltar para análises</p>
+                    <p className="text-sm text-muted-foreground">Selecione os produtos e as quantidades para iniciar uma atividade de reposição.</p>
                 </div>
             </div>
             <RestockAnalysis />
         </div>
+    );
+}
+
+export default function RestockAnalysisPage() {
+    return (
+        <Suspense fallback={<Skeleton className="h-[80vh] w-full" />}>
+            <RestockAnalysisContent />
+        </Suspense>
     );
 }
