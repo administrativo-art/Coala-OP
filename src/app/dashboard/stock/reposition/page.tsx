@@ -70,7 +70,7 @@ function RepositionManagement() {
             <Inbox className="h-12 w-12 mb-4" />
             <h3 className="text-xl font-semibold text-foreground">Nenhuma atividade de reposição</h3>
             <p className="max-w-md mt-2">
-                Quando uma sugestão de reposição for salva na aba "Análise", ela aparecerá aqui para ser gerenciada.
+                Quando uma atividade de reposição for iniciada, ela aparecerá aqui para ser gerenciada.
             </p>
         </Card>
     )
