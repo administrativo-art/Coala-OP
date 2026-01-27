@@ -13,13 +13,13 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { convertValue, units } from '@/lib/conversion';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { GlassCard, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/glass-card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2, PlusCircle, Inbox } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, ShoppingCart, Trash2, Download, Info, History, Undo2, PlusCircle, Inbox, Loader2 } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type UnitCategory, type RepositionActivity, type RepositionSuggestedLot } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -35,6 +35,7 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { useRouter } from 'next/navigation';
 import { ToastAction } from "@/components/ui/toast"
+import { Dialog } from './ui/dialog';
 
 
 const PDFDownloadLink = dynamic(
@@ -59,6 +60,68 @@ export interface AnalysisResult {
   suggestion?: SuggestedLot[];
 }
 
+function RestockSummaryModal({
+    open,
+    onOpenChange,
+    stagedItems,
+    onConfirm,
+    onCancel,
+    kioskName,
+    isLoading
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    stagedItems: RepositionItem[];
+    onConfirm: () => void;
+    onCancel: () => void;
+    kioskName: string;
+    isLoading: boolean;
+}) {
+    const totalLots = useMemo(() => stagedItems.reduce((acc, item) => acc + item.suggestedLots.length, 0), [stagedItems]);
+    const totalUnits = useMemo(() => stagedItems.reduce((acc, item) => acc + item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0), 0), [stagedItems]);
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Resumo da Reposição</DialogTitle>
+                    <DialogDescription>
+                        Confirme os itens a serem transferidos para <strong>{kioskName}</strong>.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    <p className="mb-2">Total de <strong>{stagedItems.length}</strong> produtos base, somando <strong>{totalUnits}</strong> pacotes em <strong>{totalLots}</strong> lote(s).</p>
+                    <ScrollArea className="h-60 rounded-md border">
+                         <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Produto Base</TableHead>
+                                    <TableHead className="text-right">Total (pacotes)</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {stagedItems.map(item => (
+                                    <TableRow key={item.baseProductId}>
+                                        <TableCell className="font-medium">{item.productName}</TableCell>
+                                        <TableCell className="text-right">{item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0)}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </ScrollArea>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onCancel}>Voltar e editar</Button>
+                    <Button onClick={onConfirm} disabled={isLoading}>
+                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Confirmar e criar atividade
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 function AnalysisTab() {
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
@@ -72,6 +135,8 @@ function AnalysisTab() {
   const [selectedKioskId, setSelectedKioskId] = useState<string>('');
   const [suggestionToView, setSuggestionToView] = useState<AnalysisResult | null>(null);
   const [stagedItems, setStagedItems] = useState<RepositionItem[]>([]);
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+
 
   const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
   const isMatrizSelected = selectedKioskId === 'matriz';
@@ -137,6 +202,8 @@ function AnalysisTab() {
             title: 'Erro ao criar atividade',
             description: error.message || "Não foi possível criar a atividade de reposição.",
         });
+    } finally {
+        setIsSummaryModalOpen(false);
     }
   };
 
@@ -333,7 +400,7 @@ function AnalysisTab() {
     document.body.removeChild(link);
   };
   
-    const selectedKiosk = useMemo(() => kiosks.find(k => k.id === selectedKioskId), [kiosks, selectedKioskId]);
+  const selectedKiosk = useMemo(() => kiosks.find(k => k.id === selectedKioskId), [kiosks, selectedKioskId]);
 
   return (
     <>
@@ -401,68 +468,69 @@ function AnalysisTab() {
             <p className="mt-4 font-semibold">Selecione um quiosque para iniciar a análise.</p>
           </div>
         ) : (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[30%]">Produto base</TableHead>
-                  <TableHead className="text-center">Estoque mínimo</TableHead>
-                  <TableHead className="text-center">Estoque atual</TableHead>
-                  <TableHead className="w-[20%] text-center">Nível</TableHead>
-                  <TableHead className="text-center">Ação</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {analysisResults.length > 0 ? analysisResults.map(result => {
                     const isStaged = stagedItemMap.has(result.baseProduct.id);
                     return (
-                        <TableRow key={result.baseProduct.id} className={cn(!isMatrizSelected && isStaged && "bg-primary/5")}>
-                            <TableCell className="font-medium">{result.baseProduct.name}</TableCell>
-                            <TableCell className="text-center">{result.minimumStock > 0 ? `${result.minimumStock} ${result.baseProduct.unit}` : '-'}</TableCell>
-                            <TableCell className="text-center font-semibold">{result.hasConversionError ? 'N/A' : `${result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}`}</TableCell>
-                            <TableCell className="text-center">
-                                {result.stockPercentage !== null ? (
-                                    <Progress value={result.stockPercentage} className={cn(result.stockPercentage < 100 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
-                                ) : '-'}
-                            </TableCell>
-                            <TableCell className="text-center font-bold text-primary">
-                            {isMatrizSelected ? (
-                                result.restockNeeded > 0 ? `Comprar ${result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${result.baseProduct.unit}` : '-'
-                            ) : isStaged ? (
-                                <div className="flex items-center justify-center gap-2">
-                                <Badge variant="secondary">Na reposição</Badge>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => handleRemoveStagedItem(result.baseProduct.id)}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                        <GlassCard key={result.baseProduct.id} variant={result.status === 'repor' ? 'red' : 'default'} className="flex flex-col">
+                            <CardHeader className="flex-row items-start justify-between gap-4">
+                                <div>
+                                    <CardTitle>{result.baseProduct.name}</CardTitle>
+                                    <CardDescription>{result.baseProduct.unit}</CardDescription>
                                 </div>
-                            ) : (
-                                <Button
-                                    variant={result.suggestion ? "outline" : "secondary"}
-                                    size="sm"
-                                    onClick={() => setSuggestionToView(result)}
-                                >
-                                    {result.suggestion ? (
-                                        <><Wand2 className="mr-2 h-4 w-4" /> Ver sugestão</>
-                                    ) : (
-                                        <><PlusCircle className="mr-2 h-4 w-4" /> Adicionar</>
-                                    )}
-                                </Button>
-                            )}
-                            </TableCell>
-                            <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
-                        </TableRow>
+                                {getStatusBadge(result)}
+                            </CardHeader>
+                            <CardContent className="flex-grow space-y-4">
+                                <div className="flex justify-between items-baseline">
+                                    <span className="text-sm text-muted-foreground">Estoque Atual</span>
+                                    <span className="text-2xl font-bold">{result.hasConversionError ? 'N/A' : result.currentStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between items-baseline">
+                                    <span className="text-sm text-muted-foreground">Meta Mínima</span>
+                                    <span className="text-lg">{result.minimumStock > 0 ? result.minimumStock : '-'}</span>
+                                </div>
+                                {result.stockPercentage !== null && (
+                                    <div>
+                                        <Progress value={result.stockPercentage} className={cn(result.stockPercentage < 50 ? '[&>*]:bg-orange-500' : '[&>*]:bg-green-500')} />
+                                        <p className="text-xs text-right text-muted-foreground mt-1">{result.stockPercentage.toFixed(0)}% da meta</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                            <CardFooter>
+                                {isMatrizSelected ? (
+                                    result.restockNeeded > 0 && <Badge variant="destructive">Comprar {result.restockNeeded.toLocaleString(undefined, { maximumFractionDigits: 2 })} {result.baseProduct.unit}</Badge>
+                                ) : isStaged ? (
+                                    <div className="flex items-center justify-center gap-2 w-full">
+                                        <Badge variant="secondary">Na reposição</Badge>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => handleRemoveStagedItem(result.baseProduct.id)}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button
+                                        variant={result.suggestion ? "default" : "secondary"}
+                                        size="sm"
+                                        className="w-full"
+                                        onClick={() => setSuggestionToView(result)}
+                                        disabled={result.status === 'ok' || result.status === 'sem_meta'}
+                                    >
+                                        {result.suggestion ? (
+                                            <><Wand2 className="mr-2 h-4 w-4" /> Ver sugestão</>
+                                        ) : (
+                                            <><PlusCircle className="mr-2 h-4 w-4" /> Adicionar</>
+                                        )}
+                                    </Button>
+                                )}
+                            </CardFooter>
+                        </GlassCard>
                     )
                 }) : (
-                    <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center">
-                            Nenhum produto base encontrado para análise.
-                        </TableCell>
-                    </TableRow>
+                    <div className="col-span-full text-center py-16 text-muted-foreground">
+                        <Inbox className="mx-auto h-12 w-12" />
+                        <p className="mt-4 font-semibold">Nenhum produto base encontrado para análise.</p>
+                    </div>
                 )}
-              </TableBody>
-            </Table>
-          </div>
+            </div>
         )}
       </CardContent>
     </Card>
@@ -488,10 +556,10 @@ function AnalysisTab() {
                     ))}
                 </div>
             </CardContent>
-            <CardFooter className="justify-end border-t pt-4">
-                <Button onClick={handleCreateRepositionActivity} disabled={repositionLoading}>
-                    <Truck className="mr-2 h-4 w-4" />
-                    {repositionLoading ? 'Criando atividade...' : `Criar atividade de reposição (${stagedItems.length})`}
+            <CardFooter className="justify-between items-center border-t pt-4">
+                <Button variant="outline" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
+                <Button onClick={() => setIsSummaryModalOpen(true)}>
+                    Próximo <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
             </CardFooter>
         </Card>
@@ -505,53 +573,63 @@ function AnalysisTab() {
             onStage={handleStageItem}
         />
     )}
+
+    <RestockSummaryModal
+        open={isSummaryModalOpen}
+        onOpenChange={setIsSummaryModalOpen}
+        stagedItems={stagedItems}
+        onConfirm={handleCreateRepositionActivity}
+        onCancel={() => setIsSummaryModalOpen(false)}
+        kioskName={kiosks.find(k => k.id === selectedKioskId)?.name || ''}
+        isLoading={repositionLoading}
+    />
     </>
   );
 }
 
 function RepositionHistory() {
-    const { activities, loading, revertRepositionActivity } = useReposition();
-    const { user, permissions } = useAuth();
-    const [isReverting, setIsReverting] = useState(false);
-    const [activityToRevert, setActivityToRevert] = useState<RepositionActivity | null>(null);
-    const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
+  const { activities, loading, revertRepositionActivity } = useReposition();
+  const { user, permissions } = useAuth();
+  const [isReverting, setIsReverting] = useState(false);
+  const [activityToRevert, setActivityToRevert] = useState<RepositionActivity | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
 
-    const historicalActivities = useMemo(() => {
-        return activities.filter((activity: RepositionActivity) => {
-            if (statusFilter === 'all') {
-                return activity.status === 'Concluído' || activity.status === 'Cancelada';
-            }
-            return activity.status === statusFilter;
-        });
-    }, [activities, statusFilter]);
-
-    if (loading) return <Skeleton className="h-64 w-full" />;
-    
-    const handleRevertConfirm = async () => {
-        if (!activityToRevert) return;
-        setIsReverting(true);
-        try {
-            await revertRepositionActivity(activityToRevert.id);
-        } catch(e) {
-            console.error(e);
-        } finally {
-            setIsReverting(false);
-            setActivityToRevert(null);
+  const historicalActivities = useMemo(() => {
+    return activities.filter((activity: RepositionActivity) => {
+        if (statusFilter === 'all') {
+            return activity.status === 'Concluído' || activity.status === 'Cancelada';
         }
-    };
-    
-    const hasAnyHistory = activities.some((a) => a.status === 'Concluído' || a.status === 'Cancelada');
+        return activity.status === statusFilter;
+    });
+  }, [activities, statusFilter]);
 
-    if (!hasAnyHistory) {
+  if (loading) return <Skeleton className="h-64 w-full" />;
+  
+  const handleRevertConfirm = async () => {
+    if (!activityToRevert) return;
+    setIsReverting(true);
+    try {
+        await revertRepositionActivity(activityToRevert.id);
+    } catch(e) {
+        console.error(e);
+    } finally {
+        setIsReverting(false);
+        setActivityToRevert(null);
+    }
+  };
+  
+  const hasAnyHistory = activities.some((a) => a.status === 'Concluído' || a.status === 'Cancelada');
+
+  if (!hasAnyHistory) {
          return (
             <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                 <History className="mx-auto h-12 w-12" />
                 <p className="mt-4 font-semibold">Nenhum histórico encontrado.</p>
             </div>
         );
-    }
-    
-    return (
+  }
+  
+  return (
     <>
         <Card>
             <CardHeader>
