@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -296,14 +295,6 @@ export function RestockAnalysis() {
     link.click();
     document.body.removeChild(link);
 };
-  
-   const handleExportPdf = () => {
-        toast({
-            title: "Exportação em manutenção",
-            description: "A função de exportar para PDF está sendo atualizada. Tente a exportação para CSV.",
-            variant: "destructive",
-        })
-    };
 
 
   const analysisResults = useMemo((): AnalysisResult[] => {
@@ -583,9 +574,16 @@ export function RestockAnalysis() {
                           <DropdownMenuItem onSelect={handleExportCsv}>
                               Exportar como CSV
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={handleExportPdf}>
-                              Exportar como PDF
-                          </DropdownMenuItem>
+                          <PDFDownloadLink
+                              document={<RestockAnalysisDocument data={analysisResults.filter(item => item.status === 'repor')} kioskName={kiosk?.name || 'N/A'} />}
+                              fileName={`reposicao_${kiosk?.name.replace(/\s/g, '_') || 'desconhecido'}_${new Date().toISOString().slice(0, 10)}.pdf`}
+                          >
+                               {({ loading }) => (
+                                    <DropdownMenuItem disabled={loading} onSelect={(e) => e.preventDefault()}>
+                                        {loading ? 'Gerando PDF...' : 'Exportar como PDF'}
+                                    </DropdownMenuItem>
+                                )}
+                          </PDFDownloadLink>
                       </DropdownMenuContent>
                   </DropdownMenu>
               ) : (
