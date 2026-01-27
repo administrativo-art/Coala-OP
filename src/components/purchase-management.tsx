@@ -1,19 +1,19 @@
-
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PurchaseSessionList } from "./purchase-session-list";
 import { PurchaseHistoryDashboard } from "./purchase-history-dashboard";
-import { History, ShoppingCart, ArrowRight, ArrowLeft } from "lucide-react";
+import { History, ShoppingCart, ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
 
 type ActiveView = 'menu' | 'sessions' | 'history';
 
 function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => void }) {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="flex flex-col text-center">
                 <CardHeader>
                     <div className="mx-auto bg-primary/10 p-3 rounded-full mb-2">
@@ -26,6 +26,22 @@ function MenuScreen({ setActiveView }: { setActiveView: (view: ActiveView) => vo
                      <Button className="w-full" onClick={() => setActiveView('sessions')}>
                         Acessar <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
+                </CardContent>
+            </Card>
+            <Card className="flex flex-col text-center">
+                <CardHeader>
+                    <div className="mx-auto bg-primary/10 p-3 rounded-full mb-2">
+                        <Sparkles className="h-8 w-8 text-primary" />
+                    </div>
+                    <CardTitle>Sugestão de Compra para Matriz</CardTitle>
+                    <CardDescription>Use o assistente para analisar a demanda da rede e gerar uma lista inteligente de compras.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow flex items-end justify-center">
+                    <Link href="/dashboard/stock/purchasing/suggestion" className="w-full">
+                        <Button className="w-full">
+                            Gerar Análise de Compra <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                    </Link>
                 </CardContent>
             </Card>
             <Card className="flex flex-col text-center">
