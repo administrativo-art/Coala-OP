@@ -5,10 +5,10 @@ import { useMemo, useState, useCallback } from 'react';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
+import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { usePurchase } from '@/hooks/use-purchase';
-import { convertValue } from '@/lib/conversion';
+import { convertValue, units, type UnitCategory } from '@/lib/conversion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -62,8 +62,22 @@ export function PurchaseSuggestionList() {
                     const product = productMap.get(lot.productId);
                     if (!product) return sum;
                     try {
-                        const converted = convertValue(lot.quantity * product.packageSize, product.unit, bp.unit, product.category);
-                        return sum + converted;
+                        if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                            let secondaryUnitCategory: UnitCategory | undefined;
+                            for (const category in units) {
+                                if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
+                                    secondaryUnitCategory = category as UnitCategory;
+                                    break;
+                                }
+                            }
+                            if (!secondaryUnitCategory) return sum;
+                            
+                            const valueInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, bp.unit, secondaryUnitCategory);
+                            return sum + (lot.quantity * valueInBase);
+                        }
+            
+                        const valueInBase = convertValue(product.packageSize, product.unit, bp.unit, product.category);
+                        return sum + (lot.quantity * valueInBase);
                     } catch {
                         return sum;
                     }
