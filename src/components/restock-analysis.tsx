@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -230,7 +229,7 @@ export function RestockAnalysis() {
         if (!activityId) throw new Error("A criação da atividade falhou e não retornou um ID.");
         
         toast({
-            title: "Atividade de reposição foi criada.",
+            title: "Atividade de reposição criada.",
             description: "Agora você será redirecionado para o gerenciamento da reposição.",
         });
 
@@ -417,7 +416,7 @@ export function RestockAnalysis() {
         <CardHeader>
           <CardTitle>Atividade de reposição</CardTitle>
           <CardDescription>
-            {kiosk?.name || 'Carregando...'}
+            {kiosk?.name.replace('Quiosque', 'Unidade') || 'Carregando...'}
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
