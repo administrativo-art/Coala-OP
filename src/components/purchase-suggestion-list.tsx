@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState, useCallback } from 'react';
@@ -13,11 +14,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, ShoppingCart, Inbox, Loader2 } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, Inbox, Loader2, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from './ui/skeleton';
 import { format } from 'date-fns';
+import Papa from 'papaparse';
 
 interface Suggestion {
     baseProductId: string;
@@ -142,6 +144,37 @@ export function PurchaseSuggestionList() {
         router.push('/dashboard/stock/purchasing');
     };
 
+    const handleExport = () => {
+        if (suggestions.length === 0) {
+            toast({
+                title: "Nada para exportar",
+                description: "A lista de sugestões está vazia.",
+            });
+            return;
+        }
+
+        const dataForCsv = suggestions.map(s => ({
+            'Produto Base': s.baseProductName,
+            'Estoque Matriz': `${s.matrizStock.toFixed(1)} ${s.baseProductUnit}`,
+            'Consumo/dia (Rede)': `${s.networkDailyAvg.toFixed(2)} ${s.baseProductUnit}`,
+            'Cobertura': isFinite(s.coverageDays) ? `${s.coverageDays.toFixed(0)} dias` : '∞',
+            'Lead Time': s.leadTime > 0 ? `${s.leadTime} dias` : '-',
+            'Status': s.status === 'urgent' ? 'Urgente' : s.status === 'attention' ? 'Atenção' : s.status === 'ok' ? 'OK' : 'Sem Lead Time',
+            'Sugestão de Compra': `${s.suggestedQty.toFixed(1)} ${s.baseProductUnit}`,
+        }));
+
+        const csv = Papa.unparse(dataForCsv);
+        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const filename = `sugestoes_compra_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
     }
@@ -198,7 +231,11 @@ export function PurchaseSuggestionList() {
                     </div>
                 )}
             </CardContent>
-            <CardFooter className="justify-end border-t pt-4">
+            <CardFooter className="justify-between border-t pt-4">
+                 <Button onClick={handleExport} variant="outline" disabled={suggestions.length === 0}>
+                    <Download className="mr-2 h-4 w-4"/>
+                    Exportar Lista
+                </Button>
                 <Button onClick={handleCreatePurchaseSession} disabled={selectedProducts.size === 0 || loadingPurchase}>
                     {loadingPurchase ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShoppingCart className="mr-2 h-4 w-4"/>}
                     Criar Cotação com Itens ({selectedProducts.size})
