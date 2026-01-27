@@ -464,6 +464,10 @@ export function RestockAnalysis() {
     }
   };
 
+  const formatNumberDisplay = (value: number, unit: string) => {
+    return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ${unit}`;
+  }
+
   const stagedItemMap = useMemo(() => {
     return new Map(stagedItems.map(item => [item.baseProductId, item]));
   }, [stagedItems]);
@@ -518,11 +522,11 @@ export function RestockAnalysis() {
                                         )}
                                     </TableCell>
                                  )}
-                                <TableCell className="font-medium">{result.baseProduct.name} ({result.baseProduct.unit})</TableCell>
-                                <TableCell className="text-right">{result.minimumStock > 0 ? result.minimumStock : '-'}</TableCell>
-                                <TableCell className="text-right">{result.hasConversionError ? 'Erro' : result.currentStock.toFixed(2)}</TableCell>
+                                <TableCell className="font-medium">{result.baseProduct.name}</TableCell>
+                                <TableCell className="text-right">{result.minimumStock > 0 ? formatNumberDisplay(result.minimumStock, result.baseProduct.unit) : '-'}</TableCell>
+                                <TableCell className="text-right">{result.hasConversionError ? 'Erro' : formatNumberDisplay(result.currentStock, result.baseProduct.unit)}</TableCell>
                                 <TableCell className="text-right font-bold text-destructive">
-                                    {result.restockNeeded > 0 ? result.restockNeeded.toFixed(2) : '-'}
+                                    {result.restockNeeded > 0 ? formatNumberDisplay(result.restockNeeded, result.baseProduct.unit) : '-'}
                                 </TableCell>
                                 <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
                                 {!isMatriz && (
