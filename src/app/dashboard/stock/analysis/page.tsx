@@ -55,7 +55,7 @@ export default function RepositionHubPage() {
                 {permissions.stock.analysis.restock && (
                     <Card className="flex flex-col">
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><Truck /> Atividades de Reposição</CardTitle>
+                            <CardTitle className="flex items-center gap-2"><Truck /> Gerenciamento da reposição</CardTitle>
                             <CardDescription>Gerencie despachos e recebimentos de transferências entre quiosques.</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-end">
