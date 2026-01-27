@@ -23,6 +23,7 @@ import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialo
 import { AuditReceiptModal } from "@/components/audit-receipt-modal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 function RepositionManagement() {
@@ -259,15 +260,36 @@ function RepositionHistory() {
   const [isReverting, setIsReverting] = useState(false);
   const [activityToRevert, setActivityToRevert] = useState<RepositionActivity | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>((new Date().getMonth() + 1).toString());
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+
+  const availableYears = useMemo(() => {
+    const years = new Set(activities.map(a => a.updatedAt ? parseISO(a.updatedAt).getFullYear().toString() : parseISO(a.createdAt).getFullYear().toString()));
+    return Array.from(years).sort((a,b) => parseInt(b) - parseInt(a));
+  }, [activities]);
+
+  const months = useMemo(() => Array.from({ length: 12 }, (_, i) => ({
+    value: (i + 1).toString(),
+    label: format(new Date(2000, i), 'MMMM', { locale: ptBR }),
+  })), []);
 
   const historicalActivities = useMemo(() => {
     return activities.filter((activity: RepositionActivity) => {
+        const activityDate = activity.updatedAt ? parseISO(activity.updatedAt) : parseISO(activity.createdAt);
+        
+        if (selectedYear !== 'all' && activityDate.getFullYear().toString() !== selectedYear) {
+            return false;
+        }
+        if (selectedMonth !== 'all' && (activityDate.getMonth() + 1).toString() !== selectedMonth) {
+            return false;
+        }
+        
         if (statusFilter === 'all') {
             return activity.status === 'Concluído' || activity.status === 'Cancelada';
         }
         return activity.status === statusFilter;
     });
-  }, [activities, statusFilter]);
+  }, [activities, statusFilter, selectedMonth, selectedYear]);
 
   if (loading) return <Skeleton className="h-64 w-full" />;
   
@@ -301,7 +323,7 @@ function RepositionHistory() {
             <CardHeader>
                 <CardTitle>Histórico de reposições</CardTitle>
                 <CardDescription>Consulte todas as atividades de reposição que já foram concluídas ou canceladas.</CardDescription>
-                <div className="pt-2">
+                <div className="pt-2 flex flex-wrap gap-2 items-center">
                     <Tabs defaultValue="all" value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)} className="w-full sm:w-auto">
                         <TabsList>
                             <TabsTrigger value="all">Todos</TabsTrigger>
@@ -309,6 +331,24 @@ function RepositionHistory() {
                             <TabsTrigger value="Cancelada">Cancelados</TabsTrigger>
                         </TabsList>
                     </Tabs>
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                        <SelectTrigger className="w-full sm:w-auto md:w-[150px]">
+                            <SelectValue placeholder="Mês" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos os Meses</SelectItem>
+                            {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                        <SelectTrigger className="w-full sm:w-auto md:w-[120px]">
+                            <SelectValue placeholder="Ano" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos os Anos</SelectItem>
+                            {availableYears.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
                 </div>
             </CardHeader>
             <CardContent>
