@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -386,7 +385,18 @@ export function RestockAnalysis() {
         hasConversionError,
         suggestion,
       };
-    }).sort((a, b) => a.baseProduct.name.localeCompare(b.baseProduct.name));
+    }).sort((a, b) => {
+        const aIsRepor = a.status === 'repor';
+        const bIsRepor = b.status === 'repor';
+
+        if (aIsRepor && !bIsRepor) {
+            return -1;
+        }
+        if (!aIsRepor && bIsRepor) {
+            return 1;
+        }
+        return a.baseProduct.name.localeCompare(b.baseProduct.name);
+    });
   }, [selectedKioskId, baseProducts, products, lots, loading]);
   
   const getStatusBadge = (result: AnalysisResult) => {
@@ -520,3 +530,5 @@ export function RestockAnalysis() {
       </>
   );
 }
+
+    
