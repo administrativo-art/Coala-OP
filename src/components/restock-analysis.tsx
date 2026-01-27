@@ -35,7 +35,7 @@ import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { useRouter } from 'next/navigation';
 import { ToastAction } from "@/components/ui/toast"
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { Card } from './ui/card';
 
@@ -533,33 +533,12 @@ function AnalysisTab() {
     </Card>
     
     {!isMatrizSelected && stagedItems.length > 0 && (
-        <Card className="mt-6 animate-in fade-in">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><ShoppingCart /> Itens para reposição</CardTitle>
-                <CardDescription>Revise os itens antes de criar a atividade de reposição para o quiosque {kiosks.find(k => k.id === selectedKioskId)?.name}.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-2">
-                    {stagedItems.map(item => (
-                        <div key={item.baseProductId} className="flex items-center justify-between p-3 border rounded-lg bg-muted/50">
-                            <div>
-                                <p className="font-semibold">{item.productName}</p>
-                                <p className="text-sm text-muted-foreground">{item.suggestedLots.length} lote(s) sugerido(s)</p>
-                            </div>
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleRemoveStagedItem(item.baseProductId)}>
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    ))}
-                </div>
-            </CardContent>
-            <CardFooter className="justify-between items-center border-t pt-4">
-                <Button variant="outline" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
-                <Button onClick={() => setIsSummaryModalOpen(true)}>
-                    Próximo <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-            </CardFooter>
-        </Card>
+        <div className="flex items-center justify-between border-t pt-4 mt-6">
+            <Button variant="outline" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
+            <Button onClick={() => setIsSummaryModalOpen(true)}>
+                Próximo <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+        </div>
     )}
 
     {suggestionToView && (
