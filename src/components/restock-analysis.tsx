@@ -25,7 +25,6 @@ import { Button } from './ui/button';
 import { RestockSuggestionModal } from './restock-suggestion-modal';
 import { useReposition } from '@/hooks/use-reposition';
 import { useToast } from '@/hooks/use-toast';
-import { ToastAction } from "@/components/ui/toast"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
@@ -230,12 +229,12 @@ export function RestockAnalysis() {
         if (!activityId) throw new Error("A criação da atividade falhou e não retornou um ID.");
         
         toast({
-            title: "Atividade de Reposição Criada",
-            description: `Acesse a tela de gerenciamento para despachar os itens.`,
-            action: <ToastAction altText="Ver" onClick={() => router.push('/dashboard/stock/reposition')}>Ver Atividades</ToastAction>,
+            title: "Atividade de reposição foi criada.",
+            description: "Agora você será redirecionado para o gerenciamento da reposição.",
         });
 
         setStagedItems([]);
+        router.push('/dashboard/stock/reposition');
     } catch (error: any) {
          toast({
             variant: 'destructive',
