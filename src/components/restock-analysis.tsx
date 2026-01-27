@@ -33,7 +33,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
-  { ssr: false }
+  { ssr: false,
+    loading: () => <p>Carregando...</p>
+  }
 );
 
 interface SuggestedLot {
@@ -294,6 +296,15 @@ export function RestockAnalysis() {
     link.click();
     document.body.removeChild(link);
 };
+  
+   const handleExportPdf = () => {
+        toast({
+            title: "Exportação em manutenção",
+            description: "A função de exportar para PDF está sendo atualizada. Tente a exportação para CSV.",
+            variant: "destructive",
+        })
+    };
+
 
   const analysisResults = useMemo((): AnalysisResult[] => {
     if (!kioskId || loading) return [];
@@ -572,18 +583,9 @@ export function RestockAnalysis() {
                           <DropdownMenuItem onSelect={handleExportCsv}>
                               Exportar como CSV
                           </DropdownMenuItem>
-                          {PDFDownloadLink && (
-                              <PDFDownloadLink
-                                  document={<RestockAnalysisDocument data={analysisResults.filter(item => item.status === 'repor')} kioskName={kiosk?.name || 'Matriz'} />}
-                                  fileName={`reposicao_matriz_${new Date().toISOString().slice(0, 10)}.pdf`}
-                              >
-                                  {({ loading }) => (
-                                      <DropdownMenuItem disabled={loading} onSelect={(e) => e.preventDefault()}>
-                                          {loading ? 'Gerando PDF...' : 'Exportar como PDF'}
-                                      </DropdownMenuItem>
-                                  )}
-                              </PDFDownloadLink>
-                          )}
+                          <DropdownMenuItem onSelect={handleExportPdf}>
+                              Exportar como PDF
+                          </DropdownMenuItem>
                       </DropdownMenuContent>
                   </DropdownMenu>
               ) : (

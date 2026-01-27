@@ -14,7 +14,6 @@ import { useToast } from '@/hooks/use-toast';
 import { getUnitsForCategory, units, type UnitCategory, unitCategories } from '@/lib/conversion';
 import { type Product } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
-import { resizeImage } from '@/lib/image-utils';
 
 
 import { Button } from "@/components/ui/button";
@@ -181,17 +180,12 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     };
 
     const handlePhotoCaptured = async (dataUrl: string, target: 'main' | 'instruction') => {
-        try {
-            const resized = await resizeImage(dataUrl, 512, 512);
-            if (target === 'main') {
-                form.setValue('imageUrl', resized, { shouldValidate: true, shouldDirty: true });
-            } else {
-                form.setValue('countingInstructionImageUrl', resized, { shouldValidate: true, shouldDirty: true });
-            }
-            toast({ title: "Foto capturada com sucesso!" });
-        } catch (e) {
-            toast({ variant: 'destructive', title: 'Erro ao processar imagem' });
+        if (target === 'main') {
+            form.setValue('imageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
+        } else {
+            form.setValue('countingInstructionImageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
         }
+        toast({ title: "Foto capturada com sucesso!" });
     };
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, target: 'main' | 'instruction') => {
@@ -203,15 +197,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             }
             const reader = new FileReader();
             reader.onloadend = async () => {
-                try {
-                    const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
-                    if (target === 'main') {
-                        form.setValue('imageUrl', resizedDataUrl, { shouldValidate: true, shouldDirty: true });
-                    } else {
-                        form.setValue('countingInstructionImageUrl', resizedDataUrl, { shouldValidate: true, shouldDirty: true });
-                    }
-                } catch (error) {
-                    toast({ variant: 'destructive', title: 'Erro ao processar imagem', description: 'Não foi possível redimensionar a imagem. Tente uma imagem diferente.' });
+                const dataUrl = reader.result as string;
+                if (target === 'main') {
+                    form.setValue('imageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
+                } else {
+                    form.setValue('countingInstructionImageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
                 }
             };
             reader.readAsDataURL(file);

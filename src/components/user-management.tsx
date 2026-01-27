@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -25,10 +26,8 @@ import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
-import { resizeImage, dataURLtoFile } from '@/lib/image-utils';
 import { Label } from '@/components/ui/label';
 import { useCompanySettings } from '@/hooks/use-company-settings';
-import { uploadFile } from '@/lib/storage';
 import Image from 'next/image';
 
 
@@ -152,9 +151,11 @@ export function UserManagement() {
   };
 
   const onSubmit = (values: UserFormValues) => {
+    const avatarUrl = values.avatarUrl || '';
     if (editingUser) {
       const updatedData: Partial<User> = {
           ...values,
+          avatarUrl,
       };
       delete (updatedData as any).password; 
       updateUser({ ...editingUser, ...updatedData });
@@ -167,7 +168,7 @@ export function UserManagement() {
           username: values.username, 
           profileId: values.profileId,
           assignedKioskIds: values.assignedKioskIds,
-          avatarUrl: values.avatarUrl,
+          avatarUrl: avatarUrl,
           operacional: values.operacional,
       }, values.email, values.password);
     }
@@ -181,12 +182,7 @@ export function UserManagement() {
   };
   
   const handlePhotoCaptured = async (dataUrl: string) => {
-      try {
-          const resized = await resizeImage(dataUrl, 512, 512);
-          handlePhotoUpdate(resized);
-      } catch (e) {
-          toast({ variant: 'destructive', title: 'Erro ao processar imagem' });
-      }
+      handlePhotoUpdate(dataUrl);
       setIsPhotoModalOpen(false);
   };
 
@@ -199,17 +195,8 @@ export function UserManagement() {
       }
       const reader = new FileReader();
       reader.onloadend = async () => {
-        try {
-            const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
-            handlePhotoUpdate(resizedDataUrl);
-        } catch (error) {
-            console.error("Image resize error:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Erro ao processar imagem',
-                description: 'Não foi possível redimensionar a imagem. Tente uma imagem diferente.'
-            });
-        }
+        const dataUrl = reader.result as string;
+        handlePhotoUpdate(dataUrl);
       };
       reader.readAsDataURL(file);
     }

@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from 'react';
@@ -24,7 +25,6 @@ import { Input } from '@/components/ui/input';
 import { LogOut, Warehouse, Camera, Upload, Users, Undo2, KeyRound } from 'lucide-react';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
-import { resizeImage } from '@/lib/image-utils';
 import { ChangePasswordModal } from './change-password-modal';
 
 export function UserProfile() {
@@ -59,12 +59,7 @@ export function UserProfile() {
   };
 
   const handlePhotoCaptured = async (dataUrl: string) => {
-      try {
-          const resized = await resizeImage(dataUrl, 512, 512);
-          handlePhotoUpdate(resized);
-      } catch (e) {
-          toast({ variant: 'destructive', title: 'Erro ao processar imagem' });
-      }
+      handlePhotoUpdate(dataUrl);
       setIsPhotoModalOpen(false);
   };
 
@@ -81,17 +76,8 @@ export function UserProfile() {
       }
       const reader = new FileReader();
       reader.onloadend = async () => {
-        try {
-            const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
-            handlePhotoUpdate(resizedDataUrl);
-        } catch (error) {
-            console.error("Image resize error:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Erro ao processar imagem',
-                description: 'Não foi possível redimensionar a imagem. Tente uma imagem diferente.'
-            });
-        }
+        const dataUrl = reader.result as string;
+        handlePhotoUpdate(dataUrl);
       };
       reader.readAsDataURL(file);
     }

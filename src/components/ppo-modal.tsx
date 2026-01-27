@@ -20,7 +20,6 @@ import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
-import { resizeImage } from '@/lib/image-utils';
 import dynamic from 'next/dynamic';
 import { Separator } from './ui/separator';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
@@ -144,13 +143,8 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
   };
 
   const handlePhotoCaptured = async (dataUrl: string) => {
-    try {
-        const resized = await resizeImage(dataUrl, 512, 512);
-        form.setValue('referenceImageUrl', resized, { shouldValidate: true, shouldDirty: true });
-        toast({ title: "Foto capturada com sucesso!" });
-    } catch (e) {
-        toast({ variant: 'destructive', title: 'Erro ao processar imagem' });
-    }
+    form.setValue('referenceImageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
+    toast({ title: "Foto capturada com sucesso!" });
     setIsPhotoModalOpen(false);
   };
   
@@ -163,12 +157,8 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
       }
       const reader = new FileReader();
       reader.onloadend = async () => {
-        try {
-          const resizedDataUrl = await resizeImage(reader.result as string, 512, 512);
-          form.setValue('referenceImageUrl', resizedDataUrl, { shouldValidate: true, shouldDirty: true });
-        } catch (error) {
-          toast({ variant: 'destructive', title: 'Erro ao processar imagem', description: 'Não foi possível redimensionar a imagem. Tente uma imagem diferente.' });
-        }
+          const dataUrl = reader.result as string;
+          form.setValue('referenceImageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
       };
       reader.readAsDataURL(file);
     }
@@ -406,10 +396,7 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
     }, []);
 
     const handlePhotoCaptured = async (dataUrl: string) => {
-        try {
-            const resized = await resizeImage(dataUrl, 256, 256);
-            form.setValue(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`, resized, { shouldValidate: true, shouldDirty: true });
-        } catch (e) { console.error(e) }
+        form.setValue(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`, dataUrl, { shouldValidate: true, shouldDirty: true });
         setIsPhotoModalOpen(false);
     };
 
@@ -418,10 +405,8 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
         if (!file) return;
         const reader = new FileReader();
         reader.onloadend = async () => {
-            try {
-                const resized = await resizeImage(reader.result as string, 256, 256);
-                form.setValue(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`, resized, { shouldValidate: true, shouldDirty: true });
-            } catch (error) { console.error(error) }
+            const dataUrl = reader.result as string;
+            form.setValue(`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.imageUrl`, dataUrl, { shouldValidate: true, shouldDirty: true });
         };
         reader.readAsDataURL(file);
     };
