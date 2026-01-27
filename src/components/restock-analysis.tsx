@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -237,7 +236,6 @@ function AnalysisTab() {
 
         try {
             let valueInBaseUnit = 0;
-            // Use available quantity for analysis (total - reserved)
             const availableQuantity = (lot.quantity || 0) - (lot.reservedQuantity || 0);
             if (availableQuantity <= 0) continue;
 
@@ -409,11 +407,7 @@ function AnalysisTab() {
     <>
     <Card>
       <CardHeader>
-        <CardTitle>Análise de reposição</CardTitle>
-        <CardDescription>
-          Selecione um quiosque para ver a necessidade de reposição com base nas metas de estoque mínimo.
-        </CardDescription>
-        <div className="pt-2 flex justify-between items-center">
+        <div className="flex justify-between items-center">
              <div className="flex items-center gap-2">
                 <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={loading}>
                   <SelectTrigger className="w-full max-w-sm">
@@ -762,4 +756,3 @@ export function RestockAnalysis() {
     </Tabs>
   );
 }
-
