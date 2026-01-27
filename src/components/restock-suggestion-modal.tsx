@@ -1,5 +1,5 @@
 
-"use client"
+"use client";
 
 import { useState, useMemo } from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';

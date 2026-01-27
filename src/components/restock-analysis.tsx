@@ -4,7 +4,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import type { BlobProviderParams } from '@react-pdf/renderer';
 import { format, parseISO } from 'date-fns';
 import Papa from 'papaparse';
 
@@ -30,6 +29,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Checkbox } from './ui/checkbox';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -265,7 +265,7 @@ export function RestockAnalysis() {
     }
   };
   
-    const handleExport = () => {
+    const handleExportCsv = () => {
     const dataToExport = analysisResults
       .filter(item => item.status === 'repor')
       .map(item => ({
@@ -557,10 +557,31 @@ export function RestockAnalysis() {
           </CardContent>
           <CardFooter className="flex justify-end gap-2 border-t pt-4">
               {isMatriz ? (
-                  <Button onClick={handleExport}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Exportar Lista para Compra
-                  </Button>
+                  <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                          <Button disabled={analysisResults.filter(item => item.status === 'repor').length === 0}>
+                              <Download className="mr-2 h-4 w-4" />
+                              Exportar Lista
+                          </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={handleExportCsv}>
+                              Exportar como CSV
+                          </DropdownMenuItem>
+                          {PDFDownloadLink && (
+                              <PDFDownloadLink
+                                  document={<RestockAnalysisDocument data={analysisResults.filter(item => item.status === 'repor')} kioskName={kiosk?.name || 'Matriz'} />}
+                                  fileName={`reposicao_matriz_${new Date().toISOString().slice(0, 10)}.pdf`}
+                              >
+                                  {({ loading }) => (
+                                      <DropdownMenuItem disabled={loading} onSelect={(e) => e.preventDefault()}>
+                                          {loading ? 'Gerando PDF...' : 'Exportar como PDF'}
+                                      </DropdownMenuItem>
+                                  )}
+                              </PDFDownloadLink>
+                          )}
+                      </DropdownMenuContent>
+                  </DropdownMenu>
               ) : (
                   <>
                       <Button variant="outline" onClick={() => setStagedItems([])} disabled={stagedItems.length === 0}>
