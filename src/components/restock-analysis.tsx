@@ -206,10 +206,6 @@ export function RestockAnalysis() {
         return [...prev, item];
     });
     setSuggestionToView(null);
-    toast({
-        title: "Item adicionado à reposição",
-        description: `${item.productName} está pronto para ser enviado.`
-    });
   };
 
   const handleRemoveStagedItem = (baseProductId: string) => {
@@ -499,16 +495,12 @@ export function RestockAnalysis() {
       
       {selectedKioskId && selectedKioskId !== 'matriz' && stagedItems.length > 0 && (
           <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg p-4 z-40">
-               <Card className="bg-background/95 shadow-2xl">
-                    <CardContent className="p-4 flex items-center justify-between">
-                      <div className="flex gap-2">
-                            <Button variant="destructive" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
-                            <Button onClick={() => setIsSummaryModalOpen(true)}>
-                                Próximo <ArrowRight className="ml-2 h-4 w-4" />
-                            </Button>
-                      </div>
-                  </CardContent>
-               </Card>
+              <div className="bg-background/80 backdrop-blur-lg rounded-xl p-3 border shadow-2xl flex justify-center items-center gap-4">
+                  <Button variant="destructive" onClick={() => setStagedItems([])}>Cancelar Reposição</Button>
+                  <Button onClick={() => setIsSummaryModalOpen(true)}>
+                      Próximo <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+              </div>
           </div>
       )}
   
