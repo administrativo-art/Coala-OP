@@ -203,7 +203,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                     <TableHeader>
                         <TableRow>
                             <TableHead>Lote da Matriz</TableHead>
-                            <TableHead className="w-[250px]">Qtd. a Mover ({suggestionResult.baseProduct.unit})</TableHead>
+                            <TableHead className="w-[300px]">Qtd. a Mover</TableHead>
                             <TableHead className="w-20 text-right"></TableHead>
                         </TableRow>
                     </TableHeader>
@@ -216,6 +216,8 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                             
                             const unitsPerPackage = getUnitsPerPackage(product, suggestionResult.baseProduct);
                             const quantityInPackages = unitsPerPackage > 0 ? (watchedItems[index]?.quantityInBaseUnit || 0) / unitsPerPackage : 0;
+                            const availablePackages = lot.quantity - (lot.reservedQuantity || 0);
+
                             const logisticQty = (product.multiplo_caixa && product.multiplo_caixa > 0)
                                 ? quantityInPackages / product.multiplo_caixa
                                 : null;
@@ -223,43 +225,45 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                             return (
                                 <TableRow key={field.id}>
                                     <TableCell>
-                                        <p className="font-semibold">{product.baseName} - {lot.lotNumber}</p>
+                                        <p className="font-semibold">{getProductFullName(product)} - {lot.lotNumber}</p>
                                         <p className="text-xs text-muted-foreground">Validade: {lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
-                                        <p className="text-xs text-muted-foreground">Disponível (lote): {formatNumberDisplay(lot.quantity - (lot.reservedQuantity || 0))} {product.packageType || 'pct'}</p>
+                                        <p className="text-xs text-muted-foreground">Disponível (lote): {formatNumberDisplay(availablePackages)} {product.packageType || 'pct'}</p>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2">
-                                        <FormField
-                                            control={form.control}
-                                            name={`items.${index}.quantityInBaseUnit`}
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormControl>
-                                                        <Input 
-                                                            type="number" {...field} 
-                                                            className="bg-background w-32"
-                                                        />
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                         <div className="flex flex-col text-xs text-muted-foreground">
-                                            <span>≈ {formatNumberDisplay(quantityInPackages)} {product.packageType || 'pct'}</span>
-                                            {logisticQty !== null && product.rotulo_caixa && (
-                                                <span>≈ {formatNumberDisplay(logisticQty)} {product.rotulo_caixa}(s)</span>
-                                            )}
-                                            <span className="italic">({formatNumberDisplay(unitsPerPackage)} {suggestionResult.baseProduct.unit}/{product.packageType || 'pct'})</span>
-                                         </div>
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    type="number"
+                                                    value={quantityInPackages % 1 !== 0 ? quantityInPackages.toFixed(2) : quantityInPackages}
+                                                    onChange={(e) => {
+                                                        const newPackageQty = parseFloat(e.target.value) || 0;
+                                                        const newBaseQty = newPackageQty * unitsPerPackage;
+                                                        form.setValue(`items.${index}.quantityInBaseUnit`, newBaseQty, { shouldValidate: true });
+                                                    }}
+                                                    max={availablePackages}
+                                                    min={0}
+                                                    onWheel={(e) => (e.target as HTMLElement).blur()}
+                                                    onKeyDown={(e) => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); } }}
+                                                    onFocus={(e) => e.target.select()}
+                                                    className="bg-background w-24 h-9"
+                                                />
+                                                <Label className="font-semibold text-sm">{product.packageType || 'pacote'}(s)</Label>
+                                            </div>
+                                            <div className="pl-1 text-xs text-muted-foreground">
+                                                <p>= {formatNumberDisplay(watchedItems[index]?.quantityInBaseUnit || 0)} {suggestionResult.baseProduct.unit}</p>
+                                                {logisticQty !== null && product.rotulo_caixa && (
+                                                    <p>= {formatNumberDisplay(logisticQty)} {product.rotulo_caixa}(s)</p>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-1 pt-1">
+                                                <Button type="button" size="sm" variant="ghost" className="h-6 text-xs" onClick={() => handleQuickAction(index, 'fill')}>Preencher</Button>
+                                                <Button type="button" size="sm" variant="ghost" className="h-6 text-xs" onClick={() => handleQuickAction(index, 'max')}>Máx</Button>
+                                                <Button type="button" size="sm" variant="ghost" className="h-6 text-xs" onClick={() => form.setValue(`items.${index}.quantityInBaseUnit`, 0)}>Limpar</Button>
+                                            </div>
                                         </div>
-                                         <div className="flex gap-1 mt-1">
-                                            <Button type="button" size="sm" variant="ghost" className="h-6 text-xs" onClick={() => handleQuickAction(index, 'fill')}>Preencher</Button>
-                                            <Button type="button" size="sm" variant="ghost" className="h-6 text-xs" onClick={() => handleQuickAction(index, 'max')}>Máx</Button>
-                                            <Button type="button" size="sm" variant="ghost" className="h-6 text-xs" onClick={() => form.setValue(`items.${index}.quantityInBaseUnit`, 0)}>Limpar</Button>
-                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                         <Button type="button" variant="outline" size="sm" onClick={() => remove(index)}>Remover</Button>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => remove(index)}>Remover</Button>
                                     </TableCell>
                                 </TableRow>
                             )
