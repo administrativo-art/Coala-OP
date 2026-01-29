@@ -519,4 +519,3 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   );
 }
 
-    
