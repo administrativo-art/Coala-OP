@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight, PlusCircle } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -536,8 +536,8 @@ export function RestockAnalysis() {
               <CardFooter className="pt-2">
                 {!isMatriz && result.status === 'repor' && (
                   <Button variant="outline" size="sm" className="w-full" onClick={() => setSuggestionToView(result)}>
-                    <Wand2 className="mr-2 h-4 w-4" />
-                    Sugerir
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Adicionar Insumo
                   </Button>
                 )}
                  {!isMatriz && result.status === 'ok' && (
