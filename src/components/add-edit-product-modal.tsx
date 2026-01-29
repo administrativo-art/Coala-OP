@@ -310,7 +310,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     )}/>
                                 </Card>
                                 
-                                <Card className="p-4 bg-amber-500/5">
+                                <Card className="p-4 bg-amber-100 dark:bg-amber-900/20">
                                     <div className="space-y-0.5 mb-4">
                                         <h3 className="font-medium">Embalagem de conteúdo</h3>
                                         <p className="text-sm text-muted-foreground">
@@ -362,7 +362,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     </div>
                                 </Card>
                                 
-                                <Card className="p-4 bg-blue-500/5 dark:bg-blue-900/10">
+                                <Card className="p-4 bg-blue-100 dark:bg-blue-900/20">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
                                             <FormLabel className="text-base">Detalhes logísticos</FormLabel>
@@ -403,7 +403,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     )}
                                 </Card>
                                 
-                                <Card className="p-4 bg-green-500/5 dark:bg-green-900/10">
+                                <Card className="p-4 bg-green-100 dark:bg-green-900/20">
                                   <FormField
                                       control={form.control}
                                       name="defaultCountingUnit"
@@ -425,7 +425,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                   />
                                 </Card>
 
-                                <Card className="p-4 bg-purple-500/5 dark:bg-purple-900/10">
+                                <Card className="p-4 bg-sky-100 dark:bg-sky-900/20">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
                                             <FormLabel className="text-base">Instrução de Contagem</FormLabel>
@@ -436,7 +436,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         )}/>
                                     </div>
                                     {enableCountingInstructionWatch && (
-                                        <div className="space-y-4 pt-4 border-t border-purple-500/20 mt-4">
+                                        <div className="space-y-4 pt-4 border-t border-sky-500/20 mt-4">
                                             <FormField control={form.control} name="countingInstruction" render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel>Texto da instrução</FormLabel>
@@ -445,7 +445,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 </FormItem>
                                             )}/>
                                             <div className="space-y-2">
-                                                <FormLabel>Imagem de instrução (opcional)</FormLabel>
+                                                <FormLabel>Imagem de instrução</FormLabel>
                                                 <div className="flex items-center gap-4">
                                                     <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
                                                         {form.watch('countingInstructionImageUrl') ? <Image src={form.watch('countingInstructionImageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
@@ -463,7 +463,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     )}
                                 </Card>
                                 
-                                <Card className="p-4 bg-violet-500/5 dark:bg-violet-900/10">
+                                <Card className="p-4 bg-violet-100 dark:bg-violet-900/20">
                                     <h3 className="font-medium mb-4">Vínculo e observações</h3>
                                     <FormField control={form.control} name="baseProductId" render={({ field }) => (
                                         <FormItem>
