@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, PlusCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -28,7 +28,6 @@ import { ScrollArea } from './ui/scroll-area';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Checkbox } from './ui/checkbox';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -149,6 +148,9 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
     );
 }
 
+const formatNumberDisplay = (value: number, unit: string) => {
+    return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ${unit}`;
+}
 
 export function RestockAnalysis() {
   const router = useRouter();
@@ -429,10 +431,6 @@ export function RestockAnalysis() {
     });
   }, [kioskId, baseProducts, products, lots, loading, isMatriz]);
   
-  const formatNumberDisplay = (value: number, unit: string) => {
-    return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ${unit}`;
-  }
-
   const kiosk = kiosks.find(k => k.id === kioskId);
   const stagedItemMap = useMemo(() => {
     return new Map(stagedItems.map(item => [item.baseProductId, item]));
@@ -523,15 +521,10 @@ export function RestockAnalysis() {
                 </div>
               </CardContent>
               <CardFooter className="pt-2">
-                {!isMatriz && result.suggestion && (
-                  <Button
-                    variant={stagedItemMap.has(result.baseProduct.id) ? "secondary" : "outline"}
-                    size="sm"
-                    className="w-full"
-                    onClick={() => handleStageItemToggle(result, !stagedItemMap.has(result.baseProduct.id))}
-                  >
-                    {stagedItemMap.has(result.baseProduct.id) ? <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                    {stagedItemMap.has(result.baseProduct.id) ? 'Adicionado' : 'Sugerir'}
+                {!isMatriz && result.status === 'repor' && (
+                  <Button variant="outline" size="sm" className="w-full" onClick={() => setSuggestionToView(result)}>
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    Sugerir
                   </Button>
                 )}
               </CardFooter>
@@ -541,7 +534,7 @@ export function RestockAnalysis() {
         {analysisResults.length === 0 && (
             <div className="col-span-full text-center py-16 text-muted-foreground">
                 <Inbox className="mx-auto h-12 w-12" />
-                <p className="mt-4 font-semibold">Nenhum produto base encontrado.</p>
+                <p className="mt-4 font-semibold">Nenhum produto base encontrado para este quiosque.</p>
             </div>
         )}
       </div>
@@ -550,12 +543,17 @@ export function RestockAnalysis() {
         <CardHeader>
             <div className="flex justify-between items-center">
                  <div>
-                    <CardTitle>Análise de Reposição</CardTitle>
+                    <CardTitle>Itens para Reposição</CardTitle>
                     <CardDescription>
-                        Compare o estoque atual de {kiosk?.name || '...'} com a meta e crie uma atividade de reposição.
+                        Revise os itens e clique em "Criar atividade" para iniciar a transferência.
                     </CardDescription>
                 </div>
-                 {!isMatriz ? (
+                {isMatriz ? (
+                     <Button disabled={analysisResults.filter(item => item.status === 'repor').length === 0} onClick={handleExportCsv}>
+                       <Download className="mr-2 h-4 w-4" />
+                       Exportar Lista de Compras
+                    </Button>
+                 ) : (
                      <Button
                         onClick={() => setIsSummaryModalOpen(true)}
                         disabled={stagedItems.length === 0 || repositionLoading}
@@ -563,32 +561,47 @@ export function RestockAnalysis() {
                         <Truck className="mr-2 h-4 w-4" />
                         Criar atividade ({stagedItems.length})
                       </Button>
-                 ) : (
-                     <DropdownMenu>
-                         <DropdownMenuTrigger asChild>
-                            <Button disabled={analysisResults.filter(item => item.status === 'repor').length === 0}>
-                               <Download className="mr-2 h-4 w-4" />
-                               Exportar Lista
-                            </Button>
-                         </DropdownMenuTrigger>
-                         <DropdownMenuContent>
-                             <DropdownMenuItem onSelect={handleExportCsv}>
-                                Exportar como CSV
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild>
-                                <PDFDownloadLink
-                                    document={<RestockAnalysisDocument data={analysisResults.filter(item => item.status === 'repor')} kioskName={kiosk?.name || 'N/A'} />}
-                                    fileName={`reposicao_${kiosk?.name.replace(/\s/g, '_') || 'desconhecido'}_${new Date().toISOString().slice(0, 10)}.pdf`}
-                                    className="w-full h-full px-2 py-1.5 relative flex cursor-default select-none items-center rounded-sm text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                                >
-                                    {({ loading }) => (loading ? 'Gerando PDF...' : 'Exportar como PDF')}
-                                </PDFDownloadLink>
-                            </DropdownMenuItem>
-                         </DropdownMenuContent>
-                     </DropdownMenu>
                  )}
             </div>
         </CardHeader>
+        <CardContent>
+             {isMatriz ? (
+                <p className="text-sm text-muted-foreground">A criação de atividades de reposição só está disponível para quiosques, não para a Matriz.</p>
+            ) : stagedItems.length > 0 ? (
+                <div className="rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Produto Base</TableHead>
+                                <TableHead className="text-right">Quantidade a Repor</TableHead>
+                                <TableHead className="w-12"></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {stagedItems.map(item => {
+                                const totalPackages = item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0);
+                                return (
+                                    <TableRow key={item.baseProductId}>
+                                        <TableCell className="font-semibold">{item.productName}</TableCell>
+                                        <TableCell className="text-right">{totalPackages} pacotes</TableCell>
+                                        <TableCell>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveStagedItem(item.baseProductId)}>
+                                                <Trash2 className="h-4 w-4"/>
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })}
+                        </TableBody>
+                    </Table>
+                </div>
+            ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                    <p>Nenhum item adicionado para reposição.</p>
+                    <p className="text-xs">Clique em "Sugerir" em um card acima para adicionar itens.</p>
+                </div>
+            )}
+        </CardContent>
       </Card>
       
       {suggestionToView && (
