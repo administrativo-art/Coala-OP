@@ -51,6 +51,7 @@ const productFormSchema = z.object({
   unit: z.string().min(1, 'A unidade é obrigatória.'),
   notes: z.string().optional(),
   baseProductId: z.string().optional(),
+  defaultCountingUnit: z.enum(['package', 'base', 'content']).optional(),
 
   // Conditional sections
   enableLogistics: z.boolean().optional(),
@@ -60,7 +61,6 @@ const productFormSchema = z.object({
   enableCountingInstruction: z.boolean().optional(),
   countingInstruction: z.string().optional(),
   countingInstructionImageUrl: z.string().optional(),
-  defaultCountingUnit: z.enum(['package', 'base', 'content']).optional(),
 }).superRefine((data, ctx) => {
     if (data.enableLogistics) {
         if (!data.multiplo_caixa || data.multiplo_caixa <= 0) {
@@ -106,9 +106,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             packageType: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
             notes: '', baseProductId: '',
+            defaultCountingUnit: 'package',
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
             enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
-            defaultCountingUnit: 'package',
         }
     });
     
@@ -131,6 +131,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     unit: productToEdit.unit,
                     notes: productToEdit.notes || '',
                     baseProductId: productToEdit.baseProductId || '',
+                    defaultCountingUnit: productToEdit.defaultCountingUnit || 'package',
                     // Switches
                     enableLogistics: !!productToEdit.multiplo_caixa,
                     multiplo_caixa: productToEdit.multiplo_caixa || undefined,
@@ -139,7 +140,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     enableCountingInstruction: !!(productToEdit.countingInstruction || productToEdit.countingInstructionImageUrl),
                     countingInstruction: productToEdit.countingInstruction || '',
                     countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
-                    defaultCountingUnit: productToEdit.defaultCountingUnit || 'package',
                 });
             } else {
                 form.reset({
@@ -147,9 +147,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     packageType: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
                     notes: '', baseProductId: '',
+                    defaultCountingUnit: 'package',
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
-                    defaultCountingUnit: 'package',
                 });
             }
         }
@@ -227,13 +227,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             unit: values.unit,
             notes: values.notes,
             baseProductId: values.baseProductId,
+            defaultCountingUnit: values.defaultCountingUnit,
             
             multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
             rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,
                         
             countingInstruction: values.enableCountingInstruction ? values.countingInstruction : undefined,
             countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl : undefined,
-            defaultCountingUnit: values.defaultCountingUnit,
         };
 
         if (productToEdit) {
@@ -304,7 +304,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     </FormItem>
                                 )}/>
                                 
-                                <div className="space-y-4 rounded-lg border p-4">
+                                <div className="space-y-4 rounded-lg border p-4 bg-amber-500/5">
                                     <h3 className="font-medium">Embalagem</h3>
                                      <FormField
                                         control={form.control}
@@ -374,13 +374,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 <Separator />
 
                                 <FormField control={form.control} name="enableLogistics" render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-blue-100/40 dark:bg-blue-900/20">
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-blue-500/10 dark:bg-blue-900/20">
                                         <div className="space-y-0.5"><FormLabel>Detalhes Logísticos (Opcional)</FormLabel><FormDescription>Otimize a separação no estoque, agrupando em caixas ou fardos.</FormDescription></div>
                                         <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                                     </FormItem>
                                 )} />
                                 {enableLogisticsWatch && (
-                                    <div className="p-4 border rounded-lg bg-blue-100/20 dark:bg-blue-900/10 space-y-4">
+                                    <div className="p-4 border rounded-lg bg-blue-500/5 dark:bg-blue-900/10 space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (<FormItem><FormLabel>Unidades por Caixa</FormLabel><FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                             <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (<FormItem><FormLabel>Rótulo da Embalagem</FormLabel><FormControl><Input placeholder="Ex: Caixa, Fardo" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
@@ -389,13 +389,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 )}
                                 
                                 <FormField control={form.control} name="enableCountingInstruction" render={({ field }) => (
-                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-purple-100/40 dark:bg-purple-900/20">
+                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-purple-500/10 dark:bg-purple-900/20">
                                         <div className="space-y-0.5"><FormLabel>Instrução de Contagem (Opcional)</FormLabel><FormDescription>Adicione um texto ou imagem para guiar a contagem.</FormDescription></div>
                                         <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                                     </FormItem>
                                 )} />
                                 {enableCountingInstructionWatch && (
-                                    <div className="p-4 border rounded-lg bg-purple-100/20 dark:bg-purple-900/10 space-y-4">
+                                    <div className="p-4 border rounded-lg bg-purple-500/5 dark:bg-purple-900/10 space-y-4">
                                         <FormField control={form.control} name="countingInstruction" render={({ field }) => (<FormItem><FormLabel>Texto da instrução</FormLabel><FormControl><Textarea placeholder="Ex: Contar por peso na balança..." {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                         <div className="space-y-2">
                                             <FormLabel>Imagem de instrução (opcional)</FormLabel>
