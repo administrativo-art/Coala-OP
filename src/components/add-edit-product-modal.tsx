@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
@@ -351,9 +350,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             <Select onValueChange={field.onChange} value={field.value}>
                                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                                 <SelectContent>
-                                                    <SelectItem value="package">Embalagem (ex: 1 pacote)</SelectItem>
-                                                    <SelectItem value="base">Unidade do Produto Base (ex: gramas, mL)</SelectItem>
-                                                    <SelectItem value="secondary" disabled={!enableSecondaryUnitWatch}>Unidade Secundária (ex: 10 unidades)</SelectItem>
+                                                    <SelectItem value="package">Unidade do Lote (Pacote)</SelectItem>
+                                                    <SelectItem value="base">Unidade do Produto Base</SelectItem>
+                                                    <SelectItem value="secondary" disabled={!enableSecondaryUnitWatch}>Unidade da Embalagem (Opcional)</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                             <FormDescription>Define como este insumo será exibido e contado no módulo de contagem de estoque.</FormDescription>
@@ -470,9 +469,3 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         </>
     );
 }
-
-    
-
-    
-
-    

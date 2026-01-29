@@ -182,11 +182,11 @@ export function ItemManagement() {
                         ) : filteredProducts.length > 0 ? (
                             filteredProducts.map(product => {
                                 const countingUnit = product.defaultCountingUnit || 'package';
-                                let countingUnitText = 'Embalagem';
+                                let countingUnitText = 'Unidade do Lote (Pacote)';
                                 if (countingUnit === 'base') {
-                                    countingUnitText = 'Unidade Base';
+                                    countingUnitText = 'Unidade do Produto Base';
                                 } else if (countingUnit === 'secondary') {
-                                    countingUnitText = 'Unid. Secundária';
+                                    countingUnitText = 'Unidade da Embalagem';
                                 }
                                 return (
                                 <TableRow key={product.id}>
