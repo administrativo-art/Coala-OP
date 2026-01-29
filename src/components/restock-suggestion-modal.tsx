@@ -62,17 +62,6 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
 
   const getUnitsPerPackage = (product: Product, baseProduct: BaseProduct): number => {
     try {
-        if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-            let secondaryUnitCategory: UnitCategory | undefined;
-            for (const category in units) {
-                if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
-                    secondaryUnitCategory = category as UnitCategory;
-                    break;
-                }
-            }
-            if (!secondaryUnitCategory) return 0;
-            return convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-        }
         return convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
     } catch (e) {
         console.error(e);

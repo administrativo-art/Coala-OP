@@ -6,7 +6,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
+import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { convertValue, units } from '@/lib/conversion';
 import { format, parseISO, addDays, isAfter, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -153,27 +153,6 @@ export function ConsumptionProjection() {
         packagesQty: number,
         baseProduct: typeof baseProducts[number]
     ): number => {
-        if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-            let secondaryUnitCategory: UnitCategory | undefined;
-            for (const category in units) {
-                if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
-                    secondaryUnitCategory = category as UnitCategory;
-                    break;
-                }
-            }
-            if (!secondaryUnitCategory) {
-                throw new Error(`Unidade secundária inválida ou não categorizada: ${product.secondaryUnit}`);
-            }
-    
-            const perPackageInBase = convertValue(
-                product.secondaryUnitValue,
-                product.secondaryUnit,
-                baseProduct.unit,
-                secondaryUnitCategory
-            );
-            return packagesQty * perPackageInBase;
-        }
-        
         const perPackageInBase = convertValue(
             product.packageSize ?? 1,
             product.unit,

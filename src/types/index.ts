@@ -335,8 +335,6 @@ export type Product = {
   urgentThreshold?: number; // e.g., 7 days
   isArchived?: boolean;
   baseProductId?: string;
-  secondaryUnit?: string;
-  secondaryUnitValue?: number;
 };
 
 export type ProductDefinition = {

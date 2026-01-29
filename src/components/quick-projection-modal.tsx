@@ -5,8 +5,8 @@ import { useState, useMemo } from 'react';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
-import { convertValue } from '@/lib/conversion';
+import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
+import { convertValue, units, type UnitCategory } from '@/lib/conversion';
 import { format, addDays, differenceInDays, parseISO, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { type BaseProduct } from '@/types';
@@ -71,15 +71,8 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
         if (!product) return;
         try {
             const quantityInPackages = lot.quantity || 0;
-            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                const secondaryUnitCategory = product.category === 'Unidade' ? 'Massa' : product.category === 'Embalagem' ? 'Unidade' : product.category;
-                const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                totalStock += quantityInPackages * valueOfOnePackageInBase;
-            } 
-            else if (product.category === baseProduct.category) {
-                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                 totalStock += quantityInPackages * valueOfOnePackageInBase;
-            }
+            const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+            totalStock += quantityInPackages * valueOfOnePackageInBase;
         } catch {
             hasConversionError = true;
         }

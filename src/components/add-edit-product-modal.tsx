@@ -62,8 +62,6 @@ const productFormSchema = z.object({
   enableCountingInstruction: z.boolean().optional(),
   countingInstruction: z.string().optional(),
   countingInstructionImageUrl: z.string().optional(),
-  secondaryUnit: z.string().optional(),
-  secondaryUnitValue: z.coerce.number().optional(),
 }).superRefine((data, ctx) => {
     if (data.enableLogistics) {
         if (!data.multiplo_caixa || data.multiplo_caixa <= 0) {
@@ -112,7 +110,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             defaultCountingUnit: 'package',
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
             enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
-            secondaryUnit: '', secondaryUnitValue: undefined,
         }
     });
     
@@ -144,8 +141,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     enableCountingInstruction: !!(productToEdit.countingInstruction || productToEdit.countingInstructionImageUrl),
                     countingInstruction: productToEdit.countingInstruction || '',
                     countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
-                    secondaryUnit: productToEdit.secondaryUnit || '',
-                    secondaryUnitValue: productToEdit.secondaryUnitValue || undefined,
                 });
             } else {
                 form.reset({
@@ -156,7 +151,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     defaultCountingUnit: 'package',
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
-                     secondaryUnit: '', secondaryUnitValue: undefined,
                 });
             }
         }
@@ -241,8 +235,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                         
             countingInstruction: values.enableCountingInstruction ? values.countingInstruction : undefined,
             countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl : undefined,
-            secondaryUnit: values.secondaryUnit,
-            secondaryUnitValue: values.secondaryUnitValue,
         };
 
         if (productToEdit) {
@@ -252,12 +244,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
         onOpenChange(false);
     };
-
-    const allUnits = useMemo(() => {
-        return (Object.keys(units) as UnitCategory[]).flatMap(cat => 
-            Object.keys(units[cat])
-        );
-    }, []);
     
     const showCategoryMismatchWarning = useMemo(() => {
         if (!baseProductIdWatch) return false;
@@ -367,10 +353,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             </div>
                                             <FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                         <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4 mt-4">
-                                      <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Qtd. Unidade Secundária</FormLabel><FormControl><Input type="number" step="any" placeholder="Ex: 5000" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                      <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade Secundária</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{allUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                     </div>
                                 </Card>
                                 

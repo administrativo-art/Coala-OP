@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { pruneUndefined } from '@/lib/utils';
+import { convertValue } from '@/lib/conversion';
 
 // --- TYPE DEFINITIONS ---
 export type MoveLotParams = {
