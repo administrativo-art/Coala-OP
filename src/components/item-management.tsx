@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -164,9 +163,10 @@ export function ItemManagement() {
                                     aria-label="Selecionar todos"
                                 />
                             </TableHead>
-                            <TableHead className="w-[40%]">Insumo</TableHead>
+                            <TableHead className="w-[35%]">Insumo</TableHead>
                             <TableHead>Produto Base</TableHead>
                             <TableHead>Embalagem</TableHead>
+                            <TableHead>Forma Contagem</TableHead>
                             <TableHead>Cód. Barras</TableHead>
                             <TableHead className="w-16 text-right">Ações</TableHead>
                         </TableRow>
@@ -175,11 +175,19 @@ export function ItemManagement() {
                         {loading ? (
                             [...Array(5)].map((_, i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
+                                    <TableCell colSpan={7}><Skeleton className="h-10 w-full" /></TableCell>
                                 </TableRow>
                             ))
                         ) : filteredProducts.length > 0 ? (
-                            filteredProducts.map(product => (
+                            filteredProducts.map(product => {
+                                const countingUnit = product.defaultCountingUnit || 'package';
+                                let countingUnitText = 'Embalagem';
+                                if (countingUnit === 'base') {
+                                    countingUnitText = 'Unidade Base';
+                                } else if (countingUnit === 'secondary') {
+                                    countingUnitText = 'Unid. Secundária';
+                                }
+                                return (
                                 <TableRow key={product.id}>
                                     <TableCell>
                                         <Checkbox
@@ -211,6 +219,9 @@ export function ItemManagement() {
                                         {product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}
                                         {product.unit}
                                     </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline">{countingUnitText}</Badge>
+                                    </TableCell>
                                     <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>
@@ -230,10 +241,11 @@ export function ItemManagement() {
                                         </DropdownMenu>
                                     </TableCell>
                                 </TableRow>
-                            ))
+                                )
+                            })
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                                     <div className="flex flex-col items-center gap-2">
                                         <Inbox className="h-10 w-10" />
                                         <span>Nenhum insumo encontrado.</span>
