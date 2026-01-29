@@ -289,20 +289,23 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <FormField control={form.control} name="imageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                <div className="space-y-4 rounded-lg border p-4 bg-blue-500/5 dark:bg-blue-900/10">
+                                     <h3 className="font-medium">Informações básicas</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                    </div>
+                                    
+                                    <FormField control={form.control} name="barcode" render={({ field }) => (
+                                        <FormItem><FormLabel>Código de barras</FormLabel>
+                                            <div className="flex gap-2">
+                                                <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
+                                                <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button>
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
                                 </div>
-                                
-                                <FormField control={form.control} name="barcode" render={({ field }) => (
-                                    <FormItem><FormLabel>Código de barras</FormLabel>
-                                        <div className="flex gap-2">
-                                            <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
-                                            <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button>
-                                        </div>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}/>
                                 
                                 <div className="space-y-4 rounded-lg border p-4 bg-amber-500/5">
                                     <h3 className="font-medium">Embalagem</h3>
@@ -452,38 +455,39 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     )}
                                 </div>
                                 
-                                <Separator />
+                                <div className="space-y-4 rounded-lg border p-4 bg-violet-500/5 dark:bg-violet-900/10">
+                                    <h3 className="font-medium">Vínculo e observações</h3>
+                                    <FormField control={form.control} name="baseProductId" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Insumo base</FormLabel>
+                                            <div className="flex gap-2 items-center">
+                                                <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
+                                                    <FormControl>
+                                                        <SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        {baseProducts.map(ap => <SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                                <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}>
+                                                    <Settings className="h-4 w-4"/>
+                                                </Button>
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                    
+                                    {showCategoryMismatchWarning && (
+                                         <Alert variant="destructive">
+                                            <AlertTitle>Vínculo de categorias diferentes</AlertTitle>
+                                            <AlertDescription>
+                                                A categoria deste insumo é diferente da categoria do produto base. A conversão de unidades pode não funcionar corretamente.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
 
-                                <FormField control={form.control} name="baseProductId" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Insumo base</FormLabel>
-                                        <div className="flex gap-2 items-center">
-                                            <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
-                                                <FormControl>
-                                                    <SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    {baseProducts.map(ap => <SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                            <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}>
-                                                <Settings className="h-4 w-4"/>
-                                            </Button>
-                                        </div>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}/>
-                                
-                                {showCategoryMismatchWarning && (
-                                     <Alert variant="destructive">
-                                        <AlertTitle>Vínculo de categorias diferentes</AlertTitle>
-                                        <AlertDescription>
-                                            A categoria deste insumo é diferente da categoria do produto base. A conversão de unidades pode não funcionar corretamente.
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
-
-                                <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                </div>
                             </div>
                         </ScrollArea>
                         <DialogFooter className="pt-4 border-t">
