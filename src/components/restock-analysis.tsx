@@ -537,7 +537,7 @@ export function RestockAnalysis() {
                 {!isMatriz && result.status === 'repor' && (
                   <Button variant="outline" size="sm" className="w-full" onClick={() => setSuggestionToView(result)}>
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    Adicionar Insumo
+                    Adicionar insumo
                   </Button>
                 )}
                  {!isMatriz && result.status === 'ok' && (
