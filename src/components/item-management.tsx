@@ -44,7 +44,7 @@ export function ItemManagement() {
   const loading = productsLoading || listsLoading || lotsLoading || baseProductsLoading;
 
   const baseProductMap = useMemo(() => {
-    return new Map(baseProducts.map(bp => [bp.id, bp]));
+    return new Map(baseProducts.map(bp => [bp.id, bp.name]));
   }, [baseProducts]);
 
   const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
@@ -54,7 +54,7 @@ export function ItemManagement() {
     if (!searchLower) return activeProducts;
 
     return activeProducts.filter(p => {
-        const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.name.toLowerCase() : '';
+        const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.toLowerCase() : '';
         return getProductFullName(p).toLowerCase().includes(searchLower) ||
                (p.barcode && p.barcode.includes(searchLower)) ||
                (baseProductName && baseProductName.includes(searchLower));
@@ -165,8 +165,8 @@ export function ItemManagement() {
                             <TableHead className="w-[30%]">Insumo</TableHead>
                             <TableHead>Produto Base</TableHead>
                             <TableHead>Embalagem</TableHead>
-                            <TableHead>Forma Contagem</TableHead>
-                            <TableHead>Unidade Contagem</TableHead>
+                            <TableHead>Forma da contagem de estoque</TableHead>
+                            <TableHead>Unidade da contagem de estoque</TableHead>
                             <TableHead>Cód. Barras</TableHead>
                             <TableHead className="w-16 text-right">Ações</TableHead>
                         </TableRow>
@@ -220,7 +220,7 @@ export function ItemManagement() {
                                     </TableCell>
                                     <TableCell>
                                         {product.baseProductId ? (
-                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
+                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId) || 'N/A'}</Badge>
                                         ) : (
                                             <span className="text-muted-foreground">-</span>
                                         )}
