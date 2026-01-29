@@ -23,7 +23,7 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
 import { useBaseProducts } from '@/hooks/use-base-products';
-import { type LotEntry, type Product, type BaseProduct, type RepositionActivity } from '@/types';
+import { type LotEntry, type Product, type BaseProduct, type RepositionActivity, type UnitCategory } from '@/types';
 import { LotCard } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
@@ -505,14 +505,20 @@ function ExpiryControlContent() {
                        
                        for (const unit in convertedTotals) {
                            try {
-                               sumInFirstUnit += convertValue(convertedTotals[unit], unit, firstUnit, baseProduct!.category);
+                               if (baseProduct) {
+                                   sumInFirstUnit += convertValue(convertedTotals[unit], unit, baseProduct.unit, baseProduct.category);
+                                   totalConvertedDisplay = `${sumInFirstUnit.toLocaleString('pt-BR')} ${baseProduct.unit}`;
+                               } else {
+                                   possible = false;
+                                   break;
+                               }
                            } catch (e) {
                                possible = false;
                                break;
                            }
                        }
-                       if (possible) {
-                           totalConvertedDisplay = `${sumInFirstUnit.toLocaleString('pt-BR')} ${firstUnit}`;
+                       if (!possible) {
+                           totalConvertedDisplay = "Conversão Indisponível";
                        }
                   }
               } else if (totalPackages > 0) {
@@ -549,17 +555,17 @@ function ExpiryControlContent() {
                             <div className="flex items-center gap-2 text-sm sm:text-base">
                                 <span className="font-semibold text-primary">{totalConvertedDisplay}</span>
                                 <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
-                                {totalBoxes !== null && logisticDetails.rotulo && (
-                                    <>
-                                        <Badge variant="outline" className="px-3 py-1 text-sm">
-                                            {totalBoxes.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} {logisticDetails.rotulo}(s)
-                                        </Badge>
-                                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
-                                    </>
-                                )}
                                 <Badge variant="secondary" className="px-3 py-1 text-sm">
                                     {totalPackages.toLocaleString('pt-BR')} {packageTypeForDisplay}
                                 </Badge>
+                                {totalBoxes !== null && logisticDetails.rotulo && (
+                                    <>
+                                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
+                                        <Badge variant="outline" className="px-3 py-1 text-sm">
+                                            {totalBoxes.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} {logisticDetails.rotulo}(s)
+                                        </Badge>
+                                    </>
+                                )}
                             </div>
                         )}
                      </div>
