@@ -311,7 +311,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                 </div>
                 <div className="flex gap-2">
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button type="submit" disabled={isProcessing || remainingNeeded > 0}>
+                    <Button type="submit" disabled={isProcessing || totalSuggestedInBaseUnit <= 0}>
                         {isProcessing ? "Adicionando..." : "Adicionar à reposição"}
                     </Button>
                 </div>
