@@ -303,50 +303,52 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         <FormMessage />
                                     </FormItem>
                                 )}/>
-
-                                 <FormField
-                                    control={form.control}
-                                    name="packageType"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel>Tipo de embalagem</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
-                                            <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecione o tipo de embalagem" />
-                                            </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                {packageTypes.map((type) => (
-                                                    <SelectItem key={type} value={type}>
-                                                    {type}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-
-                                <div className="grid grid-cols-3 gap-4">
-                                    <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem>
-                                        <div className="flex items-center gap-2">
-                                            <FormLabel>Qtd. embalagem</FormLabel>
-                                            <TooltipProvider delayDuration={100}>
-                                                <Tooltip>
-                                                    <TooltipTrigger type="button" onClick={(e) => e.preventDefault()}>
-                                                        <Info className="h-4 w-4 text-muted-foreground" />
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>Informe o conteúdo da embalagem. Ex: para 400g, digite 400.</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                        <FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                                
+                                <div className="space-y-4 rounded-lg border p-4">
+                                    <h3 className="font-medium">Embalagem</h3>
+                                     <FormField
+                                        control={form.control}
+                                        name="packageType"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel>Tipo de embalagem</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value}>
+                                                <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione o tipo de embalagem" />
+                                                </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {packageTypes.map((type) => (
+                                                        <SelectItem key={type} value={type}>
+                                                        {type}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem>
+                                            <div className="flex items-center gap-2">
+                                                <FormLabel>Qtd. embalagem</FormLabel>
+                                                <TooltipProvider delayDuration={100}>
+                                                    <Tooltip>
+                                                        <TooltipTrigger type="button" onClick={(e) => e.preventDefault()}>
+                                                            <Info className="h-4 w-4 text-muted-foreground" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p>Informe o conteúdo da embalagem. Ex: para 400g, digite 400.</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            </div>
+                                            <FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                                    </div>
                                 </div>
 
                                 <FormField
