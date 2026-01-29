@@ -350,29 +350,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                     </div>
                                 </div>
-
-                                <FormField
-                                    control={form.control}
-                                    name="defaultCountingUnit"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Unidade Padrão para Contagem</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                <SelectContent>
-                                                    <SelectItem value="package">Unidade do Lote</SelectItem>
-                                                    <SelectItem value="base">Unidade do Produto Base</SelectItem>
-                                                    <SelectItem value="content">Unidade do Conteúdo</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <FormDescription>Define como este insumo será exibido e contado no módulo de contagem de estoque.</FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
                                 
-                                <Separator />
-
                                 <div className="p-4 border rounded-lg space-y-4 bg-blue-500/5 dark:bg-blue-900/10">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
@@ -411,32 +389,65 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     )}
                                 </div>
                                 
-                                <FormField control={form.control} name="enableCountingInstruction" render={({ field }) => (
-                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-purple-500/10 dark:bg-purple-900/20">
-                                        <div className="space-y-0.5"><FormLabel>Instrução de Contagem (Opcional)</FormLabel><FormDescription>Adicione um texto ou imagem para guiar a contagem.</FormDescription></div>
-                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                                    </FormItem>
-                                )} />
-                                {enableCountingInstructionWatch && (
-                                    <div className="p-4 border rounded-lg bg-purple-500/5 dark:bg-purple-900/10 space-y-4">
-                                        <FormField control={form.control} name="countingInstruction" render={({ field }) => (<FormItem><FormLabel>Texto da instrução</FormLabel><FormControl><Textarea placeholder="Ex: Contar por peso na balança..." {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                        <div className="space-y-2">
-                                            <FormLabel>Imagem de instrução (opcional)</FormLabel>
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
-                                                    {form.watch('countingInstructionImageUrl') ? <Image src={form.watch('countingInstructionImageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
-                                                </div>
-                                                <div className="flex flex-col gap-2">
-                                                    <Button type="button" variant="outline" onClick={() => setIsInstructionPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('countingInstructionImageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
-                                                    <Button type="button" variant="outline" onClick={() => instructionFileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
-                                                    {form.watch('countingInstructionImageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('countingInstructionImageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
-                                                </div>
-                                            </div>
-                                            <Input type="file" ref={instructionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'instruction')} />
-                                            <FormField control={form.control} name="countingInstructionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                <div className="p-4 border rounded-lg space-y-2 bg-green-500/5 dark:bg-green-900/10">
+                                  <FormField
+                                      control={form.control}
+                                      name="defaultCountingUnit"
+                                      render={({ field }) => (
+                                          <FormItem>
+                                              <FormLabel>Unidade Padrão para Contagem</FormLabel>
+                                              <Select onValueChange={field.onChange} value={field.value}>
+                                                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                  <SelectContent>
+                                                      <SelectItem value="package">Unidade do Lote</SelectItem>
+                                                      <SelectItem value="base">Unidade do Produto Base</SelectItem>
+                                                      <SelectItem value="content">Unidade do Conteúdo</SelectItem>
+                                                  </SelectContent>
+                                              </Select>
+                                              <FormDescription>Define como este insumo será exibido e contado no módulo de contagem de estoque.</FormDescription>
+                                              <FormMessage />
+                                          </FormItem>
+                                      )}
+                                  />
+                                </div>
+
+                                <div className="p-4 border rounded-lg space-y-4 bg-purple-500/10 dark:bg-purple-900/20">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                            <FormLabel className="text-base">Instrução de Contagem (Opcional)</FormLabel>
+                                            <FormDescription>Adicione um texto ou imagem para guiar a contagem.</FormDescription>
                                         </div>
+                                        <FormField control={form.control} name="enableCountingInstruction" render={({ field }) => (
+                                            <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                        )}/>
                                     </div>
-                                )}
+                                    {enableCountingInstructionWatch && (
+                                        <div className="space-y-4 pt-4 border-t border-purple-500/20">
+                                            <FormField control={form.control} name="countingInstruction" render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Texto da instrução</FormLabel>
+                                                    <FormControl><Textarea placeholder="Ex: Contar por peso na balança..." {...field} value={field.value ?? ''} /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}/>
+                                            <div className="space-y-2">
+                                                <FormLabel>Imagem de instrução (opcional)</FormLabel>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
+                                                        {form.watch('countingInstructionImageUrl') ? <Image src={form.watch('countingInstructionImageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                                                    </div>
+                                                    <div className="flex flex-col gap-2">
+                                                        <Button type="button" variant="outline" onClick={() => setIsInstructionPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('countingInstructionImageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
+                                                        <Button type="button" variant="outline" onClick={() => instructionFileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
+                                                        {form.watch('countingInstructionImageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('countingInstructionImageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
+                                                    </div>
+                                                </div>
+                                                <Input type="file" ref={instructionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'instruction')} />
+                                                <FormField control={form.control} name="countingInstructionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                                 
                                 <Separator />
 
