@@ -1,7 +1,7 @@
 
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
-export const packageTypes = ['Caixa', 'Pacote', 'Lata', 'Garrafa', 'Frasco', 'Sachê', 'Pote', 'Balde', 'Galão', 'Bag'] as const;
+export const packageTypes = ['Unidade', 'Caixa', 'Pacote', 'Lata', 'Garrafa', 'Frasco', 'Sachê', 'Pote', 'Balde', 'Galão', 'Bag'] as const;
 
 export type UnitCategory = (typeof unitCategories)[number];
 export type PackageType = (typeof packageTypes)[number];
@@ -285,7 +285,7 @@ export type PermissionSet = {
     analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, 
     purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; 
     returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; 
-    conversions: { view: boolean; }; 
+    conversions: { view: true }, 
     predefinedLists: { view: boolean; manage: boolean; }
   };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
@@ -335,6 +335,8 @@ export type Product = {
   urgentThreshold?: number; // e.g., 7 days
   isArchived?: boolean;
   baseProductId?: string;
+  secondaryUnit?: string;
+  secondaryUnitValue?: number;
 };
 
 export type ProductDefinition = {
