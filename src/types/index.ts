@@ -24,65 +24,6 @@ export type BaseProductStockLevel = {
     override: boolean;
 };
 
-export type Classification = {
-  id: string;
-  name: string;
-  slug: string;
-  createdAt?: number;
-  updatedAt?: number;
-  usageCount?: number;
-};
-
-export type BaseProduct = {
-  id: string;
-  name: string;
-  unit: string;
-  stockLevels: { [kioskId: string]: BaseProductStockLevel };
-  category: UnitCategory;
-  classification?: string;
-  initialCostPerUnit?: number;
-  lastEffectivePrice?: PriceHistoryEntry;
-  consumptionMonths?: number;
-}
-
-export type Location = {
-  id: string;
-  name: string; // e.g., "Prateleira A1"
-  code?: string; // e.g., "PA1"
-  kioskId: string;
-};
-
-export type Product = {
-  id: string;
-  baseName: string;
-  brand?: string;
-  barcode?: string;
-  imageUrl?: string;
-  category: UnitCategory;
-  packageSize: number;
-  unit: string;
-  secondaryUnitValue?: number;
-  secondaryUnit?: string;
-  notes?: string;
-  countingInstruction?: string;
-  countingInstructionImageUrl?: string;
-  multiplo_caixa?: number;
-  rotulo_caixa?: string;
-  pdfUnit?: string;
-  alertThreshold?: number; // e.g., 30 days
-  urgentThreshold?: number; // e.g., 7 days
-  isArchived?: boolean;
-  baseProductId?: string;
-};
-
-export type ProductDefinition = {
-    baseName: string;
-    brand?: string;
-    packageSize: number;
-    category: UnitCategory;
-    unit: string;
-}
-
 export type ConversionUnits = {
   [key in UnitCategory]: { [unit: string]: number };
 };
@@ -107,11 +48,6 @@ export const units: ConversionUnits = {
       'pacote': 1,
     }
 };
-
-export type Kiosk = {
-    id: string;
-    name: string;
-}
 
 export type LotEntry = {
   id:string;
@@ -376,6 +312,38 @@ export type User = {
     operacional?: boolean;
 };
 
+export type Product = {
+  id: string;
+  baseName: string;
+  brand?: string;
+  barcode?: string;
+  imageUrl?: string;
+  category: UnitCategory;
+  packageSize: number;
+  unit: string;
+  secondaryUnitValue?: number;
+  secondaryUnit?: string;
+  notes?: string;
+  countingInstruction?: string;
+  countingInstructionImageUrl?: string;
+  defaultCountingUnit?: 'package' | 'base' | 'secondary';
+  multiplo_caixa?: number;
+  rotulo_caixa?: string;
+  pdfUnit?: string;
+  alertThreshold?: number; // e.g., 30 days
+  urgentThreshold?: number; // e.g., 7 days
+  isArchived?: boolean;
+  baseProductId?: string;
+};
+
+export type ProductDefinition = {
+    baseName: string;
+    brand?: string;
+    packageSize: number;
+    category: UnitCategory;
+    unit: string;
+}
+
 export type PredefinedConversionItem = {
   id: string;
   productId: string;
@@ -410,6 +378,7 @@ export type StockAuditItem = {
     lotNumber: string;
     expiryDate: string; // ISO String
     systemQuantity: number;
+    displayUnit: string;
     finalQuantity: number;
     adjustment?: { // Kept for compatibility, but `divergences` array is the new source of truth.
         type: 'positive' | 'negative';
@@ -761,3 +730,5 @@ export interface RepositionContextType {
   finalizeRepositionActivity: (activity: RepositionActivity) => Promise<void>;
   revertRepositionActivity: (activityId: string) => Promise<void>;
 }
+
+    

@@ -64,6 +64,7 @@ const productFormSchema = z.object({
   enableCountingInstruction: z.boolean().optional(),
   countingInstruction: z.string().optional(),
   countingInstructionImageUrl: z.string().optional(),
+  defaultCountingUnit: z.enum(['package', 'base', 'secondary']).optional(),
 }).superRefine((data, ctx) => {
     if (data.enableLogistics) {
         if (!data.multiplo_caixa || data.multiplo_caixa <= 0) {
@@ -119,6 +120,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
             enableSecondaryUnit: false, secondaryUnitValue: undefined, secondaryUnit: 'g',
             enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
+            defaultCountingUnit: 'package',
         }
     });
     
@@ -153,6 +155,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     enableCountingInstruction: !!(productToEdit.countingInstruction || productToEdit.countingInstructionImageUrl),
                     countingInstruction: productToEdit.countingInstruction || '',
                     countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
+                    defaultCountingUnit: productToEdit.defaultCountingUnit || 'package',
                 });
             } else {
                 form.reset({
@@ -162,6 +165,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
                     enableSecondaryUnit: false, secondaryUnitValue: undefined, secondaryUnit: 'g',
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
+                    defaultCountingUnit: 'package',
                 });
             }
         }
@@ -247,6 +251,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             
             countingInstruction: values.enableCountingInstruction ? values.countingInstruction : undefined,
             countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl : undefined,
+            defaultCountingUnit: values.defaultCountingUnit,
         };
 
         if (productToEdit) {
@@ -336,6 +341,26 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         <FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                     <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                 </div>
+
+                                <FormField
+                                    control={form.control}
+                                    name="defaultCountingUnit"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Unidade Padrão para Contagem</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value}>
+                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="package">Embalagem (ex: 1 pacote)</SelectItem>
+                                                    <SelectItem value="base">Unidade do Produto Base (ex: gramas, mL)</SelectItem>
+                                                    <SelectItem value="secondary" disabled={!enableSecondaryUnitWatch}>Unidade Secundária (ex: 10 unidades)</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <FormDescription>Define como este insumo será exibido e contado no módulo de contagem de estoque.</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                                 
                                 <Separator />
 
@@ -445,6 +470,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         </>
     );
 }
+
+    
 
     
 

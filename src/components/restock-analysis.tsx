@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -5,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { format, parseISO } from 'date-fns';
 import Papa from 'papaparse';
+import type { BlobProviderParams } from '@react-pdf/renderer';
 
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -574,16 +576,15 @@ export function RestockAnalysis() {
                           <DropdownMenuItem onSelect={handleExportCsv}>
                               Exportar como CSV
                           </DropdownMenuItem>
-                          <PDFDownloadLink
-                              document={<RestockAnalysisDocument data={analysisResults.filter(item => item.status === 'repor')} kioskName={kiosk?.name || 'N/A'} />}
-                              fileName={`reposicao_${kiosk?.name.replace(/\s/g, '_') || 'desconhecido'}_${new Date().toISOString().slice(0, 10)}.pdf`}
-                          >
-                               {({ loading }) => (
-                                    <DropdownMenuItem disabled={loading} onSelect={(e) => e.preventDefault()}>
-                                        {loading ? 'Gerando PDF...' : 'Exportar como PDF'}
-                                    </DropdownMenuItem>
-                                )}
-                          </PDFDownloadLink>
+                          <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild>
+                            <PDFDownloadLink
+                                document={<RestockAnalysisDocument data={analysisResults.filter(item => item.status === 'repor')} kioskName={kiosk?.name || 'N/A'} />}
+                                fileName={`reposicao_${kiosk?.name.replace(/\s/g, '_') || 'desconhecido'}_${new Date().toISOString().slice(0, 10)}.pdf`}
+                                className="w-full h-full px-2 py-1.5"
+                            >
+                                {({ loading }) => (loading ? 'Gerando PDF...' : 'Exportar como PDF')}
+                            </PDFDownloadLink>
+                          </DropdownMenuItem>
                       </DropdownMenuContent>
                   </DropdownMenu>
               ) : (
@@ -625,3 +626,5 @@ export function RestockAnalysis() {
       </>
   );
 }
+
+    
