@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -143,18 +142,6 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     setIsProcessing(false);
   };
   
-  const formatQuantity = (quantity: number, product: any): string => {
-    if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
-        const boxes = Math.floor(quantity / product.multiplo_caixa);
-        const units = quantity % product.multiplo_caixa;
-        let result = '';
-        if (boxes > 0) result += `${boxes} ${product.rotulo_caixa}(s)`;
-        if (units > 0) result += `${result ? ' + ' : ''}${units} un`;
-        return result.trim() || `${quantity} un`;
-    }
-    return `${quantity} un`;
-  };
-  
   const formatAvailableStock = (quantity: number, product: any): string => {
       if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
         const boxes = Math.floor(quantity / product.multiplo_caixa);
@@ -162,6 +149,17 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     }
     return `${quantity} unidades`;
   }
+  
+  const firstProduct = useMemo(() => {
+    if (!suggestionResult.suggestion || suggestionResult.suggestion.length === 0) return null;
+    const lotId = suggestionResult.suggestion[0].lot.id;
+    const lot = lots.find(l => l.id === lotId);
+    if (!lot) return null;
+    return products.find(p => p.id === lot.productId);
+  }, [suggestionResult.suggestion, lots, products]);
+  
+  const packageTypeLabel = firstProduct?.packageType || 'Pct';
+
 
   return (
     <Dialog open={true} onOpenChange={onOpenChange}>
@@ -181,8 +179,9 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                         <TableRow>
                             <TableHead>Insumo vinculado</TableHead>
                             <TableHead>Lote</TableHead>
-                            <TableHead className="text-right">Quant. Estoque</TableHead>
-                            <TableHead>Qtd. Mover (Pct)</TableHead>
+                            <TableHead className="text-right">Estoque Matriz</TableHead>
+                            <TableHead className="w-[150px]">Qtd. Mover ({packageTypeLabel})</TableHead>
+                            <TableHead className="w-[150px]">Resultado</TableHead>
                             <TableHead></TableHead>
                         </TableRow>
                     </TableHeader>
@@ -193,10 +192,33 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                             const product = products.find(p => p.id === lot.productId);
                             if (!product) return null;
                             
-                            let stockInBaseUnit = 0;
+                            const currentItemValue = watchedItems[index]?.quantity || 0;
+                            let valueInBaseUnit = 0;
                             try {
-                                stockInBaseUnit = convertValue(lot.quantity, product.unit, suggestionResult.baseProduct.unit, product.category);
-                            } catch {}
+                                let unitsPerPackage = 0;
+                                if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                                    let secondaryUnitCategory: UnitCategory | undefined;
+                                    for (const category in units) {
+                                        if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
+                                            secondaryUnitCategory = category as UnitCategory;
+                                            break;
+                                        }
+                                    }
+                                    if(secondaryUnitCategory) {
+                                        unitsPerPackage = convertValue(product.secondaryUnitValue, product.secondaryUnit, suggestionResult.baseProduct.unit, secondaryUnitCategory);
+                                    }
+                                } else {
+                                    unitsPerPackage = convertValue(product.packageSize, product.unit, suggestionResult.baseProduct.unit, product.category);
+                                }
+                                valueInBaseUnit = currentItemValue * unitsPerPackage;
+                            } catch (e) {
+                                console.error(e);
+                            }
+
+                            let valueInLogisticUnit: number | null = null;
+                            if (product.multiplo_caixa && product.multiplo_caixa > 0) {
+                                valueInLogisticUnit = currentItemValue / product.multiplo_caixa;
+                            }
 
                             return (
                                 <TableRow key={field.id}>
@@ -204,7 +226,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                                         <p className="font-semibold">{getProductFullName(product)}</p>
                                     </TableCell>
                                     <TableCell>{lot.lotNumber}</TableCell>
-                                    <TableCell className="text-right">{stockInBaseUnit.toLocaleString()} {suggestionResult.baseProduct.unit}</TableCell>
+                                    <TableCell className="text-right">{lot.quantity - (lot.reservedQuantity || 0)}</TableCell>
                                     <TableCell>
                                         <FormField
                                             control={form.control}
@@ -222,6 +244,16 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                                                 </FormItem>
                                             )}
                                         />
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="text-sm font-medium">
+                                            {valueInBaseUnit.toFixed(1)} {suggestionResult.baseProduct.unit}
+                                        </div>
+                                        {valueInLogisticUnit !== null && (
+                                            <div className="text-xs text-muted-foreground">
+                                                ({valueInLogisticUnit.toFixed(1)} {product.rotulo_caixa})
+                                            </div>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                          <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(index)}><Trash2 className="h-4 w-4"/></Button>
