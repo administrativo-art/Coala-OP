@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -185,18 +186,18 @@ export function ItemManagement() {
                                 let countingUnitText = 'Unidade do Lote';
                                 if (countingUnitOption === 'base') {
                                     countingUnitText = 'Unidade do Produto Base';
-                                } else if (countingUnitOption === 'secondary') {
-                                    countingUnitText = 'Unidade da Embalagem';
+                                } else if (countingUnitOption === 'content') {
+                                    countingUnitText = 'Unidade do Conteúdo';
                                 }
 
                                 let displayedCountingUnit = '';
                                 if (countingUnitOption === 'package') {
-                                    displayedCountingUnit = product.unit;
+                                    displayedCountingUnit = product.packageType || product.unit;
                                 } else if (countingUnitOption === 'base') {
                                     const baseProduct = product.baseProductId ? baseProductMap.get(product.baseProductId) : null;
                                     displayedCountingUnit = baseProduct?.unit || '-';
-                                } else if (countingUnitOption === 'secondary') {
-                                    displayedCountingUnit = product.secondaryUnit || '-';
+                                } else if (countingUnitOption === 'content') {
+                                    displayedCountingUnit = product.unit || '-';
                                 }
 
                                 return (
@@ -221,7 +222,7 @@ export function ItemManagement() {
                                     </TableCell>
                                     <TableCell>
                                         {product.baseProductId ? (
-                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
+                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId) || 'N/A'}</Badge>
                                         ) : (
                                             <span className="text-muted-foreground">-</span>
                                         )}

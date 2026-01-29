@@ -1,8 +1,10 @@
 
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
+export const packageTypes = ['Caixa', 'Pacote', 'Lata', 'Garrafa', 'Frasco', 'Sachê', 'Pote', 'Balde', 'Galão', 'Bag'] as const;
 
 export type UnitCategory = (typeof unitCategories)[number];
+export type PackageType = (typeof packageTypes)[number];
 
 export const absenceReasons = ["Atestado Médico", "Falta Injustificada", "Atraso", "Outros"] as const;
 export type AbsenceReason = (typeof absenceReasons)[number];
@@ -318,15 +320,14 @@ export type Product = {
   brand?: string;
   barcode?: string;
   imageUrl?: string;
+  packageType?: PackageType;
   category: UnitCategory;
   packageSize: number;
   unit: string;
-  secondaryUnitValue?: number;
-  secondaryUnit?: string;
   notes?: string;
   countingInstruction?: string;
   countingInstructionImageUrl?: string;
-  defaultCountingUnit?: 'package' | 'base' | 'secondary';
+  defaultCountingUnit?: 'package' | 'base' | 'content';
   multiplo_caixa?: number;
   rotulo_caixa?: string;
   pdfUnit?: string;

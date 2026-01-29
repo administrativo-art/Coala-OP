@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import Image from 'next/image';
@@ -289,9 +288,6 @@ export function LotCard({
                 </div>
                 <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                     <p><strong>Embalagem:</strong> {product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</p>
-                    {product.secondaryUnit && product.secondaryUnitValue && (
-                        <p><strong>Qtd por embalagem:</strong> {product.secondaryUnitValue}{product.secondaryUnit}</p>
-                    )}
                 </div>
             </div>
         </div>
@@ -308,13 +304,8 @@ export function LotCard({
                 let totalUnitsLabel: string;
                 let isRedundant = false;
 
-                if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                    totalUnits = lot.quantity * product.secondaryUnitValue;
-                    totalUnitsLabel = product.secondaryUnit;
-                } else {
-                    totalUnits = lot.quantity * product.packageSize;
-                    totalUnitsLabel = product.unit;
-                }
+                totalUnits = lot.quantity * product.packageSize;
+                totalUnitsLabel = product.unit;
                 
                 if (totalUnits === lot.quantity && (totalUnitsLabel.toLowerCase() === 'un' || totalUnitsLabel.toLowerCase() === 'unidade')) {
                   isRedundant = true;
@@ -366,7 +357,7 @@ export function LotCard({
                                     </div>
                                     <div className="text-center p-2 rounded-md bg-background w-24">
                                         <div className="text-2xl font-bold">{lot.quantity.toLocaleString('pt-BR')}</div>
-                                        <div className="text-xs text-muted-foreground">pacotes</div>
+                                        <div className="text-xs text-muted-foreground">{product.packageType || 'pct'}</div>
                                     </div>
                                     </>
                                 )}

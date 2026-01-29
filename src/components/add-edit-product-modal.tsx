@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
@@ -9,7 +10,7 @@ import dynamic from 'next/dynamic';
 
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
-import { getUnitsForCategory, units, type UnitCategory, unitCategories } from '@/lib/conversion';
+import { getUnitsForCategory, units, type UnitCategory, unitCategories, packageTypes, type PackageType } from '@/lib/conversion';
 import { type Product } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 
@@ -44,6 +45,7 @@ const productFormSchema = z.object({
   brand: z.string().optional(),
   barcode: z.string().optional(),
   imageUrl: z.string().optional(),
+  packageType: z.string().min(1, 'O tipo de embalagem é obrigatório.'),
   category: z.enum(unitCategories),
   packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
@@ -54,15 +56,11 @@ const productFormSchema = z.object({
   enableLogistics: z.boolean().optional(),
   multiplo_caixa: z.coerce.number().optional(),
   rotulo_caixa: z.string().optional(),
-
-  enableSecondaryUnit: z.boolean().optional(),
-  secondaryUnitValue: z.coerce.number().optional(),
-  secondaryUnit: z.string().optional(),
   
   enableCountingInstruction: z.boolean().optional(),
   countingInstruction: z.string().optional(),
   countingInstructionImageUrl: z.string().optional(),
-  defaultCountingUnit: z.enum(['package', 'base', 'secondary']).optional(),
+  defaultCountingUnit: z.enum(['package', 'base', 'content']).optional(),
 }).superRefine((data, ctx) => {
     if (data.enableLogistics) {
         if (!data.multiplo_caixa || data.multiplo_caixa <= 0) {
@@ -70,14 +68,6 @@ const productFormSchema = z.object({
         }
         if (!data.rotulo_caixa || data.rotulo_caixa.trim() === '') {
             ctx.addIssue({ code: 'custom', path: ['rotulo_caixa'], message: 'Obrigatório.' });
-        }
-    }
-    if (data.enableSecondaryUnit) {
-        if (!data.secondaryUnitValue || data.secondaryUnitValue <= 0) {
-            ctx.addIssue({ code: 'custom', path: ['secondaryUnitValue'], message: 'Deve ser > 0.' });
-        }
-        if (!data.secondaryUnit) {
-            ctx.addIssue({ code: 'custom', path: ['secondaryUnit'], message: 'Obrigatório.' });
         }
     }
     if (data.enableCountingInstruction) {
@@ -113,10 +103,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         resolver: zodResolver(productFormSchema),
         defaultValues: {
             baseName: '', brand: '', barcode: '', imageUrl: '',
+            packageType: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
             notes: '', baseProductId: '',
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
-            enableSecondaryUnit: false, secondaryUnitValue: undefined, secondaryUnit: 'g',
             enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
             defaultCountingUnit: 'package',
         }
@@ -124,7 +114,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     
     const categoryWatch = form.watch('category');
     const enableLogisticsWatch = form.watch('enableLogistics');
-    const enableSecondaryUnitWatch = form.watch('enableSecondaryUnit');
     const enableCountingInstructionWatch = form.watch('enableCountingInstruction');
     const baseProductIdWatch = form.watch('baseProductId');
 
@@ -136,6 +125,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     brand: productToEdit.brand || '',
                     barcode: productToEdit.barcode || '',
                     imageUrl: productToEdit.imageUrl || '',
+                    packageType: productToEdit.packageType || '',
                     category: productToEdit.category,
                     packageSize: productToEdit.packageSize,
                     unit: productToEdit.unit,
@@ -146,10 +136,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     multiplo_caixa: productToEdit.multiplo_caixa || undefined,
                     rotulo_caixa: productToEdit.rotulo_caixa || '',
                     
-                    enableSecondaryUnit: !!productToEdit.secondaryUnitValue,
-                    secondaryUnitValue: productToEdit.secondaryUnitValue,
-                    secondaryUnit: productToEdit.secondaryUnit || 'g',
-
                     enableCountingInstruction: !!(productToEdit.countingInstruction || productToEdit.countingInstructionImageUrl),
                     countingInstruction: productToEdit.countingInstruction || '',
                     countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
@@ -158,10 +144,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             } else {
                 form.reset({
                     baseName: '', brand: '', barcode: '', imageUrl: '',
+                    packageType: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
                     notes: '', baseProductId: '',
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
-                    enableSecondaryUnit: false, secondaryUnitValue: undefined, secondaryUnit: 'g',
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
                     defaultCountingUnit: 'package',
                 });
@@ -218,11 +204,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                 const insumoCategory = values.category;
                 const baseProductCategory = baseProduct.category;
 
-                if (insumoCategory !== baseProductCategory && !values.enableSecondaryUnit) {
+                if (insumoCategory !== baseProductCategory) {
                     toast({
                         variant: "destructive",
                         title: "Vínculo Inválido",
-                        description: `A categoria do insumo (${insumoCategory}) é diferente da do produto base (${baseProductCategory}). Ative e preencha a "Qtd por Embalagem (Opcional)" para criar a regra de conversão.`,
+                        description: `A categoria do insumo (${insumoCategory}) é diferente da do produto base (${baseProductCategory}).`,
                         duration: 8000,
                     });
                     return; // Stop submission
@@ -235,6 +221,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             brand: values.brand,
             barcode: values.barcode,
             imageUrl: values.imageUrl,
+            packageType: values.packageType as PackageType,
             category: values.category,
             packageSize: values.packageSize,
             unit: values.unit,
@@ -243,10 +230,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             
             multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
             rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,
-            
-            secondaryUnitValue: values.enableSecondaryUnit ? values.secondaryUnitValue : undefined,
-            secondaryUnit: values.enableSecondaryUnit ? values.secondaryUnit : undefined,
-            
+                        
             countingInstruction: values.enableCountingInstruction ? values.countingInstruction : undefined,
             countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl : undefined,
             defaultCountingUnit: values.defaultCountingUnit,
@@ -271,8 +255,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         const baseProduct = baseProducts.find(bp => bp.id === baseProductIdWatch);
         if (!baseProduct) return false;
         
-        return baseProduct.category !== categoryWatch && !enableSecondaryUnitWatch;
-    }, [baseProductIdWatch, categoryWatch, enableSecondaryUnitWatch, baseProducts]);
+        return baseProduct.category !== categoryWatch;
+    }, [baseProductIdWatch, categoryWatch, baseProducts]);
 
 
     return (
@@ -320,6 +304,31 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     </FormItem>
                                 )}/>
 
+                                 <FormField
+                                    control={form.control}
+                                    name="packageType"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                        <FormLabel>Tipo de embalagem</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value}>
+                                            <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione o tipo de embalagem" />
+                                            </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {packageTypes.map((type) => (
+                                                    <SelectItem key={type} value={type}>
+                                                    {type}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
                                 <div className="grid grid-cols-3 gap-4">
                                     <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                     <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem>
@@ -351,7 +360,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 <SelectContent>
                                                     <SelectItem value="package">Unidade do Lote</SelectItem>
                                                     <SelectItem value="base">Unidade do Produto Base</SelectItem>
-                                                    <SelectItem value="secondary" disabled={!enableSecondaryUnitWatch}>Unidade da Embalagem</SelectItem>
+                                                    <SelectItem value="content">Unidade do Conteúdo</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                             <FormDescription>Define como este insumo será exibido e contado no módulo de contagem de estoque.</FormDescription>
@@ -373,21 +382,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         <div className="grid grid-cols-2 gap-4">
                                             <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (<FormItem><FormLabel>Unidades por Caixa</FormLabel><FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                             <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (<FormItem><FormLabel>Rótulo da Embalagem</FormLabel><FormControl><Input placeholder="Ex: Caixa, Fardo" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                <FormField control={form.control} name="enableSecondaryUnit" render={({ field }) => (
-                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-green-100/40 dark:bg-green-900/20">
-                                        <div className="space-y-0.5"><FormLabel>Qtd por Embalagem (Opcional)</FormLabel><FormDescription>Use se o estoque geral for controlado por uma unidade diferente.</FormDescription></div>
-                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                                    </FormItem>
-                                )} />
-                                {enableSecondaryUnitWatch && (
-                                    <div className="p-4 border rounded-lg bg-green-100/20 dark:bg-green-900/10 space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <FormField control={form.control} name="secondaryUnitValue" render={({ field }) => (<FormItem><FormLabel>Quantidade</FormLabel><FormControl><Input type="number" step="any" placeholder="ex: 300" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                            <FormField control={form.control} name="secondaryUnit" render={({ field }) => (<FormItem><FormLabel>Unidade de medida</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{allUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                         </div>
                                     </div>
                                 )}
@@ -445,7 +439,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                      <Alert variant="destructive">
                                         <AlertTitle>Vínculo de categorias diferentes</AlertTitle>
                                         <AlertDescription>
-                                            A categoria deste insumo é diferente da categoria do produto base. Para que a conversão funcione, você <b>precisa</b> habilitar e preencher a "Qtd por Embalagem (Opcional)".
+                                            A categoria deste insumo é diferente da categoria do produto base. A conversão de unidades pode não funcionar corretamente.
                                         </AlertDescription>
                                     </Alert>
                                 )}
