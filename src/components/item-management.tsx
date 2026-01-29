@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo } from 'react';
@@ -46,7 +45,7 @@ export function ItemManagement() {
   const loading = productsLoading || listsLoading || lotsLoading || baseProductsLoading;
 
   const baseProductMap = useMemo(() => {
-    return new Map(baseProducts.map(bp => [bp.id, bp.name]));
+    return new Map(baseProducts.map(bp => [bp.id, bp]));
   }, [baseProducts]);
 
   const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
@@ -56,7 +55,7 @@ export function ItemManagement() {
     if (!searchLower) return activeProducts;
 
     return activeProducts.filter(p => {
-        const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.toLowerCase() : '';
+        const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.name.toLowerCase() : '';
         return getProductFullName(p).toLowerCase().includes(searchLower) ||
                (p.barcode && p.barcode.includes(searchLower)) ||
                (baseProductName && baseProductName.includes(searchLower));
@@ -168,6 +167,7 @@ export function ItemManagement() {
                             <TableHead>Produto Base</TableHead>
                             <TableHead>Embalagem</TableHead>
                             <TableHead>Forma Contagem</TableHead>
+                            <TableHead>Unidade Contagem</TableHead>
                             <TableHead>Cód. Barras</TableHead>
                             <TableHead className="w-16 text-right">Ações</TableHead>
                         </TableRow>
@@ -176,18 +176,29 @@ export function ItemManagement() {
                         {loading ? (
                             [...Array(5)].map((_, i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={7}><Skeleton className="h-10 w-full" /></TableCell>
+                                    <TableCell colSpan={8}><Skeleton className="h-10 w-full" /></TableCell>
                                 </TableRow>
                             ))
                         ) : filteredProducts.length > 0 ? (
                             filteredProducts.map(product => {
-                                const countingUnit = product.defaultCountingUnit || 'package';
-                                let countingUnitText = 'Unidade do Lote (Pacote)';
-                                if (countingUnit === 'base') {
+                                const countingUnitOption = product.defaultCountingUnit || 'package';
+                                let countingUnitText = 'Unidade do Lote';
+                                if (countingUnitOption === 'base') {
                                     countingUnitText = 'Unidade do Produto Base';
-                                } else if (countingUnit === 'secondary') {
+                                } else if (countingUnitOption === 'secondary') {
                                     countingUnitText = 'Unidade da Embalagem';
                                 }
+
+                                let displayedCountingUnit = '';
+                                if (countingUnitOption === 'package') {
+                                    displayedCountingUnit = product.unit;
+                                } else if (countingUnitOption === 'base') {
+                                    const baseProduct = product.baseProductId ? baseProductMap.get(product.baseProductId) : null;
+                                    displayedCountingUnit = baseProduct?.unit || '-';
+                                } else if (countingUnitOption === 'secondary') {
+                                    displayedCountingUnit = product.secondaryUnit || '-';
+                                }
+
                                 return (
                                 <TableRow key={product.id}>
                                     <TableCell>
@@ -210,7 +221,7 @@ export function ItemManagement() {
                                     </TableCell>
                                     <TableCell>
                                         {product.baseProductId ? (
-                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId) || 'N/A'}</Badge>
+                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
                                         ) : (
                                             <span className="text-muted-foreground">-</span>
                                         )}
@@ -222,6 +233,9 @@ export function ItemManagement() {
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant="outline">{countingUnitText}</Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="default">{displayedCountingUnit}</Badge>
                                     </TableCell>
                                     <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
                                     <TableCell className="text-right">
@@ -246,7 +260,7 @@ export function ItemManagement() {
                             })
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                                     <div className="flex flex-col items-center gap-2">
                                         <Inbox className="h-10 w-10" />
                                         <span>Nenhum insumo encontrado.</span>
