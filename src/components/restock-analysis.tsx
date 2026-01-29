@@ -131,12 +131,22 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
                 <div className="flex-1 overflow-auto -mx-6 px-6">
                     <ScrollArea className="h-full pr-4">
                        <Accordion type="multiple" className="w-full space-y-2">
-                            {itemsWithDetails.map(item => (
+                            {itemsWithDetails.map(item => {
+                                const analysisResult = analysisResults.find(r => r.baseProduct.id === item.baseProductId);
+                                return (
                                 <AccordionItem key={item.baseProductId} value={item.baseProductId} className="border-b-0">
                                     <Card>
                                     <AccordionTrigger className="p-3 font-semibold hover:no-underline text-left">
-                                        <div className="flex justify-between w-full pr-2">
-                                            <span>{item.productName}</span>
+                                        <div className="flex justify-between items-center w-full pr-2">
+                                            <div>
+                                                <p className="font-semibold text-lg">{item.productName}</p>
+                                                {analysisResult && (
+                                                    <div className="text-xs text-muted-foreground font-normal">
+                                                        Estoque: {analysisResult.currentStock.toFixed(1)} {item.baseUnit} | 
+                                                        Necessidade: {analysisResult.restockNeeded.toFixed(1)} {item.baseUnit}
+                                                    </div>
+                                                )}
+                                            </div>
                                             <span className="font-bold text-primary">{item.totalBaseUnitQty.toFixed(1)} {item.baseUnit}</span>
                                         </div>
                                     </AccordionTrigger>
@@ -170,7 +180,7 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
                                     </AccordionContent>
                                     </Card>
                                 </AccordionItem>
-                            ))}
+                            )})}
                         </Accordion>
                     </ScrollArea>
                 </div>
@@ -178,7 +188,7 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
                     <Button variant="outline" onClick={onCancel}>Voltar</Button>
                     <Button onClick={onConfirm} disabled={isLoading}>
                         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Confirmar e Criar Atividade
+                        Confirmar
                     </Button>
                 </DialogFooter>
             </DialogContent>
