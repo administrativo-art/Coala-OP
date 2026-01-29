@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -78,7 +77,7 @@ const auditFormSchema = z.object({
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
 
-function JustificationSection({ itemIndex, control, type }: { itemIndex: number, control: any, type: 'divergence' | 'adjustment' }) {
+function JustificationSection({ itemIndex, control, type, unit }: { itemIndex: number, control: any, type: 'divergence' | 'adjustment', unit: string }) {
   const name = type === 'divergence' ? `items.${itemIndex}.divergences` : `items.${itemIndex}.adjustments`;
   const { fields, append, remove } = useFieldArray({ control, name });
   
@@ -98,7 +97,7 @@ function JustificationSection({ itemIndex, control, type }: { itemIndex: number,
                     <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive h-7 w-7" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
                     <div className="grid grid-cols-2 gap-2 items-start">
                         <FormField control={control} name={`${name}.${divIndex}.quantity`} render={({ field: qtyField }) => (
-                            <FormItem><FormLabel className="text-xs">Quantidade</FormLabel>
+                            <FormItem><FormLabel className="text-xs">Quantidade ({unit})</FormLabel>
                                 <FormControl>
                                     <Input
                                         type="number"
@@ -240,6 +239,8 @@ function AuditForm({
                               const totalDivergence = (formItem?.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
                               const totalAdjustment = (formItem?.adjustments || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
                               const adjustedQuantity = item.systemQuantity - totalDivergence + totalAdjustment;
+                              
+                              const displayUnit = product?.secondaryUnit ? product.secondaryUnit : 'pct';
 
                               return (
                                   <Card key={item.lotId} className="flex flex-col">
@@ -262,15 +263,15 @@ function AuditForm({
                                           <div className="grid grid-cols-2 gap-4">
                                               <div className="p-2 border rounded-md">
                                                   <Label className="text-xs text-muted-foreground">Estoque sistema</Label>
-                                                  <p className="text-lg font-bold">{item.systemQuantity}</p>
+                                                  <p className="text-lg font-bold">{item.systemQuantity} <span className="text-sm font-normal text-muted-foreground">{displayUnit}</span></p>
                                               </div>
                                                 <div className="p-2 border rounded-md bg-muted/30">
                                                   <Label className="text-xs text-muted-foreground">Estoque ajustado</Label>
-                                                  <p className="text-lg font-bold text-primary">{adjustedQuantity}</p>
+                                                  <p className="text-lg font-bold text-primary">{adjustedQuantity} <span className="text-sm font-normal text-muted-foreground">{displayUnit}</span></p>
                                                 </div>
                                           </div>
-                                          <JustificationSection itemIndex={index} control={form.control} type="divergence" />
-                                          <JustificationSection itemIndex={index} control={form.control} type="adjustment" />
+                                          <JustificationSection itemIndex={index} control={form.control} type="divergence" unit={displayUnit} />
+                                          <JustificationSection itemIndex={index} control={form.control} type="adjustment" unit={displayUnit} />
                                       </div>
                                   </Card>
                               );
@@ -400,7 +401,12 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
 
     const auditItems: StockAuditItem[] = Object.values(groupedLots).map(lot => {
         const product = productMap.get(lot.productId)!;
-        const systemQuantity = lot.quantity; 
+        
+        let systemQuantity = lot.quantity;
+        if (product.secondaryUnitValue && product.secondaryUnitValue > 0) {
+            systemQuantity = lot.quantity * product.secondaryUnitValue;
+        }
+
         return {
             productId: lot.productId,
             productName: getProductFullName(product),
@@ -512,3 +518,5 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     </>
   );
 }
+
+    
