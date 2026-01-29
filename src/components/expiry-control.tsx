@@ -520,6 +520,19 @@ function ExpiryControlContent() {
               } else {
                   totalConvertedDisplay = "0";
               }
+              
+              const firstProductInGroup = baseGroup.brands?.[0]?.products?.[0]?.product;
+              const packageTypeForDisplay = firstProductInGroup?.packageType ? `${firstProductInGroup.packageType}(s)` : 'unidades';
+
+              const logisticDetails = firstProductInGroup 
+                  ? { multiplo: firstProductInGroup.multiplo_caixa, rotulo: firstProductInGroup.rotulo_caixa } 
+                  : { multiplo: undefined, rotulo: undefined };
+
+              let totalBoxes: number | null = null;
+              if (logisticDetails.multiplo && logisticDetails.multiplo > 0) {
+                  totalBoxes = totalPackages / logisticDetails.multiplo;
+              }
+
 
              return (
                  <div key={baseGroup.baseProductId || baseGroup.name} className="space-y-4">
@@ -532,13 +545,23 @@ function ExpiryControlContent() {
                               </Button>
                           )}
                         </div>
-                         {totalPackages > 0 && (
+                        {totalPackages > 0 && (
                             <div className="flex items-center gap-2 text-sm sm:text-base">
-                              <span className="font-semibold text-primary">{totalConvertedDisplay}</span>
-                              <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
-                              <Badge variant="secondary" className="px-3 py-1 text-sm">{totalPackages.toLocaleString('pt-BR')} pacotes/unidade</Badge>
+                                <span className="font-semibold text-primary">{totalConvertedDisplay}</span>
+                                <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
+                                {totalBoxes !== null && logisticDetails.rotulo && (
+                                    <>
+                                        <Badge variant="outline" className="px-3 py-1 text-sm">
+                                            {totalBoxes.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} {logisticDetails.rotulo}(s)
+                                        </Badge>
+                                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
+                                    </>
+                                )}
+                                <Badge variant="secondary" className="px-3 py-1 text-sm">
+                                    {totalPackages.toLocaleString('pt-BR')} {packageTypeForDisplay}
+                                </Badge>
                             </div>
-                         )}
+                        )}
                      </div>
                      <div className="space-y-4">
                         {baseGroup.brands.flatMap(brandGroup => brandGroup.products).map(productGroup => (
