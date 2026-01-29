@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -28,6 +28,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Checkbox } from './ui/checkbox';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -51,96 +52,132 @@ export interface AnalysisResult {
 }
 
 function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults, onConfirm, onCancel, kioskName, isLoading }: { open: boolean; onOpenChange: (open: boolean) => void; stagedItems: RepositionItem[]; analysisResults: AnalysisResult[]; onConfirm: () => void; onCancel: () => void; kioskName: string; isLoading: boolean; }) {
-    const { products } = useProducts();
+    const { products, getProductFullName } = useProducts();
     const { baseProducts } = useBaseProducts();
 
+    const getUnitsPerPackage = (product: Product, baseProduct: BaseProduct): number => {
+        try {
+            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
+                let secondaryUnitCategory: UnitCategory | undefined;
+                for (const category in units) {
+                    if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
+                        secondaryUnitCategory = category as UnitCategory;
+                        break;
+                    }
+                }
+                if (!secondaryUnitCategory) return 0;
+                return convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
+            }
+            return convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+        } catch (e) {
+            console.error(e);
+            return 0;
+        }
+    };
+    
     const itemsWithDetails = useMemo(() => {
         return stagedItems.map(item => {
-            const analysisInfo = analysisResults.find(ar => ar.baseProduct.id === item.baseProductId);
-            const totalPackages = item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0);
-            
-            let totalInBaseUnit = 0;
             const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
+            if (!baseProduct) return null;
+            
+            const detailedLots = item.suggestedLots.map(lot => {
+                const product = products.find(p => p.id === lot.productId);
+                if (!product) return null;
+                
+                const unitsPerPackage = getUnitsPerPackage(product, baseProduct);
+                
+                let baseUnitQty = 0;
+                let logisticUnitQty = null;
 
-            if(baseProduct) {
-                item.suggestedLots.forEach(lot => {
-                    const product = products.find(p => p.id === lot.productId);
-                    if (!product) return;
-                    
-                    try {
-                        let valueOfOnePackageInBase = 0;
-                        if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                            let secondaryUnitCategory: UnitCategory | undefined;
-                            for (const category in units) {
-                                if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
-                                    secondaryUnitCategory = category as UnitCategory;
-                                    break;
-                                }
-                            }
-                            if (!secondaryUnitCategory) return;
-                            valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                        } else {
-                           valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                        }
-                        totalInBaseUnit += lot.quantityToMove * valueOfOnePackageInBase;
-                    } catch (e) {
-                        console.error('Conversion error in summary modal', e);
-                    }
-                });
-            }
+                if (unitsPerPackage > 0) {
+                    baseUnitQty = lot.quantityToMove * unitsPerPackage;
+                }
+
+                if (product.multiplo_caixa && product.multiplo_caixa > 0) {
+                    logisticUnitQty = lot.quantityToMove / product.multiplo_caixa;
+                }
+
+                return {
+                    ...lot,
+                    productName: getProductFullName(product),
+                    packageType: product.packageType || 'pct',
+                    baseUnitQty,
+                    logisticUnitQty,
+                    logisticUnitLabel: product.rotulo_caixa
+                };
+            }).filter((l): l is NonNullable<typeof l> => l !== null);
+            
+            const totalBaseUnitQty = detailedLots.reduce((sum, lot) => sum + lot.baseUnitQty, 0);
 
             return {
                 ...item,
-                minimumStock: analysisInfo?.minimumStock || 0,
-                currentStock: analysisInfo?.currentStock || 0,
-                totalPackages,
-                totalInBaseUnit,
-                baseUnit: baseProduct?.unit || ''
+                baseUnit: baseProduct.unit,
+                totalBaseUnitQty,
+                detailedLots
             };
-        });
-    }, [stagedItems, analysisResults, products, baseProducts]);
+        }).filter((item): item is NonNullable<typeof item> => item !== null);
+    }, [stagedItems, baseProducts, products, getProductFullName]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl">
+            <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle>Resumo da Reposição</DialogTitle>
+                    <DialogTitle>Revisão da Atividade de Reposição</DialogTitle>
                     <DialogDescription>
-                        Confirme os itens a serem transferidos para <strong>{kioskName}</strong>.
+                        Confirme os itens e quantidades para a transferência para <strong>{kioskName}</strong>.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="py-4">
-                    <ScrollArea className="h-60 rounded-md border">
-                         <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Produto Base</TableHead>
-                                    <TableHead className="text-right">Estoque Mínimo</TableHead>
-                                    <TableHead className="text-right">Estoque Atual</TableHead>
-                                    <TableHead className="text-right">A Repor</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {itemsWithDetails.map(item => (
-                                    <TableRow key={item.baseProductId}>
-                                        <TableCell className="font-medium">{item.productName}</TableCell>
-                                        <TableCell className="text-right">{item.minimumStock} {item.baseUnit}</TableCell>
-                                        <TableCell className="text-right">{item.currentStock.toFixed(1)} {item.baseUnit}</TableCell>
-                                        <TableCell className="text-right font-semibold">
-                                            <div>{item.totalPackages} pct</div>
-                                            <div className="text-xs text-muted-foreground">({item.totalInBaseUnit.toFixed(1)} {item.baseUnit})</div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                <div className="flex-1 overflow-auto -mx-6 px-6">
+                    <ScrollArea className="h-full pr-4">
+                       <Accordion type="multiple" className="w-full space-y-2">
+                            {itemsWithDetails.map(item => (
+                                <AccordionItem key={item.baseProductId} value={item.baseProductId} className="border-b-0">
+                                    <Card>
+                                    <AccordionTrigger className="p-3 font-semibold hover:no-underline text-left">
+                                        <div className="flex justify-between w-full pr-2">
+                                            <span>{item.productName}</span>
+                                            <span className="font-bold text-primary">{item.totalBaseUnitQty.toFixed(1)} {item.baseUnit}</span>
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="pt-0 px-3 pb-3">
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Insumo</TableHead>
+                                                        <TableHead>Lote</TableHead>
+                                                        <TableHead className="text-right">Qtd. a Mover</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {item.detailedLots.map(lot => (
+                                                        <TableRow key={lot.lotId}>
+                                                            <TableCell>{lot.productName}</TableCell>
+                                                            <TableCell>{lot.lotNumber}</TableCell>
+                                                            <TableCell className="text-right">
+                                                                <div className="font-semibold">{lot.quantityToMove} {lot.packageType}</div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    ({lot.baseUnitQty.toFixed(1)} {item.baseUnit}
+                                                                    {lot.logisticUnitQty && ` / ${lot.logisticUnitQty.toFixed(2)} ${lot.logisticUnitLabel}`})
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </AccordionContent>
+                                    </Card>
+                                </AccordionItem>
+                            ))}
+                        </Accordion>
                     </ScrollArea>
                 </div>
-                <DialogFooter>
+                <DialogFooter className="pt-4 border-t">
                     <Button variant="outline" onClick={onCancel}>Voltar</Button>
                     <Button onClick={onConfirm} disabled={isLoading}>
                         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Confirmar
+                        Confirmar e Criar Atividade
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -185,30 +222,6 @@ export function RestockAnalysis() {
     setSuggestionToView(null);
   };
   
-  const handleStageItemToggle = (result: AnalysisResult, checked: boolean) => {
-    if (checked) {
-      if (result.suggestion) {
-        const repositionItem: RepositionItem = {
-          baseProductId: result.baseProduct.id,
-          productName: result.baseProduct.name,
-          quantityNeeded: result.restockNeeded,
-          suggestedLots: result.suggestion.map(s => ({
-            lotId: s.lot.id,
-            productId: s.lot.productId,
-            productName: products.find(p => p.id === s.lot.productId)?.baseName || '',
-            lotNumber: s.lot.lotNumber,
-            quantityToMove: s.quantityToMove,
-          }))
-        };
-        handleStageItem(repositionItem);
-      } else {
-        setSuggestionToView(result);
-      }
-    } else {
-      handleRemoveStagedItem(result.baseProduct.id);
-    }
-  };
-
   const handleRemoveStagedItem = (baseProductId: string) => {
     setStagedItems(prev => prev.filter(i => i.baseProductId !== baseProductId));
   };
@@ -418,24 +431,18 @@ export function RestockAnalysis() {
         suggestion,
       };
     }).sort((a, b) => {
-        const aIsRepor = a.status === 'repor';
-        const bIsRepor = b.status === 'repor';
-
-        if (aIsRepor && !bIsRepor) {
-            return -1;
-        }
-        if (!aIsRepor && bIsRepor) {
-            return 1;
+        const statusOrder = { 'repor': 1, 'sem_meta': 2, 'excesso': 3, 'ok': 4 };
+        const aOrder = a.hasConversionError ? 0 : statusOrder[a.status];
+        const bOrder = b.hasConversionError ? 0 : statusOrder[b.status];
+        
+        if (aOrder !== bOrder) {
+            return aOrder - bOrder;
         }
         return a.baseProduct.name.localeCompare(b.baseProduct.name);
     });
   }, [kioskId, baseProducts, products, lots, loading, isMatriz]);
   
   const kiosk = kiosks.find(k => k.id === kioskId);
-  const stagedItemMap = useMemo(() => {
-    return new Map(stagedItems.map(item => [item.baseProductId, item]));
-  }, [stagedItems]);
-
 
   if (loading) {
     return (
@@ -462,17 +469,15 @@ export function RestockAnalysis() {
         };
     }
     
+    const quarterMin = result.minimumStock / 4;
+
     if (result.currentStock >= result.minimumStock) {
         return {
             card: 'border-green-600/20 bg-green-500/5',
             progress: 'bg-green-600',
             badge: <Badge variant="secondary" className="bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" /> OK</Badge>
         };
-    }
-
-    const quarterMin = result.minimumStock / 4;
-
-    if (result.currentStock <= quarterMin) {
+    } else if (result.currentStock <= quarterMin) {
         return {
             card: 'border-red-600/20 bg-red-500/5',
             progress: 'bg-red-600',
@@ -531,7 +536,7 @@ export function RestockAnalysis() {
             </Card>
           )
         })}
-        {analysisResults.length === 0 && (
+        {analysisResults.length === 0 && !loading && (
             <div className="col-span-full text-center py-16 text-muted-foreground">
                 <Inbox className="mx-auto h-12 w-12" />
                 <p className="mt-4 font-semibold">Nenhum produto base encontrado para este quiosque.</p>
@@ -539,71 +544,27 @@ export function RestockAnalysis() {
         )}
       </div>
 
-       <Card>
-        <CardHeader>
-            <div className="flex justify-between items-center">
-                 <div>
-                    <CardTitle>Itens para Reposição</CardTitle>
-                    <CardDescription>
-                        Revise os itens e clique em "Criar atividade" para iniciar a transferência.
-                    </CardDescription>
+       {stagedItems.length > 0 && !isMatriz && (
+            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-sm border-t z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]">
+                <div className="max-w-7xl mx-auto flex justify-between items-center px-4">
+                    <div>
+                        <h3 className="font-semibold">{stagedItems.length} {stagedItems.length === 1 ? 'item' : 'itens'} para reposição</h3>
+                        <p className="text-sm text-muted-foreground">Pronto para criar a atividade de transferência.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => setStagedItems([])}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Cancelar
+                        </Button>
+                        <Button onClick={() => setIsSummaryModalOpen(true)}>
+                            Próximo
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
-                {isMatriz ? (
-                     <Button disabled={analysisResults.filter(item => item.status === 'repor').length === 0} onClick={handleExportCsv}>
-                       <Download className="mr-2 h-4 w-4" />
-                       Exportar Lista de Compras
-                    </Button>
-                 ) : (
-                     <Button
-                        onClick={() => setIsSummaryModalOpen(true)}
-                        disabled={stagedItems.length === 0 || repositionLoading}
-                      >
-                        <Truck className="mr-2 h-4 w-4" />
-                        Criar atividade ({stagedItems.length})
-                      </Button>
-                 )}
             </div>
-        </CardHeader>
-        <CardContent>
-             {isMatriz ? (
-                <p className="text-sm text-muted-foreground">A criação de atividades de reposição só está disponível para quiosques, não para a Matriz.</p>
-            ) : stagedItems.length > 0 ? (
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Produto Base</TableHead>
-                                <TableHead className="text-right">Quantidade a Repor</TableHead>
-                                <TableHead className="w-12"></TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {stagedItems.map(item => {
-                                const totalPackages = item.suggestedLots.reduce((sum, lot) => sum + lot.quantityToMove, 0);
-                                return (
-                                    <TableRow key={item.baseProductId}>
-                                        <TableCell className="font-semibold">{item.productName}</TableCell>
-                                        <TableCell className="text-right">{totalPackages} pacotes</TableCell>
-                                        <TableCell>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveStagedItem(item.baseProductId)}>
-                                                <Trash2 className="h-4 w-4"/>
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                )
-                            })}
-                        </TableBody>
-                    </Table>
-                </div>
-            ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                    <p>Nenhum item adicionado para reposição.</p>
-                    <p className="text-xs">Clique em "Sugerir" em um card acima para adicionar itens.</p>
-                </div>
-            )}
-        </CardContent>
-      </Card>
-      
+        )}
+
       {suggestionToView && (
           <RestockSuggestionModal
               suggestionResult={suggestionToView}
