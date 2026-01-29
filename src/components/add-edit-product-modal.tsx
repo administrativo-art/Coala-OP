@@ -308,7 +308,12 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 </div>
                                 
                                 <div className="space-y-4 rounded-lg border p-4 bg-amber-500/5">
-                                    <h3 className="font-medium">Embalagem</h3>
+                                    <div className="space-y-0.5">
+                                        <h3 className="font-medium">Embalagem de conteúdo</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            Detalhes do item físico que você compra. Ex: um pacote de 500g, uma lata de 395g, etc.
+                                        </p>
+                                    </div>
                                      <FormField
                                         control={form.control}
                                         name="packageType"
