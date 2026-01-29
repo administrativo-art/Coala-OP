@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -461,17 +462,15 @@ export function RestockAnalysis() {
         badge: <Badge variant="destructive">Erro Conversão</Badge>,
       };
     }
+    const quarterMin = result.minimumStock / 4;
+    
     if (result.status === 'sem_meta') {
-        return {
+         return {
             card: 'bg-muted/30',
             progress: 'bg-muted-foreground',
             badge: <Badge variant="outline">Sem Meta</Badge>,
         };
-    }
-    
-    const quarterMin = result.minimumStock / 4;
-
-    if (result.currentStock >= result.minimumStock) {
+    } else if (result.currentStock >= result.minimumStock) {
         return {
             card: 'border-green-600/20 bg-green-500/5',
             progress: 'bg-green-600',
@@ -483,7 +482,7 @@ export function RestockAnalysis() {
             progress: 'bg-red-600',
             badge: <Badge variant="destructive"><AlertTriangle className="mr-1 h-3 w-3" /> Urgente</Badge>
         };
-    } else { // currentStock < minimumStock && currentStock > quarterMin
+    } else { // currentStock < minimumStock
         return {
             card: 'border-orange-500/20 bg-orange-500/5',
             progress: 'bg-orange-500',
@@ -491,7 +490,6 @@ export function RestockAnalysis() {
         };
     }
   };
-
 
   return (
     <>
@@ -531,6 +529,11 @@ export function RestockAnalysis() {
                     <Wand2 className="mr-2 h-4 w-4" />
                     Sugerir
                   </Button>
+                )}
+                 {!isMatriz && result.status === 'ok' && (
+                    <Button variant="ghost" size="sm" className="w-full h-auto text-center text-xs text-muted-foreground p-2 hover:bg-green-500/10 whitespace-normal" onClick={() => setSuggestionToView(result)}>
+                        O estoque está ótimo, mas quero enviar mesmo assim
+                    </Button>
                 )}
               </CardFooter>
             </Card>
