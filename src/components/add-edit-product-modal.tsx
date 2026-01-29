@@ -367,6 +367,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 <FormItem>
                                                     <FormLabel>Quantidade</FormLabel>
                                                     <FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl>
+                                                    <FormDescription className="text-xs">
+                                                        Quantidade de insumos (pacotes/unidades de compra) dentro do tipo de agrupamento.
+                                                    </FormDescription>
                                                     <FormMessage />
                                                 </FormItem>
                                             )}/>
