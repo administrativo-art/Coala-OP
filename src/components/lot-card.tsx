@@ -287,7 +287,11 @@ export function LotCard({
                     </Popover>
                 </div>
                 <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                    <p><strong>Embalagem:</strong> {product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</p>
+                    <p><strong>Unidade de medida:</strong> {product.unit}</p>
+                    <p><strong>Embalagem de conteúdo:</strong> {product.packageType} com {product.packageSize}{product.unit}</p>
+                    {product.multiplo_caixa && product.rotulo_caixa && (
+                        <p><strong>Embalagem de agrupamento:</strong> 1 {product.rotulo_caixa} = {product.multiplo_caixa} {product.packageType ? `${product.packageType}(s)` : 'unidades'}</p>
+                    )}
                 </div>
             </div>
         </div>
