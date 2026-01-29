@@ -429,22 +429,6 @@ export function RestockAnalysis() {
     });
   }, [kioskId, baseProducts, products, lots, loading, isMatriz]);
   
-  const getStatusBadge = (result: AnalysisResult) => {
-    if (result.hasConversionError) {
-      return <Badge variant="destructive">Erro de Conversão</Badge>;
-    }
-    switch (result.status) {
-      case 'repor':
-        return <Badge variant="destructive" className="bg-orange-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" /> Repor</Badge>;
-      case 'ok':
-        return <Badge variant="secondary" className="bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" /> OK</Badge>;
-      case 'sem_meta':
-        return <Badge variant="outline">Sem Meta</Badge>;
-      default:
-        return <Badge variant="secondary">{result.status}</Badge>;
-    }
-  };
-
   const formatNumberDisplay = (value: number, unit: string) => {
     return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ${unit}`;
   }
@@ -464,51 +448,96 @@ export function RestockAnalysis() {
     );
   }
 
+  const getCardStatus = (result: AnalysisResult) => {
+    if (result.hasConversionError) {
+      return {
+        card: 'border-destructive/20 bg-destructive/5',
+        progress: 'bg-destructive',
+        badge: <Badge variant="destructive">Erro Conversão</Badge>,
+      };
+    }
+    if (result.status === 'sem_meta') {
+        return {
+            card: 'bg-muted/30',
+            progress: 'bg-muted-foreground',
+            badge: <Badge variant="outline">Sem Meta</Badge>,
+        };
+    }
+    
+    if (result.currentStock >= result.minimumStock) {
+        return {
+            card: 'border-green-600/20 bg-green-500/5',
+            progress: 'bg-green-600',
+            badge: <Badge variant="secondary" className="bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" /> OK</Badge>
+        };
+    }
+
+    const quarterMin = result.minimumStock / 4;
+
+    if (result.currentStock <= quarterMin) {
+        return {
+            card: 'border-red-600/20 bg-red-500/5',
+            progress: 'bg-red-600',
+            badge: <Badge variant="destructive"><AlertTriangle className="mr-1 h-3 w-3" /> Urgente</Badge>
+        };
+    } else { // currentStock < minimumStock && currentStock > quarterMin
+        return {
+            card: 'border-orange-500/20 bg-orange-500/5',
+            progress: 'bg-orange-500',
+            badge: <Badge variant="destructive" className="bg-orange-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" /> Repor</Badge>
+        };
+    }
+  };
+
+
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        {analysisResults.map(result => (
-          <Card key={result.baseProduct.id} className="flex flex-col">
-            <CardHeader className="pb-2">
-              <div className="flex justify-between items-start">
-                <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{result.baseProduct.name}</CardTitle>
-                {getStatusBadge(result)}
-              </div>
-              <CardDescription>{result.baseProduct.unit}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow space-y-3">
-              <div className="space-y-1">
-                {result.stockPercentage !== null && (
-                  <>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{formatNumberDisplay(result.currentStock, result.baseProduct.unit)}</span>
-                      <span>{formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</span>
-                    </div>
-                    <Progress value={result.stockPercentage} />
-                  </>
+        {analysisResults.map(result => {
+           const statusStyle = getCardStatus(result);
+          return (
+            <Card key={result.baseProduct.id} className={cn("flex flex-col", statusStyle.card)}>
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{result.baseProduct.name}</CardTitle>
+                  {statusStyle.badge}
+                </div>
+                <CardDescription>{result.baseProduct.unit}</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow space-y-3">
+                <div className="space-y-1">
+                  {result.stockPercentage !== null && (
+                    <>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{formatNumberDisplay(result.currentStock, result.baseProduct.unit)}</span>
+                        <span>{formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</span>
+                      </div>
+                      <Progress value={result.stockPercentage} indicatorClassName={statusStyle.progress} />
+                    </>
+                  )}
+                   {result.restockNeeded > 0 && (
+                      <p className="text-sm font-bold text-destructive">
+                        Repor: {formatNumberDisplay(result.restockNeeded, result.baseProduct.unit)}
+                      </p>
+                  )}
+                </div>
+              </CardContent>
+              <CardFooter className="pt-2">
+                {!isMatriz && result.suggestion && (
+                  <Button
+                    variant={stagedItemMap.has(result.baseProduct.id) ? "secondary" : "outline"}
+                    size="sm"
+                    className="w-full"
+                    onClick={() => handleStageItemToggle(result, !stagedItemMap.has(result.baseProduct.id))}
+                  >
+                    {stagedItemMap.has(result.baseProduct.id) ? <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                    {stagedItemMap.has(result.baseProduct.id) ? 'Adicionado' : 'Sugerir'}
+                  </Button>
                 )}
-                 {result.restockNeeded > 0 && (
-                    <p className="text-sm font-bold text-destructive">
-                      Repor: {formatNumberDisplay(result.restockNeeded, result.baseProduct.unit)}
-                    </p>
-                )}
-              </div>
-            </CardContent>
-            <CardFooter className="pt-2">
-              {!isMatriz && result.suggestion && (
-                <Button
-                  variant={stagedItemMap.has(result.baseProduct.id) ? "secondary" : "outline"}
-                  size="sm"
-                  className="w-full"
-                  onClick={() => handleStageItemToggle(result, !stagedItemMap.has(result.baseProduct.id))}
-                >
-                  {stagedItemMap.has(result.baseProduct.id) ? <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                  {stagedItemMap.has(result.baseProduct.id) ? 'Adicionado' : 'Sugerir'}
-                </Button>
-              )}
-            </CardFooter>
-          </Card>
-        ))}
+              </CardFooter>
+            </Card>
+          )
+        })}
         {analysisResults.length === 0 && (
             <div className="col-span-full text-center py-16 text-muted-foreground">
                 <Inbox className="mx-auto h-12 w-12" />
