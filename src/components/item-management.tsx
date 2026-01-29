@@ -9,18 +9,16 @@ import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
 import { useBaseProducts } from '@/hooks/use-base-products';
-import { type Product } from '@/types';
+import { type Product, type BaseProduct } from '@/types';
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from './ui/checkbox';
-import { ScrollArea } from './ui/scroll-area';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { PlusCircle, Edit, Trash2, Archive, Box, Search, MoreHorizontal, Inbox } from 'lucide-react';
 import { ArchivedProductsModal } from './archived-products-modal';
 import { AddEditProductModal } from './add-edit-product-modal';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
@@ -164,7 +162,7 @@ export function ItemManagement() {
                                     aria-label="Selecionar todos"
                                 />
                             </TableHead>
-                            <TableHead className="w-[35%]">Insumo</TableHead>
+                            <TableHead className="w-[30%]">Insumo</TableHead>
                             <TableHead>Produto Base</TableHead>
                             <TableHead>Embalagem</TableHead>
                             <TableHead>Forma Contagem</TableHead>
@@ -222,7 +220,7 @@ export function ItemManagement() {
                                     </TableCell>
                                     <TableCell>
                                         {product.baseProductId ? (
-                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId) || 'N/A'}</Badge>
+                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
                                         ) : (
                                             <span className="text-muted-foreground">-</span>
                                         )}
@@ -232,7 +230,7 @@ export function ItemManagement() {
                                         {product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}
                                         {product.unit}
                                     </TableCell>
-                                    <TableCell>
+                                     <TableCell>
                                         <Badge variant="outline">{countingUnitText}</Badge>
                                     </TableCell>
                                     <TableCell>
