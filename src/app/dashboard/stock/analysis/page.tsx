@@ -5,8 +5,9 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight, RefreshCw, Truck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -15,6 +16,14 @@ export default function RepositionHubPage() {
     const { kiosks } = useKiosks();
     const { permissions } = useAuth();
     const [isKioskModalOpen, setIsKioskModalOpen] = useState(false);
+
+    const { matriz, otherKiosks } = useMemo(() => {
+        const matrizKiosk = kiosks.find(k => k.id === 'matriz');
+        const others = kiosks
+            .filter(k => k.id !== 'matriz')
+            .sort((a,b) => a.name.localeCompare(b.name));
+        return { matriz: matrizKiosk, otherKiosks: others };
+    }, [kiosks]);
 
     const handleKioskSelect = (kioskId: string) => {
         router.push(`/dashboard/stock/analysis/restock?kioskId=${kioskId}`);
@@ -76,7 +85,13 @@ export default function RepositionHubPage() {
                         <DialogDescription>Selecione o quiosque ou a matriz para analisar a necessidade de reposição.</DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-2">
-                        {kiosks.map(kiosk => (
+                        {matriz && (
+                            <Button key={matriz.id} variant="secondary" className="w-full justify-start text-base py-6" onClick={() => handleKioskSelect(matriz.id)}>
+                                {matriz.name}
+                            </Button>
+                        )}
+                        {otherKiosks.length > 0 && matriz && <Separator className="my-2" />}
+                        {otherKiosks.map(kiosk => (
                             <Button key={kiosk.id} variant="outline" className="w-full justify-start text-base py-6" onClick={() => handleKioskSelect(kiosk.id)}>
                                 {kiosk.name}
                             </Button>
