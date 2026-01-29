@@ -311,6 +311,13 @@ export function LotCard({
                   isRedundant = true;
                 }
 
+                let totalBoxes = null;
+                let boxLabel = '';
+                if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
+                    totalBoxes = lot.quantity / product.multiplo_caixa;
+                    boxLabel = product.rotulo_caixa;
+                }
+
                 return (
                     <div key={lot.id} id={`lot-instance-${lot.id}`} className="grid grid-cols-1 items-center gap-4 p-3 border rounded-md bg-muted/50">
                         <div className="flex justify-between items-start">
@@ -360,6 +367,12 @@ export function LotCard({
                                         <div className="text-xs text-muted-foreground">{product.packageType || 'pct'}</div>
                                     </div>
                                     </>
+                                )}
+                                {totalBoxes !== null && (
+                                    <div className="text-center p-2 rounded-md bg-background w-24">
+                                        <div className="text-2xl font-bold">{totalBoxes.toLocaleString('pt-BR', {maximumFractionDigits: 1})}</div>
+                                        <div className="text-xs text-muted-foreground">{boxLabel}</div>
+                                    </div>
                                 )}
                                 <div className="flex flex-col gap-0.5 border-l pl-1 h-full justify-around">
                                     {renderActionButton(lot, Pencil, "Editar", () => onEdit(lot.id), canEdit)}
