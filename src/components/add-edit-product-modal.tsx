@@ -373,20 +373,43 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 
                                 <Separator />
 
-                                <FormField control={form.control} name="enableLogistics" render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-blue-500/10 dark:bg-blue-900/20">
-                                        <div className="space-y-0.5"><FormLabel>Detalhes Logísticos (Opcional)</FormLabel><FormDescription>Otimize a separação no estoque, agrupando em caixas ou fardos.</FormDescription></div>
-                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                                    </FormItem>
-                                )} />
-                                {enableLogisticsWatch && (
-                                    <div className="p-4 border rounded-lg bg-blue-500/5 dark:bg-blue-900/10 space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (<FormItem><FormLabel>Unidades por Caixa</FormLabel><FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                            <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (<FormItem><FormLabel>Rótulo da Embalagem</FormLabel><FormControl><Input placeholder="Ex: Caixa, Fardo" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                <div className="p-4 border rounded-lg space-y-4 bg-blue-500/5 dark:bg-blue-900/10">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                            <FormLabel className="text-base">Detalhes logísticos</FormLabel>
+                                            <FormDescription>Embalagem de agrupamento.</FormDescription>
                                         </div>
+                                        <FormField control={form.control} name="enableLogistics" render={({ field }) => (
+                                            <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                        )} />
                                     </div>
-                                )}
+                                    {enableLogisticsWatch && (
+                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-blue-500/20">
+                                            <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Quantidade</FormLabel>
+                                                    <FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}/>
+                                            <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Tipo de agrupamento</FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                                        <SelectContent>
+                                                            <SelectItem value="Caixa">Caixa</SelectItem>
+                                                            <SelectItem value="Fardo">Fardo</SelectItem>
+                                                            <SelectItem value="Pallet">Pallet</SelectItem>
+                                                            <SelectItem value="Tambor">Tambor</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}/>
+                                        </div>
+                                    )}
+                                </div>
                                 
                                 <FormField control={form.control} name="enableCountingInstruction" render={({ field }) => (
                                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-purple-500/10 dark:bg-purple-900/20">
