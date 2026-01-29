@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -215,6 +216,9 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                             
                             const unitsPerPackage = getUnitsPerPackage(product, suggestionResult.baseProduct);
                             const quantityInPackages = unitsPerPackage > 0 ? (watchedItems[index]?.quantityInBaseUnit || 0) / unitsPerPackage : 0;
+                            const logisticQty = (product.multiplo_caixa && product.multiplo_caixa > 0)
+                                ? quantityInPackages / product.multiplo_caixa
+                                : null;
                             
                             return (
                                 <TableRow key={field.id}>
@@ -242,7 +246,10 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                                         />
                                          <div className="flex flex-col text-xs text-muted-foreground">
                                             <span>≈ {formatNumberDisplay(quantityInPackages)} {product.packageType || 'pct'}</span>
-                                            <span>({formatNumberDisplay(unitsPerPackage)} {suggestionResult.baseProduct.unit}/{product.packageType || 'pct'})</span>
+                                            {logisticQty !== null && product.rotulo_caixa && (
+                                                <span>≈ {formatNumberDisplay(logisticQty)} {product.rotulo_caixa}(s)</span>
+                                            )}
+                                            <span className="italic">({formatNumberDisplay(unitsPerPackage)} {suggestionResult.baseProduct.unit}/{product.packageType || 'pct'})</span>
                                          </div>
                                         </div>
                                          <div className="flex gap-1 mt-1">
