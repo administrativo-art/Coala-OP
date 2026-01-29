@@ -28,6 +28,7 @@ import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { Card } from './ui/card';
 
 
 const BarcodeScannerModal = dynamic(
@@ -273,31 +274,33 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     <form onSubmit={form.handleSubmit(onSubmit)}>
                         <ScrollArea className="h-[60vh] -mx-6 px-6 pr-8">
                             <div className="space-y-4 pt-4">
-                                <div className="space-y-2">
-                                    <FormLabel>Foto do insumo</FormLabel>
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
-                                            {form.watch('imageUrl') ? <Image src={form.watch('imageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                                <Card className="p-4 bg-blue-500/5 dark:bg-blue-900/10">
+                                    <div className="space-y-2">
+                                        <FormLabel>Foto do insumo</FormLabel>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
+                                                {form.watch('imageUrl') ? <Image src={form.watch('imageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
+                                                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
+                                                {form.watch('imageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
+                                            </div>
                                         </div>
-                                        <div className="flex flex-col gap-2">
-                                            <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
-                                            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
-                                            {form.watch('imageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
-                                        </div>
+                                        <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'main')} />
+                                        <FormField control={form.control} name="imageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                     </div>
-                                    <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'main')} />
-                                    <FormField control={form.control} name="imageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                </div>
-                                
-                                <div className="space-y-4 rounded-lg border p-4 bg-blue-500/5 dark:bg-blue-900/10">
-                                     <h3 className="font-medium">Informações básicas</h3>
+                                </Card>
+
+                                <Card className="p-4 bg-blue-500/5 dark:bg-blue-900/10">
+                                     <h3 className="font-medium mb-4">Informações básicas</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                         <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                     </div>
                                     
                                     <FormField control={form.control} name="barcode" render={({ field }) => (
-                                        <FormItem><FormLabel>Código de barras</FormLabel>
+                                        <FormItem className='mt-4'><FormLabel>Código de barras</FormLabel>
                                             <div className="flex gap-2">
                                                 <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
                                                 <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button>
@@ -305,10 +308,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             <FormMessage />
                                         </FormItem>
                                     )}/>
-                                </div>
+                                </Card>
                                 
-                                <div className="space-y-4 rounded-lg border p-4 bg-amber-500/5">
-                                    <div className="space-y-0.5">
+                                <Card className="p-4 bg-amber-500/5">
+                                    <div className="space-y-0.5 mb-4">
                                         <h3 className="font-medium">Embalagem de conteúdo</h3>
                                         <p className="text-sm text-muted-foreground">
                                             Detalhes do item físico que você compra. Ex: um pacote de 500g, uma lata de 395g, etc.
@@ -338,7 +341,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             </FormItem>
                                         )}
                                     />
-                                    <div className="grid grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-3 gap-4 mt-4">
                                         <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                         <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem>
                                             <div className="flex items-center gap-2">
@@ -357,9 +360,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             <FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                         <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                     </div>
-                                </div>
+                                </Card>
                                 
-                                <div className="p-4 border rounded-lg space-y-4 bg-blue-500/5 dark:bg-blue-900/10">
+                                <Card className="p-4 bg-blue-500/5 dark:bg-blue-900/10">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
                                             <FormLabel className="text-base">Detalhes logísticos</FormLabel>
@@ -370,13 +373,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         )} />
                                     </div>
                                     {enableLogisticsWatch && (
-                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-blue-500/20">
+                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-blue-500/20 mt-4">
                                             <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel>Quantidade</FormLabel>
                                                     <FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl>
                                                     <FormDescription className="text-xs">
-                                                        Quantidade de insumos (pacotes/unidades de compra) dentro do tipo de agrupamento.
+                                                        Informe quantas unidades do insumo de compra (ex: bags, latas, pacotes) cabem dentro da embalagem de agrupamento. Exemplo: se 1 'Caixa' contém 10 'Bags', insira '10'.
                                                     </FormDescription>
                                                     <FormMessage />
                                                 </FormItem>
@@ -398,9 +401,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             )}/>
                                         </div>
                                     )}
-                                </div>
+                                </Card>
                                 
-                                <div className="p-4 border rounded-lg space-y-2 bg-green-500/5 dark:bg-green-900/10">
+                                <Card className="p-4 bg-green-500/5 dark:bg-green-900/10">
                                   <FormField
                                       control={form.control}
                                       name="defaultCountingUnit"
@@ -420,12 +423,12 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                           </FormItem>
                                       )}
                                   />
-                                </div>
+                                </Card>
 
-                                <div className="p-4 border rounded-lg space-y-4 bg-purple-500/10 dark:bg-purple-900/20">
+                                <Card className="p-4 bg-purple-500/5 dark:bg-purple-900/10">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
-                                            <FormLabel className="text-base">Instrução de Contagem (Opcional)</FormLabel>
+                                            <FormLabel className="text-base">Instrução de Contagem</FormLabel>
                                             <FormDescription>Adicione um texto ou imagem para guiar a contagem.</FormDescription>
                                         </div>
                                         <FormField control={form.control} name="enableCountingInstruction" render={({ field }) => (
@@ -433,7 +436,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         )}/>
                                     </div>
                                     {enableCountingInstructionWatch && (
-                                        <div className="space-y-4 pt-4 border-t border-purple-500/20">
+                                        <div className="space-y-4 pt-4 border-t border-purple-500/20 mt-4">
                                             <FormField control={form.control} name="countingInstruction" render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel>Texto da instrução</FormLabel>
@@ -458,10 +461,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             </div>
                                         </div>
                                     )}
-                                </div>
+                                </Card>
                                 
-                                <div className="space-y-4 rounded-lg border p-4 bg-violet-500/5 dark:bg-violet-900/10">
-                                    <h3 className="font-medium">Vínculo e observações</h3>
+                                <Card className="p-4 bg-violet-500/5 dark:bg-violet-900/10">
+                                    <h3 className="font-medium mb-4">Vínculo e observações</h3>
                                     <FormField control={form.control} name="baseProductId" render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Insumo base</FormLabel>
@@ -491,8 +494,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         </Alert>
                                     )}
 
-                                    <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                </div>
+                                    <FormField control={form.control} name="notes" render={({ field }) => (<FormItem className='mt-4'><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                </Card>
                             </div>
                         </ScrollArea>
                         <DialogFooter className="pt-4 border-t">
@@ -510,3 +513,5 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         </>
     );
 }
+
+    
