@@ -30,7 +30,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
 import { ResolveDivergenceModal } from '@/components/resolve-divergence-modal';
-import { BlobProviderParams } from '@react-pdf/renderer';
+import { type BlobProviderParams } from '@react-pdf/renderer';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
