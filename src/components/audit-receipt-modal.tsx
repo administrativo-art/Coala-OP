@@ -1,8 +1,6 @@
-
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import SignatureCanvas from 'react-signature-canvas';
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
 import { type RepositionActivity, type RepositionItem, type SignatureData } from '@/types';
@@ -23,7 +21,7 @@ import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Loader2, Send, Eraser, Signature } from 'lucide-react';
+import { Loader2, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from './ui/textarea';
 
@@ -67,7 +65,6 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const sigCanvas = useRef<SignatureCanvas>(null);
 
   const form = useForm<AuditFormValues>({
     resolver: zodResolver(auditFormSchema),
@@ -90,8 +87,8 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
   });
 
   const handleConfirmReceipt = async (values: AuditFormValues) => {
-    if (!user || !sigCanvas.current || sigCanvas.current.isEmpty()) {
-        toast({ variant: 'destructive', title: 'Assinatura obrigatória', description: 'Por favor, assine para confirmar o recebimento.' });
+    if (!user) {
+        toast({ variant: 'destructive', title: 'Erro de autenticação', description: 'É necessário estar logado.' });
         return;
     }
     setIsLoading(true);
@@ -125,8 +122,6 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     const newStatus = hasDivergence ? 'Recebido com divergência' : 'Recebido sem divergência';
     
     const signature: SignatureData = {
-        // Mude para isto:
-        dataUrl: sigCanvas.current?.toDataURL('image/png') || '',
         signedBy: user.username,
         signedAt: new Date().toISOString()
     };
@@ -144,12 +139,6 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
 
     setIsLoading(false);
     onOpenChange(false);
-  };
-  
-  const clearSignature = () => {
-    if (sigCanvas.current) {
-      sigCanvas.current.clear();
-    }
   };
   
   const LotRow = ({ itemIndex, lotIndex }: { itemIndex: number, lotIndex: number }) => {
@@ -227,19 +216,6 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                         </Table>
                     </div>
                     ))}
-                    <div className="p-4 border rounded-lg space-y-2">
-                        <Label className="flex items-center gap-2 font-semibold text-lg"><Signature/> Assinatura do recebedor</Label>
-                        <div className="rounded-md border bg-white">
-                            <SignatureCanvas
-                            ref={sigCanvas}
-                            penColor="black"
-                            canvasProps={{ className: "w-full h-[150px]" }}
-                            />
-                        </div>
-                        <Button type="button" variant="ghost" size="sm" onClick={clearSignature} className="text-xs -mt-1">
-                            <Eraser className="mr-1 h-3 w-3" /> Limpar
-                        </Button>
-                    </div>
                 </div>
                 </ScrollArea>
             </div>
