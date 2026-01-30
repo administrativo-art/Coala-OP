@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
-import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot } from '@/types';
+import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot, type Product } from '@/types';
 import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
 
@@ -47,6 +47,7 @@ function RepositionActivityCard({
   onReopenDispatch,
   onReopenAudit,
   canRevert,
+  products
 }: { 
   activity: RepositionActivity; 
   isSeparated: boolean;
@@ -58,6 +59,7 @@ function RepositionActivityCard({
   onReopenDispatch: (activity: RepositionActivity) => void;
   onReopenAudit: (activity: RepositionActivity) => void;
   canRevert: boolean;
+  products: Product[];
 }) {
     const { toast } = useToast();
 
@@ -98,7 +100,7 @@ function RepositionActivityCard({
                 </div>
                 <div className="flex items-center gap-2">
                     <PDFDownloadLink
-                        document={<SeparationListDocument activity={activity} />}
+                        document={<SeparationListDocument activity={activity} products={products} />}
                         fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                     >
                         {({ blob, url, loading, error }) => (
@@ -220,6 +222,7 @@ function RepositionActivityCard({
 function RepositionManagement() {
   const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
   const { permissions } = useAuth();
+  const { products } = useProducts();
   const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
   const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
@@ -314,6 +317,7 @@ function RepositionManagement() {
                   onReopenDispatch={setActivityToReopenDispatch}
                   onReopenAudit={setActivityToReopenAudit}
                   canRevert={canRevertSteps}
+                  products={products}
               />
           ))}
       </div>

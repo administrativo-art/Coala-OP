@@ -1,8 +1,9 @@
+
 "use client";
 
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
-import { type RepositionActivity } from '@/types';
+import { type RepositionActivity, type Product } from '@/types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -77,14 +78,46 @@ const styles = StyleSheet.create({
 
 interface DocumentProps {
   activity: RepositionActivity;
+  products: Product[];
 }
 
-export const SeparationListDocument = ({ activity }: DocumentProps) => {
+export const SeparationListDocument = ({ activity, products }: DocumentProps) => {
+    const productMap = new Map(products.map(p => [p.id, p]));
+
     const allItems = activity.items.flatMap(item => 
-        item.suggestedLots.map(lot => ({
-            baseProductName: item.productName,
-            ...lot
-        }))
+        item.suggestedLots.map(lot => {
+            const product = productMap.get(lot.productId);
+            
+            let quantityDisplay = `${lot.quantityToMove}`;
+            if (product) {
+                const packageType = product.packageType || 'un';
+
+                if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
+                    const totalItems = lot.quantityToMove;
+                    const itemsPerBox = product.multiplo_caixa;
+                    const fullBoxes = Math.floor(totalItems / itemsPerBox);
+                    const remainingItems = totalItems % itemsPerBox;
+
+                    let displayParts = [];
+                    if (fullBoxes > 0) {
+                        displayParts.push(`${fullBoxes} ${product.rotulo_caixa}(s)`);
+                    }
+                    if (remainingItems > 0) {
+                        displayParts.push(`${remainingItems} ${packageType}(s)`);
+                    }
+                    quantityDisplay = displayParts.length > 0 ? displayParts.join(' e ') : `0 ${packageType}(s)`;
+                } else {
+                    quantityDisplay = `${lot.quantityToMove} ${packageType}(s)`;
+                }
+            }
+
+            return {
+                baseProductName: item.productName,
+                productName: lot.productName,
+                lotNumber: lot.lotNumber,
+                quantityDisplay: quantityDisplay,
+            };
+        })
     );
     
     return (
@@ -111,10 +144,10 @@ export const SeparationListDocument = ({ activity }: DocumentProps) => {
                     </View>
 
                     {allItems.map((item, index) => (
-                        <View style={styles.tableRow} key={item.lotId + index}>
+                        <View style={styles.tableRow} key={item.lotNumber + index}>
                             <View style={[styles.tableCol, { width: '40%' }]}><Text>{item.productName}</Text></View>
                             <View style={[styles.tableCol, { width: '30%' }]}><Text>{item.lotNumber}</Text></View>
-                            <View style={[styles.tableCol, { width: '15%', textAlign: 'right' }]}><Text>{item.quantityToMove}</Text></View>
+                            <View style={[styles.tableCol, { width: '15%', textAlign: 'right' }]}><Text>{item.quantityDisplay}</Text></View>
                             <View style={[styles.tableCol, { width: '15%', textAlign: 'center' }]}><Text>[  ]</Text></View>
                         </View>
                     ))}
