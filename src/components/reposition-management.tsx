@@ -139,7 +139,19 @@ function RepositionActivityCard({
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => handleDownloadFile(activity.transportSignature!.physicalCopyUrl!, `despacho_${activity.id.slice(-6)}.jpg`)}
+                          onClick={() => {
+                            const url = activity.transportSignature!.physicalCopyUrl!;
+                            let extension = 'jpg';
+                            try {
+                                const path = new URL(url).pathname;
+                                const decodedPath = decodeURIComponent(path);
+                                const filename = decodedPath.substring(decodedPath.lastIndexOf('/') + 1);
+                                extension = filename.substring(filename.lastIndexOf('.') + 1) || 'jpg';
+                            } catch(e) {
+                                console.error("Could not parse file extension from URL", e);
+                            }
+                            handleDownloadFile(url, `despacho_${activity.id.slice(-6)}.${extension}`)
+                          }}
                         >
                             <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
                             Doc. assinado
@@ -607,7 +619,17 @@ function RepositionHistory() {
                                                      <Button 
                                                         variant="outline" 
                                                         size="sm" 
-                                                        onClick={() => handleDownloadFile(activity.transportSignature!.physicalCopyUrl!, `despacho_reposicao_${activity.id.slice(-6)}.jpg`)}
+                                                        onClick={() => {
+                                                            const url = activity.transportSignature!.physicalCopyUrl!;
+                                                            let extension = 'jpg';
+                                                            try {
+                                                                const path = new URL(url).pathname;
+                                                                const decodedPath = decodeURIComponent(path);
+                                                                const filename = decodedPath.substring(decodedPath.lastIndexOf('/') + 1);
+                                                                extension = filename.substring(filename.lastIndexOf('.') + 1) || 'jpg';
+                                                            } catch(e) {}
+                                                            handleDownloadFile(url, `despacho_reposicao_${activity.id.slice(-6)}.${extension}`)
+                                                        }}
                                                     >
                                                         <Download className="mr-2 h-4 w-4" /> Comprovante de despacho
                                                     </Button>

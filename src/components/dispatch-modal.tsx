@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
@@ -51,7 +52,11 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
         let finalPhysicalCopyUrl = physicalCopyUrl;
 
         if (physicalCopyUrl && physicalCopyUrl.startsWith('data:')) {
-            const storageRef = ref(storage, `dispatch_documents/${activity.id}/${new Date().getTime()}.jpg`);
+            const mimeTypeMatch = physicalCopyUrl.match(/data:(.*);base64,/);
+            const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'application/octet-stream';
+            const extension = mimeType.split('/')[1] || 'bin';
+            const storageRef = ref(storage, `dispatch_documents/${activity.id}/${new Date().getTime()}.${extension}`);
+            
             try {
                 // uploadString is efficient for data URLs
                 const snapshot = await uploadString(storageRef, physicalCopyUrl, 'data_url');
@@ -180,7 +185,7 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
                                     <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
                                         <Upload className="mr-2 h-4 w-4" /> Anexar Arquivo
                                     </Button>
-                                    <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                                    <Input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
                                 </div>
                             )}
                         </div>
