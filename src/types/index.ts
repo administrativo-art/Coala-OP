@@ -8,6 +8,27 @@ export type PackageType = (typeof packageTypes)[number];
 export const absenceReasons = ["Atestado Médico", "Falta Injustificada", "Atraso", "Outros"] as const;
 export type AbsenceReason = (typeof absenceReasons)[number];
 
+export type Kiosk = {
+  id: string;
+  name: string;
+};
+
+export type Location = {
+  id: string;
+  name: string;
+  kioskId: string;
+  code?: string;
+};
+
+export type Classification = {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: number;
+  updatedAt: number;
+  usageCount: number;
+};
+
 export type PriceHistoryEntry = {
   id: string;
   baseProductId: string;
@@ -286,7 +307,7 @@ export type PermissionSet = {
     purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; 
     returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; 
     conversions: { view: true }, 
-    predefinedLists: { view: false, manage: false, }
+    predefinedLists: { view: false, manage: false }
   };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; impersonate: boolean; };
@@ -333,6 +354,8 @@ export type Product = {
   pdfUnit?: string;
   alertThreshold?: number; // e.g., 30 days
   urgentThreshold?: number; // e.g., 7 days
+  secondaryUnit?: string;
+  secondaryUnitValue?: number;
   isArchived?: boolean;
   baseProductId?: string;
 };
@@ -616,7 +639,7 @@ export const defaultGuestPermissions: PermissionSet = {
       purchasing: { view: false, suggest: false, approve: false, deleteHistory: false }, 
       returns: { view: false, add: false, updateStatus: false, delete: false }, 
       conversions: { view: true }, 
-      predefinedLists: { view: false, manage: false, }
+      predefinedLists: { view: false, manage: false }
     },
     pricing: { view: false, simulate: false, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, impersonate: false },

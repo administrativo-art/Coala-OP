@@ -44,7 +44,7 @@ export function ItemManagement() {
   const loading = productsLoading || listsLoading || lotsLoading || baseProductsLoading;
 
   const baseProductMap = useMemo(() => {
-    return new Map(baseProducts.map(bp => [bp.id, bp.name]));
+    return new Map(baseProducts.map(bp => [bp.id, bp]));
   }, [baseProducts]);
 
   const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
@@ -54,7 +54,7 @@ export function ItemManagement() {
     if (!searchLower) return activeProducts;
 
     return activeProducts.filter(p => {
-        const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.toLowerCase() : '';
+        const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.name.toLowerCase() : '';
         return getProductFullName(p).toLowerCase().includes(searchLower) ||
                (p.barcode && p.barcode.includes(searchLower)) ||
                (baseProductName && baseProductName.includes(searchLower));
@@ -220,7 +220,7 @@ export function ItemManagement() {
                                     </TableCell>
                                     <TableCell>
                                         {product.baseProductId ? (
-                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId) || 'N/A'}</Badge>
+                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
                                         ) : (
                                             <span className="text-muted-foreground">-</span>
                                         )}

@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
+import { ResolveDivergenceModal } from '@/components/resolve-divergence-modal';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -63,6 +64,31 @@ function RepositionActivityCard({
 }) {
     const { toast } = useToast();
 
+    const handleDownloadFile = async (url: string, fileName: string) => {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+            console.error("Erro ao baixar o arquivo:", error);
+            toast({
+                title: "Erro no download",
+                description: "Não foi possível baixar o arquivo. Tente abrir em uma nova aba.",
+                variant: "destructive",
+            });
+        }
+    };
+
     const currentStep = useMemo(() => {
         switch (activity.status) {
             case 'Aguardando despacho':
@@ -90,9 +116,14 @@ function RepositionActivityCard({
         <Card className="w-full">
             <CardHeader className="flex flex-row items-start justify-between pb-4">
                 <div>
-                     <CardTitle className="text-lg flex items-baseline gap-2">
+                     <CardTitle className="text-lg flex items-center gap-2">
                         <span className="font-mono text-sm text-muted-foreground">#{activity.id.slice(-6)}</span>
                         <span className="font-semibold">{activity.kioskOriginName} → {activity.kioskDestinationName}</span>
+                         {hasDivergence && (
+                            <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-500 text-white">
+                                Recebimento com divergência
+                            </Badge>
+                        )}
                     </CardTitle>
                     <CardDescription>
                         Criado em: {format(parseISO(activity.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
@@ -103,19 +134,33 @@ function RepositionActivityCard({
                         document={<SeparationListDocument activity={activity} products={products} />}
                         fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                     >
-                        {(({ loading }: { loading: boolean }) => (
+                        {({ loading }: any) => (
                             <Button variant="outline" size="sm" className="relative" disabled={loading}>
                                 <FileText className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando...' : 'Doc. de separação'}
                             </Button>
-                        )) as any}
+                        )}
                     </PDFDownloadLink>
                      {activity.transportSignature?.physicalCopyUrl && (
-                        <Button asChild variant="outline" size="sm">
-                            <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_${activity.id.slice(-6)}.jpg`}>
-                                <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
-                                Doc. assinado
-                            </a>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            const url = activity.transportSignature!.physicalCopyUrl!;
+                            let extension = 'jpg';
+                            try {
+                                const path = new URL(url).pathname;
+                                const decodedPath = decodeURIComponent(path);
+                                const filename = decodedPath.substring(decodedPath.lastIndexOf('/') + 1);
+                                extension = filename.substring(filename.lastIndexOf('.') + 1) || 'jpg';
+                            } catch(e) {
+                                console.error("Could not parse file extension from URL", e);
+                            }
+                            handleDownloadFile(url, `despacho_${activity.id.slice(-6)}.${extension}`)
+                          }}
+                        >
+                            <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
+                            Doc. assinado
                         </Button>
                     )}
                      <DropdownMenu>
@@ -229,6 +274,7 @@ function RepositionManagement() {
   const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
   const [activityToFinalize, setActivityToFinalize] = useState<RepositionActivity | null>(null);
+  const [activityToResolve, setActivityToResolve] = useState<RepositionActivity | null>(null);
   const [activityToReopenDispatch, setActivityToReopenDispatch] = useState<RepositionActivity | null>(null);
   const [activityToReopenAudit, setActivityToReopenAudit] = useState<RepositionActivity | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -263,6 +309,14 @@ function RepositionManagement() {
         </Card>
     )
   }
+  
+  const handleFinalizeClick = (activity: RepositionActivity) => {
+    if (activity.status === 'Recebido com divergência') {
+      setActivityToResolve(activity);
+    } else {
+      setActivityToFinalize(activity);
+    }
+  };
 
   const handleCancelConfirm = async () => {
     if (activityToCancel) {
@@ -274,9 +328,17 @@ function RepositionManagement() {
   const handleFinalizeConfirm = async () => {
     if (!activityToFinalize) return;
     setIsFinalizing(true);
-    await finalizeRepositionActivity(activityToFinalize);
+    await finalizeRepositionActivity(activityToFinalize, 'trust_receipt');
     setIsFinalizing(false);
     setActivityToFinalize(null);
+  };
+  
+  const handleResolveConfirm = async (resolution: 'trust_receipt' | 'trust_dispatch') => {
+    if (!activityToResolve) return;
+    setIsFinalizing(true);
+    await finalizeRepositionActivity(activityToResolve, resolution);
+    setIsFinalizing(false);
+    setActivityToResolve(null);
   };
   
   const handleReopenDispatchConfirm = async () => {
@@ -314,7 +376,7 @@ function RepositionManagement() {
                   onToggleSeparated={handleToggleSeparated}
                   onDispatch={setActivityToDispatch}
                   onAudit={setActivityToAudit}
-                  onFinalize={setActivityToFinalize}
+                  onFinalize={handleFinalizeClick}
                   onCancel={setActivityToCancel}
                   onReopenDispatch={setActivityToReopenDispatch}
                   onReopenAudit={setActivityToReopenAudit}
@@ -362,6 +424,16 @@ function RepositionManagement() {
           />
       )}
 
+      {activityToResolve && (
+        <ResolveDivergenceModal
+          open={!!activityToResolve}
+          onOpenChange={(open) => !open && setActivityToResolve(null)}
+          activity={activityToResolve}
+          onConfirm={handleResolveConfirm}
+          isLoading={isFinalizing}
+        />
+      )}
+
       <DeleteConfirmationDialog
           open={!!activityToReopenDispatch}
           onOpenChange={() => setActivityToReopenDispatch(null)}
@@ -388,6 +460,32 @@ function RepositionHistory() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>((new Date().getMonth() + 1).toString());
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  const { toast } = useToast();
+
+  const handleDownloadFile = async (url: string, fileName: string) => {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+        console.error("Erro ao baixar o arquivo:", error);
+        toast({
+            title: "Erro no download",
+            description: "Não foi possível baixar o arquivo. Tente abrir em uma nova aba.",
+            variant: "destructive",
+        });
+    }
+  };
 
   const availableYears = useMemo(() => {
     if (activities.length === 0) return [new Date().getFullYear().toString()];
@@ -482,12 +580,30 @@ function RepositionHistory() {
                             const finalizer = activity.updatedBy?.username || activity.requestedBy.username;
                             const completionDate = activity.updatedAt || activity.createdAt;
 
-                            const events = [
-                                { etapa: 'Criação', responsavel: activity.requestedBy.username, data: activity.createdAt },
-                                activity.transportSignature?.signedAt && { etapa: 'Despacho', responsavel: activity.transportSignature.signedBy, data: activity.transportSignature.signedAt },
-                                activity.receiptSignature?.signedAt && { etapa: 'Recebimento', responsavel: activity.receiptSignature.signedBy, data: activity.receiptSignature.signedAt },
-                                activity.status === 'Concluído' && activity.updatedBy && { etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt }
-                            ].filter(Boolean) as { etapa: string, responsavel: string, data: string }[];
+                            const wasDivergent = activity.status === 'Concluído' && activity.items.some(item =>
+                                (item.receivedLots && item.receivedLots.length > 0) && (
+                                    item.suggestedLots.some(sl => {
+                                        const received = item.receivedLots!.find(rl => (rl as any).lotId === sl.lotId);
+                                        return !received || (received as any).receivedQuantity !== sl.quantityToMove;
+                                    })
+                                )
+                            );
+
+                            const events: { etapa: string; responsavel: any; data: string }[] = [];
+                            events.push({ etapa: 'Criação', responsavel: activity.requestedBy.username, data: activity.createdAt });
+                            if (activity.transportSignature?.signedAt) {
+                                events.push({
+                                    etapa: 'Despacho',
+                                    responsavel: { manager: activity.requestedBy.username, transporter: activity.transportSignature.signedBy },
+                                    data: activity.transportSignature.signedAt,
+                                });
+                            }
+                            if (activity.receiptSignature?.signedAt) {
+                                events.push({ etapa: 'Recebimento', responsavel: activity.receiptSignature.signedBy, data: activity.receiptSignature.signedAt });
+                            }
+                            if (activity.status === 'Concluído' && activity.updatedBy) {
+                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt });
+                            }
                             
                             return (
                             <AccordionItem key={activity.id} value={activity.id} className="border rounded-lg">
@@ -501,9 +617,16 @@ function RepositionHistory() {
                                                 {activity.status} em {completionDate ? format(parseISO(completionDate), 'dd/MM/yyyy') : ''} por @{finalizer}
                                             </p>
                                         </div>
-                                        <Badge variant={activity.status === 'Cancelada' ? 'destructive' : activity.status === 'Recebido com divergência' ? 'secondary' : 'default'} className={cn(activity.status === 'Recebido com divergência' && 'bg-yellow-500')}>
-                                            {activity.status}
-                                        </Badge>
+                                         <div className="flex flex-col items-end gap-1 text-right">
+                                            <Badge variant={activity.status === 'Cancelada' ? 'destructive' : 'default'}>
+                                                {activity.status}
+                                            </Badge>
+                                            {wasDivergent && (
+                                                <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-500 text-white">
+                                                    Recebimento com divergência
+                                                </Badge>
+                                            )}
+                                        </div>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="p-4 pt-0 space-y-4">
@@ -516,17 +639,29 @@ function RepositionHistory() {
                                                     document={<SeparationListDocument activity={activity} products={products} />}
                                                     fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                                                 >
-                                                    {(({ loading }: { loading: boolean }) => (
+                                                    {({ loading }: any) => (
                                                         <Button variant="outline" size="sm" disabled={loading}>
                                                             <FileText className="mr-2 h-4 w-4" /> {loading ? 'Gerando...' : 'PDF de separação'}
                                                         </Button>
-                                                    )) as any}
+                                                    )}
                                                 </PDFDownloadLink>
                                                 {activity.transportSignature?.physicalCopyUrl && (
-                                                    <Button asChild variant="outline" size="sm">
-                                                        <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_reposicao_${activity.id.slice(-6)}.jpg`}>
-                                                            <Download className="mr-2 h-4 w-4" /> Comprovante de despacho
-                                                        </a>
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            const url = activity.transportSignature!.physicalCopyUrl!;
+                                                            let extension = 'jpg';
+                                                            try {
+                                                                const path = new URL(url).pathname;
+                                                                const decodedPath = decodeURIComponent(path);
+                                                                const filename = decodedPath.substring(decodedPath.lastIndexOf('/') + 1);
+                                                                extension = filename.substring(filename.lastIndexOf('.') + 1) || 'jpg';
+                                                            } catch(e) {}
+                                                            handleDownloadFile(url, `despacho_reposicao_${activity.id.slice(-6)}.${extension}`)
+                                                        }}
+                                                    >
+                                                        <Download className="mr-2 h-4 w-4" /> Comprovante de despacho
                                                     </Button>
                                                 )}
                                             </div>
@@ -589,10 +724,23 @@ function RepositionHistory() {
                                                         <TableRow key={event.etapa}>
                                                             <TableCell className="font-medium">{event.etapa}</TableCell>
                                                             <TableCell>
-                                                                <div className="flex items-center gap-1">
-                                                                    <UserCheck className="h-3 w-3 text-muted-foreground" />
-                                                                    {event.responsavel}
-                                                                </div>
+                                                                {typeof event.responsavel === 'object' && event.responsavel !== null ? (
+                                                                    <div>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                                                            {event.responsavel.manager} (Resp.)
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Truck className="h-3 w-3 text-muted-foreground" />
+                                                                            {event.responsavel.transporter} (Transp.)
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="flex items-center gap-1">
+                                                                        <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                                                        {event.responsavel}
+                                                                    </div>
+                                                                )}
                                                             </TableCell>
                                                             <TableCell>{format(parseISO(event.data), 'dd/MM/yyyy HH:mm')}</TableCell>
                                                         </TableRow>
@@ -645,7 +793,3 @@ export default function RepositionPage() {
         </div>
     );
 }
-
-    
-
-    
