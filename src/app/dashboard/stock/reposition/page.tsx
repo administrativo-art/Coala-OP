@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -88,9 +89,12 @@ function RepositionActivityCard({
         <Card className="w-full">
             <CardHeader className="flex flex-row items-start justify-between pb-4">
                 <div>
-                     <CardTitle className="text-lg">#{activity.id.slice(-6)} | {activity.kioskOriginName} → {activity.kioskDestinationName}</CardTitle>
+                     <CardTitle className="text-lg flex items-baseline gap-2">
+                        <span className="font-mono text-sm text-muted-foreground">#{activity.id.slice(-6)}</span>
+                        <span className="font-semibold">{activity.kioskOriginName} → {activity.kioskDestinationName}</span>
+                    </CardTitle>
                     <CardDescription>
-                        {activity.items.length} tipo(s) de insumo
+                        Criado em: {format(parseISO(activity.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                     </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -125,6 +129,7 @@ function RepositionActivityCard({
                         const isCompleted = currentStep > step.step || activity.status === 'Concluído';
                         const isActive = currentStep === step.step;
                         const canGoBack = canRevert && isCompleted && step.step < currentStep && step.step < 4;
+                        const isRecebimentoStepCompletedWithDivergence = step.step === 3 && isCompleted && hasDivergence;
 
                         let stepAction = () => {};
                         let actionLabel = '';
@@ -147,9 +152,24 @@ function RepositionActivityCard({
                             else if (step.step === 4) { stepAction = () => onFinalize(activity); actionLabel = 'Efetivar Movimentação'; }
                         }
                         
-                        const iconColorClass = isCompleted ? 'bg-green-500 text-white' : isActive ? 'bg-primary text-white animate-pulse' : 'bg-muted text-muted-foreground';
-                        const textColorClass = isCompleted ? 'text-foreground font-semibold' : isActive ? 'text-primary font-bold' : 'text-muted-foreground';
-                        const isDivergentStep3 = step.step === 3 && hasDivergence;
+                        const iconColorClass = cn({
+                            'bg-green-500 text-white': isCompleted && !isRecebimentoStepCompletedWithDivergence,
+                            'bg-yellow-500 text-white': isRecebimentoStepCompletedWithDivergence,
+                            'bg-destructive text-white animate-pulse': isActive && hasDivergence,
+                            'bg-blue-500 text-white animate-pulse': isActive && !hasDivergence,
+                            'bg-muted text-muted-foreground': !isCompleted && !isActive,
+                        });
+
+                        const textColorClass = cn(
+                            "text-xs",
+                            isActive ? 'font-bold' : 'font-medium',
+                            isActive && hasDivergence && 'text-destructive',
+                            isActive && !hasDivergence && 'text-blue-600 dark:text-blue-400',
+                            isCompleted && isRecebimentoStepCompletedWithDivergence && 'text-yellow-600 font-bold',
+                            isCompleted && !isRecebimentoStepCompletedWithDivergence && 'text-foreground',
+                            !isCompleted && !isActive && 'text-muted-foreground'
+                        );
+
                         const isClickable = isActive || canGoBack;
 
                         return (
@@ -163,7 +183,6 @@ function RepositionActivityCard({
                                                     className={cn(
                                                         "rounded-full w-12 h-12 transition-all duration-300",
                                                         iconColorClass,
-                                                        isDivergentStep3 && 'bg-yellow-500 text-white',
                                                         !isClickable && 'pointer-events-none opacity-80',
                                                         isClickable && 'hover:scale-105'
                                                     )}
@@ -173,7 +192,7 @@ function RepositionActivityCard({
                                                 >
                                                     {canGoBack ? <Undo2 className="h-6 w-6"/> : <step.icon className="h-6 w-6" />}
                                                 </Button>
-                                                <span className={cn("text-xs font-medium", textColorClass, isDivergentStep3 && 'text-yellow-600 font-bold')}>{step.name}</span>
+                                                <span className={textColorClass}>{step.name}</span>
                                             </div>
                                         </TooltipTrigger>
                                          {actionLabel && <TooltipContent><p>{actionLabel}</p></TooltipContent>}
