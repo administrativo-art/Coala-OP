@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -25,23 +25,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
+
 
 function RepositionActivityCard({ 
   activity, 
   onDispatch, 
   onAudit, 
   onFinalize,
-  onCancel
+  onCancel,
+  onReopenDispatch,
+  onReopenAudit,
+  canRevert,
 }: { 
   activity: RepositionActivity; 
   onDispatch: (activity: RepositionActivity) => void;
   onAudit: (activity: RepositionActivity) => void;
   onFinalize: (activity: RepositionActivity) => void;
   onCancel: (activity: RepositionActivity) => void;
+  onReopenDispatch: (activity: RepositionActivity) => void;
+  onReopenAudit: (activity: RepositionActivity) => void;
+  canRevert: boolean;
 }) {
     const { toast } = useToast();
     const [isSeparated, setIsSeparated] = useState(false);
     
+    useEffect(() => {
+        if (activity.status !== 'Aguardando despacho') {
+            setIsSeparated(true);
+        } else {
+            setIsSeparated(false);
+        }
+    }, [activity.status]);
+
     const handleExportSeparationList = () => {
         toast({
             title: "Exportação em manutenção",
@@ -103,49 +119,63 @@ function RepositionActivityCard({
                     {steps.map((step, index) => {
                         const isCompleted = currentStep > step.step || activity.status === 'Concluído';
                         const isActive = currentStep === step.step;
-                        
-                        let stepAction = () => {};
-                        let isDisabled = true;
+                        const canGoBack = canRevert && isCompleted && step.step < currentStep && step.step < 4;
 
-                        if (step.step === 1 && currentStep === 1) { // Separação
-                            stepAction = () => setIsSeparated(true);
-                            isDisabled = false;
-                        } else if (step.step === 2 && currentStep === 2) { // Despacho
-                            stepAction = () => onDispatch(activity);
-                            isDisabled = false;
-                        } else if (step.step === 3 && currentStep === 3) { // Recebimento
-                            stepAction = () => onAudit(activity);
-                            isDisabled = false;
-                        } else if (step.step === 4 && currentStep === 4) { // Efetivação
-                            stepAction = () => onFinalize(activity);
-                            isDisabled = false;
+                        let stepAction = () => {};
+                        let actionLabel = '';
+
+                        if (canGoBack) {
+                            if (step.step === 1) {
+                                stepAction = () => setIsSeparated(false);
+                                actionLabel = 'Desfazer Separação';
+                            } else if (step.step === 2) {
+                                stepAction = () => onReopenDispatch(activity);
+                                actionLabel = 'Reabrir Despacho';
+                            } else if (step.step === 3) {
+                                stepAction = () => onReopenAudit(activity);
+                                actionLabel = 'Reabrir Auditoria';
+                            }
+                        } else if (isActive) {
+                            if (step.step === 1) { stepAction = () => setIsSeparated(true); actionLabel = 'Marcar como Separado'; }
+                            else if (step.step === 2) { stepAction = () => onDispatch(activity); actionLabel = 'Gerenciar Despacho'; }
+                            else if (step.step === 3) { stepAction = () => onAudit(activity); actionLabel = 'Auditar Recebimento'; }
+                            else if (step.step === 4) { stepAction = () => onFinalize(activity); actionLabel = 'Efetivar Movimentação'; }
                         }
                         
                         const iconColorClass = isCompleted ? 'bg-green-500 text-white' : isActive ? 'bg-primary text-white animate-pulse' : 'bg-muted text-muted-foreground';
                         const textColorClass = isCompleted ? 'text-foreground font-semibold' : isActive ? 'text-primary font-bold' : 'text-muted-foreground';
                         const isDivergentStep3 = step.step === 3 && hasDivergence;
+                        const isClickable = isActive || canGoBack;
 
                         return (
                             <React.Fragment key={step.name}>
-                                <div className="flex flex-col items-center gap-2 text-center">
-                                    <Button
-                                        size="icon"
-                                        className={cn(
-                                            "rounded-full w-12 h-12 transition-all duration-300",
-                                            iconColorClass,
-                                            isDivergentStep3 && 'bg-yellow-500 text-white',
-                                            isDisabled && 'pointer-events-none opacity-80',
-                                            !isDisabled && 'hover:scale-105'
-                                        )}
-                                        onClick={stepAction}
-                                        disabled={isDisabled}
-                                    >
-                                        <step.icon className="h-6 w-6" />
-                                    </Button>
-                                    <span className={cn("text-xs font-medium", textColorClass, isDivergentStep3 && 'text-yellow-600 font-bold')}>{step.name}</span>
-                                </div>
+                                 <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex flex-col items-center gap-2 text-center">
+                                                <Button
+                                                    size="icon"
+                                                    className={cn(
+                                                        "rounded-full w-12 h-12 transition-all duration-300",
+                                                        iconColorClass,
+                                                        isDivergentStep3 && 'bg-yellow-500 text-white',
+                                                        !isClickable && 'pointer-events-none opacity-80',
+                                                        isClickable && 'hover:scale-105'
+                                                    )}
+                                                    onClick={stepAction}
+                                                    disabled={!isClickable}
+                                                    aria-label={actionLabel}
+                                                >
+                                                    {canGoBack ? <Undo2 className="h-6 w-6"/> : <step.icon className="h-6 w-6" />}
+                                                </Button>
+                                                <span className={cn("text-xs font-medium", textColorClass, isDivergentStep3 && 'text-yellow-600 font-bold')}>{step.name}</span>
+                                            </div>
+                                        </TooltipTrigger>
+                                         {actionLabel && <TooltipContent><p>{actionLabel}</p></TooltipContent>}
+                                    </Tooltip>
+                                </TooltipProvider>
                                 {index < steps.length - 1 && (
-                                    <div className={cn("flex-1 h-1 rounded-full", isCompleted || (isSeparated && index === 0) ? 'bg-green-500' : 'bg-muted')} />
+                                    <div className={cn("flex-1 h-1 rounded-full", isCompleted ? 'bg-green-500' : 'bg-muted')} />
                                 )}
                             </React.Fragment>
                         );
@@ -164,7 +194,11 @@ function RepositionManagement() {
   const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
   const [activityToFinalize, setActivityToFinalize] = useState<RepositionActivity | null>(null);
+  const [activityToReopenDispatch, setActivityToReopenDispatch] = useState<RepositionActivity | null>(null);
+  const [activityToReopenAudit, setActivityToReopenAudit] = useState<RepositionActivity | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  
+  const canRevertSteps = permissions.reposition.cancel;
 
   if (loading) {
     return (
@@ -203,6 +237,30 @@ function RepositionManagement() {
     setIsFinalizing(false);
     setActivityToFinalize(null);
   };
+  
+  const handleReopenDispatchConfirm = async () => {
+    if (!activityToReopenDispatch) return;
+    await updateRepositionActivity(activityToReopenDispatch.id, {
+        status: 'Aguardando despacho',
+        transportSignature: {},
+    });
+    setActivityToReopenDispatch(null);
+  };
+
+  const handleReopenAuditConfirm = async () => {
+    if (!activityToReopenAudit) return;
+    await updateRepositionActivity(activityToReopenAudit.id, {
+        status: 'Aguardando recebimento',
+        receiptNotes: '',
+        receiptSignature: {},
+        items: activityToReopenAudit.items.map(item => ({
+            ...item,
+            receivedLots: [],
+        }))
+    });
+    setActivityToReopenAudit(null);
+  };
+
 
   return (
     <>
@@ -215,6 +273,9 @@ function RepositionManagement() {
                   onAudit={setActivityToAudit}
                   onFinalize={setActivityToFinalize}
                   onCancel={setActivityToCancel}
+                  onReopenDispatch={setActivityToReopenDispatch}
+                  onReopenAudit={setActivityToReopenAudit}
+                  canRevert={canRevertSteps}
               />
           ))}
       </div>
@@ -256,6 +317,23 @@ function RepositionManagement() {
               confirmButtonVariant="default"
           />
       )}
+
+      <DeleteConfirmationDialog
+          open={!!activityToReopenDispatch}
+          onOpenChange={() => setActivityToReopenDispatch(null)}
+          onConfirm={handleReopenDispatchConfirm}
+          title="Reabrir Despacho?"
+          description="Esta ação irá retornar a atividade para a etapa de despacho, permitindo que a assinatura seja coletada novamente. Deseja continuar?"
+          confirmButtonText="Sim, reabrir"
+      />
+      <DeleteConfirmationDialog
+          open={!!activityToReopenAudit}
+          onOpenChange={() => setActivityToReopenAudit(null)}
+          onConfirm={handleReopenAuditConfirm}
+          title="Reabrir Auditoria?"
+          description="Esta ação irá apagar a auditoria de recebimento atual e retornar a atividade para a etapa de recebimento. Deseja continuar?"
+          confirmButtonText="Sim, reabrir"
+      />
       </>
   );
 }
