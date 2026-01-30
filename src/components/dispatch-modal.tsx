@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
@@ -17,7 +16,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { ScrollArea } from './ui/scroll-area';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { Badge } from './ui/badge';
-
+import { storage } from '@/lib/firebase';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { useToast } from '@/hooks/use-toast';
 
 interface DispatchModalProps {
   activity: RepositionActivity;
@@ -28,21 +29,49 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
     const { updateRepositionActivity } = useReposition();
     const { user } = useAuth();
     const { lots } = useExpiryProducts();
+    const { toast } = useToast();
     
     const [isLoading, setIsLoading] = useState(false);
     const [transporterName, setTransporterName] = useState('');
     const [physicalCopyUrl, setPhysicalCopyUrl] = useState<string | null>(null);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (activity) {
+            setTransporterName(activity.transportSignature?.signedBy || '');
+            setPhysicalCopyUrl(activity.transportSignature?.physicalCopyUrl || null);
+        }
+    }, [activity]);
     
     const handleConfirmDispatch = async () => {
         if (!user) return;
         setIsLoading(true);
 
+        let finalPhysicalCopyUrl = physicalCopyUrl;
+
+        if (physicalCopyUrl && physicalCopyUrl.startsWith('data:')) {
+            const storageRef = ref(storage, `dispatch_documents/${activity.id}/${new Date().getTime()}.jpg`);
+            try {
+                // uploadString is efficient for data URLs
+                const snapshot = await uploadString(storageRef, physicalCopyUrl, 'data_url');
+                finalPhysicalCopyUrl = await getDownloadURL(snapshot.ref);
+            } catch (error) {
+                console.error("Error uploading dispatch document:", error);
+                toast({
+                    variant: 'destructive',
+                    title: 'Erro de Upload',
+                    description: 'Não foi possível salvar o documento anexado. Tente novamente.',
+                });
+                setIsLoading(false);
+                return;
+            }
+        }
+
         const signatureData: SignatureData = {
             signedBy: transporterName,
             signedAt: new Date().toISOString(),
-            physicalCopyUrl: physicalCopyUrl || undefined,
+            physicalCopyUrl: finalPhysicalCopyUrl || undefined,
         };
 
         await updateRepositionActivity(activity.id, {

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -63,25 +62,6 @@ function RepositionActivityCard({
 }) {
     const { toast } = useToast();
 
-    const handleDownloadSignedDoc = () => {
-        if (!activity.transportSignature?.physicalCopyUrl) return;
-
-        const url = activity.transportSignature.physicalCopyUrl;
-        const link = document.createElement('a');
-        link.href = url;
-        
-        const mimeType = url.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/);
-        let extension = 'png';
-        if (mimeType && mimeType[1]) {
-            extension = mimeType[1].split('/')[1] || 'png';
-        }
-
-        link.download = `doc_assinado_${activity.id.slice(-6)}.${extension}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
     const currentStep = useMemo(() => {
         switch (activity.status) {
             case 'Aguardando despacho':
@@ -130,13 +110,11 @@ function RepositionActivityCard({
                         )}
                     </PDFDownloadLink>
                      {activity.transportSignature?.physicalCopyUrl && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDownloadSignedDoc}
-                        >
-                            <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
-                            Doc. assinado
+                        <Button asChild variant="outline" size="sm">
+                            <a href={activity.transportSignature.physicalCopyUrl} target="_blank" rel="noopener noreferrer">
+                                <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
+                                Doc. assinado
+                            </a>
                         </Button>
                     )}
                      <DropdownMenu>
@@ -626,5 +604,3 @@ export default function RepositionPage() {
         </div>
     );
 }
-
-    
