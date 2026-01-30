@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -110,12 +111,12 @@ function RepositionActivityCard({
                         )}
                     </PDFDownloadLink>
                      {activity.transportSignature?.physicalCopyUrl && (
-                        <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_${activity.id.slice(-6)}.jpg`}>
-                            <Button variant="outline" size="sm">
+                        <Button asChild variant="outline" size="sm">
+                            <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_${activity.id.slice(-6)}.jpg`}>
                                 <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
                                 Doc. assinado
-                            </Button>
-                        </a>
+                            </a>
+                        </Button>
                     )}
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -509,7 +510,7 @@ function RepositionHistory() {
                                 
                                     <div className="flex gap-4 p-4 bg-muted/50 rounded-lg">
                                         <div className="flex flex-col gap-2">
-                                            <span className="text-xs font-bold uppercase text-muted-foreground">Documentos da Atividade</span>
+                                            <span className="text-xs font-bold uppercase text-muted-foreground">Documentos da atividade</span>
                                             <div className="flex gap-2">
                                                 <PDFDownloadLink
                                                     document={<SeparationListDocument activity={activity} products={products} />}
@@ -517,16 +518,16 @@ function RepositionHistory() {
                                                 >
                                                     {({ loading }) => (
                                                         <Button variant="outline" size="sm" disabled={loading}>
-                                                            <FileText className="mr-2 h-4 w-4" /> {loading ? 'Gerando...' : 'PDF Separação'}
+                                                            <FileText className="mr-2 h-4 w-4" /> {loading ? 'Gerando...' : 'PDF de separação'}
                                                         </Button>
                                                     )}
                                                 </PDFDownloadLink>
                                                 {activity.transportSignature?.physicalCopyUrl && (
-                                                    <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_reposicao_${activity.id.slice(-6)}.jpg`}>
-                                                        <Button variant="outline" size="sm">
-                                                            <Download className="mr-2 h-4 w-4" /> Comprovante Despacho
-                                                        </Button>
-                                                    </a>
+                                                    <Button asChild variant="outline" size="sm">
+                                                        <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_reposicao_${activity.id.slice(-6)}.jpg`}>
+                                                            <Download className="mr-2 h-4 w-4" /> Comprovante de despacho
+                                                        </a>
+                                                    </Button>
                                                 )}
                                             </div>
                                         </div>
@@ -534,7 +535,7 @@ function RepositionHistory() {
                                     
                                     {activity.receiptNotes && (
                                         <blockquote className="mt-2 border-l-2 pl-4 italic text-sm text-muted-foreground">
-                                            <strong>Notas do Recebimento:</strong> "{activity.receiptNotes}"
+                                            <strong>Notas do recebimento:</strong> "{activity.receiptNotes}"
                                         </blockquote>
                                     )}
 
@@ -573,7 +574,7 @@ function RepositionHistory() {
                                     </div>
 
                                     <div>
-                                        <h4 className="font-semibold text-md mb-2">Histórico de Eventos</h4>
+                                        <h4 className="font-semibold text-md mb-2">Histórico de eventos</h4>
                                         <div className="rounded-md border">
                                             <Table>
                                                 <TableHeader>
