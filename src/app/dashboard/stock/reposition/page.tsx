@@ -30,6 +30,8 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 
 function RepositionActivityCard({ 
   activity, 
+  isSeparated,
+  onToggleSeparated,
   onDispatch, 
   onAudit, 
   onFinalize,
@@ -39,6 +41,8 @@ function RepositionActivityCard({
   canRevert,
 }: { 
   activity: RepositionActivity; 
+  isSeparated: boolean;
+  onToggleSeparated: (activityId: string) => void;
   onDispatch: (activity: RepositionActivity) => void;
   onAudit: (activity: RepositionActivity) => void;
   onFinalize: (activity: RepositionActivity) => void;
@@ -48,15 +52,6 @@ function RepositionActivityCard({
   canRevert: boolean;
 }) {
     const { toast } = useToast();
-    const [isSeparated, setIsSeparated] = useState(false);
-    
-    useEffect(() => {
-        if (activity.status !== 'Aguardando despacho') {
-            setIsSeparated(true);
-        } else {
-            setIsSeparated(false);
-        }
-    }, [activity.status]);
 
     const handleExportSeparationList = () => {
         toast({
@@ -126,7 +121,7 @@ function RepositionActivityCard({
 
                         if (canGoBack) {
                             if (step.step === 1) {
-                                stepAction = () => setIsSeparated(false);
+                                stepAction = () => onToggleSeparated(activity.id);
                                 actionLabel = 'Desfazer Separação';
                             } else if (step.step === 2) {
                                 stepAction = () => onReopenDispatch(activity);
@@ -136,7 +131,7 @@ function RepositionActivityCard({
                                 actionLabel = 'Reabrir Auditoria';
                             }
                         } else if (isActive) {
-                            if (step.step === 1) { stepAction = () => setIsSeparated(true); actionLabel = 'Marcar como Separado'; }
+                            if (step.step === 1) { stepAction = () => onToggleSeparated(activity.id); actionLabel = 'Marcar como Separado'; }
                             else if (step.step === 2) { stepAction = () => onDispatch(activity); actionLabel = 'Gerenciar Despacho'; }
                             else if (step.step === 3) { stepAction = () => onAudit(activity); actionLabel = 'Auditar Recebimento'; }
                             else if (step.step === 4) { stepAction = () => onFinalize(activity); actionLabel = 'Efetivar Movimentação'; }
@@ -197,8 +192,35 @@ function RepositionManagement() {
   const [activityToReopenDispatch, setActivityToReopenDispatch] = useState<RepositionActivity | null>(null);
   const [activityToReopenAudit, setActivityToReopenAudit] = useState<RepositionActivity | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [separatedActivities, setSeparatedActivities] = useState<Set<string>>(new Set());
   
   const canRevertSteps = permissions.reposition.cancel;
+
+  useEffect(() => {
+    setSeparatedActivities(prev => {
+        const newSet = new Set(prev);
+        let changed = false;
+        activities.forEach(activity => {
+            if (activity.status !== 'Aguardando despacho' && !newSet.has(activity.id)) {
+                newSet.add(activity.id);
+                changed = true;
+            }
+        });
+        return changed ? newSet : prev;
+    });
+  }, [activities]);
+
+  const handleToggleSeparated = (activityId: string) => {
+    setSeparatedActivities(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(activityId)) {
+            newSet.delete(activityId);
+        } else {
+            newSet.add(activityId);
+        }
+        return newSet;
+    });
+  };
 
   if (loading) {
     return (
@@ -269,6 +291,8 @@ function RepositionManagement() {
               <RepositionActivityCard
                   key={activity.id}
                   activity={activity}
+                  isSeparated={separatedActivities.has(activity.id)}
+                  onToggleSeparated={handleToggleSeparated}
                   onDispatch={setActivityToDispatch}
                   onAudit={setActivityToAudit}
                   onFinalize={setActivityToFinalize}
@@ -561,3 +585,5 @@ export default function RepositionPage() {
         </div>
     );
 }
+
+    
