@@ -107,15 +107,19 @@ function RepositionActivityCard({
                             <Button variant="outline" size="sm" className="relative" disabled={loading}>
                                 <FileText className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando...' : 'Doc. de separação'}
-                                {hasDivergence && (
-                                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                                    </span>
-                                )}
                             </Button>
                         )}
                     </PDFDownloadLink>
+                     {activity.transportSignature?.physicalCopyUrl && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(activity.transportSignature?.physicalCopyUrl, '_blank')}
+                        >
+                            <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
+                            Doc. assinado
+                        </Button>
+                    )}
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -603,3 +607,5 @@ export default function RepositionPage() {
         </div>
     );
 }
+
+    
