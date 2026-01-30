@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowUpDown, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing, ListTodo, Check } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowUpDown, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing, ListTodo, Check, Search } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -130,6 +130,7 @@ export function ConsumptionProjection() {
     const [sortConfig, setSortConfig] = useState<{ key: keyof ProjectionResult | 'productName', direction: 'asc' | 'desc' }>({ key: 'daysRemaining', direction: 'asc' });
     const [simulationPercentage, setSimulationPercentage] = useState<number>(0);
     const [quickProjectionProduct, setQuickProjectionProduct] = useState<BaseProduct | null>(null);
+    const [searchTerm, setSearchTerm] = useState<string>('');
     const router = useRouter();
 
 
@@ -349,6 +350,20 @@ export function ConsumptionProjection() {
     const finalFilteredAndSortedResults = useMemo(() => {
         let results = [...projectionResults];
         
+        if (searchTerm) {
+            const lowerCaseSearch = searchTerm.toLowerCase();
+            results = results.filter(group => {
+                const baseProductMatch = group.baseProductName.toLowerCase().includes(lowerCaseSearch);
+                if (baseProductMatch) return true;
+    
+                const lotMatch = group.lots.some(lotResult => 
+                    lotResult.productName.toLowerCase().includes(lowerCaseSearch) || 
+                    lotResult.lot.lotNumber.toLowerCase().includes(lowerCaseSearch)
+                );
+                return lotMatch;
+            });
+        }
+
         if (showOnlyAtRisk) {
             results = results.map(group => ({
                 ...group,
@@ -385,7 +400,7 @@ export function ConsumptionProjection() {
 
         return results;
 
-    }, [projectionResults, showOnlyAtRisk, sortConfig]);
+    }, [projectionResults, showOnlyAtRisk, sortConfig, searchTerm]);
 
     const getStatusBadge = (result: ProjectionResult) => {
         switch (result.status) {
@@ -496,6 +511,16 @@ export function ConsumptionProjection() {
                             </ScrollArea>
                         </DropdownMenuContent>
                     </DropdownMenu>
+                     <div className="relative w-full sm:w-auto flex-grow">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            type="text"
+                            placeholder="Buscar por insumo ou lote..."
+                            className="w-full pl-10"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
                     <div className="relative w-full sm:w-auto">
                         <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
@@ -545,8 +570,7 @@ export function ConsumptionProjection() {
                                                               </div>
                                                           </TooltipTrigger>
                                                           <TooltipContent>
-                                                              <p>Data limite para pedir reposição e evitar ruptura, com base no lead time.</p>
-                                                          </TooltipContent>
+                                                              <p>Data limite para pedir reposição e evitar ruptura, com base no lead time.</p></TooltipContent>
                                                       </Tooltip>
                                                   </TooltipProvider>
                                               )}
@@ -627,3 +651,5 @@ export function ConsumptionProjection() {
         </Card>
     );
 }
+
+    
