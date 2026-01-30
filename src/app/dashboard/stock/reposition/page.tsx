@@ -30,6 +30,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
 import { ResolveDivergenceModal } from '@/components/resolve-divergence-modal';
+import { BlobProviderParams } from '@react-pdf/renderer';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -134,7 +135,7 @@ function RepositionActivityCard({
                         document={<SeparationListDocument activity={activity} products={products} />}
                         fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                     >
-                        {({ loading }: any) => (
+                        {({ loading }: BlobProviderParams) => (
                             <Button variant="outline" size="sm" className="relative" disabled={loading}>
                                 <FileText className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando...' : 'Doc. de separação'}
@@ -602,7 +603,7 @@ function RepositionHistory() {
                                 events.push({ etapa: 'Recebimento', responsavel: activity.receiptSignature.signedBy, data: activity.receiptSignature.signedAt });
                             }
                             if (activity.status === 'Concluído' && activity.updatedBy) {
-                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt! });
+                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt });
                             }
                             
                             return (
@@ -639,7 +640,7 @@ function RepositionHistory() {
                                                     document={<SeparationListDocument activity={activity} products={products} />}
                                                     fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                                                 >
-                                                    {({ loading }: any) => (
+                                                    {({ loading }: { loading: boolean }) => (
                                                         <Button variant="outline" size="sm" disabled={loading}>
                                                             <FileText className="mr-2 h-4 w-4" /> {loading ? 'Gerando...' : 'PDF de separação'}
                                                         </Button>

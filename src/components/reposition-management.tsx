@@ -30,6 +30,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
 import { ResolveDivergenceModal } from './resolve-divergence-modal';
+import { BlobProviderParams } from '@react-pdf/renderer';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -134,7 +135,7 @@ function RepositionActivityCard({
                         document={<SeparationListDocument activity={activity} products={products} />}
                         fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                     >
-                        {({ blob, url, loading, error }) => (
+                        {({ blob, url, loading, error }: BlobProviderParams) => (
                             <Button variant="outline" size="sm" className="relative" disabled={loading}>
                                 <FileText className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando...' : 'Doc. de separação'}
@@ -345,7 +346,7 @@ function RepositionManagement() {
     if (!activityToReopenDispatch) return;
     await updateRepositionActivity(activityToReopenDispatch.id, {
         status: 'Aguardando despacho',
-        transportSignature: {},
+        transportSignature: undefined,
     });
     setActivityToReopenDispatch(null);
   };
@@ -355,7 +356,7 @@ function RepositionManagement() {
     await updateRepositionActivity(activityToReopenAudit.id, {
         status: 'Aguardando recebimento',
         receiptNotes: '',
-        receiptSignature: {},
+        receiptSignature: undefined,
         items: activityToReopenAudit.items.map(item => ({
             ...item,
             receivedLots: [],
@@ -427,7 +428,7 @@ function RepositionManagement() {
       {activityToResolve && (
         <ResolveDivergenceModal
           open={!!activityToResolve}
-          onOpenChange={setActivityToResolve}
+          onOpenChange={(open) => !open && setActivityToResolve(null)}
           activity={activityToResolve}
           onConfirm={handleResolveConfirm}
           isLoading={isFinalizing}
@@ -602,7 +603,7 @@ function RepositionHistory() {
                                 events.push({ etapa: 'Recebimento', responsavel: activity.receiptSignature.signedBy, data: activity.receiptSignature.signedAt });
                             }
                             if (activity.status === 'Concluído' && activity.updatedBy) {
-                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt });
+                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt! });
                             }
                             
                             return (
@@ -639,7 +640,7 @@ function RepositionHistory() {
                                                     document={<SeparationListDocument activity={activity} products={products} />}
                                                     fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                                                 >
-                                                    {({ loading }) => (
+                                                    {({ loading }: { loading: boolean }) => (
                                                         <Button variant="outline" size="sm" disabled={loading}>
                                                             <FileText className="mr-2 h-4 w-4" /> {loading ? 'Gerando...' : 'PDF de separação'}
                                                         </Button>
@@ -759,38 +760,5 @@ function RepositionHistory() {
         </Card>
     </>
   );
-}
-
-export default function RepositionPage() {
-    const router = useRouter();
-
-    return (
-        <div className="space-y-4">
-             <div className="mb-4">
-                <Button 
-                    onClick={() => router.push('/dashboard/stock/analysis')}
-                    variant="outline"
-                >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Voltar para reposição
-                </Button>
-            </div>
-            <div className="mb-4">
-                <h1 className="text-3xl font-bold">Gerenciamento da reposição</h1>
-            </div>
-             <Tabs defaultValue="management" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="management"><Truck className="mr-2 h-4 w-4" /> Gerenciar reposição</TabsTrigger>
-                    <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> Histórico</TabsTrigger>
-                </TabsList>
-                <TabsContent value="management" className="mt-4">
-                    <RepositionManagement />
-                </TabsContent>
-                <TabsContent value="history" className="mt-4">
-                    <RepositionHistory />
-                </TabsContent>
-            </Tabs>
-        </div>
-    );
 }
 

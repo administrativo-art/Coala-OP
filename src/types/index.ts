@@ -640,7 +640,7 @@ export const defaultGuestPermissions: PermissionSet = {
       purchasing: { view: false, suggest: false, approve: false, deleteHistory: false }, 
       returns: { view: false, add: false, updateStatus: false, delete: false }, 
       conversions: { view: false }, 
-      predefinedLists: { view: false, manage: false }
+      predefinedLists: { view: boolean, manage: boolean }
     },
     pricing: { view: false, simulate: false, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, impersonate: false },
