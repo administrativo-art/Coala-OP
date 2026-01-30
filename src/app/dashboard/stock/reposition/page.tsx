@@ -1,10 +1,10 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import dynamic from 'next/dynamic';
 
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
@@ -27,6 +27,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
+
+const PDFDownloadLink = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
+  { ssr: false, loading: () => <Button variant="outline" size="sm" className="relative" disabled>Carregando...</Button> }
+);
 
 
 function RepositionActivityCard({ 
@@ -53,10 +59,6 @@ function RepositionActivityCard({
   canRevert: boolean;
 }) {
     const { toast } = useToast();
-
-    const handleExportSeparationList = () => {
-        alert("A função de gerar documento de separação está em desenvolvimento.");
-    };
 
     const currentStep = useMemo(() => {
         switch (activity.status) {
@@ -94,16 +96,23 @@ function RepositionActivityCard({
                     </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={handleExportSeparationList} className="relative">
-                        <FileText className="mr-2 h-4 w-4" />
-                        Doc. de separação
-                        {hasDivergence && (
-                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                            </span>
+                    <PDFDownloadLink
+                        document={<SeparationListDocument activity={activity} />}
+                        fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
+                    >
+                        {({ blob, url, loading, error }) => (
+                            <Button variant="outline" size="sm" className="relative" disabled={loading}>
+                                <FileText className="mr-2 h-4 w-4" />
+                                {loading ? 'Gerando...' : 'Doc. de separação'}
+                                {hasDivergence && (
+                                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                                    </span>
+                                )}
+                            </Button>
                         )}
-                    </Button>
+                    </PDFDownloadLink>
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
