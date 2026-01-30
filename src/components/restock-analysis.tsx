@@ -18,7 +18,7 @@ import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight, PlusCircle } from 'lucide-react';
-import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem } from '@/types';
+import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type Product } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { RestockSuggestionModal } from './restock-suggestion-modal';
@@ -600,3 +600,5 @@ export function RestockAnalysis() {
     </>
   );
 }
+
+    

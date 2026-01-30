@@ -1,3 +1,4 @@
+
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 export const packageTypes = ['Unidade', 'Caixa', 'Pacote', 'Lata', 'Garrafa', 'Frasco', 'Sachê', 'Pote', 'Balde', 'Galão', 'Bag'] as const;
@@ -303,11 +304,11 @@ export type PermissionSet = {
     // `audit` permissions are now synced with `stockCount` for backward compatibility with Firestore rules, but UI uses `stockCount`.
     stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; }; 
     audit: { view: boolean; start: boolean; approve: boolean; }; 
-    analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, 
+    analysis: { view: boolean, restock: boolean, consumption: boolean, projection: boolean, valuation: boolean }, 
     purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; 
     returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; 
-    conversions: { view: true }, 
-    predefinedLists: { view: false, manage: false }
+    conversions: { view: boolean }, 
+    predefinedLists: { view: boolean, manage: boolean }
   };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; impersonate: boolean; };
@@ -584,8 +585,8 @@ export type RepositionActivityStatus = 'Aguardando despacho' | 'Aguardando receb
 export type SignatureData = {
     dataUrl?: string;
     physicalCopyUrl?: string;
-    signedBy: string;
-    signedAt: string; // ISO String
+    signedBy?: string;
+    signedAt?: string; // ISO String
 };
 
 export type RepositionActivity = {
@@ -635,10 +636,10 @@ export const defaultGuestPermissions: PermissionSet = {
       // `audit` permissions are now synced with `stockCount` for backward compatibility with Firestore rules, but UI uses `stockCount`.
       stockCount: { view: false, perform: false, approve: false, requestItem: false }, 
       audit: { view: false, start: false, approve: false }, 
-      analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, 
+      analysis: { view: false, restock: false, consumption: false, projection: false, valuation: false }, 
       purchasing: { view: false, suggest: false, approve: false, deleteHistory: false }, 
       returns: { view: false, add: false, updateStatus: false, delete: false }, 
-      conversions: { view: true }, 
+      conversions: { view: false }, 
       predefinedLists: { view: false, manage: false }
     },
     pricing: { view: false, simulate: false, manageParameters: false },
@@ -762,6 +763,18 @@ export type PriceDecision = {
     origin: 'manual' | 'sugerido';
 };
 
+export type MoveLotParams = {
+  lotId: string;
+  toKioskId: string;
+  quantityToMove: number;
+  fromKioskId: string;
+  fromKioskName: string;
+  toKioskName: string;
+  productName: string; 
+  lotNumber: string;
+  productId: string;
+};
+
 export interface RepositionContextType {
   activities: RepositionActivity[];
   loading: boolean;
@@ -771,3 +784,5 @@ export interface RepositionContextType {
   finalizeRepositionActivity: (activity: RepositionActivity, resolution?: 'trust_receipt' | 'trust_dispatch') => Promise<void>;
   revertRepositionActivity: (activityId: string) => Promise<void>;
 }
+
+    
