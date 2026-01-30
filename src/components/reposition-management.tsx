@@ -63,6 +63,31 @@ function RepositionActivityCard({
 }) {
     const { toast } = useToast();
 
+    const handleDownloadFile = async (url: string, fileName: string) => {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+            console.error("Erro ao baixar o arquivo:", error);
+            toast({
+                title: "Erro no download",
+                description: "Não foi possível baixar o arquivo. Tente abrir em uma nova aba.",
+                variant: "destructive",
+            });
+        }
+    };
+
     const currentStep = useMemo(() => {
         switch (activity.status) {
             case 'Aguardando despacho':
@@ -111,11 +136,13 @@ function RepositionActivityCard({
                         )}
                     </PDFDownloadLink>
                      {activity.transportSignature?.physicalCopyUrl && (
-                        <Button asChild variant="outline" size="sm">
-                            <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_${activity.id.slice(-6)}.jpg`}>
-                                <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
-                                Doc. assinado
-                            </a>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleDownloadFile(activity.transportSignature!.physicalCopyUrl!, `despacho_${activity.id.slice(-6)}.jpg`)}
+                        >
+                            <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
+                            Doc. assinado
                         </Button>
                     )}
                      <DropdownMenu>
@@ -388,6 +415,32 @@ function RepositionHistory() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>((new Date().getMonth() + 1).toString());
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  const { toast } = useToast();
+
+  const handleDownloadFile = async (url: string, fileName: string) => {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+        console.error("Erro ao baixar o arquivo:", error);
+        toast({
+            title: "Erro no download",
+            description: "Não foi possível baixar o arquivo. Tente abrir em uma nova aba.",
+            variant: "destructive",
+        });
+    }
+  };
 
   const availableYears = useMemo(() => {
     if (activities.length === 0) return [new Date().getFullYear().toString()];
@@ -551,10 +604,12 @@ function RepositionHistory() {
                                                     )}
                                                 </PDFDownloadLink>
                                                 {activity.transportSignature?.physicalCopyUrl && (
-                                                    <Button asChild variant="outline" size="sm">
-                                                        <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_reposicao_${activity.id.slice(-6)}.jpg`}>
-                                                            <Download className="mr-2 h-4 w-4" /> Comprovante de despacho
-                                                        </a>
+                                                     <Button 
+                                                        variant="outline" 
+                                                        size="sm" 
+                                                        onClick={() => handleDownloadFile(activity.transportSignature!.physicalCopyUrl!, `despacho_reposicao_${activity.id.slice(-6)}.jpg`)}
+                                                    >
+                                                        <Download className="mr-2 h-4 w-4" /> Comprovante de despacho
                                                     </Button>
                                                 )}
                                             </div>
