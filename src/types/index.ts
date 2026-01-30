@@ -784,5 +784,3 @@ export interface RepositionContextType {
   finalizeRepositionActivity: (activity: RepositionActivity, resolution?: 'trust_receipt' | 'trust_dispatch') => Promise<void>;
   revertRepositionActivity: (activityId: string) => Promise<void>;
 }
-
-    

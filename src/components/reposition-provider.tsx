@@ -3,7 +3,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
-import { type RepositionActivity, type RepositionItem, type LotEntry, type MovementRecord, type RepositionContextType } from '@/types';
+import { type RepositionActivity, type RepositionItem, type LotEntry, type MovementRecord, type RepositionContextType, type MoveLotParams } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction, type DocumentSnapshot, getDoc, where, getDocs, increment, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
@@ -43,7 +43,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     return () => unsubscribe();
   }, []);
 
-  const createRepositionActivity = useCallback(async (data: Omit<RepositionActivity, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'requestedBy'>): Promise<string | null> => {
+  const createRepositionActivity = useCallback(async (data: Omit<RepositionActivity, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'requestedBy' | 'updatedBy'>): Promise<string | null> => {
     if (!user) {
       console.error("User not authenticated to create reposition activity.");
       return null;
@@ -208,7 +208,6 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
                     productName: sentLot.productName,
                     lotNumber: sentLot.lotNumber,
                     quantityToMove: qtyToActuallyMove,
-                    originalSentQuantity: sentLot.quantityToMove,
                     fromKioskId: activity.kioskOriginId,
                     fromKioskName: activity.kioskOriginName,
                     toKioskId: activity.kioskDestinationId,
@@ -327,8 +326,8 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
                 status: 'Aguardando despacho',
                 isSeparated: false,
                 receiptNotes: '',
-                receiptSignature: {},
-                transportSignature: {},
+                receiptSignature: undefined,
+                transportSignature: undefined,
                 updatedAt: new Date().toISOString()
             });
         });

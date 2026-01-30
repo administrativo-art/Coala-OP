@@ -58,17 +58,6 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
 
     const getUnitsPerPackage = (product: Product, baseProduct: BaseProduct): number => {
         try {
-            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                let secondaryUnitCategory: UnitCategory | undefined;
-                for (const category in units) {
-                    if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
-                        secondaryUnitCategory = category as UnitCategory;
-                        break;
-                    }
-                }
-                if (!secondaryUnitCategory) return 0;
-                return convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-            }
             return convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
         } catch (e) {
             console.error(e);
@@ -331,25 +320,8 @@ export function RestockAnalysis() {
             let valueInBaseUnit = 0;
             const availableQuantity = (lot.quantity || 0) - (lot.reservedQuantity || 0);
             if (availableQuantity <= 0) continue;
-
-            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                 let secondaryUnitCategory: UnitCategory | undefined;
-                 for (const category in units) {
-                    if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
-                        secondaryUnitCategory = category as UnitCategory;
-                        break;
-                    }
-                 }
-                if (!secondaryUnitCategory) {
-                    throw new Error(`Unidade secundária inválida ou não categorizada: ${product.secondaryUnit}`);
-                }
-                const valueOfOnePackageInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                valueInBaseUnit = availableQuantity * valueOfOnePackageInBase;
-            } else {
-                 const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                 valueInBaseUnit = availableQuantity * valueOfOnePackageInBase;
-            }
-
+            const valueOfOnePackageInBase = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+            valueInBaseUnit = availableQuantity * valueOfOnePackageInBase;
             currentStock += valueInBaseUnit;
         } catch (error) {
             console.error("Conversion failed for product:", product, error);
@@ -394,19 +366,7 @@ export function RestockAnalysis() {
                 const availableQtyInPackages = lot.quantity - (lot.reservedQuantity || 0);
 
                 try {
-                     if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                        let secondaryUnitCategory: UnitCategory | undefined;
-                        for (const category in units) {
-                           if (Object.keys(units[category as UnitCategory]).includes(product.secondaryUnit)) {
-                               secondaryUnitCategory = category as UnitCategory;
-                               break;
-                           }
-                        }
-                       if (!secondaryUnitCategory) continue;
-                       unitsPerPackage = convertValue(product.secondaryUnitValue, product.secondaryUnit, baseProduct.unit, secondaryUnitCategory);
-                    } else {
                        unitsPerPackage = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                    }
                 } catch {
                     continue;
                 }
@@ -600,5 +560,3 @@ export function RestockAnalysis() {
     </>
   );
 }
-
-    

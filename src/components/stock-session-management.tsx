@@ -34,12 +34,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
+import { useBaseProducts } from '@/hooks/use-base-products';
 
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
     { value: 'SAIDA_CONSUMO', label: 'Venda/Consumo' },
     { value: 'Divergência na contagem do turno - decréscimo', label: 'Divergência na contagem do turno - decréscimo' },
-    { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por vencimento' },
+    { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por Vencimento' },
     { value: 'SAIDA_DESCARTE_AVARIA', label: 'Descarte por Avaria/Quebra' },
     { value: 'SAIDA_DESCARTE_PERDA', label: 'Extravio de mercadoria' },
     { value: 'SAIDA_DESCARTE_OUTROS', label: 'Outros (especificar)'},
@@ -240,7 +241,7 @@ function AuditForm({
                               const totalAdjustment = (formItem?.adjustments || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
                               const adjustedQuantity = item.systemQuantity - totalDivergence + totalAdjustment;
                               
-                              const displayUnit = product?.secondaryUnit ? product.secondaryUnit : 'pct';
+                              const displayUnit = item.displayUnit || 'un';
 
                               return (
                                   <Card key={item.lotId} className="flex flex-col">
@@ -366,6 +367,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   const { kiosks } = useKiosks();
   const { lots } = useExpiryProducts();
   const { products, getProductFullName } = useProducts();
+  const { baseProducts } = useBaseProducts();
   const { auditSessions, activeSession, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession, loading } = useStockAudit();
   const { adjustLotQuantity } = useExpiryProducts();
   const { toast } = useToast();
@@ -381,6 +383,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     if (!kiosk) return;
 
     const productMap = new Map(products.map(p => [p.id, p]));
+    const baseProductMap = new Map(baseProducts.map(bp => [bp.id, bp]));
     const activeLots = lots.filter(lot => lot.kioskId === kioskId && lot.quantity > 0);
     
     const groupedLots: { [key: string]: LotEntry } = {};
@@ -402,11 +405,19 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     const auditItems: StockAuditItem[] = Object.values(groupedLots).map(lot => {
         const product = productMap.get(lot.productId)!;
         
-        let systemQuantity = lot.quantity;
-        if (product.secondaryUnitValue && product.secondaryUnitValue > 0) {
-            systemQuantity = lot.quantity * product.secondaryUnitValue;
+        const countingUnitOption = product.defaultCountingUnit || 'package';
+        let displayUnit = 'un';
+        if (countingUnitOption === 'package') {
+            displayUnit = product.packageType || product.unit || 'un';
+        } else if (countingUnitOption === 'base') {
+            const baseProduct = product.baseProductId ? baseProductMap.get(product.baseProductId) : null;
+            displayUnit = baseProduct?.unit || 'un';
+        } else if (countingUnitOption === 'content') {
+            displayUnit = product.unit || 'un';
         }
-
+        
+        let systemQuantity = lot.quantity;
+        
         return {
             productId: lot.productId,
             productName: getProductFullName(product),
@@ -414,6 +425,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
             lotNumber: lot.lotNumber,
             expiryDate: lot.expiryDate || '',
             systemQuantity: systemQuantity,
+            displayUnit: displayUnit,
             finalQuantity: systemQuantity,
             divergences: [],
             adjustments: [],
@@ -518,4 +530,3 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     </>
   );
 }
-

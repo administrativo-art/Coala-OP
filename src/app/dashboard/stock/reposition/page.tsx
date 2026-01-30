@@ -602,7 +602,7 @@ function RepositionHistory() {
                                 events.push({ etapa: 'Recebimento', responsavel: activity.receiptSignature.signedBy, data: activity.receiptSignature.signedAt });
                             }
                             if (activity.status === 'Concluído' && activity.updatedBy) {
-                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt });
+                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt! });
                             }
                             
                             return (
