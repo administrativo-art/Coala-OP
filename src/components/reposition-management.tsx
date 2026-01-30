@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -117,9 +116,14 @@ function RepositionActivityCard({
         <Card className="w-full">
             <CardHeader className="flex flex-row items-start justify-between pb-4">
                 <div>
-                     <CardTitle className="text-lg flex items-baseline gap-2">
+                     <CardTitle className="text-lg flex items-center gap-2">
                         <span className="font-mono text-sm text-muted-foreground">#{activity.id.slice(-6)}</span>
                         <span className="font-semibold">{activity.kioskOriginName} → {activity.kioskDestinationName}</span>
+                         {hasDivergence && (
+                            <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-500 text-white">
+                                Recebimento com divergência
+                            </Badge>
+                        )}
                     </CardTitle>
                     <CardDescription>
                         Criado em: {format(parseISO(activity.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
@@ -789,3 +793,4 @@ export default function RepositionPage() {
         </div>
     );
 }
+
