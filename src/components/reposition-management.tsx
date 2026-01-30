@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -575,39 +576,29 @@ function RepositionHistory() {
                             const finalizer = activity.updatedBy?.username || activity.requestedBy.username;
                             const completionDate = activity.updatedAt || activity.createdAt;
 
+                            const wasDivergent = activity.status === 'Concluído' && activity.items.some(item =>
+                                (item.receivedLots && item.receivedLots.length > 0) && (
+                                    item.suggestedLots.some(sl => {
+                                        const received = item.receivedLots!.find(rl => (rl as any).lotId === sl.lotId);
+                                        return !received || (received as any).receivedQuantity !== sl.quantityToMove;
+                                    })
+                                )
+                            );
+
                             const events: { etapa: string; responsavel: any; data: string }[] = [];
-
-                            events.push({ 
-                                etapa: 'Criação', 
-                                responsavel: activity.requestedBy.username, 
-                                data: activity.createdAt 
-                            });
-
+                            events.push({ etapa: 'Criação', responsavel: activity.requestedBy.username, data: activity.createdAt });
                             if (activity.transportSignature?.signedAt) {
                                 events.push({
                                     etapa: 'Despacho',
-                                    responsavel: {
-                                        manager: activity.requestedBy.username, 
-                                        transporter: activity.transportSignature.signedBy
-                                    },
+                                    responsavel: { manager: activity.requestedBy.username, transporter: activity.transportSignature.signedBy },
                                     data: activity.transportSignature.signedAt,
                                 });
                             }
-
                             if (activity.receiptSignature?.signedAt) {
-                                events.push({
-                                    etapa: 'Recebimento',
-                                    responsavel: activity.receiptSignature.signedBy,
-                                    data: activity.receiptSignature.signedAt,
-                                });
+                                events.push({ etapa: 'Recebimento', responsavel: activity.receiptSignature.signedBy, data: activity.receiptSignature.signedAt });
                             }
-
-                            if (activity.status === 'Concluído') {
-                                events.push({
-                                    etapa: 'Efetivação',
-                                    responsavel: finalizer,
-                                    data: completionDate
-                                });
+                            if (activity.status === 'Concluído' && activity.updatedBy) {
+                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt });
                             }
                             
                             return (
@@ -622,9 +613,16 @@ function RepositionHistory() {
                                                 {activity.status} em {completionDate ? format(parseISO(completionDate), 'dd/MM/yyyy') : ''} por @{finalizer}
                                             </p>
                                         </div>
-                                        <Badge variant={activity.status === 'Cancelada' ? 'destructive' : activity.status === 'Recebido com divergência' ? 'secondary' : 'default'} className={cn(activity.status === 'Recebido com divergência' && 'bg-yellow-500')}>
-                                            {activity.status}
-                                        </Badge>
+                                         <div className="flex flex-col items-end gap-1 text-right">
+                                            <Badge variant={activity.status === 'Cancelada' ? 'destructive' : 'default'}>
+                                                {activity.status}
+                                            </Badge>
+                                            {wasDivergent && (
+                                                <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-500 text-white">
+                                                    Recebimento com divergência
+                                                </Badge>
+                                            )}
+                                        </div>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="p-4 pt-0 space-y-4">
@@ -644,9 +642,9 @@ function RepositionHistory() {
                                                     )}
                                                 </PDFDownloadLink>
                                                 {activity.transportSignature?.physicalCopyUrl && (
-                                                     <Button 
+                                                    <Button 
                                                         variant="outline" 
-                                                        size="sm" 
+                                                        size="sm"
                                                         onClick={() => {
                                                             const url = activity.transportSignature!.physicalCopyUrl!;
                                                             let extension = 'jpg';
@@ -791,5 +789,3 @@ export default function RepositionPage() {
         </div>
     );
 }
-
-  
