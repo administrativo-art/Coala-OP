@@ -5,16 +5,17 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import dynamic from 'next/dynamic';
 
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
-import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot } from '@/types';
+import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot, type Product } from '@/types';
 import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft, Package, FileText } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,43 +26,60 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
+
+const PDFDownloadLink = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
+  { ssr: false, loading: () => <Button variant="outline" size="sm" className="relative" disabled>Carregando...</Button> }
+);
 
 
 function RepositionActivityCard({ 
   activity, 
+  isSeparated,
+  onToggleSeparated,
   onDispatch, 
   onAudit, 
   onFinalize,
   onCancel,
   onReopenDispatch,
   onReopenAudit,
+  canRevert,
+  products
 }: { 
   activity: RepositionActivity; 
+  isSeparated: boolean;
+  onToggleSeparated: (activity: RepositionActivity) => void;
   onDispatch: (activity: RepositionActivity) => void;
   onAudit: (activity: RepositionActivity) => void;
   onFinalize: (activity: RepositionActivity) => void;
   onCancel: (activity: RepositionActivity) => void;
   onReopenDispatch: (activity: RepositionActivity) => void;
   onReopenAudit: (activity: RepositionActivity) => void;
+  canRevert: boolean;
+  products: Product[];
 }) {
     const { toast } = useToast();
-    const [isSeparated, setIsSeparated] = useState(false);
-    
-    useEffect(() => {
-        if (activity.status !== 'Aguardando despacho') {
-            setIsSeparated(true);
-        } else {
-            setIsSeparated(false);
-        }
-    }, [activity.status]);
 
-    const handleExportSeparationList = () => {
-        toast({
-            title: "Exportação em manutenção",
-            description: "A função de exportar para PDF está sendo atualizada.",
-            variant: "destructive",
-        });
+    const handleDownloadSignedDoc = () => {
+        if (!activity.transportSignature?.physicalCopyUrl) return;
+
+        const url = activity.transportSignature.physicalCopyUrl;
+        const link = document.createElement('a');
+        link.href = url;
+        
+        const mimeType = url.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/);
+        let extension = 'png';
+        if (mimeType && mimeType[1]) {
+            extension = mimeType[1].split('/')[1] || 'png';
+        }
+
+        link.download = `doc_assinado_${activity.id.slice(-6)}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const currentStep = useMemo(() => {
@@ -91,25 +109,49 @@ function RepositionActivityCard({
         <Card className="w-full">
             <CardHeader className="flex flex-row items-start justify-between pb-4">
                 <div>
-                     <CardTitle className="text-lg">#{activity.id.slice(-6)} | {activity.kioskOriginName} → {activity.kioskDestinationName}</CardTitle>
+                     <CardTitle className="text-lg flex items-baseline gap-2">
+                        <span className="font-mono text-sm text-muted-foreground">#{activity.id.slice(-6)}</span>
+                        <span className="font-semibold">{activity.kioskOriginName} → {activity.kioskDestinationName}</span>
+                    </CardTitle>
                     <CardDescription>
-                        {activity.items.length} tipo(s) de insumo
+                        Criado em: {format(parseISO(activity.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                     </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={handleExportSeparationList} className="relative">
-                        <FileText className="mr-2 h-4 w-4" />
-                        PDF de Separação
-                        {hasDivergence && (
-                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                            </span>
+                    <PDFDownloadLink
+                        document={<SeparationListDocument activity={activity} products={products} />}
+                        fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
+                    >
+                        {({ blob, url, loading, error }) => (
+                            <Button variant="outline" size="sm" className="relative" disabled={loading}>
+                                <FileText className="mr-2 h-4 w-4" />
+                                {loading ? 'Gerando...' : 'Doc. de separação'}
+                            </Button>
                         )}
-                    </Button>
-                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => onCancel(activity)}>
-                        <Ban className="h-4 w-4" />
-                    </Button>
+                    </PDFDownloadLink>
+                     {activity.transportSignature?.physicalCopyUrl && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDownloadSignedDoc}
+                        >
+                            <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
+                            Doc. assinado
+                        </Button>
+                    )}
+                     <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onCancel(activity)}>
+                                <Ban className="mr-2 h-4 w-4" />
+                                <span>Cancelar Atividade</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </CardHeader>
             <CardContent>
@@ -117,14 +159,15 @@ function RepositionActivityCard({
                     {steps.map((step, index) => {
                         const isCompleted = currentStep > step.step || activity.status === 'Concluído';
                         const isActive = currentStep === step.step;
-                        const canGoBack = isCompleted && step.step < currentStep && step.step < 4;
+                        const canGoBack = canRevert && isCompleted && step.step < currentStep && step.step < 4;
+                        const isRecebimentoStepCompletedWithDivergence = step.step === 3 && isCompleted && hasDivergence;
 
                         let stepAction = () => {};
                         let actionLabel = '';
 
                         if (canGoBack) {
                             if (step.step === 1) {
-                                stepAction = () => setIsSeparated(false);
+                                stepAction = () => onToggleSeparated(activity);
                                 actionLabel = 'Desfazer Separação';
                             } else if (step.step === 2) {
                                 stepAction = () => onReopenDispatch(activity);
@@ -134,15 +177,30 @@ function RepositionActivityCard({
                                 actionLabel = 'Reabrir Auditoria';
                             }
                         } else if (isActive) {
-                            if (step.step === 1) { stepAction = () => setIsSeparated(true); actionLabel = 'Marcar como Separado'; }
+                            if (step.step === 1) { stepAction = () => onToggleSeparated(activity); actionLabel = 'Marcar como Separado'; }
                             else if (step.step === 2) { stepAction = () => onDispatch(activity); actionLabel = 'Gerenciar Despacho'; }
                             else if (step.step === 3) { stepAction = () => onAudit(activity); actionLabel = 'Auditar Recebimento'; }
                             else if (step.step === 4) { stepAction = () => onFinalize(activity); actionLabel = 'Efetivar Movimentação'; }
                         }
                         
-                        const iconColorClass = isCompleted ? 'bg-green-500 text-white' : isActive ? 'bg-primary text-white animate-pulse' : 'bg-muted text-muted-foreground';
-                        const textColorClass = isCompleted ? 'text-foreground font-semibold' : isActive ? 'text-primary font-bold' : 'text-muted-foreground';
-                        const isDivergentStep3 = step.step === 3 && hasDivergence;
+                        const iconColorClass = cn({
+                            'bg-green-500 text-white': isCompleted && !isRecebimentoStepCompletedWithDivergence,
+                            'bg-yellow-500 text-white': isRecebimentoStepCompletedWithDivergence,
+                            'bg-destructive text-white animate-pulse': isActive && hasDivergence,
+                            'bg-blue-500 text-white animate-pulse': isActive && !hasDivergence,
+                            'bg-muted text-muted-foreground': !isCompleted && !isActive,
+                        });
+
+                        const textColorClass = cn(
+                            "text-xs",
+                            isActive ? 'font-bold' : 'font-medium',
+                            isActive && hasDivergence && 'text-destructive',
+                            isActive && !hasDivergence && 'text-blue-600 dark:text-blue-400',
+                            isCompleted && isRecebimentoStepCompletedWithDivergence && 'text-yellow-600 font-bold',
+                            isCompleted && !isRecebimentoStepCompletedWithDivergence && 'text-foreground',
+                            !isCompleted && !isActive && 'text-muted-foreground'
+                        );
+
                         const isClickable = isActive || canGoBack;
 
                         return (
@@ -156,7 +214,6 @@ function RepositionActivityCard({
                                                     className={cn(
                                                         "rounded-full w-12 h-12 transition-all duration-300",
                                                         iconColorClass,
-                                                        isDivergentStep3 && 'bg-yellow-500 text-white',
                                                         !isClickable && 'pointer-events-none opacity-80',
                                                         isClickable && 'hover:scale-105'
                                                     )}
@@ -166,7 +223,7 @@ function RepositionActivityCard({
                                                 >
                                                     {canGoBack ? <Undo2 className="h-6 w-6"/> : <step.icon className="h-6 w-6" />}
                                                 </Button>
-                                                <span className={cn("text-xs font-medium", textColorClass, isDivergentStep3 && 'text-yellow-600 font-bold')}>{step.name}</span>
+                                                <span className={textColorClass}>{step.name}</span>
                                             </div>
                                         </TooltipTrigger>
                                          {actionLabel && <TooltipContent><p>{actionLabel}</p></TooltipContent>}
@@ -184,9 +241,11 @@ function RepositionActivityCard({
     );
 }
 
+
 function RepositionManagement() {
   const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
   const { permissions } = useAuth();
+  const { products } = useProducts();
   const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
   const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
@@ -194,6 +253,14 @@ function RepositionManagement() {
   const [activityToReopenDispatch, setActivityToReopenDispatch] = useState<RepositionActivity | null>(null);
   const [activityToReopenAudit, setActivityToReopenAudit] = useState<RepositionActivity | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  
+  const canRevertSteps = permissions.reposition.cancel;
+
+  const handleToggleSeparated = async (activity: RepositionActivity) => {
+    await updateRepositionActivity(activity.id, {
+        isSeparated: !activity.isSeparated
+    });
+  };
 
   if (loading) {
     return (
@@ -264,12 +331,16 @@ function RepositionManagement() {
               <RepositionActivityCard
                   key={activity.id}
                   activity={activity}
+                  isSeparated={!!activity.isSeparated}
+                  onToggleSeparated={handleToggleSeparated}
                   onDispatch={setActivityToDispatch}
                   onAudit={setActivityToAudit}
                   onFinalize={setActivityToFinalize}
                   onCancel={setActivityToCancel}
                   onReopenDispatch={setActivityToReopenDispatch}
                   onReopenAudit={setActivityToReopenAudit}
+                  canRevert={canRevertSteps}
+                  products={products}
               />
           ))}
       </div>
@@ -555,3 +626,5 @@ export default function RepositionPage() {
         </div>
     );
 }
+
+    
