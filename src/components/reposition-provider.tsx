@@ -164,45 +164,58 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     }
   }, [activities]);
   
-  const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity) => {
+  const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity, resolution: 'trust_receipt' | 'trust_dispatch' = 'trust_receipt') => {
     if (!user) throw new Error("Usuário não autenticado.");
     if (!activity.items) return;
 
-    const itemsToMove = activity.items.flatMap(item => 
-        (item.receivedLots && item.receivedLots.length > 0 ? item.receivedLots : item.suggestedLots).map(lot => {
-            const receivedQty = (lot as any).receivedQuantity === undefined ? lot.quantityToMove : (lot as any).receivedQuantity;
+    const itemsToMove: MoveLotParams[] = [];
+    const itemsToReleaseReservation: { lotId: string, quantityToRelease: number }[] = [];
+
+    activity.items.forEach(item => {
+        item.suggestedLots.forEach(sentLot => {
+            const receivedLot = (activity.status === 'Recebido com divergência' && item.receivedLots) 
+                ? item.receivedLots.find(rl => rl.lotId === sentLot.lotId) 
+                : undefined;
             
-            return {
-                lotId: lot.lotId,
-                productId: lot.productId,
-                productName: lot.productName,
-                lotNumber: lot.lotNumber,
-                quantityToMove: receivedQty,
-                originalSentQuantity: lot.quantityToMove,
-                fromKioskId: activity.kioskOriginId,
-                fromKioskName: activity.kioskOriginName,
-                toKioskId: activity.kioskDestinationId,
-                toKioskName: activity.kioskDestinationName,
-            };
-        })
-    );
+            const receivedQty = receivedLot !== undefined ? (receivedLot as any).receivedQuantity : sentLot.quantityToMove;
 
-    const validItemsToMove = itemsToMove.filter(item => item.quantityToMove > 0);
+            const qtyToActuallyMove = resolution === 'trust_receipt' ? receivedQty : sentLot.quantityToMove;
 
-    if (validItemsToMove.length > 0) {
-        await moveMultipleLots(validItemsToMove, user, { 
+            if (qtyToActuallyMove > 0) {
+                 itemsToMove.push({
+                    lotId: sentLot.lotId,
+                    productId: sentLot.productId,
+                    productName: sentLot.productName,
+                    lotNumber: sentLot.lotNumber,
+                    quantityToMove: qtyToActuallyMove,
+                    originalSentQuantity: sentLot.quantityToMove,
+                    fromKioskId: activity.kioskOriginId,
+                    fromKioskName: activity.kioskOriginName,
+                    toKioskId: activity.kioskDestinationId,
+                    toKioskName: activity.kioskDestinationName,
+                });
+            }
+
+            if (sentLot.quantityToMove > qtyToActuallyMove) {
+                const diff = sentLot.quantityToMove - qtyToActuallyMove;
+                itemsToReleaseReservation.push({ lotId: sentLot.lotId, quantityToRelease: diff });
+            }
+        });
+    });
+
+    if (itemsToMove.length > 0) {
+        await moveMultipleLots(itemsToMove, user, { 
             isFinalizingReposition: true,
             activityId: activity.id,
             allowPartialOnFinalize: true, 
         });
     }
 
-    const zeroQuantityItems = itemsToMove.filter(item => item.quantityToMove === 0);
-    if (zeroQuantityItems.length > 0) {
+    if (itemsToReleaseReservation.length > 0) {
         await runTransaction(db, async (transaction) => {
-            for (const item of zeroQuantityItems) {
+            for (const item of itemsToReleaseReservation) {
                 const lotRef = doc(db, 'lots', item.lotId);
-                transaction.update(lotRef, { reservedQuantity: increment(-item.originalSentQuantity) });
+                transaction.update(lotRef, { reservedQuantity: increment(-item.quantityToRelease) });
             }
         });
     }
@@ -321,3 +334,5 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     </RepositionContext.Provider>
   );
 }
+
+  

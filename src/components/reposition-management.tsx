@@ -323,7 +323,7 @@ function RepositionManagement() {
   const handleFinalizeConfirm = async () => {
     if (!activityToFinalize) return;
     setIsFinalizing(true);
-    await finalizeRepositionActivity(activityToFinalize, 'trust_receipt'); // Default for non-divergent
+    await finalizeRepositionActivity(activityToFinalize, 'trust_receipt');
     setIsFinalizing(false);
     setActivityToFinalize(null);
   };
@@ -792,4 +792,4 @@ export default function RepositionPage() {
     );
 }
 
-    
+  
