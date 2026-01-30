@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
 import { type RepositionActivity, type RepositionItem, type SignatureData } from '@/types';
@@ -24,6 +24,8 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from './ui/textarea';
+import { useProducts } from '@/hooks/use-products';
+import Image from 'next/image';
 
 const auditLotSchema = z.object({
   lotId: z.string(),
@@ -63,6 +65,7 @@ interface AuditReceiptModalProps {
 export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalProps) {
   const { updateRepositionActivity } = useReposition();
   const { user } = useAuth();
+  const { products } = useProducts();
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -141,50 +144,97 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
     onOpenChange(false);
   };
   
-  const LotRow = ({ itemIndex, lotIndex }: { itemIndex: number, lotIndex: number }) => {
+  function LotRow({ itemIndex, lotIndex }: { itemIndex: number; lotIndex: number; }) {
     const lot = useWatch({ control: form.control, name: `items.${itemIndex}.suggestedLots.${lotIndex}` });
+    const product = useMemo(() => products.find(p => p.id === lot.productId), [products, lot.productId]);
+  
+    const receivedPackages = form.watch(`items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`) || 0;
+  
+    const logisticDisplay = (quantity: number) => {
+      if (!product || !product.multiplo_caixa || product.multiplo_caixa <= 0 || !product.rotulo_caixa) return null;
+  
+      const fullBoxes = Math.floor(quantity / product.multiplo_caixa);
+      const remainingItems = quantity % product.multiplo_caixa;
+      
+      let displayParts = [];
+      if (fullBoxes > 0) displayParts.push(`${fullBoxes} ${product.rotulo_caixa}(s)`);
+      if (remainingItems > 0 && product.packageType) displayParts.push(`${remainingItems} ${product.packageType}(s)`);
+  
+      return displayParts.join(' e ');
+    };
+    
+    if (!product) {
+        return (
+            <TableRow>
+                <TableCell colSpan={3}>
+                    <p className="text-destructive">Produto não encontrado para lote {lot.lotNumber}</p>
+                </TableCell>
+            </TableRow>
+        );
+    }
+  
+    const sentLogistic = logisticDisplay(lot.quantityToMove);
+    const receivedLogistic = logisticDisplay(receivedPackages);
   
     return (
       <TableRow>
-        <TableCell colSpan={3}>
-          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-2">
-            <div>
-              <p className="font-medium">{lot.productName}</p>
-              <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber}</p>
-            </div>
-            <div className="text-center">
-              <Label className="text-xs text-muted-foreground">Enviado</Label>
-              <p className="font-bold text-lg">{lot.quantityToMove}</p>
-            </div>
-             <FormField
-                control={form.control}
-                name={`items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`}
-                render={({ field }) => (
-                <FormItem className="w-24">
-                    <FormLabel className="text-xs">Recebido</FormLabel>
-                    <FormControl>
-                    <Input type="number" {...field} className="text-center" placeholder="0" />
-                    </FormControl>
-                    <FormMessage />
-                </FormItem>
-                )}
-            />
-          </div>
-           <div className="mt-2">
-                <FormField
-                    control={form.control}
-                    name={`items.${itemIndex}.suggestedLots.${lotIndex}.receiptNotes`}
-                    render={({ field }) => (
-                    <FormItem>
-                        <FormControl>
-                        <Textarea placeholder="Observações de recebimento (obrigatório se houver divergência)" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
-            </div>
-        </TableCell>
+          <TableCell colSpan={3}>
+              <div className="flex gap-4 items-start">
+                  {product.imageUrl && <Image src={product.imageUrl} alt={product.baseName} width={64} height={64} className="rounded-md object-cover"/>}
+                  <div className="flex-grow space-y-3">
+                      <div>
+                          <p className="font-semibold">{lot.productName}</p>
+                          <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber}</p>
+                      </div>
+  
+                      <div className="grid grid-cols-2 gap-4 items-start">
+                          <div className="p-3 rounded-md border bg-muted/50">
+                              <Label className="text-xs text-muted-foreground">Enviado</Label>
+                              <p className="font-bold text-lg">{lot.quantityToMove} <span className="text-sm font-normal text-muted-foreground">{product.packageType}(s)</span></p>
+                              {sentLogistic && <p className="text-xs text-muted-foreground">({sentLogistic})</p>}
+                          </div>
+                          
+                          <div className="space-y-1">
+                               <FormField
+                                  control={form.control}
+                                  name={`items.${itemIndex}.suggestedLots.${lotIndex}.receivedQuantity`}
+                                  render={({ field }) => (
+                                  <FormItem>
+                                      <FormLabel className="text-xs">Recebido</FormLabel>
+                                      <FormControl>
+                                      <Input
+                                          type="number"
+                                          {...field}
+                                          value={field.value ?? ''}
+                                          className="text-center font-bold text-lg h-12"
+                                          placeholder="0"
+                                      />
+                                      </FormControl>
+                                      <FormMessage />
+                                  </FormItem>
+                                  )}
+                              />
+                              {receivedLogistic && <p className="text-xs text-muted-foreground text-center">({receivedLogistic})</p>}
+                          </div>
+                      </div>
+  
+                      <div className="mt-2">
+                          <FormField
+                              control={form.control}
+                              name={`items.${itemIndex}.suggestedLots.${lotIndex}.receiptNotes`}
+                              render={({ field }) => (
+                              <FormItem>
+                                  <FormControl>
+                                  <Textarea placeholder="Observações de recebimento (obrigatório se houver divergência)" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                              </FormItem>
+                              )}
+                          />
+                      </div>
+                  </div>
+              </div>
+          </TableCell>
       </TableRow>
     )
   }
