@@ -71,13 +71,12 @@ const styles = StyleSheet.create({
         bottom: 70, // Posição acima do rodapé da página
         left: 40,
         right: 40,
-        textAlign: 'center',
+        textAlign: 'left', // Alinhado à esquerda
         paddingTop: 20,
     },
     signatureLine: {
         borderTop: '1px solid #333',
         width: '50%',
-        margin: '0 auto',
         marginBottom: 5,
     },
     footer: {
@@ -142,7 +141,7 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
     return (
         <Document>
             <Page size="A4" style={styles.page}>
-                <Text style={styles.header}>Lista de Separação - Reposição</Text>
+                <Text style={styles.header}>LISTA DE SEPARAÇÃO - REPOSIÇÃO</Text>
                 <Text style={styles.subHeader}>ID da atividade: #{activity.id.slice(-6)}</Text>
                 
                 <View style={styles.infoSection}>
