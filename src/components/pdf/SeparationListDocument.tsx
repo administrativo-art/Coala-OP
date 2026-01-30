@@ -10,7 +10,7 @@ import { ptBR } from 'date-fns/locale';
 const styles = StyleSheet.create({
     page: {
         fontFamily: 'Helvetica',
-        fontSize: 10,
+        fontSize: 9,
         paddingTop: 30,
         paddingLeft: 40,
         paddingRight: 40,
@@ -88,9 +88,12 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
         item.suggestedLots.map(lot => {
             const product = productMap.get(lot.productId);
             
-            let quantityDisplay = `${lot.quantityToMove}`;
+            let logisticQuantityDisplay = `${lot.quantityToMove}`;
+            let unitQuantityDisplay = `${lot.quantityToMove}`;
+
             if (product) {
                 const packageType = product.packageType || 'un';
+                unitQuantityDisplay = `${lot.quantityToMove} ${packageType}(s)`;
 
                 if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
                     const totalItems = lot.quantityToMove;
@@ -105,9 +108,9 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
                     if (remainingItems > 0) {
                         displayParts.push(`${remainingItems} ${packageType}(s)`);
                     }
-                    quantityDisplay = displayParts.length > 0 ? displayParts.join(' e ') : `0 ${packageType}(s)`;
+                    logisticQuantityDisplay = displayParts.length > 0 ? displayParts.join(' e ') : `0 ${packageType}(s)`;
                 } else {
-                    quantityDisplay = `${lot.quantityToMove} ${packageType}(s)`;
+                    logisticQuantityDisplay = `${lot.quantityToMove} ${packageType}(s)`;
                 }
             }
 
@@ -115,7 +118,8 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
                 baseProductName: item.productName,
                 productName: lot.productName,
                 lotNumber: lot.lotNumber,
-                quantityDisplay: quantityDisplay,
+                logisticQuantityDisplay,
+                unitQuantityDisplay
             };
         })
     );
@@ -137,17 +141,19 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
                 
                 <View style={styles.table}>
                     <View style={styles.tableRow}>
-                        <View style={[styles.tableColHeader, { width: '40%' }]}><Text>Insumo</Text></View>
-                        <View style={[styles.tableColHeader, { width: '30%' }]}><Text>Lote</Text></View>
-                        <View style={[styles.tableColHeader, { width: '15%', textAlign: 'right' }]}><Text>Quantidade</Text></View>
+                        <View style={[styles.tableColHeader, { width: '25%' }]}><Text>Insumo</Text></View>
+                        <View style={[styles.tableColHeader, { width: '20%' }]}><Text>Lote</Text></View>
+                        <View style={[styles.tableColHeader, { width: '20%', textAlign: 'right' }]}><Text>Qtd. Logística</Text></View>
+                        <View style={[styles.tableColHeader, { width: '20%', textAlign: 'right' }]}><Text>Qtd. Unitária</Text></View>
                         <View style={[styles.tableColHeader, { width: '15%', textAlign: 'center' }]}><Text>Conferido</Text></View>
                     </View>
 
                     {allItems.map((item, index) => (
                         <View style={styles.tableRow} key={item.lotNumber + index}>
-                            <View style={[styles.tableCol, { width: '40%' }]}><Text>{item.productName}</Text></View>
-                            <View style={[styles.tableCol, { width: '30%' }]}><Text>{item.lotNumber}</Text></View>
-                            <View style={[styles.tableCol, { width: '15%', textAlign: 'right' }]}><Text>{item.quantityDisplay}</Text></View>
+                            <View style={[styles.tableCol, { width: '25%' }]}><Text>{item.productName}</Text></View>
+                            <View style={[styles.tableCol, { width: '20%' }]}><Text>{item.lotNumber}</Text></View>
+                            <View style={[styles.tableCol, { width: '20%', textAlign: 'right' }]}><Text>{item.logisticQuantityDisplay}</Text></View>
+                            <View style={[styles.tableCol, { width: '20%', textAlign: 'right' }]}><Text>{item.unitQuantityDisplay}</Text></View>
                             <View style={[styles.tableCol, { width: '15%', textAlign: 'center' }]}><Text>[  ]</Text></View>
                         </View>
                     ))}
