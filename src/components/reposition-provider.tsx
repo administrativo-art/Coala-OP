@@ -56,6 +56,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       ...data,
       id: activityRef.id,
       status: 'Aguardando despacho',
+      isSeparated: false,
       requestedBy: {
         userId: user.id,
         username: user.username,
@@ -291,6 +292,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
             const activityRef = doc(db, 'repositionActivities', activityId);
             transaction.update(activityRef, {
                 status: 'Aguardando despacho',
+                isSeparated: false,
                 receiptNotes: '',
                 receiptSignature: {},
                 transportSignature: {},

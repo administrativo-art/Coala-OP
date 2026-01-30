@@ -571,6 +571,7 @@ export type RepositionActivity = {
   transportSignature?: SignatureData;
   receiptNotes?: string;
   receiptSignature?: SignatureData;
+  isSeparated?: boolean;
 };
 
 export type ProfitRange = {

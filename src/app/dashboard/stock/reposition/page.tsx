@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -49,7 +50,7 @@ function RepositionActivityCard({
 }: { 
   activity: RepositionActivity; 
   isSeparated: boolean;
-  onToggleSeparated: (activityId: string) => void;
+  onToggleSeparated: (activity: RepositionActivity) => void;
   onDispatch: (activity: RepositionActivity) => void;
   onAudit: (activity: RepositionActivity) => void;
   onFinalize: (activity: RepositionActivity) => void;
@@ -141,7 +142,7 @@ function RepositionActivityCard({
 
                         if (canGoBack) {
                             if (step.step === 1) {
-                                stepAction = () => onToggleSeparated(activity.id);
+                                stepAction = () => onToggleSeparated(activity);
                                 actionLabel = 'Desfazer Separação';
                             } else if (step.step === 2) {
                                 stepAction = () => onReopenDispatch(activity);
@@ -151,7 +152,7 @@ function RepositionActivityCard({
                                 actionLabel = 'Reabrir Auditoria';
                             }
                         } else if (isActive) {
-                            if (step.step === 1) { stepAction = () => onToggleSeparated(activity.id); actionLabel = 'Marcar como Separado'; }
+                            if (step.step === 1) { stepAction = () => onToggleSeparated(activity); actionLabel = 'Marcar como Separado'; }
                             else if (step.step === 2) { stepAction = () => onDispatch(activity); actionLabel = 'Gerenciar Despacho'; }
                             else if (step.step === 3) { stepAction = () => onAudit(activity); actionLabel = 'Auditar Recebimento'; }
                             else if (step.step === 4) { stepAction = () => onFinalize(activity); actionLabel = 'Efetivar Movimentação'; }
@@ -226,33 +227,12 @@ function RepositionManagement() {
   const [activityToReopenDispatch, setActivityToReopenDispatch] = useState<RepositionActivity | null>(null);
   const [activityToReopenAudit, setActivityToReopenAudit] = useState<RepositionActivity | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [separatedActivities, setSeparatedActivities] = useState<Set<string>>(new Set());
   
   const canRevertSteps = permissions.reposition.cancel;
 
-  useEffect(() => {
-    setSeparatedActivities(prev => {
-        const newSet = new Set(prev);
-        let changed = false;
-        activities.forEach(activity => {
-            if (activity.status !== 'Aguardando despacho' && !newSet.has(activity.id)) {
-                newSet.add(activity.id);
-                changed = true;
-            }
-        });
-        return changed ? newSet : prev;
-    });
-  }, [activities]);
-
-  const handleToggleSeparated = (activityId: string) => {
-    setSeparatedActivities(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(activityId)) {
-            newSet.delete(activityId);
-        } else {
-            newSet.add(activityId);
-        }
-        return newSet;
+  const handleToggleSeparated = async (activity: RepositionActivity) => {
+    await updateRepositionActivity(activity.id, {
+        isSeparated: !activity.isSeparated
     });
   };
 
@@ -325,7 +305,7 @@ function RepositionManagement() {
               <RepositionActivityCard
                   key={activity.id}
                   activity={activity}
-                  isSeparated={separatedActivities.has(activity.id)}
+                  isSeparated={!!activity.isSeparated}
                   onToggleSeparated={handleToggleSeparated}
                   onDispatch={setActivityToDispatch}
                   onAudit={setActivityToAudit}
