@@ -21,11 +21,12 @@ import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, Warehouse, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from './ui/textarea';
 import { useProducts } from '@/hooks/use-products';
 import Image from 'next/image';
+import { Badge } from './ui/badge';
 
 const auditLotSchema = z.object({
   lotId: z.string(),
@@ -191,7 +192,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                           <div className="p-3 rounded-md border bg-muted/50">
                               <Label className="text-xs text-muted-foreground">Enviado</Label>
                               <p className="font-bold text-lg">{lot.quantityToMove} <span className="text-sm font-normal text-muted-foreground">{product.packageType}(s)</span></p>
-                              {sentLogistic && <p className="text-xs text-muted-foreground">({sentLogistic})</p>}
+                              {sentLogistic && <p className="text-xs text-muted-foreground">{sentLogistic}</p>}
                           </div>
                           
                           <div className="space-y-1">
@@ -214,7 +215,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
                                   </FormItem>
                                   )}
                               />
-                              {receivedLogistic && <p className="text-xs text-muted-foreground text-center">({receivedLogistic})</p>}
+                              {receivedLogistic && <p className="text-xs text-muted-foreground text-center">{receivedLogistic}</p>}
                           </div>
                       </div>
   
@@ -245,8 +246,19 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
         <DialogHeader>
           <DialogTitle>Auditar recebimento de reposição</DialogTitle>
           <DialogDescription>
-            Confirme as quantidades recebidas de {activity.kioskOriginName} para {activity.kioskDestinationName}.
+            Confirme as quantidades recebidas na transferência.
           </DialogDescription>
+            <div className="flex items-center justify-center gap-2 pt-2">
+                <Badge variant="destructive" className="flex gap-2 items-center text-base py-1 px-4">
+                    <Warehouse className="h-4 w-4" />
+                    SAÍDA: {activity.kioskOriginName}
+                </Badge>
+                <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                <Badge variant="secondary" className="flex gap-2 items-center text-base py-1 px-4 bg-green-600 hover:bg-green-700 text-white">
+                    <Warehouse className="h-4 w-4" />
+                    ENTRADA: {activity.kioskDestinationName}
+                </Badge>
+            </div>
         </DialogHeader>
 
         <Form {...form}>
