@@ -30,7 +30,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
 import { ResolveDivergenceModal } from './resolve-divergence-modal';
-import { BlobProviderParams } from '@react-pdf/renderer';
+import { type BlobProviderParams } from '@react-pdf/renderer';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -127,7 +127,7 @@ function RepositionActivityCard({
                         )}
                     </CardTitle>
                     <CardDescription>
-                        Criado em: {format(parseISO(activity.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        Criado em: {activity.createdAt ? format(parseISO(activity.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : ''}
                     </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -135,7 +135,7 @@ function RepositionActivityCard({
                         document={<SeparationListDocument activity={activity} products={products} />}
                         fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                     >
-                        {({ blob, url, loading, error }: BlobProviderParams) => (
+                        {({ blob, url, loading, error }: BlobProviderParams): React.ReactNode => (
                             <Button variant="outline" size="sm" className="relative" disabled={loading}>
                                 <FileText className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando...' : 'Doc. de separação'}
@@ -591,7 +591,7 @@ function RepositionHistory() {
                             );
 
                             const events: { etapa: string; responsavel: any; data: string }[] = [];
-                            events.push({ etapa: 'Criação', responsavel: activity.requestedBy.username, data: activity.createdAt });
+                            if(activity.createdAt) events.push({ etapa: 'Criação', responsavel: activity.requestedBy.username, data: activity.createdAt });
                             if (activity.transportSignature?.signedAt) {
                                 events.push({
                                     etapa: 'Despacho',
@@ -602,8 +602,8 @@ function RepositionHistory() {
                             if (activity.receiptSignature?.signedAt) {
                                 events.push({ etapa: 'Recebimento', responsavel: activity.receiptSignature.signedBy, data: activity.receiptSignature.signedAt });
                             }
-                            if (activity.status === 'Concluído' && activity.updatedBy) {
-                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt! });
+                            if (activity.status === 'Concluído' && activity.updatedBy && activity.updatedAt) {
+                                events.push({ etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt });
                             }
                             
                             return (
@@ -640,7 +640,7 @@ function RepositionHistory() {
                                                     document={<SeparationListDocument activity={activity} products={products} />}
                                                     fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                                                 >
-                                                    {({ loading }: { loading: boolean }) => (
+                                                    {({ loading }: { loading: boolean }): React.ReactNode => (
                                                         <Button variant="outline" size="sm" disabled={loading}>
                                                             <FileText className="mr-2 h-4 w-4" /> {loading ? 'Gerando...' : 'PDF de separação'}
                                                         </Button>
@@ -743,7 +743,7 @@ function RepositionHistory() {
                                                                     </div>
                                                                 )}
                                                             </TableCell>
-                                                            <TableCell>{format(parseISO(event.data), 'dd/MM/yyyy HH:mm')}</TableCell>
+                                                            <TableCell>{event.data ? format(parseISO(event.data), 'dd/MM/yyyy HH:mm') : ''}</TableCell>
                                                         </TableRow>
                                                     ))}
                                                 </TableBody>
@@ -761,4 +761,3 @@ function RepositionHistory() {
     </>
   );
 }
-
