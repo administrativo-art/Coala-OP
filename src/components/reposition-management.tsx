@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
+import { ResolveDivergenceModal } from './resolve-divergence-modal';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -268,6 +269,7 @@ function RepositionManagement() {
   const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
   const [activityToFinalize, setActivityToFinalize] = useState<RepositionActivity | null>(null);
+  const [activityToResolve, setActivityToResolve] = useState<RepositionActivity | null>(null);
   const [activityToReopenDispatch, setActivityToReopenDispatch] = useState<RepositionActivity | null>(null);
   const [activityToReopenAudit, setActivityToReopenAudit] = useState<RepositionActivity | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -302,6 +304,14 @@ function RepositionManagement() {
         </Card>
     )
   }
+  
+  const handleFinalizeClick = (activity: RepositionActivity) => {
+    if (activity.status === 'Recebido com divergência') {
+      setActivityToResolve(activity);
+    } else {
+      setActivityToFinalize(activity);
+    }
+  };
 
   const handleCancelConfirm = async () => {
     if (activityToCancel) {
@@ -313,9 +323,17 @@ function RepositionManagement() {
   const handleFinalizeConfirm = async () => {
     if (!activityToFinalize) return;
     setIsFinalizing(true);
-    await finalizeRepositionActivity(activityToFinalize);
+    await finalizeRepositionActivity(activityToFinalize, 'trust_receipt'); // Default for non-divergent
     setIsFinalizing(false);
     setActivityToFinalize(null);
+  };
+  
+  const handleResolveConfirm = async (resolution: 'trust_receipt' | 'trust_dispatch') => {
+    if (!activityToResolve) return;
+    setIsFinalizing(true);
+    await finalizeRepositionActivity(activityToResolve, resolution);
+    setIsFinalizing(false);
+    setActivityToResolve(null);
   };
   
   const handleReopenDispatchConfirm = async () => {
@@ -353,7 +371,7 @@ function RepositionManagement() {
                   onToggleSeparated={handleToggleSeparated}
                   onDispatch={setActivityToDispatch}
                   onAudit={setActivityToAudit}
-                  onFinalize={setActivityToFinalize}
+                  onFinalize={handleFinalizeClick}
                   onCancel={setActivityToCancel}
                   onReopenDispatch={setActivityToReopenDispatch}
                   onReopenAudit={setActivityToReopenAudit}
@@ -399,6 +417,16 @@ function RepositionManagement() {
               confirmButtonText="Sim, efetivar"
               confirmButtonVariant="default"
           />
+      )}
+
+      {activityToResolve && (
+        <ResolveDivergenceModal
+          open={!!activityToResolve}
+          onOpenChange={setActivityToResolve}
+          activity={activityToResolve}
+          onConfirm={handleResolveConfirm}
+          isLoading={isFinalizing}
+        />
       )}
 
       <DeleteConfirmationDialog

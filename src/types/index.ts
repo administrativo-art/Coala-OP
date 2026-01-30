@@ -729,7 +729,7 @@ export interface RepositionContextType {
   createRepositionActivity: (data: Omit<RepositionActivity, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'requestedBy'>) => Promise<string | null>;
   updateRepositionActivity: (activityId: string, updates: Partial<RepositionActivity>) => Promise<void>;
   cancelRepositionActivity: (activityId: string) => Promise<void>;
-  finalizeRepositionActivity: (activity: RepositionActivity) => Promise<void>;
+  finalizeRepositionActivity: (activity: RepositionActivity, resolution?: 'trust_receipt' | 'trust_dispatch') => Promise<void>;
   revertRepositionActivity: (activityId: string) => Promise<void>;
 }
 
