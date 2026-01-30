@@ -385,10 +385,7 @@ function RepositionManagement() {
 }
 
 function RepositionHistory() {
-  const { activities, loading, revertRepositionActivity } = useReposition();
-  const { user, permissions } = useAuth();
-  const [isReverting, setIsReverting] = useState(false);
-  const [activityToRevert, setActivityToRevert] = useState<RepositionActivity | null>(null);
+  const { activities, loading } = useReposition();
   const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>((new Date().getMonth() + 1).toString());
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
@@ -418,23 +415,10 @@ function RepositionHistory() {
             return activity.status === 'Concluído' || activity.status === 'Cancelada';
         }
         return activity.status === statusFilter;
-    });
+    }).sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
   }, [activities, statusFilter, selectedMonth, selectedYear]);
 
   if (loading) return <Skeleton className="h-64 w-full" />;
-  
-  const handleRevertConfirm = async () => {
-    if (!activityToRevert) return;
-    setIsReverting(true);
-    try {
-        await revertRepositionActivity(activityToRevert.id);
-    } catch(e) {
-        console.error(e);
-    } finally {
-        setIsReverting(false);
-        setActivityToRevert(null);
-    }
-  };
   
   const hasAnyHistory = activities.some((a) => a.status === 'Concluído' || a.status === 'Cancelada');
 
@@ -545,13 +529,6 @@ function RepositionHistory() {
                                         </TableBody>
                                     </Table>
                                     </div>
-                                    <div className="flex justify-end pt-2">
-                                        {activity.status === 'Concluído' && permissions.reposition.cancel && (
-                                            <Button variant="outline" size="sm" onClick={() => setActivityToRevert(activity)}>
-                                                <Undo2 className="mr-2 h-4 w-4" /> Reverter movimentação
-                                            </Button>
-                                        )}
-                                    </div>
                                 </div>
                                 </AccordionContent>
                             </AccordionItem>
@@ -560,17 +537,6 @@ function RepositionHistory() {
                 )}
             </CardContent>
         </Card>
-        {activityToRevert && (
-            <DeleteConfirmationDialog
-                open={!!activityToRevert}
-                onOpenChange={() => setActivityToRevert(null)}
-                onConfirm={handleRevertConfirm}
-                isDeleting={isReverting}
-                title="Reverter movimentação?"
-                description={<p>Esta ação irá estornar esta transferência e reabrir a atividade de reposição. <strong>Esta ação é irreversível.</strong></p>}
-                confirmButtonText="Sim, reverter"
-            />
-        )}
     </>
   );
 }
