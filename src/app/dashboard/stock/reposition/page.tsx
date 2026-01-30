@@ -103,12 +103,12 @@ function RepositionActivityCard({
                         document={<SeparationListDocument activity={activity} products={products} />}
                         fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                     >
-                        {({ blob, url, loading, error }) => (
+                        {(({ loading }: { loading: boolean }) => (
                             <Button variant="outline" size="sm" className="relative" disabled={loading}>
                                 <FileText className="mr-2 h-4 w-4" />
                                 {loading ? 'Gerando...' : 'Doc. de separação'}
                             </Button>
-                        )}
+                        )) as any}
                     </PDFDownloadLink>
                      {activity.transportSignature?.physicalCopyUrl && (
                         <Button asChild variant="outline" size="sm">
@@ -283,7 +283,7 @@ function RepositionManagement() {
     if (!activityToReopenDispatch) return;
     await updateRepositionActivity(activityToReopenDispatch.id, {
         status: 'Aguardando despacho',
-        transportSignature: {},
+        transportSignature: undefined,
     });
     setActivityToReopenDispatch(null);
   };
@@ -293,7 +293,7 @@ function RepositionManagement() {
     await updateRepositionActivity(activityToReopenAudit.id, {
         status: 'Aguardando recebimento',
         receiptNotes: '',
-        receiptSignature: {},
+        receiptSignature: undefined,
         items: activityToReopenAudit.items.map(item => ({
             ...item,
             receivedLots: [],
@@ -516,11 +516,11 @@ function RepositionHistory() {
                                                     document={<SeparationListDocument activity={activity} products={products} />}
                                                     fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                                                 >
-                                                    {({ loading }) => (
+                                                    {(({ loading }: { loading: boolean }) => (
                                                         <Button variant="outline" size="sm" disabled={loading}>
                                                             <FileText className="mr-2 h-4 w-4" /> {loading ? 'Gerando...' : 'PDF de separação'}
                                                         </Button>
-                                                    )}
+                                                    )) as any}
                                                 </PDFDownloadLink>
                                                 {activity.transportSignature?.physicalCopyUrl && (
                                                     <Button asChild variant="outline" size="sm">
@@ -645,5 +645,7 @@ export default function RepositionPage() {
         </div>
     );
 }
+
+    
 
     

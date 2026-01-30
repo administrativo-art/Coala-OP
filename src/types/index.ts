@@ -1,4 +1,3 @@
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 export const packageTypes = ['Unidade', 'Caixa', 'Pacote', 'Lata', 'Garrafa', 'Frasco', 'Sachê', 'Pote', 'Balde', 'Galão', 'Bag'] as const;
@@ -256,6 +255,7 @@ export type ProductSimulation = {
   };
 };
 
+
 // Manager's Diary Types
 export type DiaryOccurrence = {};
 export type DiaryActivity = {};
@@ -286,7 +286,7 @@ export type PermissionSet = {
     purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; 
     returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; 
     conversions: { view: true }, 
-    predefinedLists: { view: boolean; manage: boolean; }
+    predefinedLists: { view: false, manage: false, }
   };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; impersonate: boolean; };
@@ -344,6 +344,18 @@ export type ProductDefinition = {
     category: UnitCategory;
     unit: string;
 }
+
+export type BaseProduct = {
+  id: string;
+  name: string;
+  classification?: string;
+  category: UnitCategory;
+  unit: string;
+  initialCostPerUnit?: number;
+  stockLevels: { [kioskId: string]: BaseProductStockLevel };
+  consumptionMonths?: number;
+  lastEffectivePrice?: PriceHistoryEntry;
+};
 
 export type PredefinedConversionItem = {
   id: string;
@@ -445,8 +457,8 @@ export type ReturnRequest = {
     anexos?: { url: string; nome: string }[];
     historico: ReturnRequestHistoricoItem[];
     checklist: { [key: string]: ReturnRequestChecklistItem[] };
-    createdAt: string; // Data em formato ISO
-    updatedAt: string; // Data em formato ISO
+    createdAt: string; // ISO String
+    updatedAt: string; // ISO String
     isArchived?: boolean;
     createdBy: {
         userId: string;
@@ -547,10 +559,10 @@ export type RepositionItem = {
 export type RepositionActivityStatus = 'Aguardando despacho' | 'Aguardando recebimento' | 'Recebido com divergência' | 'Recebido sem divergência' | 'Concluído' | 'Cancelada';
 
 export type SignatureData = {
-    dataUrl?: string; // digital signature
-    physicalCopyUrl?: string; // uploaded photo of physical doc
-    signedBy: string; // username of transporter or receiver
-    signedAt: string; // ISO date
+    dataUrl?: string;
+    physicalCopyUrl?: string;
+    signedBy: string;
+    signedAt: string; // ISO String
 };
 
 export type RepositionActivity = {
@@ -564,13 +576,17 @@ export type RepositionActivity = {
     userId: string;
     username: string;
   };
+  updatedBy?: {
+    userId: string;
+    username: string;
+  };
   createdAt: string; // ISO String
   updatedAt: string; // ISO String
   items: RepositionItem[];
   transportDocumentUrl?: string;
-  transportSignature?: SignatureData;
+  transportSignature?: Partial<SignatureData>;
   receiptNotes?: string;
-  receiptSignature?: SignatureData;
+  receiptSignature?: Partial<SignatureData>;
   isSeparated?: boolean;
 };
 
@@ -600,7 +616,7 @@ export const defaultGuestPermissions: PermissionSet = {
       purchasing: { view: false, suggest: false, approve: false, deleteHistory: false }, 
       returns: { view: false, add: false, updateStatus: false, delete: false }, 
       conversions: { view: true }, 
-      predefinedLists: { view: false, manage: false }
+      predefinedLists: { view: false, manage: false, }
     },
     pricing: { view: false, simulate: false, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, impersonate: false },
@@ -726,11 +742,9 @@ export type PriceDecision = {
 export interface RepositionContextType {
   activities: RepositionActivity[];
   loading: boolean;
-  createRepositionActivity: (data: Omit<RepositionActivity, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'requestedBy'>) => Promise<string | null>;
+  createRepositionActivity: (data: Omit<RepositionActivity, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'requestedBy' | 'updatedBy'>) => Promise<string | null>;
   updateRepositionActivity: (activityId: string, updates: Partial<RepositionActivity>) => Promise<void>;
   cancelRepositionActivity: (activityId: string) => Promise<void>;
   finalizeRepositionActivity: (activity: RepositionActivity, resolution?: 'trust_receipt' | 'trust_dispatch') => Promise<void>;
   revertRepositionActivity: (activityId: string) => Promise<void>;
 }
-
-    
