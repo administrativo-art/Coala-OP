@@ -55,11 +55,7 @@ function RepositionActivityCard({
     const { toast } = useToast();
 
     const handleExportSeparationList = () => {
-        toast({
-            title: "Exportação em manutenção",
-            description: "A função de exportar para PDF está sendo atualizada.",
-            variant: "destructive",
-        });
+        alert("A função de gerar documento de separação está em desenvolvimento.");
     };
 
     const currentStep = useMemo(() => {
@@ -100,7 +96,7 @@ function RepositionActivityCard({
                 <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={handleExportSeparationList} className="relative">
                         <FileText className="mr-2 h-4 w-4" />
-                        PDF de Separação
+                        Doc. de separação
                         {hasDivergence && (
                             <span className="absolute -top-1 -right-1 flex h-3 w-3">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
