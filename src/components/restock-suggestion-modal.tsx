@@ -20,7 +20,7 @@ import { Progress } from '@/components/ui/progress';
 
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem } from '@/types';
+import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, type Product } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
@@ -62,6 +62,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
 
   const getUnitsPerPackage = (product: Product, baseProduct: BaseProduct): number => {
     try {
+        if (product.packageSize === 0) return 0;
         return convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
     } catch (e) {
         console.error(e);
@@ -216,7 +217,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                                     <TableCell>
                                         <p className="font-semibold">{getProductFullName(product)} - {lot.lotNumber}</p>
                                         <p className="text-xs text-muted-foreground">Validade: {lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
-                                        <p className="text-xs text-muted-foreground">Disponível (lote): {formatNumberDisplay(availablePackages)} {product.packageType || 'pct'}</p>
+                                        <p className="text-xs text-muted-foreground">Disponível (lote): {formatNumberDisplay(availablePackages)} {product.packageType || 'unidades'}</p>
                                     </TableCell>
                                     <TableCell>
                                         <div className="space-y-1">
@@ -236,7 +237,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                                                     onFocus={(e) => e.target.select()}
                                                     className="bg-background w-24 h-9"
                                                 />
-                                                <Label className="font-semibold text-sm">{product.packageType || 'pacote'}(s)</Label>
+                                                <Label className="font-semibold text-sm">{product.packageType ? `${product.packageType}(s)` : 'unidades'}</Label>
                                             </div>
                                             <div className="pl-1 text-xs text-muted-foreground">
                                                 <p>= {formatNumberDisplay(watchedItems[index]?.quantityInBaseUnit || 0)} {suggestionResult.baseProduct.unit}</p>
@@ -279,7 +280,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                                <TableRow key={lot.id}>
                                    <TableCell>{getProductFullName(product)} - {lot.lotNumber}</TableCell>
                                    <TableCell>{lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy') : 'N/A'}</TableCell>
-                                   <TableCell>{lot.quantity - (lot.reservedQuantity || 0)} {product.packageType || 'pct'}</TableCell>
+                                   <TableCell>{lot.quantity - (lot.reservedQuantity || 0)} {product.packageType || 'un'}</TableCell>
                                    <TableCell>
                                        <Button type="button" size="sm" variant="secondary" onClick={() => append({lotId: lot.id, quantityInBaseUnit: 0})}>Adicionar</Button>
                                    </TableCell>
