@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -401,7 +402,8 @@ function RepositionHistory() {
   })), []);
 
   const historicalActivities = useMemo(() => {
-    return activities.filter((activity: RepositionActivity) => {
+    return activities
+      .filter((activity: RepositionActivity) => {
         const activityDate = activity.updatedAt ? parseISO(activity.updatedAt) : parseISO(activity.createdAt);
         
         if (selectedYear !== 'all' && activityDate.getFullYear().toString() !== selectedYear) {
@@ -415,7 +417,12 @@ function RepositionHistory() {
             return activity.status === 'Concluído' || activity.status === 'Cancelada';
         }
         return activity.status === statusFilter;
-    });
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.updatedAt || a.createdAt).getTime();
+        const dateB = new Date(b.updatedAt || b.createdAt).getTime();
+        return dateB - dateA;
+      });
   }, [activities, statusFilter, selectedMonth, selectedYear]);
 
   if (loading) return <Skeleton className="h-64 w-full" />;
