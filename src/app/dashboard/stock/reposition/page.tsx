@@ -1,8 +1,9 @@
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { useReposition } from '@/hooks/use-reposition';
@@ -13,7 +14,7 @@ import { useProducts } from '@/hooks/use-products';
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft, Package, FileText } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,12 +24,142 @@ import { AuditReceiptModal } from "@/components/audit-receipt-modal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+
+function RepositionActivityCard({ 
+  activity, 
+  onDispatch, 
+  onAudit, 
+  onFinalize,
+  onCancel
+}: { 
+  activity: RepositionActivity; 
+  onDispatch: (activity: RepositionActivity) => void;
+  onAudit: (activity: RepositionActivity) => void;
+  onFinalize: (activity: RepositionActivity) => void;
+  onCancel: (activity: RepositionActivity) => void;
+}) {
+    const { toast } = useToast();
+    const [isSeparated, setIsSeparated] = useState(false);
+    
+    const handleExportSeparationList = () => {
+        toast({
+            title: "Exportação em manutenção",
+            description: "A função de exportar para PDF está sendo atualizada.",
+            variant: "destructive",
+        });
+    };
+
+    const currentStep = useMemo(() => {
+        switch (activity.status) {
+            case 'Aguardando despacho':
+                return isSeparated ? 2 : 1; // 1: Separação, 2: Despacho
+            case 'Aguardando recebimento':
+                return 3; // Recebimento
+            case 'Recebido com divergência':
+            case 'Recebido sem divergência':
+                return 4; // Efetivação
+            default:
+                return 5; // Concluído/Cancelada (won't be shown)
+        }
+    }, [activity.status, isSeparated]);
+
+    const steps = [
+        { name: 'Separação', icon: Package, step: 1 },
+        { name: 'Despacho', icon: Truck, step: 2 },
+        { name: 'Recebimento', icon: Inbox, step: 3 },
+        { name: 'Efetivação', icon: CheckSquare, step: 4 },
+    ];
+    
+    const hasDivergence = activity.status === 'Recebido com divergência';
+
+    return (
+        <Card className="w-full">
+            <CardHeader className="flex flex-row items-start justify-between pb-4">
+                <div>
+                     <CardTitle className="text-lg">#{activity.id.slice(-6)} | {activity.kioskOriginName} → {activity.kioskDestinationName}</CardTitle>
+                    <CardDescription>
+                        {activity.items.length} tipo(s) de insumo
+                    </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={handleExportSeparationList} className="relative">
+                        <FileText className="mr-2 h-4 w-4" />
+                        PDF de Separação
+                        {hasDivergence && (
+                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                            </span>
+                        )}
+                    </Button>
+                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => onCancel(activity)}>
+                        <Ban className="h-4 w-4" />
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="flex items-center justify-around w-full">
+                    {steps.map((step, index) => {
+                        const isCompleted = currentStep > step.step || activity.status === 'Concluído';
+                        const isActive = currentStep === step.step;
+                        
+                        let stepAction = () => {};
+                        let isDisabled = true;
+
+                        if (step.step === 1 && currentStep === 1) { // Separação
+                            stepAction = () => setIsSeparated(true);
+                            isDisabled = false;
+                        } else if (step.step === 2 && currentStep === 2) { // Despacho
+                            stepAction = () => onDispatch(activity);
+                            isDisabled = false;
+                        } else if (step.step === 3 && currentStep === 3) { // Recebimento
+                            stepAction = () => onAudit(activity);
+                            isDisabled = false;
+                        } else if (step.step === 4 && currentStep === 4) { // Efetivação
+                            stepAction = () => onFinalize(activity);
+                            isDisabled = false;
+                        }
+                        
+                        const iconColorClass = isCompleted ? 'bg-green-500 text-white' : isActive ? 'bg-primary text-white animate-pulse' : 'bg-muted text-muted-foreground';
+                        const textColorClass = isCompleted ? 'text-foreground font-semibold' : isActive ? 'text-primary font-bold' : 'text-muted-foreground';
+                        const isDivergentStep3 = step.step === 3 && hasDivergence;
+
+                        return (
+                            <React.Fragment key={step.name}>
+                                <div className="flex flex-col items-center gap-2 text-center">
+                                    <Button
+                                        size="icon"
+                                        className={cn(
+                                            "rounded-full w-12 h-12 transition-all duration-300",
+                                            iconColorClass,
+                                            isDivergentStep3 && 'bg-yellow-500 text-white',
+                                            isDisabled && 'pointer-events-none opacity-80',
+                                            !isDisabled && 'hover:scale-105'
+                                        )}
+                                        onClick={stepAction}
+                                        disabled={isDisabled}
+                                    >
+                                        <step.icon className="h-6 w-6" />
+                                    </Button>
+                                    <span className={cn("text-xs font-medium", textColorClass, isDivergentStep3 && 'text-yellow-600 font-bold')}>{step.name}</span>
+                                </div>
+                                {index < steps.length - 1 && (
+                                    <div className={cn("flex-1 h-1 rounded-full", isCompleted || (isSeparated && index === 0) ? 'bg-green-500' : 'bg-muted')} />
+                                )}
+                            </React.Fragment>
+                        );
+                    })}
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
 
 
 function RepositionManagement() {
   const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
-  const { user, permissions } = useAuth();
-  const { products } = useProducts();
+  const { permissions } = useAuth();
   const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
   const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
@@ -38,29 +169,10 @@ function RepositionManagement() {
   if (loading) {
     return (
         <div className="space-y-4">
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-40 w-full" />
         </div>
     )
-  }
-
-  const getStatusBadge = (status: RepositionActivity['status']) => {
-    switch (status) {
-        case 'Aguardando despacho':
-            return <Badge variant="secondary">{status}</Badge>;
-        case 'Aguardando recebimento':
-            return <Badge className="bg-blue-500 text-white hover:bg-blue-600">{status}</Badge>;
-        case 'Recebido com divergência':
-            return <Badge variant="destructive" className="bg-yellow-500 text-white hover:bg-yellow-600"><AlertTriangle className="mr-1 h-3 w-3" />{status}</Badge>;
-        case 'Recebido sem divergência':
-            return <Badge className="bg-green-600 text-white hover:bg-green-700">{status}</Badge>;
-        case 'Concluído':
-            return <Badge variant="default">{status}</Badge>;
-        case 'Cancelada':
-            return <Badge variant="destructive">{status}</Badge>;
-        default:
-            return <Badge>{status}</Badge>;
-    }
   }
 
   const activeActivities = activities.filter((activity: RepositionActivity) => activity.status !== 'Concluído' && activity.status !== 'Cancelada');
@@ -77,26 +189,11 @@ function RepositionManagement() {
     )
   }
 
-  const handleExportSeparationList = (activity: RepositionActivity) => {
-    alert("A exportação de PDF está em manutenção.");
-  };
-
   const handleCancelConfirm = async () => {
     if (activityToCancel) {
         await cancelRepositionActivity(activityToCancel.id);
         setActivityToCancel(null);
     }
-  };
-
-  const handleReopenAudit = async (activity: RepositionActivity) => {
-    await updateRepositionActivity(activity.id, {
-        status: 'Aguardando recebimento',
-        receiptNotes: '',
-        items: activity.items.map(item => ({
-            ...item,
-            receivedLots: [],
-        }))
-    });
   };
 
   const handleFinalizeConfirm = async () => {
@@ -109,106 +206,16 @@ function RepositionManagement() {
 
   return (
     <>
-      <div className="space-y-3">
+      <div className="space-y-4">
           {activeActivities.map((activity: RepositionActivity) => (
-              <Accordion type="single" collapsible key={activity.id}>
-                  <AccordionItem value={activity.id} className="border rounded-lg">
-                      <div className="flex items-center p-4">
-                          <AccordionTrigger className="p-0 hover:no-underline flex-1 text-left">
-                              <div className="flex justify-between items-center w-full">
-                                  <div>
-                                      <p className="font-semibold text-lg">{activity.kioskOriginName} → {activity.kioskDestinationName.replace('Quiosque', 'Unidade')}</p>
-                                      <p className="text-sm text-muted-foreground">
-                                          Solicitado em {format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                                      </p>
-                                  </div>
-                                  <div className="flex items-center gap-4">
-                                  {getStatusBadge(activity.status)}
-                                  </div>
-                              </div>
-                          </AccordionTrigger>
-                          {permissions.reposition.cancel && (
-                              <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="ml-2 text-destructive hover:text-destructive"
-                                  onClick={(e) => { e.stopPropagation(); setActivityToCancel(activity); }}>
-                                  <Ban className="h-4 w-4" />
-                              </Button>
-                          )}
-                      </div>
-                      <AccordionContent className="p-4 pt-0">
-                           <div className="space-y-4">
-                              {activity.items.map((item: RepositionItem, index: number) => {
-                                  const hasBeenAudited = activity.status.startsWith('Recebido');
-
-                                  return (
-                                      <div key={index} className="p-3 border rounded-md bg-muted/50">
-                                          <p className="font-semibold">{item.productName}</p>
-                                          <ul className="list-disc pl-5 mt-1 text-sm space-y-1">
-                                              {(hasBeenAudited ? item.receivedLots : item.suggestedLots)?.map((lot: RepositionSuggestedLot & { receivedQuantity?: number }) => {
-                                                  const originalLot = item.suggestedLots.find((sl: RepositionSuggestedLot) => sl.lotId === lot.lotId);
-                                                  const sentQty = originalLot?.quantityToMove || 0;
-                                                  const receivedQty = lot.receivedQuantity;
-                                                  const hasDivergence = hasBeenAudited && receivedQty !== sentQty;
-
-                                                  return (
-                                                      <li key={lot.lotId}>
-                                                          {hasBeenAudited ? (
-                                                              <span className={hasDivergence ? 'text-destructive font-bold' : ''}>
-                                                                  Recebido: {receivedQty} / Enviado: {sentQty}
-                                                              </span>
-                                                          ) : (
-                                                              `Enviando: ${sentQty}`
-                                                          )}
-                                                          <span className="text-muted-foreground"> x {lot.productName} (Lote: {lot.lotNumber})</span>
-                                                          {hasDivergence && lot.receiptNotes && (
-                                                              <p className="text-xs text-destructive pl-4 border-l-2 border-destructive ml-1 mt-1 italic">"{lot.receiptNotes}"</p>
-                                                          )}
-                                                      </li>
-                                                  )
-                                              })}
-                                          </ul>
-                                      </div>
-                                  )
-                              })}
-
-                              <div className="flex justify-end pt-4 border-t gap-2">
-                                   {activity.status === 'Aguardando despacho' && (
-                                      <>
-                                          <Button variant="outline" onClick={() => handleExportSeparationList(activity)}>
-                                              <Download className="mr-2 h-4 w-4" />
-                                              Exportar PDF de Separação
-                                          </Button>
-                                          <Button onClick={() => setActivityToDispatch(activity)}>
-                                              <Truck className="mr-2 h-4 w-4" />
-                                              Gerenciar Despacho
-                                          </Button>
-                                      </>
-                                  )}
-                                  {activity.status === 'Aguardando recebimento' && (
-                                       <Button onClick={() => setActivityToAudit(activity)}>
-                                          <CheckSquare className="mr-2 h-4 w-4" />
-                                          Auditar Recebimento
-                                      </Button>
-                                  )}
-                                  {(activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.stock.stockCount.approve && (
-                                      <>
-                                          <Button variant="outline" onClick={() => handleReopenAudit(activity)}>
-                                              <Undo2 className="mr-2 h-4 w-4" />
-                                              Reabrir Auditoria
-                                          </Button>
-                                          <Button onClick={() => setActivityToFinalize(activity)}>
-                                              <BadgeCheck className="mr-2 h-4 w-4" />
-                                              Efetivar Movimentação
-                                          </Button>
-                                      </>
-                                  )}
-                              </div>
-                          </div>
-                      </AccordionContent>
-                  </AccordionItem>
-              </Accordion>
+              <RepositionActivityCard
+                  key={activity.id}
+                  activity={activity}
+                  onDispatch={setActivityToDispatch}
+                  onAudit={setActivityToAudit}
+                  onFinalize={setActivityToFinalize}
+                  onCancel={setActivityToCancel}
+              />
           ))}
       </div>
       
