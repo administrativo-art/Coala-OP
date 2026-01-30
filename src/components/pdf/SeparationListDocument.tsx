@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -13,7 +14,7 @@ const styles = StyleSheet.create({
         paddingTop: 30,
         paddingLeft: 40,
         paddingRight: 40,
-        paddingBottom: 50,
+        paddingBottom: 60, // Aumentado para dar espaço para assinatura
         lineHeight: 1.5,
     },
     header: {
@@ -21,6 +22,7 @@ const styles = StyleSheet.create({
         marginBottom: 5,
         textAlign: 'center',
         fontFamily: 'Helvetica-Bold',
+        textTransform: 'uppercase', // Adicionado
     },
     subHeader: {
         fontSize: 10,
@@ -63,6 +65,20 @@ const styles = StyleSheet.create({
         borderLeftWidth: 0,
         borderTopWidth: 0,
         padding: 6,
+    },
+    signatureContainer: {
+        position: 'absolute',
+        bottom: 70, // Posição acima do rodapé da página
+        left: 40,
+        right: 40,
+        textAlign: 'center',
+        paddingTop: 20,
+    },
+    signatureLine: {
+        borderTop: '1px solid #333',
+        width: '50%',
+        margin: '0 auto',
+        marginBottom: 5,
     },
     footer: {
         position: 'absolute',
@@ -127,7 +143,7 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
         <Document>
             <Page size="A4" style={styles.page}>
                 <Text style={styles.header}>Lista de Separação - Reposição</Text>
-                <Text style={styles.subHeader}>ID da Atividade: #{activity.id.slice(-6)}</Text>
+                <Text style={styles.subHeader}>ID da atividade: #{activity.id.slice(-6)}</Text>
                 
                 <View style={styles.infoSection}>
                     <Text>Origem: {activity.kioskOriginName}</Text>
@@ -142,8 +158,8 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
                     <View style={styles.tableRow}>
                         <View style={[styles.tableColHeader, { width: '25%' }]}><Text>Insumo</Text></View>
                         <View style={[styles.tableColHeader, { width: '20%' }]}><Text>Lote</Text></View>
-                        <View style={[styles.tableColHeader, { width: '20%', textAlign: 'right' }]}><Text>Qtd. Logística</Text></View>
-                        <View style={[styles.tableColHeader, { width: '20%', textAlign: 'right' }]}><Text>Qtd. Unitária</Text></View>
+                        <View style={[styles.tableColHeader, { width: '20%', textAlign: 'right' }]}><Text>Qtd. unitária</Text></View>
+                        <View style={[styles.tableColHeader, { width: '20%', textAlign: 'right' }]}><Text>Qtd. logística</Text></View>
                         <View style={[styles.tableColHeader, { width: '15%', textAlign: 'center' }]}><Text>Conferido</Text></View>
                     </View>
 
@@ -151,11 +167,18 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
                         <View style={styles.tableRow} key={item.lotNumber + index}>
                             <View style={[styles.tableCol, { width: '25%' }]}><Text>{item.productName}</Text></View>
                             <View style={[styles.tableCol, { width: '20%' }]}><Text>{item.lotNumber}</Text></View>
-                            <View style={[styles.tableCol, { width: '20%', textAlign: 'right' }]}><Text>{item.logisticQuantityDisplay}</Text></View>
                             <View style={[styles.tableCol, { width: '20%', textAlign: 'right' }]}><Text>{item.unitQuantityDisplay}</Text></View>
+                            <View style={[styles.tableCol, { width: '20%', textAlign: 'right' }]}><Text>{item.logisticQuantityDisplay}</Text></View>
                             <View style={[styles.tableCol, { width: '15%', textAlign: 'center' }]}><Text>[  ]</Text></View>
                         </View>
                     ))}
+                </View>
+
+                <View style={styles.signatureContainer} fixed>
+                  <View style={styles.signatureLine} />
+                  <Text>Assinatura do transportador</Text>
+                  <Text>Nome:</Text>
+                  <Text>CPF:</Text>
                 </View>
 
                 <Text style={styles.footer} render={({ pageNumber, totalPages }) => (
