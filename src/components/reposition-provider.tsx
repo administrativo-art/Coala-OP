@@ -142,6 +142,19 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
         return;
     }
   
+    // Prepare lot updates for optimistic UI
+    const lotUpdates: { lotId: string; quantityToReserve: number }[] = [];
+    if (activityToCancel.status === 'Aguardando despacho' || activityToCancel.status === 'Aguardando recebimento') {
+        activityToCancel.items.forEach(item => {
+            item.suggestedLots.forEach(lot => {
+                lotUpdates.push({
+                    lotId: lot.lotId,
+                    quantityToReserve: -lot.quantityToMove // Negative to release reservation
+                });
+            });
+        });
+    }
+
     try {
       await runTransaction(db, async (transaction) => {
         const activityRef = doc(db, 'repositionActivities', activityId);
@@ -158,11 +171,18 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
             }
         }
       });
+
+      // Optimistic UI updates
+      if (lotUpdates.length > 0) {
+        optimisticallyUpdateLots(lotUpdates);
+      }
+      setActivities(prev => prev.map(act => act.id === activityId ? { ...act, status: 'Cancelada' } : act));
+
     } catch (error) {
       console.error("Error cancelling reposition activity:", error);
       throw error;
     }
-  }, [activities]);
+  }, [activities, optimisticallyUpdateLots]);
   
   const finalizeRepositionActivity = useCallback(async (activity: RepositionActivity, resolution: 'trust_receipt' | 'trust_dispatch' = 'trust_receipt') => {
     if (!user) throw new Error("Usuário não autenticado.");
@@ -334,5 +354,3 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     </RepositionContext.Provider>
   );
 }
-
-  
