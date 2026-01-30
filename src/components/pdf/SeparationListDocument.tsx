@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -93,7 +92,7 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
 
             if (product) {
                 const packageType = product.packageType || 'un';
-                unitQuantityDisplay = `${lot.quantityToMove} ${packageType}(s)`;
+                unitQuantityDisplay = `${lot.quantityToMove} ${packageType.toLowerCase()}(s)`;
 
                 if (product.multiplo_caixa && product.multiplo_caixa > 0 && product.rotulo_caixa) {
                     const totalItems = lot.quantityToMove;
@@ -103,14 +102,14 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
 
                     let displayParts = [];
                     if (fullBoxes > 0) {
-                        displayParts.push(`${fullBoxes} ${product.rotulo_caixa}(s)`);
+                        displayParts.push(`${fullBoxes} ${product.rotulo_caixa.toLowerCase()}(s)`);
                     }
                     if (remainingItems > 0) {
-                        displayParts.push(`${remainingItems} ${packageType}(s)`);
+                        displayParts.push(`${remainingItems} ${packageType.toLowerCase()}(s)`);
                     }
-                    logisticQuantityDisplay = displayParts.length > 0 ? displayParts.join(' e ') : `0 ${packageType}(s)`;
+                    logisticQuantityDisplay = displayParts.length > 0 ? displayParts.join(' e ') : `0 ${packageType.toLowerCase()}(s)`;
                 } else {
-                    logisticQuantityDisplay = `${lot.quantityToMove} ${packageType}(s)`;
+                    logisticQuantityDisplay = `${lot.quantityToMove} ${packageType.toLowerCase()}(s)`;
                 }
             }
 
