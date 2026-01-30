@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -14,7 +13,7 @@ import { useProducts } from '@/hooks/use-products';
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft, Package, FileText } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 
 function RepositionActivityCard({ 
@@ -104,9 +104,19 @@ function RepositionActivityCard({
                             </span>
                         )}
                     </Button>
-                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => onCancel(activity)}>
-                        <Ban className="h-4 w-4" />
-                    </Button>
+                     <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onCancel(activity)}>
+                                <Ban className="mr-2 h-4 w-4" />
+                                <span>Cancelar Atividade</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </CardHeader>
             <CardContent>
@@ -585,5 +595,3 @@ export default function RepositionPage() {
         </div>
     );
 }
-
-    
