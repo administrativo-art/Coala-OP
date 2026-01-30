@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -15,7 +14,7 @@ import { useProducts } from '@/hooks/use-products';
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal } from "lucide-react";
+import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal, ArrowRight, UserCheck } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -111,14 +110,12 @@ function RepositionActivityCard({
                         )}
                     </PDFDownloadLink>
                      {activity.transportSignature?.physicalCopyUrl && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(activity.transportSignature?.physicalCopyUrl, '_blank')}
-                        >
-                            <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
-                            Doc. assinado
-                        </Button>
+                        <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_${activity.id.slice(-6)}.jpg`}>
+                            <Button variant="outline" size="sm">
+                                <BadgeCheck className="mr-2 h-4 w-4 text-green-600" />
+                                Doc. assinado
+                            </Button>
+                        </a>
                     )}
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -386,11 +383,13 @@ function RepositionManagement() {
 
 function RepositionHistory() {
   const { activities, loading } = useReposition();
+  const { products, loading: productsLoading } = useProducts();
   const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>((new Date().getMonth() + 1).toString());
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
 
   const availableYears = useMemo(() => {
+    if (activities.length === 0) return [new Date().getFullYear().toString()];
     const years = new Set(activities.map(a => a.updatedAt ? parseISO(a.updatedAt).getFullYear().toString() : parseISO(a.createdAt).getFullYear().toString()));
     return Array.from(years).sort((a,b) => parseInt(b) - parseInt(a));
   }, [activities]);
@@ -402,6 +401,7 @@ function RepositionHistory() {
 
   const historicalActivities = useMemo(() => {
     return activities.filter((activity: RepositionActivity) => {
+        if (!activity.createdAt) return false;
         const activityDate = activity.updatedAt ? parseISO(activity.updatedAt) : parseISO(activity.createdAt);
         
         if (selectedYear !== 'all' && activityDate.getFullYear().toString() !== selectedYear) {
@@ -415,10 +415,14 @@ function RepositionHistory() {
             return activity.status === 'Concluído' || activity.status === 'Cancelada';
         }
         return activity.status === statusFilter;
-    }).sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+    }).sort((a, b) => {
+        const dateA = new Date(a.updatedAt || a.createdAt).getTime();
+        const dateB = new Date(b.updatedAt || b.createdAt).getTime();
+        return dateB - dateA;
+    });
   }, [activities, statusFilter, selectedMonth, selectedYear]);
 
-  if (loading) return <Skeleton className="h-64 w-full" />;
+  if (loading || productsLoading) return <Skeleton className="h-64 w-full" />;
   
   const hasAnyHistory = activities.some((a) => a.status === 'Concluído' || a.status === 'Cancelada');
 
@@ -474,62 +478,129 @@ function RepositionHistory() {
                 ) : (
                     <Accordion type="multiple" className="w-full space-y-3">
                         {historicalActivities.map((activity) => {
-                            const hasDivergence = activity.status === 'Recebido com divergência';
+                            const finalizer = activity.updatedBy?.username || activity.requestedBy.username;
+                            const completionDate = activity.updatedAt || activity.createdAt;
+
+                            const events = [
+                                { etapa: 'Criação', responsavel: activity.requestedBy.username, data: activity.createdAt },
+                                activity.transportSignature?.signedAt && { etapa: 'Despacho', responsavel: activity.transportSignature.signedBy, data: activity.transportSignature.signedAt },
+                                activity.receiptSignature?.signedAt && { etapa: 'Recebimento', responsavel: activity.receiptSignature.signedBy, data: activity.receiptSignature.signedAt },
+                                activity.status === 'Concluído' && activity.updatedBy && { etapa: 'Efetivação', responsavel: activity.updatedBy.username, data: activity.updatedAt }
+                            ].filter(Boolean) as { etapa: string, responsavel: string, data: string }[];
                             
                             return (
                             <AccordionItem key={activity.id} value={activity.id} className="border rounded-lg">
                                 <AccordionTrigger className="p-4 hover:no-underline text-left">
                                     <div className="flex justify-between items-center w-full">
                                         <div>
-                                            <p className="font-semibold text-base">{activity.kioskOriginName} → {activity.kioskDestinationName}</p>
+                                            <p className="font-semibold text-base flex items-center gap-2">
+                                                <span className="font-mono text-sm text-muted-foreground">#{activity.id.slice(-6)}</span> | {activity.kioskOriginName} <ArrowRight className="h-4 w-4" /> {activity.kioskDestinationName}
+                                            </p>
                                             <p className="text-sm text-muted-foreground">
-                                                {activity.status === 'Concluído' ? 'Concluída em' : 'Cancelada em'} {activity.updatedAt ? format(parseISO(activity.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : ''}
+                                                {activity.status} em {completionDate ? format(parseISO(completionDate), 'dd/MM/yyyy') : ''} por @{finalizer}
                                             </p>
                                         </div>
-                                        <Badge variant={activity.status === 'Cancelada' ? 'destructive' : 'default'}>{activity.status}</Badge>
+                                        <Badge variant={activity.status === 'Cancelada' ? 'destructive' : activity.status === 'Recebido com divergência' ? 'secondary' : 'default'} className={cn(activity.status === 'Recebido com divergência' && 'bg-yellow-500')}>
+                                            {activity.status}
+                                        </Badge>
                                     </div>
                                 </AccordionTrigger>
-                                <AccordionContent className="p-4 pt-0">
-                                <div className="space-y-4">
+                                <AccordionContent className="p-4 pt-0 space-y-4">
+                                
+                                    <div className="flex gap-4 p-4 bg-muted/50 rounded-lg">
+                                        <div className="flex flex-col gap-2">
+                                            <span className="text-xs font-bold uppercase text-muted-foreground">Documentos da Atividade</span>
+                                            <div className="flex gap-2">
+                                                <PDFDownloadLink
+                                                    document={<SeparationListDocument activity={activity} products={products} />}
+                                                    fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
+                                                >
+                                                    {({ loading }) => (
+                                                        <Button variant="outline" size="sm" disabled={loading}>
+                                                            <FileText className="mr-2 h-4 w-4" /> {loading ? 'Gerando...' : 'PDF Separação'}
+                                                        </Button>
+                                                    )}
+                                                </PDFDownloadLink>
+                                                {activity.transportSignature?.physicalCopyUrl && (
+                                                    <a href={activity.transportSignature.physicalCopyUrl} download={`despacho_reposicao_${activity.id.slice(-6)}.jpg`}>
+                                                        <Button variant="outline" size="sm">
+                                                            <Download className="mr-2 h-4 w-4" /> Comprovante Despacho
+                                                        </Button>
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     {activity.receiptNotes && (
                                         <blockquote className="mt-2 border-l-2 pl-4 italic text-sm text-muted-foreground">
                                             <strong>Notas do Recebimento:</strong> "{activity.receiptNotes}"
                                         </blockquote>
                                     )}
-                                    <div className="rounded-md border">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Insumo</TableHead>
-                                                <TableHead>Lote</TableHead>
-                                                <TableHead className="text-center">Qtd. enviada</TableHead>
-                                                <TableHead className="text-center">Qtd. recebida</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {activity.items.flatMap((item: RepositionItem) => 
-                                                item.suggestedLots.map((lot: RepositionSuggestedLot) => {
-                                                    const receivedLot = activity.items.flatMap((i: RepositionItem) => i.receivedLots || []).find((rl: RepositionSuggestedLot) => rl.lotId === lot.lotId);
-                                                    const receivedQty = (receivedLot as any)?.receivedQuantity;
-                                                    const sentQty = lot.quantityToMove;
-                                                    const isDivergent = receivedQty !== undefined && sentQty !== receivedQty;
 
-                                                    return (
-                                                        <TableRow key={lot.lotId} className={cn(isDivergent && "bg-destructive/10")}>
-                                                            <TableCell className="font-medium">{lot.productName}</TableCell>
-                                                            <TableCell>{lot.lotNumber}</TableCell>
-                                                            <TableCell className="text-center">{sentQty}</TableCell>
-                                                            <TableCell className={cn("text-center font-bold", isDivergent && "text-destructive")}>
-                                                                {receivedQty ?? '-'}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    )
-                                                })
-                                            )}
-                                        </TableBody>
-                                    </Table>
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Insumo</TableHead>
+                                                    <TableHead>Lote</TableHead>
+                                                    <TableHead className="text-center">Qtd. enviada</TableHead>
+                                                    <TableHead className="text-center">Qtd. recebida</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {activity.items.flatMap((item: RepositionItem) => 
+                                                    item.suggestedLots.map((lot: RepositionSuggestedLot) => {
+                                                        const receivedLot = activity.items.flatMap((i: RepositionItem) => i.receivedLots || []).find((rl: RepositionSuggestedLot) => rl.lotId === lot.lotId);
+                                                        const receivedQty = (receivedLot as any)?.receivedQuantity;
+                                                        const sentQty = lot.quantityToMove;
+                                                        const isDivergent = receivedQty !== undefined && sentQty !== receivedQty;
+
+                                                        return (
+                                                            <TableRow key={lot.lotId} className={cn(isDivergent && "bg-destructive/10")}>
+                                                                <TableCell className="font-medium">{lot.productName}</TableCell>
+                                                                <TableCell>{lot.lotNumber}</TableCell>
+                                                                <TableCell className="text-center">{sentQty}</TableCell>
+                                                                <TableCell className={cn("text-center font-bold", isDivergent && "text-destructive")}>
+                                                                    {receivedQty ?? '-'}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )
+                                                    })
+                                                )}
+                                            </TableBody>
+                                        </Table>
                                     </div>
-                                </div>
+
+                                    <div>
+                                        <h4 className="font-semibold text-md mb-2">Histórico de Eventos</h4>
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Etapa</TableHead>
+                                                        <TableHead>Responsável</TableHead>
+                                                        <TableHead>Data e Hora</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {events.map(event => (
+                                                        <TableRow key={event.etapa}>
+                                                            <TableCell className="font-medium">{event.etapa}</TableCell>
+                                                            <TableCell>
+                                                                <div className="flex items-center gap-1">
+                                                                    <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                                                    {event.responsavel}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>{format(parseISO(event.data), 'dd/MM/yyyy HH:mm')}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+
                                 </AccordionContent>
                             </AccordionItem>
                         )})}
