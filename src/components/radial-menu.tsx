@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, ReactNode } from 'react';
+import { useState, ReactNode, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { X, Wand2 } from 'lucide-react';
@@ -18,13 +19,18 @@ interface RadialMenuProps {
 
 export function RadialMenu({ items }: RadialMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const itemCount = items.length;
   // Spread items over a 120-degree arc instead of a full circle
   const arc = 120; 
   const angleStep = itemCount > 1 ? arc / (itemCount - 1) : 0;
   const radius = 90; // in pixels
 
-  return (
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const menuContent = (
     <div className="fixed bottom-8 right-8 z-50">
       <div className="relative flex items-center justify-center">
         <TooltipProvider>
@@ -76,4 +82,10 @@ export function RadialMenu({ items }: RadialMenuProps) {
       </div>
     </div>
   );
+
+  if (isMounted && typeof document !== 'undefined') {
+    return createPortal(menuContent, document.body);
+  }
+
+  return null;
 }
