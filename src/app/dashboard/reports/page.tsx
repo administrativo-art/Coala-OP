@@ -1,68 +1,97 @@
 "use client";
 
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, DollarSign, LineChart } from 'lucide-react';
+import { TrendingUp, LineChart, DollarSign, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
 export default function ReportsPage() {
-    const { permissions } = useAuth();
-    
-    return (
-        <div className="w-full space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold">Análise estratégica</h1>
-                <p className="text-sm text-muted-foreground">Ferramentas estratégicas para seu estoque.</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {permissions.stock.analysis.consumption && (
-                    <Card className="flex flex-col">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><TrendingUp /> Consumo médio</CardTitle>
-                            <CardDescription>Visualize o consumo médio mensal dos seus insumos para planejar compras futuras.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-grow flex items-end">
-                            <Link href="/dashboard/stock/analysis/consumption" className="w-full">
-                                <Button className="w-full">
-                                    Ver consumo <ArrowRight className="ml-2" />
-                                </Button>
-                            </Link>
-                        </CardContent>
-                    </Card>
-                )}
-                {permissions.stock.analysis.projection && (
-                    <Card className="flex flex-col">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><LineChart /> Projeção de Consumo</CardTitle>
-                            <CardDescription>Preveja se o estoque será consumido antes do vencimento com base na média.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-grow flex items-end">
-                            <Link href="/dashboard/stock/analysis/projection" className="w-full">
-                                <Button className="w-full">
-                                    Acessar projeção <ArrowRight className="ml-2" />
-                                </Button>
-                            </Link>
-                        </CardContent>
-                    </Card>
-                )}
-                {permissions.stock.analysis.valuation && (
-                    <Card className="flex flex-col">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><DollarSign /> Avaliação financeira</CardTitle>
-                            <CardDescription>Calcule o valor financeiro do seu estoque com base nos preços de compra.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-grow flex items-end">
-                            <Link href="/dashboard/stock/analysis/valuation" className="w-full">
-                                <Button className="w-full">
-                                    Acessar avaliação <ArrowRight className="ml-2" />
-                                </Button>
-                            </Link>
-                        </CardContent>
-                    </Card>
-                )}
-            </div>
+  const router = useRouter();
+  const { permissions } = useAuth();
+  const [isOpen, setIsOpen] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen) {
+      router.push('/dashboard/stock');
+    }
+  }, [isOpen, router]);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogContent className="sm:max-w-[850px] gap-0 p-0">
+        <DialogHeader className="p-6 pb-4">
+          <DialogTitle className="text-2xl">Análise estratégica</DialogTitle>
+          <DialogDescription>
+            Ferramentas estratégicas para seu estoque. Escolha uma opção para continuar.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            {permissions.stock.analysis.consumption && (
+                <Card className="flex flex-col text-center items-center p-4 border-2 border-transparent hover:border-primary hover:shadow-lg transition-all duration-300">
+                    <CardHeader className="p-0 items-center">
+                        <div className="p-3 bg-primary/10 rounded-full mb-4">
+                            <TrendingUp className="h-8 w-8 text-primary" />
+                        </div>
+                        <CardTitle className="text-xl mb-2">Consumo médio</CardTitle>
+                        <CardDescription className="text-sm">Visualize o consumo médio dos seus insumos.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                        <Link href="/dashboard/stock/analysis/consumption" className="w-full">
+                            <Button className="w-full">
+                                Acessar <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            )}
+             {permissions.stock.analysis.projection && (
+                <Card className="flex flex-col text-center items-center p-4 border-2 border-transparent hover:border-primary hover:shadow-lg transition-all duration-300">
+                    <CardHeader className="p-0 items-center">
+                        <div className="p-3 bg-primary/10 rounded-full mb-4">
+                            <LineChart className="h-8 w-8 text-primary" />
+                        </div>
+                        <CardTitle className="text-xl mb-2">Projeção de Consumo</CardTitle>
+                        <CardDescription className="text-sm">Preveja se o estoque será consumido antes do vencimento.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                        <Link href="/dashboard/stock/analysis/projection" className="w-full">
+                            <Button className="w-full">
+                                Acessar <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            )}
+            {permissions.stock.analysis.valuation && (
+                <Card className="flex flex-col text-center items-center p-4 border-2 border-transparent hover:border-primary hover:shadow-lg transition-all duration-300">
+                    <CardHeader className="p-0 items-center">
+                        <div className="p-3 bg-primary/10 rounded-full mb-4">
+                            <DollarSign className="h-8 w-8 text-primary" />
+                        </div>
+                        <CardTitle className="text-xl mb-2">Avaliação financeira</CardTitle>
+                        <CardDescription className="text-sm">Calcule o valor financeiro do seu estoque.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                        <Link href="/dashboard/stock/analysis/valuation" className="w-full">
+                            <Button className="w-full">
+                                Acessar <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            )}
         </div>
-    );
+      </DialogContent>
+    </Dialog>
+  );
 }
