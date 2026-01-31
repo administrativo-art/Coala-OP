@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState, useCallback } from 'react';
@@ -10,7 +11,7 @@ import { usePurchase } from "@/hooks/use-purchase";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
 import { type PurchaseSession, type PurchaseItem, type BaseProduct, type Product } from "@/types";
-import { Building, Calendar, ShoppingCart, User, Trash2, Download, PlusCircle, Check } from 'lucide-react';
+import { Building, Calendar, ShoppingCart, User, Trash2, Download, PlusCircle, Check, Award } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
@@ -20,6 +21,8 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from './ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { arrayUnion } from 'firebase/firestore';
+import { Badge } from './ui/badge';
+
 
 interface PurchaseSessionCardProps {
     session: PurchaseSession;
@@ -40,6 +43,13 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete }: { item
             )}
             onClick={onSelect}
         >
+            {isLowest && (
+                <Badge variant="secondary" className="absolute -top-2 -left-2 bg-green-500 text-white hover:bg-green-600 shadow-lg z-10">
+                    <Award className="h-3 w-3 mr-1" />
+                    Melhor Preço
+                </Badge>
+            )}
+
             <div className="flex justify-between items-start">
                 <div>
                     <p className="font-semibold text-sm">{item.entityName}</p>
@@ -52,6 +62,21 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete }: { item
                     )}
                 </div>
             </div>
+            
+            {item.lastPricePerUnit !== null && (
+                <div className="mt-2 text-xs pt-2 border-t border-dashed">
+                    <span className="text-muted-foreground">Última compra: {formatCurrency(item.lastPricePerUnit)} / {item.baseUnit}</span>
+                    {item.priceVariation !== null && (
+                         <span className={cn(
+                             "font-bold ml-2",
+                             item.priceVariation > 0 ? "text-red-500" : "text-green-600"
+                         )}>
+                             {item.priceVariation > 0 ? '▲' : '▼'} {Math.abs(item.priceVariation).toFixed(1)}%
+                         </span>
+                    )}
+                </div>
+            )}
+
             <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-7 w-7 text-destructive opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); onDelete();}}>
                 <Trash2 className="h-4 w-4" />
             </Button>
@@ -63,7 +88,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const { user, users } = useAuth();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
-    const { items: allPurchaseItems, closeSession, deleteSession, updateSession, loading: purchaseLoading, deletePurchaseItem } = usePurchase();
+    const { items: allPurchaseItems, closeSession, deleteSession, updateSession, loading: purchaseLoading, deletePurchaseItem, priceHistory } = usePurchase();
     const { products, getProductFullName, loading: productsLoading } = useProducts();
     const { toast } = useToast();
     
@@ -98,22 +123,33 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 
                 const pricePerUnit = (product && baseProduct) ? calculatePricePerUnit(item, product, baseProduct) : null;
     
+                const lastPriceEntry = priceHistory.find(
+                    h => h.productId === item.productId && h.entityId === item.entityId
+                );
+                const lastPricePerUnit = lastPriceEntry?.pricePerUnit ?? null;
+                
+                let priceVariation: number | null = null;
+                if (pricePerUnit !== null && lastPricePerUnit !== null && lastPricePerUnit > 0) {
+                    priceVariation = ((pricePerUnit / lastPricePerUnit) - 1) * 100;
+                }
+    
                 return {
                     ...item,
                     productName: product ? getProductFullName(product) : 'Insumo não encontrado',
                     entityName: entity?.name || 'Fornecedor não encontrado',
                     pricePerUnit,
-                    baseUnit: baseProduct?.unit || ''
+                    baseUnit: baseProduct?.unit || '',
+                    lastPricePerUnit,
+                    priceVariation
                 }
             });
-    }, [session.id, allPurchaseItems, products, baseProducts, entities, getProductFullName, calculatePricePerUnit]);
+    }, [session.id, allPurchaseItems, products, baseProducts, entities, getProductFullName, calculatePricePerUnit, priceHistory]);
 
     const loading = purchaseLoading || productsLoading;
     
     const itemsByBaseProductMap = useMemo(() => {
         const grouped = new Map<string, { baseProduct: BaseProduct, items: any[] }>();
         
-        // Add items that have prices
         sessionItems.forEach(item => {
             const product = products.find(p => p.id === item.productId);
             if (!product || !product.baseProductId) return;
@@ -126,7 +162,6 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
             grouped.get(baseProduct.id)!.items.push(item);
         });
 
-        // Add base products from the session that don't have items yet
         (session.baseProductIds || []).forEach(baseId => {
             if (!grouped.has(baseId)) {
                 const baseProduct = baseProducts.find(bp => bp.id === baseId);
@@ -171,7 +206,6 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     };
 
     if (session.status === 'closed') {
-        // Render history card
         return (
              <Card className="bg-muted/50">
                 <CardHeader>
