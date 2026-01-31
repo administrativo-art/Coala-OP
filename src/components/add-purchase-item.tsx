@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
@@ -81,27 +82,30 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
         }
     }, [selectedProduct]);
 
-    const calculatePricePerBaseUnit = useCallback((price: number, unit: string, product: any, baseProduct: any): number | null => {
-        let priceForSinglePackage = price;
-        if (unit === product.rotulo_caixa && product.multiplo_caixa && product.multiplo_caixa > 0) {
-            priceForSinglePackage = price / product.multiplo_caixa;
-        }
-
+    const calculatePricePerBaseUnit = useCallback((price: number, purchaseUnit: string, product: any, baseProduct: any): number | null => {
         try {
-            if (baseProduct.category === 'Unidade') {
-                if (product.packageSize > 0) {
-                    return priceForSinglePackage / product.packageSize;
-                }
+            const contentUnitsPerPackage = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+    
+            if (contentUnitsPerPackage <= 0) return null;
+    
+            let totalBaseUnitsInPurchase;
+            
+            if (purchaseUnit === product.rotulo_caixa && product.multiplo_caixa > 0) {
+                // The price is for the whole box.
+                totalBaseUnitsInPurchase = contentUnitsPerPackage * product.multiplo_caixa;
+            } else {
+                // The price is for a single package.
+                totalBaseUnitsInPurchase = contentUnitsPerPackage;
             }
-
-            if (product.category === baseProduct.category) {
-                const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                 if (quantityInBaseUnit > 0) {
-                    return priceForSinglePackage / quantityInBaseUnit;
-                }
+    
+            if (totalBaseUnitsInPurchase > 0) {
+                return price / totalBaseUnitsInPurchase;
             }
+    
             return null;
-        } catch { return null; }
+        } catch {
+            return null;
+        }
     }, []);
 
     const alternativePrices = useMemo(() => {
