@@ -112,6 +112,8 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     
     const itemsByBaseProductMap = useMemo(() => {
         const grouped = new Map<string, { baseProduct: BaseProduct, items: any[] }>();
+        
+        // Add items that have prices
         sessionItems.forEach(item => {
             const product = products.find(p => p.id === item.productId);
             if (!product || !product.baseProductId) return;
@@ -123,8 +125,19 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
             }
             grouped.get(baseProduct.id)!.items.push(item);
         });
+
+        // Add base products from the session that don't have items yet
+        (session.baseProductIds || []).forEach(baseId => {
+            if (!grouped.has(baseId)) {
+                const baseProduct = baseProducts.find(bp => bp.id === baseId);
+                if (baseProduct) {
+                    grouped.set(baseId, { baseProduct, items: [] });
+                }
+            }
+        });
+
         return grouped;
-    }, [sessionItems, products, baseProducts]);
+    }, [sessionItems, session.baseProductIds, products, baseProducts]);
 
     const handleSelectWinner = (baseProductId: string, purchaseItemId: string) => {
         setWinners(prev => ({
@@ -200,12 +213,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                     </Select>
 
                     {loading ? <Skeleton className="h-48 w-full"/> : 
-                     (session.baseProductIds || []).map(baseProductId => {
-                        const group = itemsByBaseProductMap.get(baseProductId);
-                        const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
-                        if (!baseProduct) return null;
-
-                        const items = group ? group.items : [];
+                     Array.from(itemsByBaseProductMap.values()).map(({ baseProduct, items }) => {
                         const lowestPriceItem = items.length > 0 ? items.reduce((lowest, current) => {
                             const currentPrice = current.pricePerUnit ?? Infinity;
                             const lowestPrice = lowest.pricePerUnit ?? Infinity;

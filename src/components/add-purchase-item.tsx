@@ -4,7 +4,6 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useDebounce } from 'use-debounce';
 
 import { usePurchase } from '@/hooks/use-purchase';
 import { useProducts } from '@/hooks/use-products';
@@ -15,6 +14,9 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/form';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { convertValue } from '@/lib/conversion';
 import { Label } from './ui/label';
+import { Button } from './ui/button';
+import { PlusCircle } from 'lucide-react';
+
 
 const addItemSchema = z.object({
   productId: z.string().min(1, "O insumo é obrigatório."),
@@ -36,42 +38,40 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
     const { baseProducts } = useBaseProducts();
     const [purchaseUnit, setPurchaseUnit] = useState<string>('');
     const priceInputRef = useRef<HTMLInputElement>(null);
+    const entitySelectRef = useRef<any>(null);
 
     const form = useForm<FormValues>({
         resolver: zodResolver(addItemSchema),
         defaultValues: { productId: '', entityId: '', price: undefined },
     });
+    
+    const onSubmit = async (values: FormValues) => {
+        const productToSave = products.find(p => p.id === values.productId);
+        if (!productToSave) return;
+        
+        let priceForSinglePackage = values.price;
+        if (purchaseUnit === productToSave.rotulo_caixa && productToSave.multiplo_caixa && productToSave.multiplo_caixa > 0) {
+            priceForSinglePackage = values.price / productToSave.multiplo_caixa;
+        }
+
+        await savePrice(null, { 
+            sessionId,
+            productId: values.productId, 
+            entityId: values.entityId, 
+            price: priceForSinglePackage 
+        });
+        
+        form.reset({ 
+            productId: values.productId, 
+            entityId: '', 
+            price: undefined 
+        });
+        setTimeout(() => entitySelectRef.current?.focus(), 0);
+    };
 
     const watchedValues = form.watch();
-    const [debouncedValues] = useDebounce(watchedValues, 500);
 
     const selectedProduct = useMemo(() => products.find(p => p.id === watchedValues.productId), [products, watchedValues.productId]);
-
-    useEffect(() => {
-        const trySave = async () => {
-            const { productId, entityId, price } = debouncedValues;
-            if (productId && entityId && price && price > 0) {
-                const isValid = await form.trigger();
-                if (isValid) {
-                    const productToSave = products.find(p => p.id === productId);
-                    if (!productToSave) return;
-                    
-                    let priceForSinglePackage = price;
-                    if (purchaseUnit === productToSave.rotulo_caixa && productToSave.multiplo_caixa && productToSave.multiplo_caixa > 0) {
-                        priceForSinglePackage = price / productToSave.multiplo_caixa;
-                    }
-
-                    await savePrice(null, { productId, entityId, price: priceForSinglePackage, sessionId });
-                    form.reset({ productId: '', entityId: '', price: undefined });
-                    setPurchaseUnit('');
-                }
-            }
-        };
-
-        trySave();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [debouncedValues, form, products, purchaseUnit, savePrice, sessionId]);
-
 
     useEffect(() => {
         if (selectedProduct) {
@@ -155,7 +155,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
 
     return (
         <Form {...form}>
-            <div className="space-y-3 mt-2 p-2 border-t">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 mt-2 p-2 border-t">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
                      <FormField
                         control={form.control}
@@ -183,7 +183,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                                 <Label>Fornecedor</Label>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
-                                        <SelectTrigger className="w-full"><SelectValue placeholder="Fornecedor..." /></SelectTrigger>
+                                        <SelectTrigger ref={entitySelectRef} className="w-full"><SelectValue placeholder="Fornecedor..." /></SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
                                         {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
@@ -237,13 +237,16 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                 {alternativePrices && (
                     <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
                         <p>= {formatCurrency(alternativePrices.pricePerPackage)} por {alternativePrices.packageLabel}</p>
-                        <p>= {formatCurrency(alternativePrices.pricePerBox)} por {alternativePrices.boxLabel}</p>
+                        {alternativePrices.pricePerBox > 0 && <p>= {formatCurrency(alternativePrices.pricePerBox)} por {alternativePrices.boxLabel}</p>}
                         {alternativePrices.pricePerBase !== null && (
                             <p className="font-bold">= {formatCurrency(alternativePrices.pricePerBase)} por {alternativePrices.baseUnitLabel}</p>
                         )}
                     </div>
                 )}
-            </div>
+                <Button type="submit" className="w-full">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Preço
+                </Button>
+            </form>
         </Form>
     );
 }
