@@ -321,7 +321,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                             <p className="text-2xl font-bold text-primary">{formatCurrency(totalPurchaseValue)}</p>
                         </div>
                         <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0 || loading}>
-                            <Check className="mr-2 h-4 w-4"/> Finalizar e Efetivar Compra
+                            <Check className="mr-2 h-4 w-4"/> Salvar cotação
                         </Button>
                     </CardFooter>
                 )}
