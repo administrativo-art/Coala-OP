@@ -19,6 +19,8 @@ import { convertValue } from '@/lib/conversion';
 import { AddPurchaseItem } from './add-purchase-item';
 import { cn } from '@/lib/utils';
 import { Skeleton } from './ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { arrayUnion } from 'firebase/firestore';
 
 interface PurchaseSessionCardProps {
     session: PurchaseSession;
@@ -28,7 +30,7 @@ const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-function BidCard({ item, product, baseProduct, isWinner, isLowest, onSelect }: { item: PurchaseItem, product: Product, baseProduct: BaseProduct, isWinner: boolean, isLowest: boolean, onSelect: () => void }) {
+function BidCard({ item, product, baseProduct, isWinner, isLowest, onSelect }: { item: PurchaseItem, product: Product, baseProduct: BaseProduct, onSelect: () => void, isWinner: boolean, isLowest: boolean }) {
     const { entities } = useEntities();
     const entity = entities.find(e => e.id === item.entityId);
 
@@ -50,6 +52,8 @@ function BidCard({ item, product, baseProduct, isWinner, isLowest, onSelect }: {
             return null;
         } catch { return null; }
     }, [item, product, baseProduct]);
+
+    const { getProductFullName } = useProducts();
 
     return (
         <div
@@ -79,7 +83,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const { user, users } = useAuth();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
-    const { items: allPurchaseItems, closeSession, deleteSession, loading: purchaseLoading } = usePurchase();
+    const { items: allPurchaseItems, closeSession, deleteSession, updateSession, loading: purchaseLoading } = usePurchase();
     const { products, getProductFullName, loading: productsLoading } = useProducts();
     const { toast } = useToast();
     
@@ -88,23 +92,23 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
 
     const sessionItems = useMemo(() => allPurchaseItems.filter(i => i.sessionId === session.id), [session.id, allPurchaseItems]);
     const loading = purchaseLoading || productsLoading;
-
-    const itemsByBaseProduct = useMemo(() => {
-        const grouped: Record<string, { baseProduct: BaseProduct, items: { item: PurchaseItem, product: Product }[] }> = {};
+    
+    const itemsByBaseProductMap = useMemo(() => {
+        const grouped = new Map<string, { baseProduct: BaseProduct, items: { item: PurchaseItem, product: Product }[] }>();
         sessionItems.forEach(item => {
             const product = products.find(p => p.id === item.productId);
             if (!product || !product.baseProductId) return;
             const baseProduct = baseProducts.find(bp => bp.id === product.baseProductId);
             if (!baseProduct) return;
             
-            if (!grouped[baseProduct.id]) {
-                grouped[baseProduct.id] = { baseProduct, items: [] };
+            if (!grouped.has(baseProduct.id)) {
+                grouped.set(baseProduct.id, { baseProduct, items: [] });
             }
-            grouped[baseProduct.id].items.push({ item, product });
+            grouped.get(baseProduct.id)!.items.push({ item, product });
         });
-        return Object.values(grouped).sort((a,b) => a.baseProduct.name.localeCompare(b.baseProduct.name));
+        return grouped;
     }, [sessionItems, products, baseProducts]);
-    
+
     const handleSelectWinner = (baseProductId: string, purchaseItemId: string) => {
         setWinners(prev => ({
             ...prev,
@@ -124,6 +128,18 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     
     const sessionUser = useMemo(() => users.find(u => u.id === session.userId), [session.userId, users]);
     
+    const availableProductsToAdd = useMemo(() => {
+        const currentIds = new Set(session.baseProductIds || []);
+        return baseProducts.filter(bp => !currentIds.has(bp.id));
+    }, [baseProducts, session.baseProductIds]);
+    
+    const handleAddBaseProduct = async (baseProductId: string) => {
+        if (!baseProductId) return;
+        await updateSession(session.id, {
+            baseProductIds: arrayUnion(baseProductId)
+        });
+    };
+
     if (session.status === 'closed') {
         // Render history card
         return (
@@ -157,7 +173,22 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {loading ? <Skeleton className="h-48 w-full"/> : itemsByBaseProduct.map(({ baseProduct, items }) => {
+                     <Select onValueChange={handleAddBaseProduct}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="+ Adicionar Insumo para Cotação" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {availableProductsToAdd.map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+
+                    {loading ? <Skeleton className="h-48 w-full"/> : 
+                     (session.baseProductIds || []).map(baseProductId => {
+                        const group = itemsByBaseProductMap.get(baseProductId);
+                        const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
+                        if (!baseProduct) return null;
+
+                        const items = group ? group.items : [];
                         const lowestPriceItem = items.length > 0 ? items.reduce((lowest, current) => {
                             return current.item.price < lowest.item.price ? current : lowest;
                         }) : null;

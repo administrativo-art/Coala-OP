@@ -19,7 +19,6 @@ import { ShoppingCart, History, ArrowRight, Loader2, List } from 'lucide-react';
 import { usePurchase } from '@/hooks/use-purchase';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 export default function PurchasingHubPage() {
@@ -27,7 +26,6 @@ export default function PurchasingHubPage() {
   const { sessions, addSession, loading: purchaseLoading } = usePurchase();
   const [isOpen, setIsOpen] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     if (!isOpen) {
@@ -43,20 +41,11 @@ export default function PurchasingHubPage() {
     try {
       const newSessionId = await addSession({ description, baseProductIds: [], type: 'manual' });
       if (newSessionId) {
-        toast({
-          title: "Sessão de cotação criada!",
-          description: "Você está sendo redirecionado para o workspace.",
-        });
         router.push(`/dashboard/stock/purchasing/sessions/${newSessionId}`);
       } else {
         throw new Error("Falha ao criar a sessão.");
       }
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Erro",
-        description: "Não foi possível criar a sessão de cotação."
-      });
       setIsCreating(false);
     }
   };

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -26,6 +26,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
     const { products, getProductFullName } = useProducts();
     const { entities } = useEntities();
     const [showForm, setShowForm] = useState(false);
+    const priceInputRef = useRef<HTMLInputElement>(null);
 
     const form = useForm<FormValues>({
         resolver: zodResolver(addItemSchema),
@@ -34,6 +35,13 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
 
     const productsForBase = products.filter(p => p.baseProductId === baseProductId);
 
+    const handleShowForm = () => {
+        setShowForm(true);
+        setTimeout(() => {
+            priceInputRef.current?.focus();
+        }, 100);
+    }
+
     const onSubmit = async (values: FormValues) => {
         await savePrice(null, { ...values, sessionId });
         form.reset();
@@ -41,7 +49,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
     };
 
     if (!showForm) {
-        return <Button variant="outline" size="sm" onClick={() => setShowForm(true)} className="w-full mt-2"><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Cotação</Button>;
+        return <Button variant="outline" size="sm" onClick={handleShowForm} className="w-full mt-2"><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Cotação</Button>;
     }
 
     return (
@@ -58,7 +66,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                     {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
                 </SelectContent>
             </Select>
-            <Input type="number" placeholder="Preço" {...form.register('price')} step="0.01" />
+            <Input type="number" placeholder="Preço" {...form.register('price')} step="0.01" ref={priceInputRef} />
             <Button type="submit">Salvar</Button>
         </form>
     );

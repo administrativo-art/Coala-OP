@@ -1,11 +1,10 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type PurchaseItem, type PriceHistoryEntry, type PurchaseSession, type BaseProduct } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch, deleteDoc, runTransaction, increment } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch, deleteDoc, runTransaction, increment, arrayUnion } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useProducts } from '@/hooks/use-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -17,6 +16,7 @@ export interface PurchaseContextType {
   priceHistory: PriceHistoryEntry[];
   loading: boolean;
   addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'closedAt' | 'entityId'>) => Promise<string | null>;
+  updateSession: (sessionId: string, data: Partial<PurchaseSession> | any) => Promise<void>;
   closeSession: (sessionId: string, confirmedItemIds: string[]) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   savePrice: (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => Promise<void>;
@@ -115,6 +115,11 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             return null;
         }
     }, [user]);
+
+    const updateSession = useCallback(async (sessionId: string, data: Partial<PurchaseSession>) => {
+        const sessionRef = doc(db, 'purchaseSessions', sessionId);
+        await updateDoc(sessionRef, data);
+    }, []);
 
     const closeSession = useCallback(async (sessionId: string, confirmedItemIds: string[]) => {
         if (!user) throw new Error("Usuário não autenticado.");
@@ -232,12 +237,13 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         priceHistory,
         loading,
         addSession,
+        updateSession,
         closeSession,
         deleteSession,
         savePrice,
         deletePurchaseItem,
         deletePriceHistoryEntry,
-    }), [sessions, items, priceHistory, loading, addSession, closeSession, deleteSession, savePrice, deletePurchaseItem, deletePriceHistoryEntry]);
+    }), [sessions, items, priceHistory, loading, addSession, updateSession, closeSession, deleteSession, savePrice, deletePurchaseItem, deletePriceHistoryEntry]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }
