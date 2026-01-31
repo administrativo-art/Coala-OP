@@ -153,7 +153,9 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
   const getProductFullName = useCallback((product: Product | null | undefined) => {
     if (!product) return '';
     const brandPart = product.brand ? ` - ${product.brand}` : '';
-    return `${product.baseName}${brandPart}`;
+    const base = `${product.baseName}${brandPart}`;
+    const packagePart = product.packageSize && product.unit ? ` (${product.packageSize}${product.unit})` : '';
+    return `${base}${packagePart}`;
   }, []);
 
   const value: ProductsContextType = useMemo(() => ({
