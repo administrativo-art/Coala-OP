@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -19,6 +20,7 @@ import { usePurchase } from '@/hooks/use-purchase';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 export default function PurchasingHubPage() {
   const router = useRouter();
@@ -69,7 +71,13 @@ export default function PurchasingHubPage() {
           </DialogDescription>
         </DialogHeader>
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="flex flex-col text-center items-center p-6 border-2 border-primary shadow-lg transition-all duration-300">
+            <Card 
+              className={cn(
+                "flex flex-col text-center items-center p-6 border-2 border-primary shadow-lg transition-all duration-300",
+                !isCreating && "cursor-pointer hover:bg-primary/5"
+              )}
+              onClick={!isCreating ? handleCreateSession : undefined}
+            >
                 <CardHeader className="p-0 items-center">
                     <div className="p-3 bg-primary/10 rounded-full mb-4">
                         <ShoppingCart className="h-8 w-8 text-primary" />
@@ -78,10 +86,17 @@ export default function PurchasingHubPage() {
                     <CardDescription className="text-sm">Crie uma nova pesquisa de preços em branco.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
-                    <Button className="w-full" onClick={handleCreateSession} disabled={isCreating}>
-                        {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ArrowRight className="mr-2 h-4 w-4" />}
-                        {isCreating ? 'Criando...' : 'Iniciar'}
-                    </Button>
+                    <div className="text-primary font-semibold flex items-center h-10">
+                        {isCreating ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin"/> Criando sessão...
+                            </>
+                        ) : (
+                            <>
+                                Iniciar <ArrowRight className="ml-2 h-4 w-4" />
+                            </>
+                        )}
+                    </div>
                 </CardContent>
             </Card>
 
