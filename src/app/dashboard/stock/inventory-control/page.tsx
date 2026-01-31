@@ -3,24 +3,50 @@
 
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ExpiryControl } from '@/components/expiry-control';
-import { ArrowLeft, MinusCircle, History, Truck, Scale, Ticket, Menu } from 'lucide-react';
+import { ArrowLeft, MinusCircle, History, Truck, Scale, Ticket } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MovementHistoryModal } from '@/components/movement-history-modal';
 import { FinancialPeriodAnalysisModal } from '@/components/financial-period-analysis-modal';
 import { LabelSettingsModal } from '@/components/label-settings';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { RadialMenu } from '@/components/radial-menu';
 
 function InventoryControlContent() {
+    const router = useRouter();
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
+    
+    const menuItems = [
+      {
+        icon: <MinusCircle className="h-6 w-6" />,
+        label: 'Realizar Baixa',
+        onClick: () => router.push('/dashboard/stock/write-down'),
+      },
+      {
+        icon: <Truck className="h-6 w-6" />,
+        label: 'Realizar Transferência',
+        onClick: () => router.push('/dashboard/stock/transfer'),
+      },
+      {
+        icon: <History className="h-6 w-6" />,
+        label: 'Consultar Histórico',
+        onClick: () => setIsHistoryModalOpen(true),
+      },
+      {
+        icon: <Scale className="h-6 w-6" />,
+        label: 'Consumo por Período',
+        onClick: () => setIsConsumptionModalOpen(true),
+      },
+      {
+        icon: <Ticket className="h-6 w-6" />,
+        label: 'Configurar Etiquetas',
+        onClick: () => setIsLabelModalOpen(true),
+      },
+    ];
+
 
     return (
         <>
@@ -32,38 +58,12 @@ function InventoryControlContent() {
                             Voltar para gestão de estoque
                         </Button>
                     </Link>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="icon">
-                          <Menu className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        <DropdownMenuItem asChild>
-                          <Link href="/dashboard/stock/write-down" className="w-full">
-                            <MinusCircle className="mr-2 h-4 w-4" /> Realizar Baixa
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href="/dashboard/stock/transfer" className="w-full">
-                            <Truck className="mr-2 h-4 w-4" /> Realizar Transferência
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setIsHistoryModalOpen(true)}>
-                          <History className="mr-2 h-4 w-4"/> Consultar Histórico
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setIsConsumptionModalOpen(true)}>
-                          <Scale className="mr-2 h-4 w-4"/> Consumo por período
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setIsLabelModalOpen(true)}>
-                          <Ticket className="mr-2 h-4 w-4" /> Configurar Etiquetas
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                 </div>
                 <ExpiryControl />
             </div>
+
+            <RadialMenu items={menuItems} />
+
             {isHistoryModalOpen && (
                 <MovementHistoryModal open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen} />
             )}
