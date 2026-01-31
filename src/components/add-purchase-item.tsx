@@ -10,11 +10,9 @@ import { useEntities } from '@/hooks/use-entities';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { PlusCircle, X } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/form';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { convertValue } from '@/lib/conversion';
-import { cn } from '@/lib/utils';
 import { Label } from './ui/label';
 
 const addItemSchema = z.object({
@@ -35,7 +33,6 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
     const { products, getProductFullName } = useProducts();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
-    const [showForm, setShowForm] = useState(false);
     const [purchaseUnit, setPurchaseUnit] = useState<string>('');
     const priceInputRef = useRef<HTMLInputElement>(null);
 
@@ -110,13 +107,6 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
 
 
     const productsForBase = products.filter(p => p.baseProductId === baseProductId);
-
-    const handleShowForm = () => {
-        setShowForm(true);
-        setTimeout(() => {
-            priceInputRef.current?.focus();
-        }, 100);
-    }
     
     const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
         const value = e.target.value;
@@ -160,11 +150,6 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
             entityId: '',
             price: undefined,
         });
-        setShowForm(false);
-    }
-
-    if (!showForm) {
-        return <Button variant="outline" size="sm" onClick={handleShowForm} className="w-full mt-2"><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Cotação</Button>;
     }
 
     return (
