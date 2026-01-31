@@ -11,10 +11,11 @@ import { useEntities } from '@/hooks/use-entities';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, X } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/form';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { convertValue } from '@/lib/conversion';
+import { cn } from '@/lib/utils';
 
 const addItemSchema = z.object({
   productId: z.string().min(1, "O insumo é obrigatório."),
@@ -24,7 +25,8 @@ const addItemSchema = z.object({
 
 type FormValues = z.infer<typeof addItemSchema>;
 
-const formatCurrency = (value: number) => {
+const formatCurrency = (value: number | null) => {
+    if (value === null || !value || isNaN(value)) return 'R$ 0,00';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
@@ -106,8 +108,16 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
             entityId: '',
             price: undefined,
         });
-        setShowForm(false);
     };
+    
+    const handleCancel = () => {
+        form.reset({
+            productId: '',
+            entityId: '',
+            price: undefined,
+        });
+        setShowForm(false);
+    }
 
     if (!showForm) {
         return <Button variant="outline" size="sm" onClick={handleShowForm} className="w-full mt-2"><PlusCircle className="mr-2 h-4 w-4" /> Adicionar Cotação</Button>;
@@ -123,7 +133,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                         <FormItem>
                         <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Selecione o insumo..." /></SelectTrigger>
+                            <SelectTrigger className="w-full"><SelectValue placeholder="Selecione o insumo..." /></SelectTrigger>
                             </FormControl>
                             <SelectContent>
                                 {productsForBase.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
@@ -140,7 +150,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                          <FormItem>
                          <Select onValueChange={field.onChange} value={field.value}>
                              <FormControl>
-                             <SelectTrigger><SelectValue placeholder="Fornecedor..." /></SelectTrigger>
+                             <SelectTrigger className="w-full"><SelectValue placeholder="Fornecedor..." /></SelectTrigger>
                              </FormControl>
                              <SelectContent>
                                  {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
@@ -175,8 +185,12 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                         <span>-</span>
                     )}
                 </div>
-                <Button type="submit">Salvar</Button>
+                <div className="flex gap-2">
+                    <Button type="submit">Salvar</Button>
+                    <Button type="button" variant="ghost" size="icon" onClick={handleCancel}><X className="h-4 w-4" /></Button>
+                </div>
             </form>
         </Form>
     );
 }
+
