@@ -61,8 +61,18 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
                     <p className="font-semibold text-sm">{item.entityName}</p>
                     <p className="text-xs text-muted-foreground">{item.productName}</p>
                 </div>
-                <div className="text-right">
-                    <p className="font-bold text-lg">{formatCurrency(item.price)}</p>
+                <div className="text-right flex flex-col items-end">
+                    <div className="flex items-baseline justify-end gap-2">
+                        {item.priceVariation !== null && (
+                             <span className={cn(
+                                 "font-semibold text-xs flex items-center",
+                                 item.priceVariation > 0 ? "text-red-500" : "text-green-600"
+                             )}>
+                                 {item.priceVariation > 0 ? '▲' : '▼'} {Math.abs(item.priceVariation).toFixed(0)}%
+                             </span>
+                        )}
+                        <p className="font-bold text-lg">{formatCurrency(item.price)}</p>
+                    </div>
                     {item.pricePerUnit !== null && (
                         <p className="text-xs text-muted-foreground">{formatCurrency(item.pricePerUnit)} / {item.baseUnit}</p>
                     )}
@@ -72,14 +82,6 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
             {item.lastPricePerUnit !== null && (
                 <div className="mt-2 text-xs pt-2 border-t border-dashed">
                     <span className="text-muted-foreground">Última compra: {formatCurrency(item.lastPricePerUnit)} / {item.baseUnit}</span>
-                    {item.priceVariation !== null && (
-                         <span className={cn(
-                             "font-bold ml-2",
-                             item.priceVariation > 0 ? "text-red-500" : "text-green-600"
-                         )}>
-                             {item.priceVariation > 0 ? '▲' : '▼'} {Math.abs(item.priceVariation).toFixed(1)}%
-                         </span>
-                    )}
                 </div>
             )}
 
