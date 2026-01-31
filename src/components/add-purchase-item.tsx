@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,6 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/form';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { convertValue } from '@/lib/conversion';
 import { cn } from '@/lib/utils';
+import { Label } from './ui/label';
 
 const addItemSchema = z.object({
   productId: z.string().min(1, "O insumo é obrigatório."),
@@ -30,13 +31,13 @@ const formatCurrency = (value: number | null) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-
 export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: string, sessionId: string }) {
     const { savePrice } = usePurchase();
     const { products, getProductFullName } = useProducts();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
     const [showForm, setShowForm] = useState(false);
+    const [purchaseUnit, setPurchaseUnit] = useState<string>('');
     const priceInputRef = useRef<HTMLInputElement>(null);
 
     const form = useForm<FormValues>({
@@ -46,33 +47,67 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
 
     const selectedProductId = form.watch('productId');
     const currentPrice = form.watch('price');
+    const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [products, selectedProductId]);
 
-    const pricePerUnit = useMemo(() => {
-        if (!selectedProductId || !currentPrice || currentPrice <= 0) return null;
-        const product = products.find(p => p.id === selectedProductId);
-        const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
-        if (!product || !baseProduct) return null;
+    useEffect(() => {
+        if (selectedProduct) {
+            setPurchaseUnit(selectedProduct.packageType || selectedProduct.unit);
+        } else {
+            setPurchaseUnit('');
+        }
+    }, [selectedProduct]);
+
+    const calculatePricePerBaseUnit = useCallback((price: number, unit: string, product: any, baseProduct: any): number | null => {
+        let priceForSinglePackage = price;
+        if (unit === product.rotulo_caixa && product.multiplo_caixa && product.multiplo_caixa > 0) {
+            priceForSinglePackage = price / product.multiplo_caixa;
+        }
 
         try {
             if (baseProduct.category === 'Unidade') {
                 if (product.packageSize > 0) {
-                    return currentPrice / product.packageSize;
+                    return priceForSinglePackage / product.packageSize;
                 }
             }
 
             if (product.category === baseProduct.category) {
                 const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                  if (quantityInBaseUnit > 0) {
-                    return currentPrice / quantityInBaseUnit;
+                    return priceForSinglePackage / quantityInBaseUnit;
                 }
             }
             return null;
         } catch { return null; }
-    }, [selectedProductId, currentPrice, products, baseProducts, baseProductId]);
+    }, []);
 
-    const baseProductUnit = useMemo(() => {
-        return baseProducts.find(bp => bp.id === baseProductId)?.unit;
-    }, [baseProducts, baseProductId]);
+    const alternativePrices = useMemo(() => {
+        if (!selectedProduct || !currentPrice || currentPrice <= 0 || !purchaseUnit || !selectedProduct.rotulo_caixa || !selectedProduct.multiplo_caixa) return null;
+
+        let pricePerPackage: number;
+        let pricePerBox: number;
+
+        if (purchaseUnit === selectedProduct.rotulo_caixa) {
+            pricePerBox = currentPrice;
+            pricePerPackage = currentPrice / selectedProduct.multiplo_caixa;
+        } else {
+            pricePerPackage = currentPrice;
+            pricePerBox = currentPrice * selectedProduct.multiplo_caixa;
+        }
+        
+        const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
+        if (!baseProduct) return null;
+        
+        const pricePerBase = calculatePricePerBaseUnit(currentPrice, purchaseUnit, selectedProduct, baseProduct);
+
+        return {
+            pricePerPackage,
+            pricePerBox,
+            packageLabel: selectedProduct.packageType || 'unidade',
+            boxLabel: selectedProduct.rotulo_caixa,
+            pricePerBase,
+            baseUnitLabel: baseProduct.unit
+        };
+    }, [selectedProduct, currentPrice, purchaseUnit, baseProducts, baseProductId, calculatePricePerBaseUnit]);
 
 
     const productsForBase = products.filter(p => p.baseProductId === baseProductId);
@@ -102,12 +137,22 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
     };
 
     const onSubmit = async (values: FormValues) => {
-        await savePrice(null, { ...values, sessionId });
+        if (!selectedProduct) return;
+        
+        let priceForSinglePackage = values.price;
+
+        if (purchaseUnit === selectedProduct.rotulo_caixa && selectedProduct.multiplo_caixa && selectedProduct.multiplo_caixa > 0) {
+            priceForSinglePackage = values.price / selectedProduct.multiplo_caixa;
+        }
+
+        await savePrice(null, { ...values, price: priceForSinglePackage, sessionId });
+        
         form.reset({
-            productId: '',
+            productId: values.productId,
             entityId: '',
             price: undefined,
         });
+        priceInputRef.current?.focus();
     };
     
     const handleCancel = () => {
@@ -125,72 +170,100 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-[2fr,2fr,1.5fr,1.5fr,auto] gap-2 items-end mt-2 p-2 border-t">
-                <FormField
-                    control={form.control}
-                    name="productId"
-                    render={({ field }) => (
-                        <FormItem>
-                        <Select onValueChange={field.onChange} value={field.value}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 mt-2 p-2 border-t">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
+                     <FormField
+                        control={form.control}
+                        name="productId"
+                        render={({ field }) => (
+                            <FormItem>
+                                <Label>Insumo</Label>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger className="w-full"><SelectValue placeholder="Selecione o insumo..." /></SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {productsForBase.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage/>
+                            </FormItem>
+                        )}
+                    />
+                     <FormField
+                        control={form.control}
+                        name="entityId"
+                        render={({ field }) => (
+                            <FormItem>
+                                <Label>Fornecedor</Label>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger className="w-full"><SelectValue placeholder="Fornecedor..." /></SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage/>
+                            </FormItem>
+                        )}
+                    />
+                </div>
+                 <div className="flex gap-2 items-end">
+                    <FormField
+                        control={form.control}
+                        name="price"
+                        render={({ field }) => (
+                        <FormItem className="flex-grow">
+                            <Label>Preço</Label>
                             <FormControl>
-                            <SelectTrigger className="w-full"><SelectValue placeholder="Selecione o insumo..." /></SelectTrigger>
+                            <Input
+                                type="text"
+                                placeholder="R$ 0,00"
+                                value={formatPriceForInput(field.value)}
+                                onChange={(e) => handlePriceChange(e, field)}
+                                ref={priceInputRef}
+                            />
                             </FormControl>
-                            <SelectContent>
-                                {productsForBase.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <FormMessage/>
+                            <FormMessage />
                         </FormItem>
-                    )}
-                />
-                 <FormField
-                    control={form.control}
-                    name="entityId"
-                    render={({ field }) => (
-                         <FormItem>
-                         <Select onValueChange={field.onChange} value={field.value}>
-                             <FormControl>
-                             <SelectTrigger className="w-full"><SelectValue placeholder="Fornecedor..." /></SelectTrigger>
-                             </FormControl>
-                             <SelectContent>
-                                 {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                             </SelectContent>
-                         </Select>
-                         <FormMessage/>
-                         </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="price"
-                    render={({ field }) => (
-                    <FormItem>
-                        <FormControl>
-                        <Input
-                            type="text"
-                            placeholder="Preço (R$)"
-                            value={formatPriceForInput(field.value)}
-                            onChange={(e) => handlePriceChange(e, field)}
-                            ref={priceInputRef}
-                        />
-                        </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
-                 <div className="h-10 flex items-center justify-center p-2 border rounded-md bg-muted text-sm text-muted-foreground">
-                    {pricePerUnit !== null ? (
-                        <span className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(pricePerUnit)} / {baseProductUnit}</span>
-                    ) : (
-                        <span>-</span>
+                        )}
+                    />
+                    {selectedProduct?.rotulo_caixa && (
+                        <div className="w-40 flex-shrink-0">
+                            <Label>Unidade de compra</Label>
+                            <Select value={purchaseUnit} onValueChange={setPurchaseUnit}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={selectedProduct.packageType || selectedProduct.unit}>
+                                        {selectedProduct.packageType || selectedProduct.unit}
+                                    </SelectItem>
+                                    <SelectItem value={selectedProduct.rotulo_caixa}>
+                                        {selectedProduct.rotulo_caixa}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     )}
                 </div>
+
+                {alternativePrices && (
+                    <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
+                        <p>= {formatCurrency(alternativePrices.pricePerPackage)} por {alternativePrices.packageLabel}</p>
+                        <p>= {formatCurrency(alternativePrices.pricePerBox)} por {alternativePrices.boxLabel}</p>
+                        {alternativePrices.pricePerBase !== null && (
+                            <p className="font-bold">= {formatCurrency(alternativePrices.pricePerBase)} por {alternativePrices.baseUnitLabel}</p>
+                        )}
+                    </div>
+                )}
+                
                 <div className="flex gap-2">
                     <Button type="submit">Salvar</Button>
-                    <Button type="button" variant="ghost" size="icon" onClick={handleCancel}><X className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={handleCancel}>Cancelar</Button>
                 </div>
             </form>
         </Form>
     );
 }
-

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,55 +26,29 @@ interface PurchaseSessionCardProps {
     session: PurchaseSession;
 }
 
-const formatCurrency = (value: number) => {
+const formatCurrency = (value: number | null) => {
+    if (value === null || !value || isNaN(value)) return 'R$ 0,00';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-function BidCard({ item, product, baseProduct, isWinner, isLowest, onSelect }: { item: PurchaseItem, product: Product, baseProduct: BaseProduct, onSelect: () => void, isWinner: boolean, isLowest: boolean }) {
-    const { entities } = useEntities();
-    const entity = entities.find(e => e.id === item.entityId);
-
-    const pricePerUnit = useMemo(() => {
-        if (!product || !baseProduct || !item.price || item.price <= 0) return null;
-        try {
-            if (baseProduct.category === 'Unidade') {
-                if (product.packageSize > 0) {
-                    return item.price / product.packageSize;
-                }
-            }
-
-            if (product.category === baseProduct.category) {
-                const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                 if (quantityInBaseUnit > 0) {
-                    return item.price / quantityInBaseUnit;
-                }
-            }
-            return null;
-        } catch { return null; }
-    }, [item, product, baseProduct]);
-
-    const { getProductFullName } = useProducts();
-
+function PriceEntryCard({ item, onDelete }: { item: any, onDelete: () => void }) {
     return (
-        <div
-            className={cn(
-                "border rounded-lg p-3 cursor-pointer transition-all duration-300 relative",
-                isWinner ? 'border-2 border-primary shadow-lg' : 'border-border hover:border-muted-foreground',
-                isLowest && !isWinner && 'border-dashed border-green-500',
-                !isWinner && 'ghost-card'
-            )}
-            onClick={onSelect}
-        >
+        <div className="border rounded-lg p-3 relative group">
             <div className="flex justify-between items-start">
                 <div>
-                    <p className="font-semibold text-sm">{entity?.name || 'Fornecedor não informado'}</p>
-                    <p className="text-xs text-muted-foreground">{getProductFullName(product)}</p>
+                    <p className="font-semibold text-sm">{item.entityName}</p>
+                    <p className="text-xs text-muted-foreground">{item.productName}</p>
                 </div>
                 <div className="text-right">
                     <p className="font-bold text-lg">{formatCurrency(item.price)}</p>
-                    {pricePerUnit !== null && <p className="text-xs text-muted-foreground">{formatCurrency(pricePerUnit)} / {baseProduct.unit}</p>}
+                    {item.pricePerUnit !== null && (
+                        <p className="text-xs text-muted-foreground">{formatCurrency(item.pricePerUnit)} / {item.baseUnit}</p>
+                    )}
                 </div>
             </div>
+            <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-7 w-7 text-destructive opacity-0 group-hover:opacity-100" onClick={onDelete}>
+                <Trash2 className="h-4 w-4" />
+            </Button>
         </div>
     );
 }
@@ -83,18 +57,55 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const { user, users } = useAuth();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
-    const { items: allPurchaseItems, closeSession, deleteSession, updateSession, loading: purchaseLoading } = usePurchase();
+    const { items: allPurchaseItems, closeSession, deleteSession, updateSession, loading: purchaseLoading, deletePurchaseItem } = usePurchase();
     const { products, getProductFullName, loading: productsLoading } = useProducts();
     const { toast } = useToast();
     
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const [winners, setWinners] = useState<Record<string, string>>({}); // {[baseProductId]: purchaseItemId}
 
-    const sessionItems = useMemo(() => allPurchaseItems.filter(i => i.sessionId === session.id), [session.id, allPurchaseItems]);
+     const calculatePricePerUnit = useCallback((item: PurchaseItem, product: Product, baseProduct: BaseProduct): number | null => {
+        if (!product || !baseProduct || !item.price || item.price <= 0) return null;
+        try {
+            if (baseProduct.category === 'Unidade') {
+                if (product.packageSize > 0) {
+                    return item.price / product.packageSize;
+                }
+            }
+            if (product.category === baseProduct.category) {
+                const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                if (quantityInBaseUnit > 0) {
+                    return item.price / quantityInBaseUnit;
+                }
+            }
+            return null;
+        } catch { return null; }
+    }, []);
+
+    const sessionItems = useMemo(() => {
+        return allPurchaseItems
+            .filter(i => i.sessionId === session.id)
+            .map(item => {
+                const product = products.find(p => p.id === item.productId);
+                const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
+                const entity = entities.find(e => e.id === item.entityId);
+                
+                const pricePerUnit = (product && baseProduct) ? calculatePricePerUnit(item, product, baseProduct) : null;
+    
+                return {
+                    ...item,
+                    productName: product ? getProductFullName(product) : 'Insumo não encontrado',
+                    entityName: entity?.name || 'Fornecedor não encontrado',
+                    pricePerUnit,
+                    baseUnit: baseProduct?.unit || ''
+                }
+            });
+    }, [session.id, allPurchaseItems, products, baseProducts, entities, getProductFullName, calculatePricePerUnit]);
+
     const loading = purchaseLoading || productsLoading;
     
     const itemsByBaseProductMap = useMemo(() => {
-        const grouped = new Map<string, { baseProduct: BaseProduct, items: { item: PurchaseItem, product: Product }[] }>();
+        const grouped = new Map<string, { baseProduct: BaseProduct, items: any[] }>();
         sessionItems.forEach(item => {
             const product = products.find(p => p.id === item.productId);
             if (!product || !product.baseProductId) return;
@@ -104,7 +115,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
             if (!grouped.has(baseProduct.id)) {
                 grouped.set(baseProduct.id, { baseProduct, items: [] });
             }
-            grouped.get(baseProduct.id)!.items.push({ item, product });
+            grouped.get(baseProduct.id)!.items.push(item);
         });
         return grouped;
     }, [sessionItems, products, baseProducts]);
@@ -190,7 +201,9 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
 
                         const items = group ? group.items : [];
                         const lowestPriceItem = items.length > 0 ? items.reduce((lowest, current) => {
-                            return current.item.price < lowest.item.price ? current : lowest;
+                            const currentPrice = current.pricePerUnit ?? Infinity;
+                            const lowestPrice = lowest.pricePerUnit ?? Infinity;
+                            return currentPrice < lowestPrice ? current : lowest;
                         }) : null;
                         
                         const hasWinner = !!winners[baseProduct.id];
@@ -200,16 +213,19 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                 <h3 className="font-semibold">{baseProduct.name}</h3>
                                 {items.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {items.map(({ item, product }) => (
-                                            <BidCard
+                                        {items.map((item) => (
+                                             <div
                                                 key={item.id}
-                                                item={item}
-                                                product={product}
-                                                baseProduct={baseProduct}
-                                                isWinner={winners[baseProduct.id] === item.id}
-                                                isLowest={lowestPriceItem ? item.id === lowestPriceItem.item.id : false}
-                                                onSelect={() => handleSelectWinner(baseProduct.id, item.id)}
-                                            />
+                                                className={cn(
+                                                    "border rounded-lg p-3 cursor-pointer transition-all duration-300 relative group",
+                                                    winners[baseProduct.id] === item.id ? 'border-2 border-primary shadow-lg' : 'border-border hover:border-muted-foreground',
+                                                    lowestPriceItem ? item.id === lowestPriceItem.id : false && !(winners[baseProduct.id] === item.id) && 'border-dashed border-green-500',
+                                                    hasWinner && winners[baseProduct.id] !== item.id && 'ghost-card'
+                                                )}
+                                                onClick={() => handleSelectWinner(baseProduct.id, item.id)}
+                                            >
+                                                <PriceEntryCard item={item} onDelete={() => deletePurchaseItem(item.id)} />
+                                            </div>
                                         ))}
                                     </div>
                                 ) : <p className="text-xs text-muted-foreground">Nenhuma cotação para este item ainda.</p>}
