@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -12,6 +13,8 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { PlusCircle } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/form';
+import { useBaseProducts } from '@/hooks/use-base-products';
+import { convertValue } from '@/lib/conversion';
 
 const addItemSchema = z.object({
   productId: z.string().min(1, "O insumo é obrigatório."),
@@ -21,10 +24,16 @@ const addItemSchema = z.object({
 
 type FormValues = z.infer<typeof addItemSchema>;
 
+const formatCurrency = (value: number) => {
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+
 export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: string, sessionId: string }) {
     const { savePrice } = usePurchase();
     const { products, getProductFullName } = useProducts();
     const { entities } = useEntities();
+    const { baseProducts } = useBaseProducts();
     const [showForm, setShowForm] = useState(false);
     const priceInputRef = useRef<HTMLInputElement>(null);
 
@@ -32,6 +41,37 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
         resolver: zodResolver(addItemSchema),
         defaultValues: { productId: '', entityId: '', price: undefined },
     });
+
+    const selectedProductId = form.watch('productId');
+    const currentPrice = form.watch('price');
+
+    const pricePerUnit = useMemo(() => {
+        if (!selectedProductId || !currentPrice || currentPrice <= 0) return null;
+        const product = products.find(p => p.id === selectedProductId);
+        const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
+        if (!product || !baseProduct) return null;
+
+        try {
+            if (baseProduct.category === 'Unidade') {
+                if (product.packageSize > 0) {
+                    return currentPrice / product.packageSize;
+                }
+            }
+
+            if (product.category === baseProduct.category) {
+                const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                 if (quantityInBaseUnit > 0) {
+                    return currentPrice / quantityInBaseUnit;
+                }
+            }
+            return null;
+        } catch { return null; }
+    }, [selectedProductId, currentPrice, products, baseProducts, baseProductId]);
+
+    const baseProductUnit = useMemo(() => {
+        return baseProducts.find(bp => bp.id === baseProductId)?.unit;
+    }, [baseProducts, baseProductId]);
+
 
     const productsForBase = products.filter(p => p.baseProductId === baseProductId);
 
@@ -54,14 +94,18 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
         field.onChange(numericValue);
     };
 
-    const formatPrice = (value: number | undefined) => {
+    const formatPriceForInput = (value: number | undefined) => {
         if (value === undefined || value === null) return '';
         return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
 
     const onSubmit = async (values: FormValues) => {
         await savePrice(null, { ...values, sessionId });
-        form.reset();
+        form.reset({
+            productId: '',
+            entityId: '',
+            price: undefined,
+        });
         setShowForm(false);
     };
 
@@ -71,7 +115,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end mt-2 p-2 border-t">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-[2fr,2fr,1.5fr,1.5fr,auto] gap-2 items-end mt-2 p-2 border-t">
                 <FormField
                     control={form.control}
                     name="productId"
@@ -115,7 +159,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                         <Input
                             type="text"
                             placeholder="Preço (R$)"
-                            value={formatPrice(field.value)}
+                            value={formatPriceForInput(field.value)}
                             onChange={(e) => handlePriceChange(e, field)}
                             ref={priceInputRef}
                         />
@@ -124,6 +168,13 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                     </FormItem>
                     )}
                 />
+                 <div className="h-10 flex items-center justify-center p-2 border rounded-md bg-muted text-sm text-muted-foreground">
+                    {pricePerUnit !== null ? (
+                        <span className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(pricePerUnit)} / {baseProductUnit}</span>
+                    ) : (
+                        <span>-</span>
+                    )}
+                </div>
                 <Button type="submit">Salvar</Button>
             </form>
         </Form>
