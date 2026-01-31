@@ -114,7 +114,7 @@
         scrollbar-width: none;  /* Firefox */
     }
     .winner-group .ghost-card {
-        opacity: 0.4;
+        opacity: 0.5;
         filter: grayscale(100%);
     }
 }

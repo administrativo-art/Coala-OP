@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo } from 'react';
@@ -58,8 +59,8 @@ export default function PurchaseSessionWorkspacePage() {
     }
 
     return (
-        <div className="space-y-4">
-            <div className="mb-4">
+        <div className="flex flex-col h-full">
+            <div className="mb-4 shrink-0">
                 <Button 
                     onClick={() => router.push('/dashboard/stock/purchasing')}
                     variant="outline"
@@ -68,7 +69,9 @@ export default function PurchaseSessionWorkspacePage() {
                     Voltar para gestão de compras
                 </Button>
             </div>
-            <PurchaseSessionCard session={session} />
+            <div className="flex-1 overflow-hidden">
+              <PurchaseSessionCard session={session} />
+            </div>
         </div>
     );
 }

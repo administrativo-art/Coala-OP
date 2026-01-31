@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { usePurchase } from "@/hooks/use-purchase";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
 import { type PurchaseSession, type PurchaseItem, type BaseProduct, type Product } from "@/types";
-import { Building, Calendar, ShoppingCart, User, Trash2, Download, PlusCircle, Check, Award } from 'lucide-react';
+import { ShoppingCart, Trash2, Check, Award } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
@@ -33,21 +33,27 @@ const formatCurrency = (value: number | null) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete }: { item: any, isWinner: boolean, isLowest: boolean, onSelect: () => void, onDelete: () => void }) {
+function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfirm }: { item: any, isWinner: boolean, isLowest: boolean, onSelect: () => void, onDelete: () => void, canConfirm: boolean }) {
     return (
         <div
             className={cn(
-                "border rounded-lg p-3 transition-all duration-300 relative group",
-                isWinner ? 'border-2 border-primary shadow-lg' : 'border-border hover:border-muted-foreground',
-                isLowest && !isWinner && 'border-dashed border-green-500'
+                "border rounded-lg p-3 transition-all duration-200 ease-in-out relative group cursor-pointer",
+                isWinner ? 'border-2 border-primary shadow-lg scale-[1.02]' : 'border-border hover:border-muted-foreground',
+                isLowest && !isWinner && 'border-dashed border-green-500',
+                !canConfirm && 'cursor-default'
             )}
-            onClick={onSelect}
+            onClick={canConfirm ? onSelect : undefined}
         >
             {isLowest && (
                 <Badge variant="secondary" className="absolute -top-2 -left-2 bg-green-500 text-white hover:bg-green-600 shadow-lg z-10">
                     <Award className="h-3 w-3 mr-1" />
                     Melhor Preço
                 </Badge>
+            )}
+            {isWinner && (
+                <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center shadow-lg">
+                    <Check className="h-4 w-4 text-white" />
+                </div>
             )}
 
             <div className="flex justify-between items-start">
@@ -77,9 +83,9 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete }: { item
                 </div>
             )}
 
-            <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-7 w-7 text-destructive opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); onDelete();}}>
+            {canConfirm && <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-7 w-7 text-destructive opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); onDelete();}}>
                 <Trash2 className="h-4 w-4" />
-            </Button>
+            </Button>}
         </div>
     );
 }
@@ -94,6 +100,21 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const [winners, setWinners] = useState<Record<string, string>>({}); // {[baseProductId]: purchaseItemId}
+
+    useEffect(() => {
+        if (session.status === 'closed' && session.confirmedItemIds) {
+            const initialWinners: Record<string, string> = {};
+            session.confirmedItemIds.forEach(itemId => {
+                const item = allPurchaseItems.find(i => i.id === itemId);
+                const product = products.find(p => p.id === item?.productId);
+                if (item && product?.baseProductId) {
+                    initialWinners[product.baseProductId] = itemId;
+                }
+            });
+            setWinners(initialWinners);
+        }
+    }, [session, allPurchaseItems, products]);
+
 
      const calculatePricePerUnit = useCallback((item: PurchaseItem, product: Product, baseProduct: BaseProduct): number | null => {
         if (!product || !baseProduct || !item.price || item.price <= 0) return null;
@@ -175,6 +196,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     }, [sessionItems, session.baseProductIds, products, baseProducts]);
 
     const handleSelectWinner = (baseProductId: string, purchaseItemId: string) => {
+        if (session.status === 'closed') return;
         setWinners(prev => ({
             ...prev,
             [baseProductId]: purchaseItemId
@@ -211,27 +233,17 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
         await updateSession(session.id, { baseProductIds: newBaseProductIds });
     };
 
+    const totalPurchaseValue = useMemo(() => {
+        return Object.values(winners).reduce((total, itemId) => {
+            const item = sessionItems.find(i => i.id === itemId);
+            return total + (item?.price || 0);
+        }, 0);
+    }, [winners, sessionItems]);
 
-    if (session.status === 'closed') {
-        return (
-             <Card className="bg-muted/50">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base text-muted-foreground"><ShoppingCart /> {session.description}</CardTitle>
-                    <CardDescription className="text-xs mt-1">
-                        Fechada por {sessionUser?.username} em {session.closedAt ? format(new Date(session.closedAt), 'dd/MM/yyyy') : ''}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-sm">Total da Compra: <span className="font-bold">{formatCurrency(session.valor_total_estimado || 0)}</span></p>
-                    <p className="text-sm">{session.confirmedItemIds?.length || 0} item(s) efetivados.</p>
-                </CardContent>
-            </Card>
-        )
-    }
 
     return (
         <>
-            <Card className="overflow-hidden">
+            <Card className="overflow-hidden flex flex-col h-full">
                 <CardHeader>
                     <div className="flex justify-between items-start">
                         <div>
@@ -240,18 +252,20 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                 Por {sessionUser?.username} em {format(new Date(session.createdAt), 'dd/MM/yyyy')}
                             </CardDescription>
                         </div>
-                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setIsDeleteConfirmOpen(true)}><Trash2 className="h-4 w-4"/></Button>
+                        {session.status === 'open' && <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setIsDeleteConfirmOpen(true)}><Trash2 className="h-4 w-4"/></Button>}
                     </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                     <Select onValueChange={handleAddBaseProduct}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="+ Adicionar Insumo para Cotação" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {availableProductsToAdd.map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+                <CardContent className="space-y-4 flex-1 overflow-y-auto">
+                    {session.status === 'open' && (
+                        <Select onValueChange={handleAddBaseProduct}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="+ Adicionar Insumo para Cotação" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableProductsToAdd.map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    )}
 
                     {loading ? <Skeleton className="h-48 w-full"/> : 
                      Array.from(itemsByBaseProductMap.values()).map(({ baseProduct, items }) => {
@@ -261,44 +275,57 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                             return currentPrice < lowestPrice ? current : lowest;
                         }) : null;
                         
+                        const winnerSelected = !!winners[baseProduct.id];
+
                         return (
-                            <div key={baseProduct.id} className={'p-4 border rounded-lg space-y-3'}>
+                            <div key={baseProduct.id} className={cn("p-4 border rounded-lg space-y-3", winnerSelected && "winner-group")}>
                                 <div className="flex justify-between items-center">
                                     <h3 className="font-semibold">{baseProduct.name}</h3>
-                                    <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => handleRemoveBaseProduct(baseProduct.id)}>
+                                    {session.status === 'open' && <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => handleRemoveBaseProduct(baseProduct.id)}>
                                         <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    </Button>}
                                 </div>
                                 
-                                {items.length > 0 && (
+                                {items.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {items.map((item) => (
-                                            <PriceEntryCard 
-                                                key={item.id} 
-                                                item={item} 
-                                                isWinner={winners[baseProduct.id] === item.id}
-                                                isLowest={lowestPriceItem ? item.id === lowestPriceItem.id : false}
-                                                onSelect={() => handleSelectWinner(baseProduct.id, item.id)}
-                                                onDelete={() => deletePurchaseItem(item.id)}
-                                            />
-                                        ))}
+                                        {items.map((item) => {
+                                            const isWinner = winners[baseProduct.id] === item.id;
+                                            return (
+                                                <div key={item.id} className={cn(winnerSelected && !isWinner && "ghost-card", "transition-all duration-200")}>
+                                                    <PriceEntryCard 
+                                                        item={item} 
+                                                        isWinner={isWinner}
+                                                        isLowest={lowestPriceItem ? item.id === lowestPriceItem.id : false}
+                                                        onSelect={() => handleSelectWinner(baseProduct.id, item.id)}
+                                                        onDelete={() => deletePurchaseItem(item.id)}
+                                                        canConfirm={session.status === 'open'}
+                                                    />
+                                                </div>
+                                            )
+                                        })}
                                     </div>
+                                ) : (
+                                    <p className="text-sm text-center text-muted-foreground">Nenhuma cotação adicionada para este item.</p>
                                 )}
-                                <AddPurchaseItem baseProductId={baseProduct.id} sessionId={session.id} />
+                                {session.status === 'open' && <AddPurchaseItem baseProductId={baseProduct.id} sessionId={session.id} />}
                             </div>
                         )
                     })}
                 </CardContent>
-                <CardFooter className="bg-muted/50 border-t p-4 flex justify-end">
-                    <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0}>
-                        <Check className="mr-2 h-4 w-4"/> Finalizar e Efetivar Compra
-                    </Button>
-                </CardFooter>
+                {session.status === 'open' && (
+                    <CardFooter className="bg-background/80 backdrop-blur-sm border-t p-4 flex justify-between items-center sticky bottom-0 z-10">
+                        <div>
+                            <p className="text-sm font-semibold">Total Selecionado</p>
+                            <p className="text-2xl font-bold text-primary">{formatCurrency(totalPurchaseValue)}</p>
+                        </div>
+                        <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0 || loading}>
+                            <Check className="mr-2 h-4 w-4"/> Finalizar e Efetivar Compra
+                        </Button>
+                    </CardFooter>
+                )}
             </Card>
 
             <DeleteConfirmationDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen} onConfirm={handleDelete} itemName={`a sessão de cotação "${session.description}"`} />
         </>
     )
 }
-
-    
