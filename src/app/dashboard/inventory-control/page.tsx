@@ -27,20 +27,19 @@ function InventoryControlContent() {
     return (
         <>
             <div className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                        <Button 
-                            onClick={() => router.push('/dashboard/stock')}
-                            variant="ghost"
-                            className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                            aria-label="Voltar para gestão de estoque"
-                        >
-                            <ArrowLeft className="w-6 h-6" />
-                        </Button>
-                        <div>
-                            <h1 className="text-3xl font-bold">Controle de Estoque</h1>
-                            <p className="text-sm text-muted-foreground">Monitore validades, adicione lotes e faça movimentações.</p>
-                        </div>
+                <div className="mb-4">
+                    <Button 
+                        onClick={() => router.push('/dashboard/stock')}
+                        variant="outline"
+                    >
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Voltar para gestão de estoque
+                    </Button>
+                </div>
+                <div className="flex justify-between items-start mb-6">
+                    <div className="space-y-1">
+                        <h1 className="text-3xl font-bold">Controle de Estoque</h1>
+                        <p className="text-sm text-muted-foreground">Monitore validades, adicione lotes e faça movimentações.</p>
                     </div>
                     
                     <DropdownMenu>
