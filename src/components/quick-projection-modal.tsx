@@ -38,6 +38,13 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
 
   const [coverageMonths, setCoverageMonths] = useState(baseProduct.consumptionMonths || 1);
 
+   const formatNumber = (value: number) => {
+    if (Number.isInteger(value)) {
+      return value.toLocaleString('pt-BR');
+    }
+    return value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  };
+
   const projection = useMemo(() => {
     const productMap = new Map(products.map(p => [p.id, p]));
     
@@ -105,6 +112,21 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
         const daysOfNewStock = Math.floor(suggestedOrderQty / dailyAvg);
         finalConsumptionDate = addDays(ruptureDate, daysOfNewStock);
     }
+    
+    const representativeProduct = products.find(p => p.baseProductId === baseProduct.id);
+    let logisticInfo = null;
+
+    if (representativeProduct && representativeProduct.multiplo_caixa && representativeProduct.rotulo_caixa) {
+        const unitsPerPackage = convertValue(representativeProduct.packageSize, representativeProduct.unit, baseProduct.unit, representativeProduct.category);
+        if (unitsPerPackage > 0) {
+            const packagesNeeded = suggestedOrderQty / unitsPerPackage;
+            const boxesNeeded = packagesNeeded / representativeProduct.multiplo_caixa;
+            logisticInfo = {
+                quantity: boxesNeeded,
+                label: representativeProduct.rotulo_caixa,
+            };
+        }
+    }
 
     return {
       dailyAvg,
@@ -119,6 +141,7 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
       leadTime,
       suggestedOrderQty,
       finalConsumptionDate,
+      logisticInfo,
     };
   }, [baseProduct, lots, products, consumptionHistory, coverageMonths]);
 
@@ -128,7 +151,7 @@ Projeção para ${baseProduct.name}:
 - Status do Pedido: ${projection.orderStatus.toUpperCase()}
 - Data Ideal do Pedido: ${projection.orderDate ? format(projection.orderDate, 'dd/MM/yyyy') : 'N/A'}
 - Data de Ruptura: ${projection.ruptureDate ? format(projection.ruptureDate, 'dd/MM/yyyy') : 'N/A'}
-- Sugestão de Compra: ${projection.suggestedOrderQty.toFixed(0)} ${baseProduct.unit} (para ${coverageMonths} meses)
+- Sugestão de Compra: ${formatNumber(projection.suggestedOrderQty)} ${baseProduct.unit} (para ${coverageMonths} meses)
     `;
     navigator.clipboard.writeText(summary.trim());
     toast({ title: 'Resumo copiado!' });
@@ -161,8 +184,8 @@ Projeção para ${baseProduct.name}:
         <div className="space-y-4 py-4">
             <Card className="bg-muted/50">
                 <CardContent className="p-3 grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Estoque atual: <strong>{projection.totalStock.toFixed(1)} {baseProduct.unit}</strong></span></div>
-                    <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Média diária: <strong>{projection.dailyAvg.toFixed(1)} {baseProduct.unit}</strong></span></div>
+                    <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Estoque atual: <strong>{formatNumber(projection.totalStock)} {baseProduct.unit}</strong></span></div>
+                    <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Média diária: <strong>{formatNumber(projection.dailyAvg)} {baseProduct.unit}</strong></span></div>
                     <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Cobertura: <strong>{isFinite(projection.daysOfCoverage) ? `${projection.daysOfCoverage} dias` : 'N/A'}</strong></span></div>
                     <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Lead Time: <strong>{projection.leadTime || 0} dias</strong></span></div>
                 </CardContent>
@@ -183,7 +206,12 @@ Projeção para ${baseProduct.name}:
                         <CardTitle className="text-base flex items-center justify-between">Quanto Pedir?</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-0 space-y-2">
-                        <div className="flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-primary" /><span className="font-semibold text-xl">{projection.suggestedOrderQty.toFixed(0)} {baseProduct.unit}</span></div>
+                        <div className="flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-primary" /><span className="font-semibold text-xl">{formatNumber(projection.suggestedOrderQty)} {baseProduct.unit}</span></div>
+                        {projection.logisticInfo && (
+                            <p className="text-xs text-muted-foreground pt-1">
+                                (equivale a ~{formatNumber(projection.logisticInfo.quantity)} {projection.logisticInfo.label}(s))
+                            </p>
+                        )}
                         <div className="text-sm">Para cobrir {coverageMonths} mês(es) de consumo.</div>
                         {projection.finalConsumptionDate && (
                             <div className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" /><span>Consumo até: {format(projection.finalConsumptionDate, 'dd/MM/yyyy')}</span></div>
