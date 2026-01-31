@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, ReactNode, useEffect } from 'react';
@@ -20,55 +21,49 @@ interface RadialMenuProps {
 export function RadialMenu({ items }: RadialMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const itemCount = items.length;
-  // Spread items over a 90-degree arc centered on the left
-  const arc = 90; 
-  const angleStep = itemCount > 1 ? arc / (itemCount - 1) : 0;
-  const radius = 80; // Reduced radius
-
+  
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   const menuContent = (
     <div className="fixed bottom-8 right-8 z-50">
-      <div className="relative flex items-center justify-center">
-        <TooltipProvider>
-        {items.map((item, index) => {
-          // Start angle at -225 degrees (bottom-left) and go up to -135 (top-left)
-          const angle = -225 + (angleStep * index);
-          const x = radius * Math.cos((angle * Math.PI) / 180);
-          const y = radius * Math.sin((angle * Math.PI) / 180);
-
-          return (
-            <Tooltip key={index}>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  className={cn(
-                    "absolute rounded-full w-11 h-11 shadow-lg transition-all duration-300 ease-in-out", // Reduced size
-                    isOpen
-                      ? "opacity-100"
-                      : "opacity-0 scale-50 pointer-events-none"
-                  )}
-                  style={{
-                    transform: isOpen ? `translate(${x}px, ${y}px)` : 'translate(0,0)',
-                  }}
-                  onClick={() => {
-                    item.onClick();
-                    setIsOpen(false);
-                  }}
-                >
-                  {item.icon}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                <p>{item.label}</p>
-              </TooltipContent>
-            </Tooltip>
-          );
-        })}
-        </TooltipProvider>
+      <div className="relative flex flex-col items-center gap-3">
+        
+        <div className="flex flex-col-reverse items-center gap-3">
+          <TooltipProvider>
+            {items.map((item, index) => (
+              <div
+                key={index}
+                className={cn(
+                  "transition-all duration-300 ease-in-out",
+                  isOpen
+                    ? "opacity-100 translate-y-0"
+                    : "opacity-0 translate-y-4 pointer-events-none"
+                )}
+                style={{ transitionDelay: `${isOpen ? index * 40 : (items.length - index - 1) * 40}ms` }}
+              >
+                <Tooltip delayDuration={100}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      className="rounded-full w-12 h-12 shadow-lg bg-background/80 backdrop-blur-md border border-white/20 hover:bg-muted"
+                      onClick={() => {
+                        item.onClick();
+                        setIsOpen(false);
+                      }}
+                    >
+                      {item.icon}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">
+                    <p>{item.label}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            ))}
+          </TooltipProvider>
+        </div>
 
         <Button
           size="icon"
@@ -82,7 +77,7 @@ export function RadialMenu({ items }: RadialMenuProps) {
       </div>
     </div>
   );
-
+  
   if (isMounted && typeof document !== 'undefined') {
     return createPortal(menuContent, document.body);
   }
