@@ -31,23 +31,22 @@ export default function RepositionHubPage() {
     };
     
     return (
-        <div className="w-full space-y-8">
-            <div className="flex items-center gap-4 mb-4">
+        <div className="w-full space-y-6">
+            <div className="mb-4">
                 <Button 
                     onClick={() => router.push('/dashboard/stock')}
-                    variant="ghost"
-                    className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                    aria-label="Voltar para gestão de estoque"
+                    variant="outline"
                 >
-                    <ArrowLeft className="w-6 h-6" />
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Voltar para gestão de estoque
                 </Button>
-                <div>
-                    <h1 className="text-3xl font-bold">Reposição de Estoque</h1>
-                    <p className="text-sm text-muted-foreground">Inicie uma nova reposição ou gerencie atividades em andamento.</p>
-                </div>
+            </div>
+            <div className="space-y-1">
+                <h1 className="text-3xl font-bold">Reposição de Estoque</h1>
+                <p className="text-sm text-muted-foreground">Inicie uma nova reposição ou gerencie atividades em andamento.</p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4">
                 {permissions.stock.analysis.restock && (
                     <Card className="flex flex-col">
                         <CardHeader>
