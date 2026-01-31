@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef } from 'react';
@@ -12,6 +11,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { PlusCircle } from 'lucide-react';
+import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/form';
 
 const addItemSchema = z.object({
   productId: z.string().min(1, "O insumo é obrigatório."),
@@ -41,6 +41,23 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
             priceInputRef.current?.focus();
         }, 100);
     }
+    
+    const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
+        const value = e.target.value;
+        const digitsOnly = value.replace(/\D/g, '');
+        if (digitsOnly === '') {
+            field.onChange(undefined);
+            return;
+        }
+
+        const numericValue = parseInt(digitsOnly, 10) / 100;
+        field.onChange(numericValue);
+    };
+
+    const formatPrice = (value: number | undefined) => {
+        if (value === undefined || value === null) return '';
+        return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
 
     const onSubmit = async (values: FormValues) => {
         await savePrice(null, { ...values, sessionId });
@@ -53,21 +70,62 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
     }
 
     return (
-        <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end mt-2 p-2 border-t">
-            <Select onValueChange={val => form.setValue('productId', val)}>
-                <SelectTrigger><SelectValue placeholder="Selecione o insumo..." /></SelectTrigger>
-                <SelectContent>
-                    {productsForBase.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
-                </SelectContent>
-            </Select>
-            <Select onValueChange={val => form.setValue('entityId', val)}>
-                <SelectTrigger><SelectValue placeholder="Fornecedor..." /></SelectTrigger>
-                <SelectContent>
-                    {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                </SelectContent>
-            </Select>
-            <Input type="number" placeholder="Preço" {...form.register('price')} step="0.01" ref={priceInputRef} />
-            <Button type="submit">Salvar</Button>
-        </form>
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end mt-2 p-2 border-t">
+                <FormField
+                    control={form.control}
+                    name="productId"
+                    render={({ field }) => (
+                        <FormItem>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Selecione o insumo..." /></SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {productsForBase.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage/>
+                        </FormItem>
+                    )}
+                />
+                 <FormField
+                    control={form.control}
+                    name="entityId"
+                    render={({ field }) => (
+                         <FormItem>
+                         <Select onValueChange={field.onChange} value={field.value}>
+                             <FormControl>
+                             <SelectTrigger><SelectValue placeholder="Fornecedor..." /></SelectTrigger>
+                             </FormControl>
+                             <SelectContent>
+                                 {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                             </SelectContent>
+                         </Select>
+                         <FormMessage/>
+                         </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="price"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormControl>
+                        <Input
+                            type="text"
+                            placeholder="Preço (R$)"
+                            value={formatPrice(field.value)}
+                            onChange={(e) => handlePriceChange(e, field)}
+                            ref={priceInputRef}
+                        />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                <Button type="submit">Salvar</Button>
+            </form>
+        </Form>
     );
 }
