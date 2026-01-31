@@ -37,7 +37,7 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete }: { item
     return (
         <div
             className={cn(
-                "border rounded-lg p-3 cursor-pointer transition-all duration-300 relative group",
+                "border rounded-lg p-3 transition-all duration-300 relative group",
                 isWinner ? 'border-2 border-primary shadow-lg' : 'border-border hover:border-muted-foreground',
                 isLowest && !isWinner && 'border-dashed border-green-500'
             )}
@@ -204,6 +204,13 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
             baseProductIds: arrayUnion(baseProductId)
         });
     };
+    
+    const handleRemoveBaseProduct = async (baseProductIdToRemove: string) => {
+        if (!session.baseProductIds) return;
+        const newBaseProductIds = session.baseProductIds.filter(id => id !== baseProductIdToRemove);
+        await updateSession(session.id, { baseProductIds: newBaseProductIds });
+    };
+
 
     if (session.status === 'closed') {
         return (
@@ -256,7 +263,13 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                         
                         return (
                             <div key={baseProduct.id} className={'p-4 border rounded-lg space-y-3'}>
-                                <h3 className="font-semibold">{baseProduct.name}</h3>
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-semibold">{baseProduct.name}</h3>
+                                    <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => handleRemoveBaseProduct(baseProduct.id)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                
                                 {items.length > 0 && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                         {items.map((item) => (
@@ -287,3 +300,5 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
         </>
     )
 }
+
+    
