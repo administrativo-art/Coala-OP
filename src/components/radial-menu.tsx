@@ -21,10 +21,10 @@ export function RadialMenu({ items }: RadialMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const itemCount = items.length;
-  // Spread items over a 120-degree arc instead of a full circle
-  const arc = 120; 
+  // Spread items over a 90-degree arc centered on the left
+  const arc = 90; 
   const angleStep = itemCount > 1 ? arc / (itemCount - 1) : 0;
-  const radius = 90; // in pixels
+  const radius = 80; // Reduced radius
 
   useEffect(() => {
     setIsMounted(true);
@@ -35,8 +35,8 @@ export function RadialMenu({ items }: RadialMenuProps) {
       <div className="relative flex items-center justify-center">
         <TooltipProvider>
         {items.map((item, index) => {
-          // Start angle at -150 degrees (bottom-left) and go up to -30 (bottom-right)
-          const angle = -150 + (angleStep * index);
+          // Start angle at -225 degrees (bottom-left) and go up to -135 (top-left)
+          const angle = -225 + (angleStep * index);
           const x = radius * Math.cos((angle * Math.PI) / 180);
           const y = radius * Math.sin((angle * Math.PI) / 180);
 
@@ -46,7 +46,7 @@ export function RadialMenu({ items }: RadialMenuProps) {
                 <Button
                   size="icon"
                   className={cn(
-                    "absolute rounded-full w-12 h-12 shadow-lg transition-all duration-300 ease-in-out",
+                    "absolute rounded-full w-11 h-11 shadow-lg transition-all duration-300 ease-in-out", // Reduced size
                     isOpen
                       ? "opacity-100"
                       : "opacity-0 scale-50 pointer-events-none"
@@ -62,7 +62,7 @@ export function RadialMenu({ items }: RadialMenuProps) {
                   {item.icon}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">
+              <TooltipContent side="left">
                 <p>{item.label}</p>
               </TooltipContent>
             </Tooltip>
