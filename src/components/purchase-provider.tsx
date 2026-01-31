@@ -16,7 +16,7 @@ export interface PurchaseContextType {
   items: PurchaseItem[];
   priceHistory: PriceHistoryEntry[];
   loading: boolean;
-  addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'closedAt' | 'entityId'>) => Promise<void>;
+  addSession: (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'closedAt' | 'entityId'>) => Promise<string | null>;
   closeSession: (sessionId: string, confirmedItemIds: string[]) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   savePrice: (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => Promise<void>;
@@ -99,7 +99,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
      const addSession = useCallback(async (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'closedAt' | 'entityId'>) => {
-        if (!user) return;
+        if (!user) return null;
         const { entityId, ...restOfData } = data as any; 
         const newSession: Omit<PurchaseSession, 'id' | 'entityId' | 'closedAt' | 'confirmedItemIds'> = {
             ...restOfData,
@@ -108,9 +108,11 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             createdAt: new Date().toISOString(),
         };
         try {
-            await addDoc(collection(db, "purchaseSessions"), newSession);
+            const docRef = await addDoc(collection(db, "purchaseSessions"), newSession);
+            return docRef.id;
         } catch (error) {
             console.error("Error adding purchase session:", error);
+            return null;
         }
     }, [user]);
 
