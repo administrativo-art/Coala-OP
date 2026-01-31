@@ -47,7 +47,7 @@ export function RadialMenu({ items }: RadialMenuProps) {
                   <TooltipTrigger asChild>
                     <Button
                       size="icon"
-                      className="rounded-full w-12 h-12 shadow-lg bg-background/80 backdrop-blur-md border border-white/20 hover:bg-muted"
+                      className="rounded-full w-12 h-12 shadow-lg bg-destructive/10 backdrop-blur-md border border-destructive/20 hover:bg-destructive/20 text-destructive"
                       onClick={() => {
                         item.onClick();
                         setIsOpen(false);
