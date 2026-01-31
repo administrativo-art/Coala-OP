@@ -313,7 +313,7 @@ export type PermissionSet = {
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; impersonate: boolean; };
   tasks: { view: boolean; manage: boolean; };
-  help: { view: boolean; };
+  help: { view: true };
   reposition: { cancel: boolean; };
   // itemRequests is now managed under stock.stockCount
   itemRequests: { add: boolean; approve: boolean; };
@@ -532,6 +532,7 @@ export type PurchaseSession = {
   entityId?: string;
   baseProductIds: string[];
   confirmedItemIds?: string[]; // Array of PurchaseItem IDs that were bought
+  valor_total_estimado?: number;
   type: 'manual' | 'automatic';
   status: 'open' | 'closed';
   createdAt: string; // ISO String
@@ -640,7 +641,7 @@ export const defaultGuestPermissions: PermissionSet = {
       purchasing: { view: false, suggest: false, approve: false, deleteHistory: false }, 
       returns: { view: false, add: false, updateStatus: false, delete: false }, 
       conversions: { view: false }, 
-      predefinedLists: { view: false, manage: false }
+      predefinedLists: { view: true, manage: true }
     },
     pricing: { view: false, simulate: false, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, impersonate: false },

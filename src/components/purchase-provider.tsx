@@ -5,8 +5,11 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type PurchaseItem, type PriceHistoryEntry, type PurchaseSession, type BaseProduct } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch, deleteDoc, runTransaction, increment } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
+import { useProducts } from '@/hooks/use-products';
+import { useBaseProducts } from '@/hooks/use-base-products';
+import { convertValue } from '@/lib/conversion';
 
 export interface PurchaseContextType {
   sessions: PurchaseSession[];
@@ -18,7 +21,6 @@ export interface PurchaseContextType {
   deleteSession: (sessionId: string) => Promise<void>;
   savePrice: (itemId: string | null, data: Partial<Omit<PurchaseItem, 'id'>>) => Promise<void>;
   deletePurchaseItem: (itemId: string) => Promise<void>;
-  confirmPurchase: (itemId: string, baseProductId: string, pricePerUnit: number) => Promise<void>;
   deletePriceHistoryEntry: (historyId: string) => Promise<void>;
 }
 
@@ -26,11 +28,43 @@ export const PurchaseContext = createContext<PurchaseContextType | undefined>(un
 
 export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
+    const { products } = useProducts();
+    const { baseProducts } = useBaseProducts();
     
     const [sessions, setSessions] = useState<PurchaseSession[]>([]);
     const [items, setItems] = useState<PurchaseItem[]>([]);
     const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const findPricePerUnit = useCallback((item: PurchaseItem): number | null => {
+        const product = products.find(p => p.id === item.productId);
+        const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
+    
+        if (!product || !baseProduct || !item.price || item.price <= 0) {
+            return null;
+        }
+    
+        try {
+            if (baseProduct.category === 'Unidade') {
+                if (product.packageSize > 0) {
+                    return item.price / product.packageSize;
+                }
+            }
+
+            if (product.category === baseProduct.category) {
+                const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+                 if (quantityInBaseUnit > 0) {
+                    return item.price / quantityInBaseUnit;
+                }
+            }
+            return null;
+        } catch (e) {
+            console.error(`Error calculating price per unit for item ${item.id} (${product.baseName}):`, e);
+            return null;
+        }
+    
+        return null;
+    }, [products, baseProducts]);
 
     useEffect(() => {
         const qSessions = query(collection(db, "purchaseSessions"));
@@ -81,16 +115,61 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     }, [user]);
 
     const closeSession = useCallback(async (sessionId: string, confirmedItemIds: string[]) => {
-        try {
-            await updateDoc(doc(db, "purchaseSessions", sessionId), {
+        if (!user) throw new Error("Usuário não autenticado.");
+    
+        const sessionRef = doc(db, "purchaseSessions", sessionId);
+        
+        await runTransaction(db, async (transaction) => {
+            const itemsQuery = query(collection(db, "purchaseItems"), where("sessionId", "==", sessionId));
+            const itemsSnapshot = await getDocs(itemsQuery);
+            const sessionItems = itemsSnapshot.docs.map(d => ({id: d.id, ...d.data()} as PurchaseItem));
+    
+            let totalValue = 0;
+    
+            for (const itemId of confirmedItemIds) {
+                const item = sessionItems.find(i => i.id === itemId);
+                if (!item) continue;
+                
+                transaction.update(doc(db, "purchaseItems", itemId), { isConfirmed: true });
+    
+                const product = products.find(p => p.id === item.productId);
+                if (!product || !product.baseProductId) continue;
+                
+                const baseProduct = baseProducts.find(bp => bp.id === product.baseProductId);
+                if (!baseProduct) continue;
+    
+                const pricePerUnit = findPricePerUnit(item);
+                if (pricePerUnit === null) continue;
+                
+                totalValue += item.price;
+    
+                const historyEntry: Omit<PriceHistoryEntry, 'id'> = {
+                    baseProductId: baseProduct.id,
+                    productId: item.productId,
+                    pricePerUnit,
+                    entityId: item.entityId || 'N/A',
+                    confirmedBy: user.id,
+                    confirmedAt: new Date().toISOString(),
+                };
+                transaction.set(doc(collection(db, "priceHistory")), historyEntry);
+    
+                transaction.update(doc(db, "baseProducts", baseProduct.id), { lastEffectivePrice: historyEntry });
+            }
+            
+            for (const item of sessionItems) {
+                if (!confirmedItemIds.includes(item.id)) {
+                    transaction.update(doc(db, "purchaseItems", item.id), { isConfirmed: false });
+                }
+            }
+    
+            transaction.update(sessionRef, {
                 status: 'closed',
                 closedAt: new Date().toISOString(),
-                confirmedItemIds: confirmedItemIds
+                confirmedItemIds: confirmedItemIds,
+                valor_total_estimado: totalValue,
             });
-        } catch (error) {
-            console.error("Error closing session:", error);
-        }
-    }, []);
+        });
+    }, [user, products, baseProducts, findPricePerUnit]);
 
     const deleteSession = useCallback(async (sessionId: string) => {
         try {
@@ -117,6 +196,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                 const newItem: Omit<PurchaseItem, 'id'> = {
                     sessionId: data.sessionId!,
                     productId: data.productId!,
+                    entityId: data.entityId,
                     price: data.price || 0,
                     isConfirmed: false,
                     createdAt: new Date().toISOString(),
@@ -135,46 +215,6 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             console.error("Error deleting purchase item:", error);
         }
     }, []);
-
-
-    const confirmPurchase = useCallback(async (itemId: string, baseProductId: string, pricePerUnit: number) => {
-        if (!user) return;
-        const itemToConfirm = items.find(i => i.id === itemId);
-        if (!itemToConfirm) return;
-        
-        const session = sessions.find(s => s.id === itemToConfirm.sessionId);
-
-        try {
-            const batch = writeBatch(db);
-            const now = new Date().toISOString();
-            
-            const itemRef = doc(db, "purchaseItems", itemId);
-            batch.update(itemRef, {
-                isConfirmed: true,
-                confirmedBy: user.id,
-                confirmedAt: now,
-            });
-            
-            const historyRef = doc(collection(db, "priceHistory"));
-            const historyEntry: Omit<PriceHistoryEntry, 'id'> = {
-                baseProductId: baseProductId,
-                productId: itemToConfirm.productId,
-                pricePerUnit: pricePerUnit,
-                entityId: itemToConfirm.entityId || session?.entityId || 'automatic',
-                confirmedBy: user.id,
-                confirmedAt: now,
-            };
-            batch.set(historyRef, historyEntry);
-
-            const baseProductRef = doc(db, "baseProducts", baseProductId);
-            batch.update(baseProductRef, { lastEffectivePrice: historyEntry });
-            
-            await batch.commit();
-
-        } catch (error) {
-            console.error("Error confirming purchase:", error);
-        }
-    }, [user, items, sessions]);
     
     const deletePriceHistoryEntry = useCallback(async (historyId: string) => {
         try {
@@ -194,9 +234,8 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
         deleteSession,
         savePrice,
         deletePurchaseItem,
-        confirmPurchase,
         deletePriceHistoryEntry,
-    }), [sessions, items, priceHistory, loading, addSession, closeSession, deleteSession, savePrice, deletePurchaseItem, confirmPurchase, deletePriceHistoryEntry]);
+    }), [sessions, items, priceHistory, loading, addSession, closeSession, deleteSession, savePrice, deletePurchaseItem, deletePriceHistoryEntry]);
 
     return <PurchaseContext.Provider value={value}>{children}</PurchaseContext.Provider>;
 }

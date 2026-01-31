@@ -113,6 +113,10 @@
         -ms-overflow-style: none;  /* IE and Edge */
         scrollbar-width: none;  /* Firefox */
     }
+    .winner-group .ghost-card {
+        opacity: 0.4;
+        filter: grayscale(100%);
+    }
 }
 
 @keyframes pulse-once {

@@ -5,221 +5,196 @@ import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { useEntities } from "@/hooks/use-entities";
 import { usePurchase } from "@/hooks/use-purchase";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
-import { type PurchaseSession, type PurchaseItem } from "@/types";
-import { Building, Calendar, ShoppingCart, User, Trash2, Download } from 'lucide-react';
+import { type PurchaseSession, type PurchaseItem, type BaseProduct, type Product } from "@/types";
+import { Building, Calendar, ShoppingCart, User, Trash2, Download, PlusCircle, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { convertValue } from '@/lib/conversion';
-import { PriceComparisonTable } from './price-comparison-table';
+import { AddPurchaseItem } from './add-purchase-item';
+import { cn } from '@/lib/utils';
+import { Skeleton } from './ui/skeleton';
 
 interface PurchaseSessionCardProps {
     session: PurchaseSession;
 }
 
-export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
-    const { users } = useAuth();
+const formatCurrency = (value: number) => {
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+function BidCard({ item, product, baseProduct, isWinner, isLowest, onSelect }: { item: PurchaseItem, product: Product, baseProduct: BaseProduct, isWinner: boolean, isLowest: boolean, onSelect: () => void }) {
     const { entities } = useEntities();
-    const { baseProducts } = useBaseProducts();
-    const { items: purchaseItems, closeSession, deleteSession, confirmPurchase } = usePurchase();
-    const { products, getProductFullName } = useProducts();
-    const { toast } = useToast();
-    
-    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set(session.confirmedItemIds || []));
+    const entity = entities.find(e => e.id === item.entityId);
 
-    const entity = useMemo(() => entities.find(e => e.id === session.entityId), [session.entityId, entities]);
-    const user = useMemo(() => users.find(u => u.id === session.userId), [session.userId, users]);
-    const sessionItems = useMemo(() => purchaseItems.filter(i => i.sessionId === session.id), [session.id, purchaseItems]);
-
-    const sessionBaseProducts = useMemo(() => {
-        return baseProducts
-            .filter(bp => session.baseProductIds.includes(bp.id))
-            .sort((a,b) => a.name.localeCompare(b.name));
-    }, [session.baseProductIds, baseProducts]);
-    
-    const isSessionClosed = session.status === 'closed';
-
-    const handleDeleteSession = async () => {
-        await deleteSession(session.id);
-        setIsDeleteConfirmOpen(false);
-    };
-
-    const handleSelectionChange = (itemId: string, isSelected: boolean) => {
-        setSelectedItems(prev => {
-            const newSet = new Set(prev);
-            if (isSelected) {
-                newSet.add(itemId);
-            } else {
-                newSet.delete(itemId);
-            }
-            return newSet;
-        });
-    };
-
-    const findPricePerUnit = (item: PurchaseItem): number | null => {
-        const product = products.find(p => p.id === item.productId);
-        const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
-    
-        if (!product || !baseProduct || !item.price || item.price <= 0) {
-            return null;
-        }
-    
+    const pricePerUnit = useMemo(() => {
+        if (!product || !baseProduct || !item.price || item.price <= 0) return null;
         try {
-            // Case 1: Secondary unit is the most direct source of truth for quantity.
-            if (product.secondaryUnit && typeof product.secondaryUnitValue === 'number' && product.secondaryUnitValue > 0) {
-                return item.price / product.secondaryUnitValue;
-            }
-            
-            // Case 2: Base product is measured in 'Unidade'. The package size is the quantity.
             if (baseProduct.category === 'Unidade') {
                 if (product.packageSize > 0) {
                     return item.price / product.packageSize;
                 }
             }
 
-            // Case 3: Standard conversion for other matching categories (Volume, Massa).
             if (product.category === baseProduct.category) {
                 const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
                  if (quantityInBaseUnit > 0) {
                     return item.price / quantityInBaseUnit;
                 }
             }
-        } catch (e) {
-            console.error(`Error calculating price per unit for item ${item.id} (${product.baseName}):`, e);
             return null;
-        }
-    
-        return null;
-    };
-    
-    const handleExportPdf = () => {
-        alert("A exportação de PDF está em manutenção.");
-    };
+        } catch { return null; }
+    }, [item, product, baseProduct]);
 
-    const finalizePurchase = async (downloadPdf: boolean) => {
-        let confirmedCount = 0;
-        if (selectedItems.size > 0) {
-            for (const itemId of selectedItems) {
-                const item = purchaseItems.find(i => i.id === itemId);
-                if (!item) continue;
-                
-                const product = products.find(p => p.id === item.productId);
-                const baseProductId = product?.baseProductId;
-                if (!baseProductId) continue;
-                
-                const pricePerUnit = findPricePerUnit(item);
-                if (pricePerUnit !== null) {
-                    await confirmPurchase(itemId, baseProductId, pricePerUnit);
-                    confirmedCount++;
-                }
+    return (
+        <div
+            className={cn(
+                "border rounded-lg p-3 cursor-pointer transition-all duration-300 relative",
+                isWinner ? 'border-2 border-primary shadow-lg' : 'border-border hover:border-muted-foreground',
+                isLowest && !isWinner && 'border-dashed border-green-500',
+                !isWinner && 'ghost-card'
+            )}
+            onClick={onSelect}
+        >
+            <div className="flex justify-between items-start">
+                <div>
+                    <p className="font-semibold text-sm">{entity?.name || 'Fornecedor não informado'}</p>
+                    <p className="text-xs text-muted-foreground">{getProductFullName(product)}</p>
+                </div>
+                <div className="text-right">
+                    <p className="font-bold text-lg">{formatCurrency(item.price)}</p>
+                    {pricePerUnit !== null && <p className="text-xs text-muted-foreground">{formatCurrency(pricePerUnit)} / {baseProduct.unit}</p>}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
+    const { user, users } = useAuth();
+    const { entities } = useEntities();
+    const { baseProducts } = useBaseProducts();
+    const { items: allPurchaseItems, closeSession, deleteSession, loading: purchaseLoading } = usePurchase();
+    const { products, getProductFullName, loading: productsLoading } = useProducts();
+    const { toast } = useToast();
+    
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [winners, setWinners] = useState<Record<string, string>>({}); // {[baseProductId]: purchaseItemId}
+
+    const sessionItems = useMemo(() => allPurchaseItems.filter(i => i.sessionId === session.id), [session.id, allPurchaseItems]);
+    const loading = purchaseLoading || productsLoading;
+
+    const itemsByBaseProduct = useMemo(() => {
+        const grouped: Record<string, { baseProduct: BaseProduct, items: { item: PurchaseItem, product: Product }[] }> = {};
+        sessionItems.forEach(item => {
+            const product = products.find(p => p.id === item.productId);
+            if (!product || !product.baseProductId) return;
+            const baseProduct = baseProducts.find(bp => bp.id === product.baseProductId);
+            if (!baseProduct) return;
+            
+            if (!grouped[baseProduct.id]) {
+                grouped[baseProduct.id] = { baseProduct, items: [] };
             }
-        }
-        
-        await closeSession(session.id, Array.from(selectedItems));
-
-        toast({
-            title: "Sessão de compra finalizada!",
-            description: selectedItems.size > 0 
-                ? `${confirmedCount} item(s) tiveram seus preços efetivados.`
-                : 'A pesquisa de preços foi salva no histórico.'
+            grouped[baseProduct.id].items.push({ item, product });
         });
-
-        if (downloadPdf) {
-            handleExportPdf();
-        }
-
-        setSelectedItems(new Set());
-        setIsConfirmModalOpen(false);
+        return Object.values(grouped).sort((a,b) => a.baseProduct.name.localeCompare(b.baseProduct.name));
+    }, [sessionItems, products, baseProducts]);
+    
+    const handleSelectWinner = (baseProductId: string, purchaseItemId: string) => {
+        setWinners(prev => ({
+            ...prev,
+            [baseProductId]: purchaseItemId
+        }));
+    };
+    
+    const handleFinalize = async () => {
+        await closeSession(session.id, Object.values(winners));
+        toast({ title: "Sessão de compra finalizada!", description: `${Object.keys(winners).length} item(s) tiveram seus preços efetivados.` });
     };
 
-    const handleSaveAndFinalize = () => {
-        if (selectedItems.size > 0) {
-            setIsConfirmModalOpen(true);
-        } else {
-            finalizePurchase(false);
-        }
-    };
+    const handleDelete = async () => {
+        await deleteSession(session.id);
+        setIsDeleteConfirmOpen(false);
+    }
+    
+    const sessionUser = useMemo(() => users.find(u => u.id === session.userId), [session.userId, users]);
+    
+    if (session.status === 'closed') {
+        // Render history card
+        return (
+             <Card className="bg-muted/50">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base text-muted-foreground"><ShoppingCart /> {session.description}</CardTitle>
+                    <CardDescription className="text-xs mt-1">
+                        Fechada por {sessionUser?.username} em {session.closedAt ? format(new Date(session.closedAt), 'dd/MM/yyyy') : ''}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-sm">Total da Compra: <span className="font-bold">{formatCurrency(session.valor_total_estimado || 0)}</span></p>
+                    <p className="text-sm">{session.confirmedItemIds?.length || 0} item(s) efetivados.</p>
+                </CardContent>
+            </Card>
+        )
+    }
 
     return (
         <>
-            <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value={session.id} className="border rounded-lg">
-                <Card className={isSessionClosed ? 'bg-muted/50' : ''}>
-                    <CardHeader>
-                        <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
-                             <AccordionTrigger className="p-0 hover:no-underline flex-1 text-left">
-                                <div>
-                                    <CardTitle className="flex items-center gap-2"><ShoppingCart /> {session.description}</CardTitle>
-                                    <CardDescription className="mt-2 space-y-1 text-xs">
-                                        {entity && <p className="flex items-center gap-1.5"><Building className="h-3 w-3" /> Fornecedor: <strong>{entity?.name}</strong></p>}
-                                        <p className="flex items-center gap-1.5"><Calendar className="h-3 w-3" /> Criado em: {format(new Date(session.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
-                                        <p className="flex items-center gap-1.5"><User className="h-3 w-3" /> Por: {user?.username || 'Desconhecido'}</p>
-                                        {isSessionClosed && session.closedAt && (
-                                            <p className="flex items-center gap-1.5 text-primary">Concluído em: {format(new Date(session.closedAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
-                                        )}
-                                    </CardDescription>
-                                </div>
-                             </AccordionTrigger>
-                            <div className="flex items-center">
-                                {isSessionClosed && session.confirmedItemIds && session.confirmedItemIds.length > 0 && (
-                                    <Button variant="outline" size="icon" onClick={handleExportPdf}>
-                                        <Download className="h-5 w-5"/>
-                                    </Button>
-                                )}
-                                <DeleteConfirmationDialog
-                                    open={isDeleteConfirmOpen}
-                                    onOpenChange={setIsDeleteConfirmOpen}
-                                    onConfirm={handleDeleteSession}
-                                    itemName={`a pesquisa "${session.description}"`}
-                                    description="Esta ação não pode ser desfeita. Todos os preços inseridos nesta pesquisa serão perdidos."
-                                    triggerButton={
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="text-destructive hover:text-destructive shrink-0"
-                                        >
-                                            <Trash2 className="h-5 w-5" />
-                                        </Button>
-                                    }
-                                />
-                            </div>
+            <Card className="overflow-hidden">
+                <CardHeader>
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <CardTitle className="flex items-center gap-2"><ShoppingCart /> {session.description}</CardTitle>
+                            <CardDescription className="text-xs mt-1">
+                                Por {sessionUser?.username} em {format(new Date(session.createdAt), 'dd/MM/yyyy')}
+                            </CardDescription>
                         </div>
-                    </CardHeader>
-                    <AccordionContent>
-                        <CardContent>
-                           {/* Content will be added here in a future request */}
-                        </CardContent>
-                        {!isSessionClosed && (
-                            <CardFooter className="border-t pt-4 justify-end">
-                                <Button onClick={handleSaveAndFinalize}>
-                                    <ShoppingCart className="mr-2 h-4 w-4" />
-                                    Salvar e Efetivar Compra ({selectedItems.size})
-                                </Button>
-                            </CardFooter>
-                        )}
-                    </AccordionContent>
-                </Card>
-            </AccordionItem>
-            </Accordion>
-            <DeleteConfirmationDialog
-                open={isConfirmModalOpen}
-                onOpenChange={setIsConfirmModalOpen}
-                onConfirm={() => finalizePurchase(true)}
-                onCancel={() => finalizePurchase(false)}
-                title="Emitir Ordem de Compra?"
-                description="Você efetivou a compra de um ou mais itens. Deseja baixar o PDF da ordem de compra agora?"
-                confirmButtonText="Sim, baixar PDF"
-                cancelButtonText="Não, apenas finalizar"
-                confirmButtonVariant="default"
-            />
+                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setIsDeleteConfirmOpen(true)}><Trash2 className="h-4 w-4"/></Button>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {loading ? <Skeleton className="h-48 w-full"/> : itemsByBaseProduct.map(({ baseProduct, items }) => {
+                        const lowestPriceItem = items.length > 0 ? items.reduce((lowest, current) => {
+                            return current.item.price < lowest.item.price ? current : lowest;
+                        }) : null;
+                        
+                        const hasWinner = !!winners[baseProduct.id];
+
+                        return (
+                            <div key={baseProduct.id} className={cn('p-4 border rounded-lg space-y-3', hasWinner && 'winner-group')}>
+                                <h3 className="font-semibold">{baseProduct.name}</h3>
+                                {items.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {items.map(({ item, product }) => (
+                                            <BidCard
+                                                key={item.id}
+                                                item={item}
+                                                product={product}
+                                                baseProduct={baseProduct}
+                                                isWinner={winners[baseProduct.id] === item.id}
+                                                isLowest={lowestPriceItem ? item.id === lowestPriceItem.item.id : false}
+                                                onSelect={() => handleSelectWinner(baseProduct.id, item.id)}
+                                            />
+                                        ))}
+                                    </div>
+                                ) : <p className="text-xs text-muted-foreground">Nenhuma cotação para este item ainda.</p>}
+                                <AddPurchaseItem baseProductId={baseProduct.id} sessionId={session.id} />
+                            </div>
+                        )
+                    })}
+                </CardContent>
+                <CardFooter className="bg-muted/50 border-t p-4 flex justify-end">
+                    <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0}>
+                        <Check className="mr-2 h-4 w-4"/> Finalizar e Efetivar Compra
+                    </Button>
+                </CardFooter>
+            </Card>
+
+            <DeleteConfirmationDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen} onConfirm={handleDelete} itemName={`a sessão de cotação "${session.description}"`} />
         </>
-    );
+    )
 }
