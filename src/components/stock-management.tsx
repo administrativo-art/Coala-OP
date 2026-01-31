@@ -91,7 +91,7 @@ export function StockManagement() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <BarChart3 className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Análise Estratégica</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Análise estratégica</CardTitle>
                         <CardDescription>Relatórios de consumo, projeção de estoque e avaliação financeira.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
