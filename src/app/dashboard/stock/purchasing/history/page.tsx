@@ -11,19 +11,17 @@ export default function PurchaseHistoryPage() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-4 mb-2">
+             <div className="mb-4">
                 <Button 
                     onClick={() => router.push('/dashboard/stock')}
-                    variant="ghost"
-                    className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                    aria-label="Voltar para gestão de estoque"
+                    variant="outline"
                 >
-                    <ArrowLeft className="w-6 h-6" />
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Voltar para gestão de estoque
                 </Button>
-                <div>
-                    <h1 className="text-3xl font-bold">Consultar histórico</h1>
-                    <p className="text-sm text-muted-foreground">Voltar para gestão de estoque</p>
-                </div>
+            </div>
+             <div className="space-y-1 mb-6">
+                <h1 className="text-3xl font-bold">Consultar histórico</h1>
             </div>
             <Card>
                 <CardHeader>
