@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -36,24 +35,17 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const findPricePerUnit = useCallback((item: PurchaseItem): number | null => {
-        const product = products.find(p => p.id === item.productId);
-        const baseProduct = baseProducts.find(bp => bp.id === product?.baseProductId);
-    
-        if (!product || !baseProduct || !item.price || item.price <= 0) {
-            return null;
-        }
-    
+    const findPricePerUnit = useCallback((item: PurchaseItem, product: Product, baseProduct: BaseProduct): number | null => {
+        if (!product || !baseProduct || !item.price || item.price <= 0) return null;
         try {
             if (baseProduct.category === 'Unidade') {
                 if (product.packageSize > 0) {
                     return item.price / product.packageSize;
                 }
             }
-
             if (product.category === baseProduct.category) {
                 const quantityInBaseUnit = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-                 if (quantityInBaseUnit > 0) {
+                if (quantityInBaseUnit > 0) {
                     return item.price / quantityInBaseUnit;
                 }
             }
@@ -145,7 +137,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                 const baseProduct = baseProducts.find(bp => bp.id === product.baseProductId);
                 if (!baseProduct) continue;
     
-                const pricePerUnit = findPricePerUnit(item);
+                const pricePerUnit = findPricePerUnit(item, product, baseProduct);
                 if (pricePerUnit === null) continue;
                 
                 totalValue += item.price;

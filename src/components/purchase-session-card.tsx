@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useState, useCallback } from 'react';
@@ -27,13 +26,20 @@ interface PurchaseSessionCardProps {
 }
 
 const formatCurrency = (value: number | null) => {
-    if (value === null || !value || isNaN(value)) return 'R$ 0,00';
+    if (value === null || !value || isNaN(value)) return '-';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-function PriceEntryCard({ item, onDelete }: { item: any, onDelete: () => void }) {
+function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete }: { item: any, isWinner: boolean, isLowest: boolean, onSelect: () => void, onDelete: () => void }) {
     return (
-        <div className="border rounded-lg p-3 relative group">
+        <div
+            className={cn(
+                "border rounded-lg p-3 cursor-pointer transition-all duration-300 relative group",
+                isWinner ? 'border-2 border-primary shadow-lg' : 'border-border hover:border-muted-foreground',
+                isLowest && !isWinner && 'border-dashed border-green-500'
+            )}
+            onClick={onSelect}
+        >
             <div className="flex justify-between items-start">
                 <div>
                     <p className="font-semibold text-sm">{item.entityName}</p>
@@ -46,7 +52,7 @@ function PriceEntryCard({ item, onDelete }: { item: any, onDelete: () => void })
                     )}
                 </div>
             </div>
-            <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-7 w-7 text-destructive opacity-0 group-hover:opacity-100" onClick={onDelete}>
+            <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-7 w-7 text-destructive opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); onDelete();}}>
                 <Trash2 className="h-4 w-4" />
             </Button>
         </div>
@@ -209,23 +215,20 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                         return (
                             <div key={baseProduct.id} className={'p-4 border rounded-lg space-y-3'}>
                                 <h3 className="font-semibold">{baseProduct.name}</h3>
-                                {items.length > 0 ? (
+                                {items.length > 0 && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                         {items.map((item) => (
-                                             <div
-                                                key={item.id}
-                                                className={cn(
-                                                    "border rounded-lg p-3 cursor-pointer transition-all duration-300 relative group",
-                                                    winners[baseProduct.id] === item.id ? 'border-2 border-primary shadow-lg' : 'border-border hover:border-muted-foreground',
-                                                    lowestPriceItem && item.id === lowestPriceItem.id && !(winners[baseProduct.id] === item.id) && 'border-dashed border-green-500'
-                                                )}
-                                                onClick={() => handleSelectWinner(baseProduct.id, item.id)}
-                                            >
-                                                <PriceEntryCard item={item} onDelete={() => deletePurchaseItem(item.id)} />
-                                            </div>
+                                            <PriceEntryCard 
+                                                key={item.id} 
+                                                item={item} 
+                                                isWinner={winners[baseProduct.id] === item.id}
+                                                isLowest={lowestPriceItem ? item.id === lowestPriceItem.id : false}
+                                                onSelect={() => handleSelectWinner(baseProduct.id, item.id)}
+                                                onDelete={() => deletePurchaseItem(item.id)}
+                                            />
                                         ))}
                                     </div>
-                                ) : <p className="text-xs text-muted-foreground">Nenhuma cotação para este item ainda.</p>}
+                                )}
                                 <AddPurchaseItem baseProductId={baseProduct.id} sessionId={session.id} />
                             </div>
                         )

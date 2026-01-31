@@ -20,7 +20,7 @@ export const useProducts = (): UseProductsHook => {
     if (!product) return '';
     const brandPart = product.brand ? ` - ${product.brand}` : '';
     // Avoid showing "(1un)" for single items which is redundant
-    const packagePart = (product.packageSize && product.unit && (product.packageSize !== 1 || (product.unit.toLowerCase() !== 'un' && product.unit.toLowerCase() !== 'unidade'))) 
+    const packagePart = (product.packageSize && product.unit) 
       ? ` (${product.packageSize}${product.unit})` 
       : '';
     return `${product.baseName}${brandPart}${packagePart}`;
@@ -28,6 +28,7 @@ export const useProducts = (): UseProductsHook => {
 
   return { ...context, getProductFullName };
 };
+
 
 
 

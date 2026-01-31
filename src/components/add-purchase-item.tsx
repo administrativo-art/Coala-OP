@@ -4,10 +4,11 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { useDebounce } from 'use-debounce';
+
 import { usePurchase } from '@/hooks/use-purchase';
 import { useProducts } from '@/hooks/use-products';
 import { useEntities } from '@/hooks/use-entities';
-import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/form';
@@ -41,9 +42,36 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
         defaultValues: { productId: '', entityId: '', price: undefined },
     });
 
-    const selectedProductId = form.watch('productId');
-    const currentPrice = form.watch('price');
-    const selectedProduct = useMemo(() => products.find(p => p.id === selectedProductId), [products, selectedProductId]);
+    const watchedValues = form.watch();
+    const [debouncedValues] = useDebounce(watchedValues, 500);
+
+    const selectedProduct = useMemo(() => products.find(p => p.id === watchedValues.productId), [products, watchedValues.productId]);
+
+    useEffect(() => {
+        const trySave = async () => {
+            const { productId, entityId, price } = debouncedValues;
+            if (productId && entityId && price && price > 0) {
+                const isValid = await form.trigger();
+                if (isValid) {
+                    const productToSave = products.find(p => p.id === productId);
+                    if (!productToSave) return;
+                    
+                    let priceForSinglePackage = price;
+                    if (purchaseUnit === productToSave.rotulo_caixa && productToSave.multiplo_caixa && productToSave.multiplo_caixa > 0) {
+                        priceForSinglePackage = price / productToSave.multiplo_caixa;
+                    }
+
+                    await savePrice(null, { productId, entityId, price: priceForSinglePackage, sessionId });
+                    form.reset({ productId: '', entityId: '', price: undefined });
+                    setPurchaseUnit('');
+                }
+            }
+        };
+
+        trySave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedValues, form, products, purchaseUnit, savePrice, sessionId]);
+
 
     useEffect(() => {
         if (selectedProduct) {
@@ -77,23 +105,23 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
     }, []);
 
     const alternativePrices = useMemo(() => {
-        if (!selectedProduct || !currentPrice || currentPrice <= 0 || !purchaseUnit || !selectedProduct.rotulo_caixa || !selectedProduct.multiplo_caixa) return null;
-
+        if (!selectedProduct || !watchedValues.price || watchedValues.price <= 0 || !purchaseUnit) return null;
+        
         let pricePerPackage: number;
         let pricePerBox: number;
 
-        if (purchaseUnit === selectedProduct.rotulo_caixa) {
-            pricePerBox = currentPrice;
-            pricePerPackage = currentPrice / selectedProduct.multiplo_caixa;
+        if (purchaseUnit === selectedProduct.rotulo_caixa && selectedProduct.multiplo_caixa && selectedProduct.multiplo_caixa > 0) {
+            pricePerBox = watchedValues.price;
+            pricePerPackage = watchedValues.price / selectedProduct.multiplo_caixa;
         } else {
-            pricePerPackage = currentPrice;
-            pricePerBox = currentPrice * selectedProduct.multiplo_caixa;
+            pricePerPackage = watchedValues.price;
+            pricePerBox = selectedProduct.multiplo_caixa ? watchedValues.price * selectedProduct.multiplo_caixa : 0;
         }
         
         const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
         if (!baseProduct) return null;
         
-        const pricePerBase = calculatePricePerBaseUnit(currentPrice, purchaseUnit, selectedProduct, baseProduct);
+        const pricePerBase = calculatePricePerBaseUnit(watchedValues.price, purchaseUnit, selectedProduct, baseProduct);
 
         return {
             pricePerPackage,
@@ -103,7 +131,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
             pricePerBase,
             baseUnitLabel: baseProduct.unit
         };
-    }, [selectedProduct, currentPrice, purchaseUnit, baseProducts, baseProductId, calculatePricePerBaseUnit]);
+    }, [selectedProduct, watchedValues.price, purchaseUnit, baseProducts, baseProductId, calculatePricePerBaseUnit]);
 
 
     const productsForBase = products.filter(p => p.baseProductId === baseProductId);
@@ -125,36 +153,9 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
         return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
 
-    const onSubmit = async (values: FormValues) => {
-        if (!selectedProduct) return;
-        
-        let priceForSinglePackage = values.price;
-
-        if (purchaseUnit === selectedProduct.rotulo_caixa && selectedProduct.multiplo_caixa && selectedProduct.multiplo_caixa > 0) {
-            priceForSinglePackage = values.price / selectedProduct.multiplo_caixa;
-        }
-
-        await savePrice(null, { ...values, price: priceForSinglePackage, sessionId });
-        
-        form.reset({
-            productId: values.productId,
-            entityId: '',
-            price: undefined,
-        });
-        priceInputRef.current?.focus();
-    };
-    
-    const handleCancel = () => {
-        form.reset({
-            productId: '',
-            entityId: '',
-            price: undefined,
-        });
-    }
-
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 mt-2 p-2 border-t">
+            <div className="space-y-3 mt-2 p-2 border-t">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
                      <FormField
                         control={form.control}
@@ -242,12 +243,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                         )}
                     </div>
                 )}
-                
-                <div className="flex gap-2">
-                    <Button type="submit">Salvar</Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={handleCancel}>Cancelar</Button>
-                </div>
-            </form>
+            </div>
         </Form>
     );
 }
