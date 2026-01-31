@@ -206,10 +206,8 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                             return currentPrice < lowestPrice ? current : lowest;
                         }) : null;
                         
-                        const hasWinner = !!winners[baseProduct.id];
-
                         return (
-                            <div key={baseProduct.id} className={cn('p-4 border rounded-lg space-y-3', hasWinner && 'winner-group')}>
+                            <div key={baseProduct.id} className={'p-4 border rounded-lg space-y-3'}>
                                 <h3 className="font-semibold">{baseProduct.name}</h3>
                                 {items.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -219,8 +217,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                                 className={cn(
                                                     "border rounded-lg p-3 cursor-pointer transition-all duration-300 relative group",
                                                     winners[baseProduct.id] === item.id ? 'border-2 border-primary shadow-lg' : 'border-border hover:border-muted-foreground',
-                                                    lowestPriceItem ? item.id === lowestPriceItem.id : false && !(winners[baseProduct.id] === item.id) && 'border-dashed border-green-500',
-                                                    hasWinner && winners[baseProduct.id] !== item.id && 'ghost-card'
+                                                    lowestPriceItem && item.id === lowestPriceItem.id && !(winners[baseProduct.id] === item.id) && 'border-dashed border-green-500'
                                                 )}
                                                 onClick={() => handleSelectWinner(baseProduct.id, item.id)}
                                             >
