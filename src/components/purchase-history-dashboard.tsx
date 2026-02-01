@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { type PriceHistoryEntry } from "@/types";
-import { Inbox, Search, Package, Building, Eraser, Trash2, Eye } from "lucide-react";
+import { Inbox, Search, Package, Building, Eraser, Trash2, Eye, LineChart } from "lucide-react";
 import { useProducts } from "@/hooks/use-products";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useEntities } from "@/hooks/use-entities";
@@ -20,6 +20,7 @@ import { Skeleton } from "./ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { PurchaseSessionCard } from './purchase-session-card';
+import { DynamicPriceQuery } from './dynamic-price-query';
 
 function PriceHistoryList() {
     const { priceHistory, loading, deletePriceHistoryEntry } = usePurchase();
@@ -239,15 +240,19 @@ function PurchaseOrderList() {
 export function PurchaseHistoryDashboard() {
     return (
         <Tabs defaultValue="orders">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="orders">Ordens de Compra</TabsTrigger>
                 <TabsTrigger value="prices">Histórico de Preços</TabsTrigger>
+                <TabsTrigger value="query"><LineChart className="mr-2 h-4 w-4"/>Consulta Dinâmica</TabsTrigger>
             </TabsList>
             <TabsContent value="orders" className="mt-4">
                 <PurchaseOrderList />
             </TabsContent>
             <TabsContent value="prices" className="mt-4">
                 <PriceHistoryList />
+            </TabsContent>
+            <TabsContent value="query" className="mt-4">
+                <DynamicPriceQuery />
             </TabsContent>
         </Tabs>
     );
