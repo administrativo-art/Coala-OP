@@ -28,9 +28,20 @@ const addItemSchema = z.object({
 type FormValues = z.infer<typeof addItemSchema>;
 
 const formatCurrency = (value: number | null) => {
-    if (value === null || !value || isNaN(value)) return 'R$ 0,00';
+    if (value === null || isNaN(value)) return '-';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
+
+const formatPricePerBaseUnit = (value: number | null) => {
+    if (value === null || isNaN(value)) return '-';
+    // For very small values, show more precision
+    if (value > 0 && value < 0.01) {
+        return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 3, maximumFractionDigits: 5 });
+    }
+    // Otherwise, use standard currency format
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 
 export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: string, sessionId: string }) {
     const { savePrice } = usePurchase();
@@ -76,7 +87,11 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
 
     useEffect(() => {
         if (selectedProduct) {
-            setPurchaseUnit(selectedProduct.packageType || selectedProduct.unit);
+             if(selectedProduct.rotulo_caixa) {
+                setPurchaseUnit(selectedProduct.rotulo_caixa);
+            } else {
+                setPurchaseUnit(selectedProduct.packageType || selectedProduct.unit);
+            }
         } else {
             setPurchaseUnit('');
         }
@@ -112,14 +127,16 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
         if (!selectedProduct || !watchedValues.price || watchedValues.price <= 0 || !purchaseUnit) return null;
         
         let pricePerPackage: number;
-        let pricePerBox: number;
+        let pricePerBox: number | null = null;
 
         if (purchaseUnit === selectedProduct.rotulo_caixa && selectedProduct.multiplo_caixa && selectedProduct.multiplo_caixa > 0) {
             pricePerBox = watchedValues.price;
             pricePerPackage = watchedValues.price / selectedProduct.multiplo_caixa;
         } else {
             pricePerPackage = watchedValues.price;
-            pricePerBox = selectedProduct.multiplo_caixa ? watchedValues.price * selectedProduct.multiplo_caixa : 0;
+            if (selectedProduct.multiplo_caixa && selectedProduct.multiplo_caixa > 0) {
+                 pricePerBox = watchedValues.price * selectedProduct.multiplo_caixa;
+            }
         }
         
         const baseProduct = baseProducts.find(bp => bp.id === baseProductId);
@@ -241,9 +258,9 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                 {alternativePrices && (
                     <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
                         <p>= {formatCurrency(alternativePrices.pricePerPackage)} por {alternativePrices.packageLabel}</p>
-                        {alternativePrices.pricePerBox > 0 && <p>= {formatCurrency(alternativePrices.pricePerBox)} por {alternativePrices.boxLabel}</p>}
+                        {alternativePrices.pricePerBox !== null && <p>= {formatCurrency(alternativePrices.pricePerBox)} por {alternativePrices.boxLabel}</p>}
                         {alternativePrices.pricePerBase !== null && (
-                            <p className="font-bold">= {formatCurrency(alternativePrices.pricePerBase)} por {alternativePrices.baseUnitLabel}</p>
+                            <p className="font-bold">= {formatPricePerBaseUnit(alternativePrices.pricePerBase)} por {alternativePrices.baseUnitLabel}</p>
                         )}
                     </div>
                 )}
