@@ -224,10 +224,17 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
 
     const handleSelectWinner = (baseProductId: string, purchaseItemId: string) => {
         if (session.status === 'closed') return;
-        setWinners(prev => ({
-            ...prev,
-            [baseProductId]: purchaseItemId
-        }));
+        setWinners(prev => {
+            if (prev[baseProductId] === purchaseItemId) {
+                const newWinners = { ...prev };
+                delete newWinners[baseProductId];
+                return newWinners;
+            }
+            return {
+                ...prev,
+                [baseProductId]: purchaseItemId
+            };
+        });
     };
     
     const handleFinalize = async () => {
@@ -311,7 +318,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                     </Button>}
                                 </div>
                                 
-                                <div className="flex overflow-x-auto gap-4 p-1 -m-1">
+                                <div className="flex overflow-x-auto gap-4 p-1 -m-1 pt-4">
                                     {items.map((item) => {
                                         const isWinner = winners[baseProduct.id] === item.id;
                                         
