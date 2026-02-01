@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type PurchaseItem, type PriceHistoryEntry, type PurchaseSession, type BaseProduct } from '@/types';
+import { type PurchaseItem, type PriceHistoryEntry, type PurchaseSession, type BaseProduct, type Product } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, getDocs, writeBatch, deleteDoc, runTransaction, increment, arrayUnion } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';

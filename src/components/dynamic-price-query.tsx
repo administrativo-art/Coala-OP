@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -29,6 +28,13 @@ const formatCurrency = (value: number | null | undefined) => {
     if (value === null || value === undefined || isNaN(value)) return 'N/A';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
+
+interface KpiStats {
+  lowest: { price: number; entityName: string } | null;
+  highest: { price: number; entityName: string } | null;
+  mostCompetitive: { name: string; avg: number } | null;
+  variation: number;
+}
 
 export function DynamicPriceQuery() {
     const { priceHistory, loading: loadingHistory } = usePurchase();
@@ -74,8 +80,10 @@ export function DynamicPriceQuery() {
         return Object.values(dataByDate);
     }, [filteredHistory, entityMap]);
 
-    const kpis = useMemo(() => {
-        if (filteredHistory.length === 0) return { lowest: null, highest: null, mostCompetitive: null, variation: 0 };
+    const kpis = useMemo((): KpiStats => {
+        if (filteredHistory.length === 0) {
+            return { lowest: null, highest: null, mostCompetitive: null, variation: 0 };
+        }
         
         let lowest = { price: Infinity, entityName: '' };
         let highest = { price: -1, entityName: '' };
