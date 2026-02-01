@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import { usePurchase } from "@/hooks/use-purchase";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
 import { type PurchaseSession, type PurchaseItem, type BaseProduct, type Product } from "@/types";
-import { ShoppingCart, Trash2, Check, Award, PlusCircle } from 'lucide-react';
+import { ShoppingCart, Trash2, Check, Award, PlusCircle, Inbox } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { arrayUnion } from 'firebase/firestore';
 import { Badge } from './ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Input } from './ui/input';
 
 
 interface PurchaseSessionCardProps {
@@ -33,16 +35,26 @@ const formatCurrency = (value: number | null) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfirm }: { item: any, isWinner: boolean, isLowest: boolean, onSelect: () => void, onDelete: () => void, canConfirm: boolean }) {
+function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfirm, onPriceChange }: { item: any, isWinner: boolean, isLowest: boolean, onSelect: () => void, onDelete: () => void, canConfirm: boolean, onPriceChange: (newPrice: number) => void }) {
+    const [isEditing, setIsEditing] = useState(false);
+
+    const handlePriceUpdate = (newPriceStr: string) => {
+        const newPrice = parseFloat(newPriceStr);
+        if (!isNaN(newPrice) && newPrice !== item.price) {
+            onPriceChange(newPrice);
+        }
+        setIsEditing(false);
+    };
+
     return (
         <div
             className={cn(
-                "border rounded-lg p-3 transition-all duration-300 ease-in-out relative group cursor-pointer shrink-0 w-64",
+                "border rounded-lg p-4 transition-all duration-300 ease-in-out relative group shrink-0 w-64",
                 isWinner ? 'border-2 border-primary shadow-lg scale-[1.02]' : 'border-border hover:border-muted-foreground',
                 isLowest && !isWinner && 'border-dashed border-green-500',
                 !canConfirm && 'cursor-default'
             )}
-            onClick={canConfirm ? onSelect : undefined}
+            onClick={canConfirm && !isEditing ? onSelect : undefined}
         >
             {isLowest && (
                 <Badge variant="secondary" className="absolute -top-2 -left-2 bg-green-500 text-white hover:bg-green-600 shadow-lg z-10">
@@ -64,7 +76,7 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
             </div>
             
             <div className="text-right flex flex-col items-end">
-                <div className="flex items-baseline justify-end gap-2">
+                <div className="flex items-baseline justify-end gap-2 w-full">
                     {item.priceVariation !== null && item.lastPricePerUnit !== null && (
                          <span className={cn(
                              "font-semibold flex items-center text-xs",
@@ -73,7 +85,23 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
                              {item.priceVariation > 0 ? '▲' : '▼'} {Math.abs(item.priceVariation).toFixed(0)}%
                          </span>
                     )}
-                    <p className="font-bold text-lg">{formatCurrency(item.price)}</p>
+                    {isEditing ? (
+                        <Input
+                            type="number"
+                            defaultValue={item.price}
+                            autoFocus
+                            onBlur={(e) => handlePriceUpdate(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') handlePriceUpdate((e.target as HTMLInputElement).value);
+                                if (e.key === 'Escape') setIsEditing(false);
+                            }}
+                            className="h-8 text-lg font-bold text-right p-1"
+                        />
+                    ) : (
+                         <p className="font-bold text-lg cursor-pointer" onClick={() => canConfirm && setIsEditing(true)}>
+                            {formatCurrency(item.price)}
+                        </p>
+                    )}
                 </div>
                 {item.pricePerUnit !== null && (
                     <p className="text-xs text-muted-foreground">{formatCurrency(item.pricePerUnit)} / {item.baseUnit}</p>
@@ -98,7 +126,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     const { user, users } = useAuth();
     const { entities } = useEntities();
     const { baseProducts } = useBaseProducts();
-    const { items: allPurchaseItems, closeSession, deleteSession, updateSession, loading: purchaseLoading, deletePurchaseItem, priceHistory } = usePurchase();
+    const { items: allPurchaseItems, closeSession, deleteSession, updateSession, loading: purchaseLoading, deletePurchaseItem, priceHistory, savePrice } = usePurchase();
     const { products, getProductFullName, loading: productsLoading } = useProducts();
     const { toast } = useToast();
     
@@ -149,8 +177,9 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 const pricePerUnit = (product && baseProduct) ? calculatePricePerUnit(item, product, baseProduct) : null;
     
                 const lastPriceEntry = priceHistory.find(
-                    h => h.productId === item.productId && h.entityId === item.entityId
+                    h => h.baseProductId === baseProduct?.id && h.entityId === item.entityId
                 );
+
                 const lastPricePerUnit = lastPriceEntry?.pricePerUnit ?? null;
                 
                 let priceVariation: number | null = null;
@@ -263,6 +292,13 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                     )}
 
                     {loading ? <Skeleton className="h-48 w-full"/> : 
+                     Array.from(itemsByBaseProductMap.values()).length === 0 && session.status === 'open' ? (
+                        <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+                           <Inbox className="mx-auto h-12 w-12 mb-4" />
+                           <p className="font-semibold">Nenhum insumo nesta cotação</p>
+                           <p className="text-sm">Use o botão "Adicionar Insumo" para começar.</p>
+                       </div>
+                     ) :
                      Array.from(itemsByBaseProductMap.values()).map(({ baseProduct, items }) => {
                         const lowestPriceItem = items.length > 0 ? items.reduce((lowest, current) => {
                             const currentPrice = current.pricePerUnit ?? Infinity;
@@ -273,7 +309,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                         const winnerSelected = !!winners[baseProduct.id];
 
                         return (
-                            <div key={baseProduct.id} className={cn("p-4 border rounded-lg space-y-3", winnerSelected && "winner-group")}>
+                            <div key={baseProduct.id} className={cn("p-6 border rounded-lg space-y-3", winnerSelected && "winner-group")}>
                                 <div className="flex justify-between items-center">
                                     <h3 className="font-semibold">{baseProduct.name}</h3>
                                     {session.status === 'open' && <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => handleRemoveBaseProduct(baseProduct.id)}>
@@ -281,7 +317,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                     </Button>}
                                 </div>
                                 
-                                <div className="flex overflow-x-auto gap-3 p-1 -m-1">
+                                <div className="flex overflow-x-auto gap-4 p-1 -m-1">
                                     {items.map((item) => {
                                         const isWinner = winners[baseProduct.id] === item.id;
                                         
@@ -294,6 +330,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                                     onSelect={() => handleSelectWinner(baseProduct.id, item.id)}
                                                     onDelete={() => deletePurchaseItem(item.id)}
                                                     canConfirm={session.status === 'open'}
+                                                    onPriceChange={(newPrice) => savePrice(item.id, { price: newPrice })}
                                                 />
                                             </div>
                                         )
@@ -325,7 +362,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 </CardContent>
                 {session.status === 'open' && (
                     <CardFooter className="bg-background/80 backdrop-blur-sm border-t p-4 flex justify-end items-center sticky bottom-0 z-10">
-                        <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0 || loading}>
+                        <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0 || loading} size="lg" className="bg-gradient-to-r from-primary to-accent text-white shadow-lg hover:shadow-xl transition-shadow">
                             <Check className="mr-2 h-4 w-4"/> Salvar cotação
                         </Button>
                     </CardFooter>
