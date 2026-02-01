@@ -83,6 +83,7 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
                              item.priceVariation > 0 ? "text-red-500" : "text-green-600"
                          )}>
                              {item.priceVariation > 0 ? '▲' : '▼'} {Math.abs(item.priceVariation).toFixed(0)}%
+                             <span className="text-muted-foreground ml-1 font-normal">(de {formatCurrency(item.lastPricePerUnit)})</span>
                          </span>
                     )}
                     {isEditing ? (
@@ -107,13 +108,6 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
                     <p className="text-xs text-muted-foreground">{formatCurrency(item.pricePerUnit)} / {item.baseUnit}</p>
                 )}
             </div>
-            
-             {item.lastPricePerUnit !== null && (
-                <div className="mt-2 text-xs pt-2 border-t border-dashed flex justify-between items-center">
-                    <span className="text-muted-foreground">Última compra:</span>
-                    <span className="text-muted-foreground font-semibold">{formatCurrency(item.lastPricePerUnit)}</span>
-                </div>
-            )}
 
             {canConfirm && <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-7 w-7 text-destructive opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); onDelete();}}>
                 <Trash2 className="h-4 w-4" />
