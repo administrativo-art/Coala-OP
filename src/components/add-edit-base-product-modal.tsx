@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -220,17 +220,17 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                   <Input
                                       type="number"
-                                      step="0.001"
-                                      placeholder="0,000"
-                                      className="pl-8"
+                                      readOnly
+                                      disabled
+                                      className="pl-8 bg-muted/60"
                                       {...field}
                                       value={field.value ?? ''}
                                   />
                               </div>
                               <FormMessage />
-                              <p className="text-xs text-muted-foreground pt-1">
-                                Este custo é usado como fallback até que uma compra seja efetivada para um insumo deste produto base.
-                              </p>
+                              <FormDescription className="text-xs pt-1">
+                                O custo por unidade é definido automaticamente ao efetivar uma compra no módulo de cotações.
+                              </FormDescription>
                           </FormItem>
                       )}
                   />
