@@ -77,41 +77,40 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
             </div>
             
             <div className="text-right flex flex-col items-end">
-                <div className="flex items-baseline justify-end gap-2 w-full">
-                    {item.priceVariation !== null && (
-                         <span className={cn(
-                             "font-semibold flex items-center text-xs",
-                             item.priceVariation > 0 ? "text-red-500" : "text-green-600"
-                         )}>
-                             {item.priceVariation > 0 ? '▲' : '▼'} {Math.abs(item.priceVariation).toFixed(0)}%
-                             <span className="text-muted-foreground ml-1 font-normal">
-                                (de {formatCurrency(item.lastPackagePrice)} | {formatCurrency(item.lastPricePerUnit)}/{item.baseUnit})
-                             </span>
-                         </span>
-                    )}
-                    {isEditing ? (
-                        <Input
-                            type="number"
-                            defaultValue={item.price}
-                            autoFocus
-                            onBlur={(e) => handlePriceUpdate(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') handlePriceUpdate((e.target as HTMLInputElement).value);
-                                if (e.key === 'Escape') setIsEditing(false);
-                            }}
-                            className="h-8 text-lg font-bold text-right p-1"
-                        />
-                    ) : (
-                         <p className="font-bold text-lg" onClick={(e) => { e.stopPropagation(); if (canConfirm) setIsEditing(true);}}>
-                            {formatCurrency(item.price)}
-                        </p>
-                    )}
-                </div>
-                <div className="text-xs text-muted-foreground space-x-2">
+                 {isEditing ? (
+                    <Input
+                        type="number"
+                        defaultValue={item.price}
+                        autoFocus
+                        onBlur={(e) => handlePriceUpdate(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handlePriceUpdate((e.target as HTMLInputElement).value);
+                            if (e.key === 'Escape') setIsEditing(false);
+                        }}
+                        className="h-8 text-lg font-bold text-right p-1"
+                    />
+                ) : (
+                    <p className="font-bold text-lg" onClick={(e) => { e.stopPropagation(); if (canConfirm) setIsEditing(true); }}>
+                        {formatCurrency(item.price)}
+                    </p>
+                )}
+                 <div className="text-xs text-muted-foreground space-x-2">
                     {item.pricePerUnit !== null && (
                         <span>{formatCurrency(item.pricePerUnit)} / {item.baseUnit}</span>
                     )}
                 </div>
+
+                {item.priceVariation !== null && (
+                     <div className={cn(
+                         "font-semibold flex items-center text-xs mt-1",
+                         item.priceVariation > 0 ? "text-red-500" : "text-green-600"
+                     )}>
+                         {item.priceVariation > 0 ? '▲' : '▼'} {Math.abs(item.priceVariation).toFixed(0)}%
+                         <span className="text-muted-foreground ml-1 font-normal">
+                             (de {formatCurrency(item.lastPackagePrice)} | {formatCurrency(item.lastPricePerUnit)}/{item.baseUnit})
+                         </span>
+                     </div>
+                )}
             </div>
 
             {canConfirm && <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-7 w-7 text-destructive opacity-0 group-hover:opacity-100" onClick={(e) => { e.stopPropagation(); onDelete();}}>
@@ -268,9 +267,22 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     };
     
     const handleRemoveBaseProduct = async (baseProductIdToRemove: string) => {
-        if (!session.baseProductIds) return;
-        const newBaseProductIds = session.baseProductIds.filter(id => id !== baseProductIdToRemove);
-        await updateSession(session.id, { baseProductIds: newBaseProductIds });
+        // 1. Find all purchaseItems to delete
+        const itemsToDelete = sessionItems.filter(item => {
+            const product = products.find(p => p.id === item.productId);
+            return product?.baseProductId === baseProductIdToRemove;
+        });
+
+        // 2. Delete them
+        for (const item of itemsToDelete) {
+            await deletePurchaseItem(item.id);
+        }
+
+        // 3. Remove from the baseProductIds array in the session document
+        if (session.baseProductIds?.includes(baseProductIdToRemove)) {
+            const newBaseProductIds = (session.baseProductIds || []).filter(id => id !== baseProductIdToRemove);
+            await updateSession(session.id, { baseProductIds: newBaseProductIds });
+        }
     };
 
     return (
@@ -319,7 +331,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                         const winnerSelected = !!winners[baseProduct.id];
 
                         return (
-                            <div key={baseProduct.id} className={cn("p-4 border rounded-lg space-y-3 pt-6", winnerSelected && "winner-group")}>
+                            <div key={baseProduct.id} className={cn("p-4 pt-8 -mt-2 border rounded-lg space-y-3", winnerSelected && "winner-group")}>
                                 <div className="flex justify-between items-center -mt-2 -mx-2">
                                     <h3 className="font-semibold px-2">{baseProduct.name}</h3>
                                     {session.status === 'open' && <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => handleRemoveBaseProduct(baseProduct.id)}>
@@ -327,7 +339,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                     </Button>}
                                 </div>
                                 
-                                <div className="flex overflow-x-auto gap-4 p-2 pt-4 -mx-2">
+                                <div className="flex overflow-x-auto gap-4 p-2 -mx-2">
                                     {items.map((item) => {
                                         const isWinner = winners[baseProduct.id] === item.id;
                                         
