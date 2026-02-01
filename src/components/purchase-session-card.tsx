@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useState, useCallback, useEffect } from 'react';
@@ -33,7 +32,7 @@ const formatCurrency = (value: number | null) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-function PriceEntryCard({ item, isWinner, isLowest, variationFromLowest, onSelect, onDelete, canConfirm }: { item: any, isWinner: boolean, isLowest: boolean, variationFromLowest: number | null, onSelect: () => void, onDelete: () => void, canConfirm: boolean }) {
+function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfirm }: { item: any, isWinner: boolean, isLowest: boolean, onSelect: () => void, onDelete: () => void, canConfirm: boolean }) {
     return (
         <div
             className={cn(
@@ -65,9 +64,12 @@ function PriceEntryCard({ item, isWinner, isLowest, variationFromLowest, onSelec
             
             <div className="text-right flex flex-col items-end">
                 <div className="flex items-baseline justify-end gap-2">
-                    {variationFromLowest !== null && variationFromLowest > 0.1 && (
-                         <span className="font-semibold text-xs text-red-500">
-                           +{variationFromLowest.toFixed(0)}%
+                    {item.priceVariation !== null && item.lastPricePerUnit !== null && (
+                         <span className={cn(
+                             "font-semibold flex items-center text-xs",
+                             item.priceVariation > 0 ? "text-red-500" : "text-green-600"
+                         )}>
+                             {item.priceVariation > 0 ? '▲' : '▼'} {Math.abs(item.priceVariation).toFixed(0)}%
                          </span>
                     )}
                     <p className="font-bold text-lg">{formatCurrency(item.price)}</p>
@@ -80,17 +82,7 @@ function PriceEntryCard({ item, isWinner, isLowest, variationFromLowest, onSelec
              {item.lastPricePerUnit !== null && (
                 <div className="mt-2 text-xs pt-2 border-t border-dashed flex justify-between items-center">
                     <span className="text-muted-foreground">Última compra:</span>
-                    <div className="flex items-center gap-1">
-                         {item.priceVariation !== null && (
-                             <span className={cn(
-                                 "font-semibold flex items-center text-xs",
-                                 item.priceVariation > 0 ? "text-red-500" : "text-green-600"
-                             )}>
-                                 {item.priceVariation > 0 ? '▲' : '▼'} {Math.abs(item.priceVariation).toFixed(0)}%
-                             </span>
-                        )}
-                        <span className="text-muted-foreground font-semibold">{formatCurrency(item.lastPricePerUnit)}</span>
-                    </div>
+                    <span className="text-muted-foreground font-semibold">{formatCurrency(item.lastPricePerUnit)}</span>
                 </div>
             )}
 
@@ -302,18 +294,12 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                         {items.map((item) => {
                                             const isWinner = winners[baseProduct.id] === item.id;
                                             
-                                            let variationFromLowest: number | null = null;
-                                            if (lowestPriceItem && lowestPriceItem.pricePerUnit && lowestPriceItem.pricePerUnit > 0 && item.pricePerUnit) {
-                                                variationFromLowest = ((item.pricePerUnit / lowestPriceItem.pricePerUnit) - 1) * 100;
-                                            }
-
                                             return (
                                                 <div key={item.id} className={cn(winnerSelected && !isWinner && "ghost-card", "transition-all duration-200")}>
                                                     <PriceEntryCard 
                                                         item={item} 
                                                         isWinner={isWinner}
                                                         isLowest={lowestPriceItem ? item.id === lowestPriceItem.id : false}
-                                                        variationFromLowest={variationFromLowest}
                                                         onSelect={() => handleSelectWinner(baseProduct.id, item.id)}
                                                         onDelete={() => deletePurchaseItem(item.id)}
                                                         canConfirm={session.status === 'open'}
@@ -337,7 +323,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                             <p className="text-2xl font-bold text-primary">{formatCurrency(totalPurchaseValue)}</p>
                         </div>
                         <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0 || loading}>
-                            <Check className="mr-2 h-4 w-4"/> Efetivar Compra
+                            <Check className="mr-2 h-4 w-4"/> Salvar cotação
                         </Button>
                     </CardFooter>
                 )}
