@@ -10,7 +10,7 @@ import { usePurchase } from "@/hooks/use-purchase";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
 import { type PurchaseSession, type PurchaseItem, type BaseProduct, type Product } from "@/types";
-import { ShoppingCart, Trash2, Check, Award } from 'lucide-react';
+import { ShoppingCart, Trash2, Check, Award, PlusCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
@@ -21,6 +21,7 @@ import { Skeleton } from './ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { arrayUnion } from 'firebase/firestore';
 import { Badge } from './ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 
 interface PurchaseSessionCardProps {
@@ -208,7 +209,6 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     
     const handleFinalize = async () => {
         await closeSession(session.id, Object.values(winners));
-        toast({ title: "Cotação salva!", description: "O custo dos produtos base foi atualizado com os preços efetivados." });
     };
 
     const handleDelete = async () => {
@@ -281,29 +281,44 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                     </Button>}
                                 </div>
                                 
-                                {items.length > 0 ? (
-                                    <div className="flex overflow-x-auto gap-3 p-1 -m-1">
-                                        {items.map((item) => {
-                                            const isWinner = winners[baseProduct.id] === item.id;
-                                            
-                                            return (
-                                                <div key={item.id} className={cn(winnerSelected && !isWinner && "ghost-card", "transition-all duration-200")}>
-                                                    <PriceEntryCard 
-                                                        item={item} 
-                                                        isWinner={isWinner}
-                                                        isLowest={lowestPriceItem ? item.id === lowestPriceItem.id : false}
-                                                        onSelect={() => handleSelectWinner(baseProduct.id, item.id)}
-                                                        onDelete={() => deletePurchaseItem(item.id)}
-                                                        canConfirm={session.status === 'open'}
-                                                    />
+                                <div className="flex overflow-x-auto gap-3 p-1 -m-1">
+                                    {items.map((item) => {
+                                        const isWinner = winners[baseProduct.id] === item.id;
+                                        
+                                        return (
+                                            <div key={item.id} className={cn(winnerSelected && !isWinner && "ghost-card", "transition-all duration-200")}>
+                                                <PriceEntryCard 
+                                                    item={item} 
+                                                    isWinner={isWinner}
+                                                    isLowest={lowestPriceItem ? item.id === lowestPriceItem.id : false}
+                                                    onSelect={() => handleSelectWinner(baseProduct.id, item.id)}
+                                                    onDelete={() => deletePurchaseItem(item.id)}
+                                                    canConfirm={session.status === 'open'}
+                                                />
+                                            </div>
+                                        )
+                                    })}
+                                    {session.status === 'open' && (
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <div
+                                                    className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-3 transition-all duration-300 ease-in-out group cursor-pointer shrink-0 w-64 flex items-center justify-center hover:border-primary hover:text-primary"
+                                                >
+                                                    <div className="text-center text-muted-foreground group-hover:text-primary">
+                                                        <PlusCircle className="mx-auto h-8 w-8" />
+                                                        <p className="text-sm font-semibold mt-2">Adicionar Preço</p>
+                                                    </div>
                                                 </div>
-                                            )
-                                        })}
-                                    </div>
-                                ) : (
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-96">
+                                                 <AddPurchaseItem baseProductId={baseProduct.id} sessionId={session.id} />
+                                            </PopoverContent>
+                                        </Popover>
+                                    )}
+                                </div>
+                                {items.length === 0 && session.status !== 'open' && (
                                     <p className="text-sm text-center text-muted-foreground">Nenhuma cotação adicionada para este item.</p>
                                 )}
-                                {session.status === 'open' && <AddPurchaseItem baseProductId={baseProduct.id} sessionId={session.id} />}
                             </div>
                         )
                     })}
