@@ -208,7 +208,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
     
     const handleFinalize = async () => {
         await closeSession(session.id, Object.values(winners));
-        toast({ title: "Sessão de compra finalizada!", description: `${Object.keys(winners).length} item(s) tiveram seus preços efetivados.` });
+        toast({ title: "Cotação salva!", description: "O custo dos produtos base foi atualizado com os preços efetivados." });
     };
 
     const handleDelete = async () => {
@@ -235,14 +235,6 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
         const newBaseProductIds = session.baseProductIds.filter(id => id !== baseProductIdToRemove);
         await updateSession(session.id, { baseProductIds: newBaseProductIds });
     };
-
-    const totalPurchaseValue = useMemo(() => {
-        return Object.values(winners).reduce((total, itemId) => {
-            const item = sessionItems.find(i => i.id === itemId);
-            return total + (item?.price || 0);
-        }, 0);
-    }, [winners, sessionItems]);
-
 
     return (
         <>
@@ -317,11 +309,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                     })}
                 </CardContent>
                 {session.status === 'open' && (
-                    <CardFooter className="bg-background/80 backdrop-blur-sm border-t p-4 flex justify-between items-center sticky bottom-0 z-10">
-                        <div>
-                            <p className="text-sm font-semibold">Total Selecionado</p>
-                            <p className="text-2xl font-bold text-primary">{formatCurrency(totalPurchaseValue)}</p>
-                        </div>
+                    <CardFooter className="bg-background/80 backdrop-blur-sm border-t p-4 flex justify-end items-center sticky bottom-0 z-10">
                         <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0 || loading}>
                             <Check className="mr-2 h-4 w-4"/> Salvar cotação
                         </Button>
