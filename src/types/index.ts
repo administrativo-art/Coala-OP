@@ -34,6 +34,7 @@ export type PriceHistoryEntry = {
   id: string;
   baseProductId: string;
   productId: string;
+  price: number;
   pricePerUnit: number;
   entityId: string;
   confirmedBy: string; // userId
@@ -308,7 +309,7 @@ export type PermissionSet = {
     purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; 
     returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; 
     conversions: { view: boolean }, 
-    predefinedLists: { view: boolean, manage: boolean }
+    predefinedLists: { view: true, manage: true }
   };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; impersonate: boolean; };

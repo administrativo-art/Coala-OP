@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -145,6 +146,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
                 const historyEntry: Omit<PriceHistoryEntry, 'id'> = {
                     baseProductId: baseProduct.id,
                     productId: item.productId,
+                    price: item.price,
                     pricePerUnit,
                     entityId: item.entityId || 'N/A',
                     confirmedBy: user.id,
