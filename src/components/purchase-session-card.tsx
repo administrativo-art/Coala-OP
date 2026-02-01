@@ -60,7 +60,7 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
             {isLowest && (
                 <Badge variant="secondary" className="absolute -top-2 -left-2 bg-green-500 text-white hover:bg-green-600 shadow-lg z-10">
                     <Award className="h-3 w-3 mr-1" />
-                    Melhor Preço
+                    Melhor preço
                 </Badge>
             )}
             {isWinner && (
@@ -327,7 +327,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                     </Button>}
                                 </div>
                                 
-                                <div className="flex overflow-x-auto gap-4 p-1 -m-1 pt-4">
+                                <div className="flex overflow-x-auto gap-4 p-2 pt-4 -mx-2">
                                     {items.map((item) => {
                                         const isWinner = winners[baseProduct.id] === item.id;
                                         
@@ -363,9 +363,6 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                         </Popover>
                                     )}
                                 </div>
-                                {items.length === 0 && session.status !== 'open' && (
-                                    <p className="text-sm text-center text-muted-foreground">Nenhuma cotação adicionada para este item.</p>
-                                )}
                             </div>
                         )
                     })}
