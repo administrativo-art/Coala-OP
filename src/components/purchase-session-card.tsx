@@ -49,10 +49,11 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
     return (
         <div
             className={cn(
-                "border rounded-lg p-4 transition-all duration-300 ease-in-out relative group shrink-0 w-64",
+                "border rounded-lg p-4 transition-all duration-300 ease-in-out relative group shrink-0 w-64 pt-6",
                 isWinner ? 'border-2 border-primary shadow-lg scale-[1.02]' : 'border-border hover:border-muted-foreground',
                 isLowest && !isWinner && 'border-dashed border-green-500',
-                !canConfirm && 'cursor-default'
+                !canConfirm && 'cursor-default',
+                canConfirm && 'cursor-pointer'
             )}
             onClick={canConfirm && !isEditing ? onSelect : undefined}
         >
@@ -63,7 +64,7 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
                 </Badge>
             )}
             {isWinner && (
-                <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center shadow-lg">
+                <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center shadow-lg z-10">
                     <Check className="h-4 w-4 text-white" />
                 </div>
             )}
@@ -99,7 +100,7 @@ function PriceEntryCard({ item, isWinner, isLowest, onSelect, onDelete, canConfi
                             className="h-8 text-lg font-bold text-right p-1"
                         />
                     ) : (
-                         <p className="font-bold text-lg cursor-pointer" onClick={() => canConfirm && setIsEditing(true)}>
+                         <p className="font-bold text-lg" onClick={(e) => { e.stopPropagation(); if (canConfirm) setIsEditing(true);}}>
                             {formatCurrency(item.price)}
                         </p>
                     )}
@@ -268,7 +269,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
 
     return (
         <>
-            <Card className="overflow-hidden flex flex-col h-full">
+            <Card className="flex flex-col h-full">
                 <CardHeader>
                     <div className="flex justify-between items-start">
                         <div>
@@ -282,6 +283,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                 </CardHeader>
                 <CardContent className="space-y-4 flex-1 overflow-y-auto">
                     {session.status === 'open' && (
+                        <div className="pt-2">
                         <Select onValueChange={handleAddBaseProduct}>
                             <SelectTrigger>
                                 <SelectValue placeholder="+ Adicionar Insumo para Cotação" />
@@ -290,6 +292,7 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                 {availableProductsToAdd.map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}
                             </SelectContent>
                         </Select>
+                        </div>
                     )}
 
                     {loading ? <Skeleton className="h-48 w-full"/> : 
