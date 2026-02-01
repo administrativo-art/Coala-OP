@@ -347,8 +347,8 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                                                     </div>
                                                 </div>
                                             </PopoverTrigger>
-                                            <PopoverContent className="w-96">
-                                                 <AddPurchaseItem baseProductId={baseProduct.id} sessionId={session.id} />
+                                            <PopoverContent className="w-[500px]">
+                                                    <AddPurchaseItem baseProductId={baseProduct.id} sessionId={session.id} />
                                             </PopoverContent>
                                         </Popover>
                                     )}
