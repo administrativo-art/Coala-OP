@@ -4,13 +4,11 @@ import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
 import { useBaseProducts } from './use-base-products';
 import { useKiosks } from './use-kiosks';
 import { validateConsumptionReports, validateBaseProducts, generateDataIntegrityReport } from '@/utils/dataValidation';
-import { writeBatch, doc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { type BaseProductStockLevel, type ConsumptionReport, type BaseProduct } from '@/types';
+import { type ConsumptionReport, type BaseProduct } from '@/types';
 
 export function useValidatedConsumptionData() {
   const { history: rawReports, loading: loadingReports, addReport: rawAddReport, deleteReport } = useConsumptionAnalysis();
-  const { baseProducts: rawBaseProducts, loading: loadingBases, updateMultipleBaseProducts } = useBaseProducts();
+  const { baseProducts: rawBaseProducts, loading: loadingBases } = useBaseProducts();
   const { kiosks, loading: loadingKiosks } = useKiosks();
 
   const { reports, baseProducts, integrityReport } = useMemo(() => {
@@ -46,7 +44,6 @@ export function useValidatedConsumptionData() {
   
   const addReport = useCallback(async (reportData: any) => {
     const reportId = await rawAddReport(reportData);
-    // The automatic calculation was removed from here.
     return reportId;
   }, [rawAddReport]);
 
@@ -56,7 +53,7 @@ export function useValidatedConsumptionData() {
     integrityReport,
     isLoading: loadingReports || loadingBases || loadingKiosks,
     error: null,
-    hasValidData: reports.length > 0 && baseProducts.length > 0,
+    hasValidData: reports.length > 0,
     addReport,
     deleteReport,
   };
