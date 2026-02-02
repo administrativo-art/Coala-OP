@@ -9,6 +9,7 @@ import { ptBR } from 'date-fns/locale'
 import { useMovementHistory } from "@/hooks/use-movement-history"
 import { useBaseProducts } from "@/hooks/use-base-products"
 import { useProducts } from "@/hooks/use-products"
+import { useKiosks } from "@/hooks/use-kiosks"
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -24,6 +25,9 @@ import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
 import { InsightCard, type Insight } from './insight-card'
 import type { BaseProduct } from "@/types"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
+
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -51,22 +55,29 @@ export function AverageConsumptionChart() {
     const [viewMode, setViewMode] = useState<'absolute' | 'percentage'>('absolute');
     const [open, setOpen] = useState(false);
     const [initialLoad, setInitialLoad] = useState(true);
+    const [kioskId, setKioskId] = useState<string>('all');
+    const [abcFilter, setAbcFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
 
     // Data Hooks
     const { history: movementHistory, loading: historyLoading } = useMovementHistory();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
     const { products, loading: productsLoading } = useProducts();
+    const { kiosks, loading: kiosksLoading } = useKiosks();
 
-    const loading = historyLoading || baseProductsLoading || productsLoading;
+    const loading = historyLoading || baseProductsLoading || productsLoading || kiosksLoading;
     
-    const { dailyConsumptions, historicalAverages } = useMemo(() => {
-        if (loading) return { dailyConsumptions: new Map(), historicalAverages: new Map() };
+    const { dailyConsumptions, historicalAverages, abcClasses } = useMemo(() => {
+        if (loading) return { dailyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] } };
+
+        const filteredHistory = kioskId === 'all' 
+            ? movementHistory 
+            : movementHistory.filter(m => m.fromKioskId === kioskId);
         
         const consumptions = new Map<string, Map<string, number>>(); // Map<baseProductId, Map<dateStr, quantity>>
         const totals = new Map<string, number>();
         const daysWithConsumption = new Map<string, Set<string>>();
 
-        movementHistory.forEach(m => {
+        filteredHistory.forEach(m => {
             if (m.type !== 'SAIDA_CONSUMO') return;
             const product = products.find(p => p.id === m.productId);
             if (!product || !product.baseProductId) return;
@@ -92,9 +103,30 @@ export function AverageConsumptionChart() {
             averages.set(bpId, total / daysCount);
         });
 
-        return { dailyConsumptions: consumptions, historicalAverages: averages };
+        // ABC Calculation
+        let totalNetworkConsumption = 0;
+        const consumptionByProduct = new Map<string, number>();
+        filteredHistory.forEach(m => {
+             if (m.type !== 'SAIDA_CONSUMO') return;
+             const product = products.find(p => p.id === m.productId);
+             if (!product || !product.baseProductId) return;
+             const current = consumptionByProduct.get(product.baseProductId) || 0;
+             consumptionByProduct.set(product.baseProductId, current + m.quantityChange);
+             totalNetworkConsumption += m.quantityChange;
+        });
+        
+        const consumptionPercentages = Array.from(consumptionByProduct.entries()).map(([id, total]) => ({
+            id,
+            total,
+            percentage: totalNetworkConsumption > 0 ? (total / totalNetworkConsumption) * 100 : 0
+        })).sort((a,b) => b.total - a.total);
+        
+        const classA = consumptionPercentages.slice(0, 5).map(p => p.id);
+        const classB = consumptionPercentages.slice(5).map(p => p.id);
 
-    }, [loading, movementHistory, products]);
+        return { dailyConsumptions: consumptions, historicalAverages: averages, abcClasses: { A: classA, B: classB } };
+
+    }, [loading, movementHistory, products, kioskId]);
     
     const topOfensores = useMemo(() => {
         if (loading || dailyConsumptions.size === 0) return [];
@@ -197,6 +229,12 @@ export function AverageConsumptionChart() {
         return { chartData: finalChartData, yAxisLabel: yLabel, insights: finalInsights };
 
     }, [dateRange, selectedBaseProducts, loading, baseProducts, viewMode, dailyConsumptions, historicalAverages, uniqueUnitsOnSelected]);
+    
+    const availableBaseProducts = useMemo(() => {
+        if (abcFilter === 'A') return baseProducts.filter(bp => abcClasses.A.includes(bp.id));
+        if (abcFilter === 'B') return baseProducts.filter(bp => abcClasses.B.includes(bp.id));
+        return baseProducts;
+    }, [baseProducts, abcFilter, abcClasses]);
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -210,15 +248,24 @@ export function AverageConsumptionChart() {
             </CardHeader>
             <CardContent className="space-y-4">
                  <InsightCard insights={insights} />
-
+                
                 <div className="flex flex-col md:flex-row gap-2">
+                    <Select value={kioskId} onValueChange={setKioskId}>
+                        <SelectTrigger className="w-full md:w-[200px]">
+                            <SelectValue placeholder="Selecione a unidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas as Unidades</SelectItem>
+                            {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
                     {/* Date Range Picker */}
                     <Popover>
                         <PopoverTrigger asChild>
                             <Button
                                 id="date"
                                 variant={"outline"}
-                                className={cn("w-full md:w-[260px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}
+                                className={cn("w-full md:w-auto justify-start text-left font-normal", !dateRange && "text-muted-foreground")}
                             >
                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                 {dateRange?.from ? (
@@ -269,7 +316,7 @@ export function AverageConsumptionChart() {
                                 <CommandEmpty>Nenhum insumo encontrado.</CommandEmpty>
                                 <CommandList>
                                 <CommandGroup>
-                                    {baseProducts.map((bp) => (
+                                    {availableBaseProducts.map((bp) => (
                                         <CommandItem
                                             key={bp.id}
                                             onSelect={() => {
@@ -299,6 +346,13 @@ export function AverageConsumptionChart() {
                         <ToggleGroupItem value="percentage">Variação %</ToggleGroupItem>
                     </ToggleGroup>
                 </div>
+                 <Tabs value={abcFilter} onValueChange={(v) => setAbcFilter(v as any)}>
+                    <TabsList>
+                        <TabsTrigger value="ALL">Geral</TabsTrigger>
+                        <TabsTrigger value="A">Curva A (Top 5)</TabsTrigger>
+                        <TabsTrigger value="B">Curva B (Restante)</TabsTrigger>
+                    </TabsList>
+                </Tabs>
                 
                 {selectedBaseProducts.length > 0 && (
                     <div className="flex flex-wrap gap-2">
