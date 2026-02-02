@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -59,11 +58,11 @@ export function AverageConsumptionChart() {
     const [abcFilter, setAbcFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
 
     // Data Hooks
-    const { reports: consumptionReports, loading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
+    const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
     const { products, loading: productsLoading } = useProducts();
     const { kiosks, loading: kiosksLoading } = useKiosks();
 
-    const loading = consumptionLoading || baseProductsLoading || productsLoading || kiosksLoading;
+    const loading = consumptionLoading || productsLoading || kiosksLoading;
     
     const { monthlyConsumptions, historicalAverages, abcClasses } = useMemo(() => {
         if (loading) return { monthlyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] } };
