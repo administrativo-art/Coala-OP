@@ -26,6 +26,8 @@ import { Calendar } from "./ui/calendar"
 import { Switch } from "./ui/switch"
 import { Label } from "./ui/label"
 import { unitCategories, type UnitCategory } from "@/types"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
+
 
 const formatNumberForDisplay = (value: number) => {
     if (typeof value !== 'number' || isNaN(value)) return "0";
@@ -47,6 +49,7 @@ export function AverageConsumptionChart() {
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection }>({ key: 'Consumo', direction: 'desc' });
   const [hideZeroConsumption, setHideZeroConsumption] = useState(true);
   const [classificationFilter, setClassificationFilter] = useState<string>('all');
+  const [abcClassFilter, setAbcClassFilter] = useState<'ALL' | 'A' | 'B' | 'C'>('ALL');
   const [hoveredBar, setHoveredBar] = useState<string | null>(null);
   
   useEffect(() => {
@@ -97,7 +100,7 @@ export function AverageConsumptionChart() {
     }
     const networkMonthsCount = allNetworkMonths.size;
 
-    let dataToSort = baseProducts
+    let allItems = baseProducts
         .filter(bp => 
             selectedBaseProducts.includes(bp.id) && 
             (classificationFilter === 'all' || bp.classification === classificationFilter)
@@ -124,7 +127,31 @@ export function AverageConsumptionChart() {
         });
 
     if (hideZeroConsumption) {
-        dataToSort = dataToSort.filter(item => item.Consumo > 0);
+        allItems = allItems.filter(item => item.Consumo > 0);
+    }
+    
+    const sortedByConsumption = [...allItems].sort((a, b) => b.Consumo - a.Consumo);
+    const totalConsumptionValue = sortedByConsumption.reduce((sum, item) => sum + item.Consumo, 0);
+
+    let cumulativePercentage = 0;
+    const classifiedData = sortedByConsumption.map(item => {
+        const percentageOfTotal = totalConsumptionValue > 0 ? (item.Consumo / totalConsumptionValue) * 100 : 0;
+        cumulativePercentage += percentageOfTotal;
+        
+        let abcClass: 'A' | 'B' | 'C';
+        if (cumulativePercentage <= 70) {
+            abcClass = 'A';
+        } else if (cumulativePercentage <= 95) {
+            abcClass = 'B';
+        } else {
+            abcClass = 'C';
+        }
+        return { ...item, abcClass };
+    });
+
+    let dataToSort = classifiedData;
+    if (abcClassFilter !== 'ALL') {
+        dataToSort = classifiedData.filter(item => item.abcClass === abcClassFilter);
     }
 
     return dataToSort.sort((a, b) => {
@@ -139,7 +166,7 @@ export function AverageConsumptionChart() {
         }
     });
 
-  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig, hideZeroConsumption, classificationFilter]);
+  }, [user, consumptionHistory, baseProducts, hasValidData, selectedKiosk, selectedBaseProducts, sortConfig, hideZeroConsumption, classificationFilter, abcClassFilter]);
 
   const handleExportCsv = () => {
     if (chartData.length === 0) return;
@@ -318,7 +345,17 @@ export function AverageConsumptionChart() {
                 <Switch id="hide-zero" checked={hideZeroConsumption} onCheckedChange={setHideZeroConsumption} />
                 <Label htmlFor="hide-zero">Ocultar itens sem consumo</Label>
             </div>
-            <div className="pr-2 pl-0">
+
+            <Tabs value={abcClassFilter} onValueChange={(value) => setAbcClassFilter(value as any)} className="w-full sm:w-auto">
+                <TabsList>
+                    <TabsTrigger value="ALL">Todos</TabsTrigger>
+                    <TabsTrigger value="A" className="data-[state=active]:text-red-600 data-[state=active]:border-red-600/50">Curva A</TabsTrigger>
+                    <TabsTrigger value="B" className="data-[state=active]:text-orange-500 data-[state=active]:border-orange-500/50">Curva B</TabsTrigger>
+                    <TabsTrigger value="C" className="data-[state=active]:text-yellow-600 data-[state=active]:border-yellow-600/50">Curva C</TabsTrigger>
+                </TabsList>
+            </Tabs>
+            
+            <div className="pr-2 pl-0 mt-4">
                 { (loadingData) ? (
                     <Skeleton className="h-[350px] w-full" />
                     ) : chartData.length > 0 ? (
@@ -405,3 +442,5 @@ export function AverageConsumptionChart() {
     </Card>
   )
 }
+
+    
