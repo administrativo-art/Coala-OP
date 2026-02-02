@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useRef } from 'react';
@@ -19,6 +18,7 @@ import { UploadCloud, Loader2 } from 'lucide-react';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { convertValue } from '@/lib/conversion';
+import { ToastAction } from '@/components/ui/toast';
 
 
 const consumptionUploadSchema = z.object({
@@ -134,11 +134,17 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                     }
 
                     if (unmatchedSkus.size > 0) {
+                        const unmatchedSkuList = Array.from(unmatchedSkus).join(', ');
                         toast({
                             variant: 'destructive',
                             title: 'Alguns SKUs não foram encontrados ou tiveram erros',
-                            description: `Os seguintes SKUs do seu relatório foram ignorados: ${Array.from(unmatchedSkus).join(', ')}. Verifique os cadastros na ficha da mercadoria.`,
-                            duration: 10000,
+                            description: `Os seguintes SKUs do seu relatório foram ignorados: ${unmatchedSkuList}. Verifique os cadastros na ficha da mercadoria.`,
+                            duration: 30000,
+                            action: (
+                              <ToastAction altText="Copiar SKUs" onClick={() => navigator.clipboard.writeText(unmatchedSkuList)}>
+                                Copiar SKUs
+                              </ToastAction>
+                            ),
                         });
                     }
                     
