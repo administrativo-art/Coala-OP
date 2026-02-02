@@ -56,6 +56,7 @@ export function AverageConsumptionChart() {
     const [initialLoad, setInitialLoad] = useState(true);
     const [kioskId, setKioskId] = useState<string>('all');
     const [abcFilter, setAbcFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
+    const [searchQuery, setSearchQuery] = useState("");
 
     // Data Hooks
     const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
@@ -242,6 +243,18 @@ export function AverageConsumptionChart() {
         if (abcFilter === 'B') return baseProducts.filter(bp => abcClasses.B.includes(bp.id));
         return baseProducts;
     }, [baseProducts, abcFilter, abcClasses]);
+    
+    const filteredBaseProducts = useMemo(() => {
+        if (!searchQuery) return availableBaseProducts;
+        
+        const normalize = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const query = normalize(searchQuery);
+    
+        return availableBaseProducts.filter(bp => 
+            normalize(bp.name).includes(query)
+        );
+    }, [availableBaseProducts, searchQuery]);
+
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -318,15 +331,19 @@ export function AverageConsumptionChart() {
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                            <Command>
-                                <CommandInput placeholder="Buscar insumo..." />
+                            <Command shouldFilter={false}>
+                                <CommandInput
+                                    placeholder="Buscar insumo..."
+                                    value={searchQuery}
+                                    onValueChange={setSearchQuery}
+                                />
                                 <CommandEmpty>Nenhum insumo encontrado.</CommandEmpty>
                                 <CommandList className="max-h-[300px] overflow-y-auto">
                                 <CommandGroup>
-                                    {availableBaseProducts.map((bp) => (
+                                    {filteredBaseProducts.map((bp) => (
                                         <CommandItem
                                             key={bp.id}
-                                            value={bp.name}
+                                            value={bp.id}
                                             onSelect={() => {
                                                 setSelectedBaseProducts(prev => 
                                                     prev.includes(bp.id) ? prev.filter(id => id !== bp.id) : [...prev, bp.id]
