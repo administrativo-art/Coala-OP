@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useMemo, useState, useRef } from 'react';
@@ -656,7 +657,14 @@ useEffect(() => {
                                                   <FormControl>
                                                       <Switch 
                                                           checked={switchField.value} 
-                                                          onCheckedChange={switchField.onChange} 
+                                                          onCheckedChange={(checked) => {
+                                                              switchField.onChange(checked);
+                                                              if (checked && baseProduct) {
+                                                                  form.setValue(`items.${index}.overrideUnit`, baseProduct.unit);
+                                                                  const costSource = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
+                                                                  form.setValue(`items.${index}.overrideCostPerUnit`, costSource);
+                                                              }
+                                                          }} 
                                                           disabled={!hasDefaultCost}
                                                       />
                                                   </FormControl>
