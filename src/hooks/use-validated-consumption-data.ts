@@ -1,4 +1,3 @@
-
 // src/hooks/useValidatedConsumptionData.ts
 import { useEffect, useMemo, useCallback } from 'react';
 import { useConsumptionAnalysis } from '@/hooks/use-consumption-analysis';
@@ -45,99 +44,11 @@ export function useValidatedConsumptionData() {
     };
   }, [rawReports, rawBaseProducts]);
   
-  const calculateAndApplyAllMinimumStocks = useCallback(async (allReports: any[]) => {
-    if (!allReports.length || !baseProducts.length || !kiosks.length) return;
-
-    const productsToUpdate: any[] = [];
-    const kioskList = kiosks.filter(k => k.id !== 'matriz');
-
-    for (const bp of baseProducts) {
-      const newStockLevels: { [kioskId: string]: BaseProductStockLevel } = { ...(bp.stockLevels || {}) };
-      
-      let totalNetworkConsumption = 0;
-      const networkMonthsWithConsumption = new Set<string>();
-
-      // 1. Kiosk calculation (12 days)
-      for (const k of kioskList) {
-          if (newStockLevels[k.id]?.override) {
-              // If override is on, we still need to calculate its consumption for the network total
-              const kioskReportsForNetwork = allReports.filter(r => r.kioskId === k.id);
-              const kioskConsumptionForNetwork = kioskReportsForNetwork.reduce((sum, r) => {
-                  const item = r.results.find((res: any) => res.baseProductId === bp.id);
-                  return sum + (item?.consumedQuantity || 0);
-              }, 0);
-              
-              if (kioskConsumptionForNetwork > 0) {
-                  totalNetworkConsumption += kioskConsumptionForNetwork;
-                  kioskReportsForNetwork.forEach(r => networkMonthsWithConsumption.add(`${r.year}-${r.month}`));
-              }
-              continue; // Skip auto-calculation for this kiosk
-          };
-
-          const kioskReports = allReports.filter(r => r.kioskId === k.id);
-          if (kioskReports.length === 0) continue;
-          
-          const totalKioskConsumption = kioskReports.reduce((sum, r) => {
-              const item = r.results.find((res: any) => res.baseProductId === bp.id);
-              return sum + (item?.consumedQuantity || 0);
-          }, 0);
-
-          totalNetworkConsumption += totalKioskConsumption;
-          
-          if (totalKioskConsumption > 0) {
-            kioskReports.forEach(r => networkMonthsWithConsumption.add(`${r.year}-${r.month}`));
-            
-            const avgMonthlyConsumption = totalKioskConsumption / kioskReports.length;
-            const dailyAvg = avgMonthlyConsumption / 30;
-            const kioskMinStock = Math.ceil((dailyAvg * 12)); // 12 days coverage
-            
-            if (kioskMinStock > 0) {
-                newStockLevels[k.id] = { 
-                    ...(newStockLevels[k.id] || {}),
-                    min: kioskMinStock, 
-                    override: false 
-                };
-            }
-          }
-      }
-
-      // 2. Matriz calculation (30 days of network consumption)
-      if (!newStockLevels['matriz']?.override) {
-          if (totalNetworkConsumption > 0 && networkMonthsWithConsumption.size > 0) {
-              const avgTotalMonthlyConsumption = totalNetworkConsumption / networkMonthsWithConsumption.size;
-              const matrizMinStock = Math.ceil(avgTotalMonthlyConsumption);
-               if (matrizMinStock > 0) {
-                  newStockLevels['matriz'] = { 
-                      ...(newStockLevels['matriz'] || {}),
-                      min: matrizMinStock, 
-                      override: false 
-                  };
-              }
-          }
-      }
-      
-      // Only stage for update if stockLevels actually changed
-      if (JSON.stringify(newStockLevels) !== JSON.stringify(bp.stockLevels)) {
-        productsToUpdate.push({
-            ...bp,
-            stockLevels: newStockLevels,
-        });
-      }
-    }
-
-    if (productsToUpdate.length > 0) {
-      await updateMultipleBaseProducts(productsToUpdate);
-    }
-}, [kiosks, baseProducts, updateMultipleBaseProducts]);
-  
   const addReport = useCallback(async (reportData: any) => {
     const reportId = await rawAddReport(reportData);
-    if (reportId) {
-        const newReportsList = [...reports, { ...reportData, id: reportId }];
-        await calculateAndApplyAllMinimumStocks(newReportsList);
-    }
+    // The automatic calculation was removed from here.
     return reportId;
-  }, [rawAddReport, reports, calculateAndApplyAllMinimumStocks]);
+  }, [rawAddReport]);
 
   return {
     reports,

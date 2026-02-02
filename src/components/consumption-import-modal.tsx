@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
-import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
+import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 
 
 const consumptionUploadSchema = z.object({
@@ -169,7 +169,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     
                     await addReport(newReport);
                     
-                    toast({ title: 'Sucesso!', description: 'Relatório processado e estoques mínimos foram recalculados.' });
+                    toast({ title: 'Sucesso!', description: 'Relatório processado com sucesso.' });
                     
                     onOpenChange(false);
 
@@ -190,7 +190,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                 <DialogHeader>
                     <DialogTitle>Importar relatório de consumo</DialogTitle>
                     <DialogDescription>
-                        Faça o upload de um relatório de vendas/consumo em formato CSV para análise. O estoque mínimo será atualizado automaticamente.
+                        Faça o upload de um relatório de vendas/consumo em formato CSV para análise.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...uploadForm}>
@@ -241,5 +241,3 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
         </Dialog>
     );
 }
-
-    
