@@ -132,21 +132,6 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                             consumptionByBaseProduct[baseProduct.id].quantity += consumedInBaseUnit;
                         }
                     }
-
-                    if (unmatchedSkus.size > 0) {
-                        const unmatchedSkuList = Array.from(unmatchedSkus).join(', ');
-                        toast({
-                            variant: 'destructive',
-                            title: 'Alguns SKUs não foram encontrados ou tiveram erros',
-                            description: `Os seguintes SKUs do seu relatório foram ignorados: ${unmatchedSkuList}. Verifique os cadastros na ficha da mercadoria.`,
-                            duration: 30000,
-                            action: (
-                              <ToastAction altText="Copiar SKUs" onClick={() => navigator.clipboard.writeText(unmatchedSkuList)}>
-                                Copiar SKUs
-                              </ToastAction>
-                            ),
-                        });
-                    }
                     
                     const finalResults = Object.entries(consumptionByBaseProduct).map(([baseProductId, data]) => ({
                         productId: baseProductId,
@@ -155,11 +140,12 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                         baseProductId: baseProductId,
                     }));
 
-                    if (finalResults.length === 0 && unmatchedSkus.size === 0) {
-                        throw new Error("Nenhum item do relatório foi processado. Verifique os nomes das colunas (devem ser 'codigo' e 'quantidade') e se os SKUs existem.");
-                    }
-                     if (finalResults.length === 0 && unmatchedSkus.size > 0) {
-                        throw new Error("Nenhum dos SKUs no relatório correspondeu a uma mercadoria cadastrada.");
+                    if (finalResults.length === 0) {
+                        if (unmatchedSkus.size > 0) {
+                            throw new Error("Nenhum dos SKUs no relatório correspondeu a uma mercadoria cadastrada. Verifique a lista de SKUs não encontrados.");
+                        } else {
+                            throw new Error("Nenhum item do relatório foi processado. Verifique o formato do arquivo (colunas 'codigo' e 'quantidade').");
+                        }
                     }
                      
                     const newReport: Omit<ConsumptionReport, 'id'> = {
@@ -175,7 +161,23 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                     
                     await addReport(newReport);
                     
-                    toast({ title: 'Sucesso!', description: 'Relatório de vendas processado e consumo calculado.' });
+                    if (unmatchedSkus.size > 0) {
+                        const unmatchedSkuList = Array.from(unmatchedSkus).join(', ');
+                        toast({
+                            variant: 'default',
+                            className: 'border-amber-500 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200',
+                            title: 'Relatório processado com avisos',
+                            description: `${finalResults.length} tipo(s) de insumo foram calculados, mas ${unmatchedSkus.size} SKU(s) foram ignorados: ${unmatchedSkuList}.`,
+                            duration: 30000,
+                            action: (
+                              <ToastAction altText="Copiar SKUs" onClick={() => navigator.clipboard.writeText(unmatchedSkuList)}>
+                                Copiar SKUs
+                              </ToastAction>
+                            ),
+                        });
+                    } else {
+                        toast({ title: 'Sucesso!', description: 'Relatório de vendas processado e consumo calculado.' });
+                    }
                     
                     onOpenChange(false);
 
