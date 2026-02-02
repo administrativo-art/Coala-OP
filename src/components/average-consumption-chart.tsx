@@ -49,7 +49,7 @@ export function AverageConsumptionChart() {
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection }>({ key: 'Consumo', direction: 'desc' });
   const [hideZeroConsumption, setHideZeroConsumption] = useState(true);
   const [classificationFilter, setClassificationFilter] = useState<string>('all');
-  const [abcClassFilter, setAbcClassFilter] = useState<'ALL' | 'A' | 'B' | 'C'>('ALL');
+  const [abcClassFilter, setAbcClassFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
   const [hoveredBar, setHoveredBar] = useState<string | null>(null);
   
   useEffect(() => {
@@ -83,7 +83,7 @@ export function AverageConsumptionChart() {
     const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
     
     relevantReports.forEach(report => {
-        const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
+        const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
         report.results.forEach(res => {
             if (res.baseProductId) {
                 if (!monthlyConsumptionByBaseId[res.baseProductId]) monthlyConsumptionByBaseId[res.baseProductId] = {};
@@ -93,10 +93,12 @@ export function AverageConsumptionChart() {
     });
     
     const allNetworkMonths = new Set<string>();
-    for (const report of relevantReports) {
-      const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
-      const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
-      if (anyConsumption) allNetworkMonths.add(key);
+    if (isMatrixView) {
+        for (const report of relevantReports) {
+          const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
+          const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
+          if (anyConsumption) allNetworkMonths.add(key);
+        }
     }
     const networkMonthsCount = allNetworkMonths.size;
 
@@ -131,22 +133,12 @@ export function AverageConsumptionChart() {
     }
     
     const sortedByConsumption = [...allItems].sort((a, b) => b.Consumo - a.Consumo);
-    const totalConsumptionValue = sortedByConsumption.reduce((sum, item) => sum + item.Consumo, 0);
-
-    let cumulativePercentage = 0;
-    const classifiedData = sortedByConsumption.map(item => {
-        const percentageOfTotal = totalConsumptionValue > 0 ? (item.Consumo / totalConsumptionValue) * 100 : 0;
-        cumulativePercentage += percentageOfTotal;
-        
-        let abcClass: 'A' | 'B' | 'C';
-        if (cumulativePercentage <= 70) {
-            abcClass = 'A';
-        } else if (cumulativePercentage <= 95) {
-            abcClass = 'B';
-        } else {
-            abcClass = 'C';
-        }
-        return { ...item, abcClass };
+    
+    const classifiedData = sortedByConsumption.map((item, index) => {
+        return {
+            ...item,
+            abcClass: index < 5 ? 'A' : 'B'
+        };
     });
 
     let dataToSort = classifiedData;
@@ -349,9 +341,8 @@ export function AverageConsumptionChart() {
             <Tabs value={abcClassFilter} onValueChange={(value) => setAbcClassFilter(value as any)} className="w-full sm:w-auto">
                 <TabsList>
                     <TabsTrigger value="ALL">Todos</TabsTrigger>
-                    <TabsTrigger value="A" className="data-[state=active]:text-red-600 data-[state=active]:border-red-600/50">Curva A</TabsTrigger>
-                    <TabsTrigger value="B" className="data-[state=active]:text-orange-500 data-[state=active]:border-orange-500/50">Curva B</TabsTrigger>
-                    <TabsTrigger value="C" className="data-[state=active]:text-yellow-600 data-[state=active]:border-yellow-600/50">Curva C</TabsTrigger>
+                    <TabsTrigger value="A" className="data-[state=active]:text-red-600 data-[state=active]:border-red-600/50">Curva A (Top 5)</TabsTrigger>
+                    <TabsTrigger value="B" className="data-[state=active]:text-orange-500 data-[state=active]:border-orange-500/50">Curva B (Restante)</TabsTrigger>
                 </TabsList>
             </Tabs>
             
@@ -442,5 +433,3 @@ export function AverageConsumptionChart() {
     </Card>
   )
 }
-
-    
