@@ -93,15 +93,9 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
                                                                 <p className="text-sm text-muted-foreground">Analisado em: {report.createdAt && isValid(parseISO(report.createdAt)) ? format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'Data indisponível'}</p>
                                                             </div>
                                                             <div className="flex items-center gap-1 shrink-0">
-                                                                 <DeleteConfirmationDialog 
-                                                                    open={false}
-                                                                    onOpenChange={() => {}}
-                                                                    onConfirm={handleDeleteConfirm}
-                                                                    itemName={`o relatório de consumo de ${report.kioskName} (${report.month}/${report.year})`}
-                                                                    triggerButton={
-                                                                        <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(report); }}><span><Trash2 className="h-4 w-4" /></span></Button>
-                                                                    }
-                                                                />
+                                                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(report); }}>
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
                                                             </div>
                                                         </div>
                                                     </AccordionTrigger>
@@ -139,23 +133,31 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
     }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
-                <DialogHeader>
-                    <DialogTitle>Histórico de análises de consumo</DialogTitle>
-                    <DialogDescription>
-                        Consulte, expanda e exclua análises de consumo de meses anteriores.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="flex-grow overflow-hidden">
-                    <ScrollArea className="h-full pr-4">
-                        {renderContent()}
-                    </ScrollArea>
-                </div>
-                <DialogFooter className="pt-4 border-t mt-auto">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Histórico de análises de consumo</DialogTitle>
+                        <DialogDescription>
+                            Consulte, expanda e exclua análises de consumo de meses anteriores.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex-grow overflow-hidden">
+                        <ScrollArea className="h-full pr-4">
+                            {renderContent()}
+                        </ScrollArea>
+                    </div>
+                    <DialogFooter className="pt-4 border-t mt-auto">
+                        <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            <DeleteConfirmationDialog
+                open={!!reportToDelete}
+                onOpenChange={() => setReportToDelete(null)}
+                onConfirm={handleDeleteConfirm}
+                itemName={reportToDelete ? `o relatório de consumo de ${reportToDelete.kioskName} (${reportToDelete.month}/${reportToDelete.year})` : ''}
+            />
+        </>
     );
 }
