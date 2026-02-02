@@ -1,5 +1,5 @@
 
-      "use client"
+"use client"
 
 import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
@@ -8,7 +8,7 @@ import * as z from 'zod';
 import Papa from 'papaparse';
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { type BaseProduct, type ConsumptionReport, type Kiosk } from '@/types';
+import { type BaseProduct, type ConsumptionReport, type Kiosk, type ProductSimulation, type ProductSimulationItem } from '@/types';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadCloud, Loader2 } from 'lucide-react';
-import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
+import { useProductSimulation } from '@/hooks/use-product-simulation';
+import { useBaseProducts } from '@/hooks/use-base-products';
+import { convertValue } from '@/lib/conversion';
 
 
 const consumptionUploadSchema = z.object({
@@ -27,15 +29,6 @@ const consumptionUploadSchema = z.object({
 });
 
 type ConsumptionUploadFormValues = z.infer<typeof consumptionUploadSchema>;
-
-const normalizeString = (str: string) => {
-    if (!str) return '';
-    return str
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .trim();
-};
 
 const parseQuantity = (qtyString: string | number): number => {
     if (typeof qtyString === 'number') {
@@ -57,15 +50,17 @@ interface ConsumptionImportModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     kiosks: Kiosk[];
-    baseProducts: BaseProduct[];
     addReport: (report: Omit<ConsumptionReport, 'id'>) => Promise<string | null>;
 }
 
-export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProducts, addReport }: ConsumptionImportModalProps) {
+export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }: ConsumptionImportModalProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const { simulations, simulationItems } = useProductSimulation();
+    const { baseProducts } = useBaseProducts();
+
 
     const uploadForm = useForm<ConsumptionUploadFormValues>({
         resolver: zodResolver(consumptionUploadSchema),
@@ -76,12 +71,6 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
             file: undefined,
         }
     });
-
-    const findBaseProductByName = (name: string): BaseProduct | undefined => {
-        const normalizedName = normalizeString(name);
-        if (!normalizedName) return undefined;
-        return baseProducts.find(p => normalizeString(p.name) === normalizedName);
-    }
 
     const onUploadSubmit = async (values: ConsumptionUploadFormValues) => {
         const file = values.file[0];
@@ -103,57 +92,68 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     const kiosk = kiosks.find(k => k.id === values.kioskId);
                     if (!kiosk) throw new Error("Quiosque selecionado inválido.");
 
-                    const analysisResults: { [baseProductId: string]: { productName: string; consumedQuantity: number; count: number } } = {};
-                    const unmatchedItems = new Set<string>();
+                    const consumptionByBaseProduct: { [baseProductId: string]: { name: string; quantity: number } } = {};
+                    const unmatchedSkus = new Set<string>();
 
                     for (const row of rows) {
-                        const itemName = (row['Item'])?.trim();
-                        const quantityStr = (row['Qtde.']);
-                        
-                        if (!itemName || quantityStr === undefined || quantityStr === null) continue;
+                        const sku = row['codigo']?.trim();
+                        const quantitySoldStr = row['quantidade'];
 
-                        const baseProductConfig = findBaseProductByName(itemName);
-                        if (!baseProductConfig) {
-                            unmatchedItems.add(itemName);
+                        if (!sku || quantitySoldStr === undefined || quantitySoldStr === null) continue;
+
+                        const quantitySold = parseQuantity(quantitySoldStr);
+                        if (quantitySold <= 0) continue;
+
+                        const simulation = simulations.find(s => s.ppo?.sku === sku);
+                        if (!simulation) {
+                            unmatchedSkus.add(sku);
                             continue;
                         }
-                        
-                        const quantityValue = parseQuantity(quantityStr);
-                        
-                        if (quantityValue < 0) continue;
 
-                        if (!analysisResults[baseProductConfig.id]) {
-                            analysisResults[baseProductConfig.id] = { 
-                                productName: baseProductConfig.name,
-                                consumedQuantity: 0,
-                                count: 0
-                            };
+                        const itemsForSim = simulationItems.filter(i => i.simulationId === simulation.id);
+
+                        for (const simItem of itemsForSim) {
+                            const baseProduct = baseProducts.find(bp => bp.id === simItem.baseProductId);
+                            if (!baseProduct) continue;
+
+                            let consumedInBaseUnit = 0;
+                            try {
+                                const valueOfOneSimItemInBase = convertValue(simItem.quantity, simItem.overrideUnit || baseProduct.unit, baseProduct.unit, baseProduct.category);
+                                consumedInBaseUnit = quantitySold * valueOfOneSimItemInBase;
+                            } catch (e) {
+                                console.error(`Error converting values for explosion for SKU ${sku}:`, e);
+                                unmatchedSkus.add(`${sku} (erro de conversão)`);
+                                continue; 
+                            }
+                            
+                            if (!consumptionByBaseProduct[baseProduct.id]) {
+                                consumptionByBaseProduct[baseProduct.id] = { name: baseProduct.name, quantity: 0 };
+                            }
+                            consumptionByBaseProduct[baseProduct.id].quantity += consumedInBaseUnit;
                         }
-                        analysisResults[baseProductConfig.id].consumedQuantity += quantityValue;
-                        analysisResults[baseProductConfig.id].count += 1;
                     }
 
-                    if (unmatchedItems.size > 0) {
+                    if (unmatchedSkus.size > 0) {
                         toast({
                             variant: 'destructive',
-                            title: 'Alguns itens não foram encontrados',
-                            description: `Os seguintes itens do CSV foram ignorados: ${Array.from(unmatchedItems).join(', ')}. Verifique se eles existem no cadastro de 'Produtos Base'.`,
+                            title: 'Alguns SKUs não foram encontrados ou tiveram erros',
+                            description: `Os seguintes SKUs do seu relatório foram ignorados: ${Array.from(unmatchedSkus).join(', ')}. Verifique os cadastros na ficha da mercadoria.`,
                             duration: 10000,
                         });
                     }
                     
-                    const finalResults = Object.entries(analysisResults).map(([baseProductId, data]) => ({
-                        productId: baseProductId, 
-                        productName: data.productName,
-                        consumedQuantity: data.consumedQuantity,
+                    const finalResults = Object.entries(consumptionByBaseProduct).map(([baseProductId, data]) => ({
+                        productId: baseProductId,
+                        productName: data.name,
+                        consumedQuantity: data.quantity,
                         baseProductId: baseProductId,
                     }));
 
-                    if (finalResults.length === 0 && unmatchedItems.size === 0) {
-                        throw new Error("Nenhum item do relatório foi processado. Verifique os nomes das colunas (devem ser 'Item' e 'Qtde.') e os dados do arquivo.");
+                    if (finalResults.length === 0 && unmatchedSkus.size === 0) {
+                        throw new Error("Nenhum item do relatório foi processado. Verifique os nomes das colunas (devem ser 'codigo' e 'quantidade') e se os SKUs existem.");
                     }
-                     if (finalResults.length === 0 && unmatchedItems.size > 0) {
-                        throw new Error("Nenhum item do relatório correspondeu a um Produto Base cadastrado.");
+                     if (finalResults.length === 0 && unmatchedSkus.size > 0) {
+                        throw new Error("Nenhum dos SKUs no relatório correspondeu a uma mercadoria cadastrada.");
                     }
                      
                     const newReport: Omit<ConsumptionReport, 'id'> = {
@@ -169,7 +169,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
                     
                     await addReport(newReport);
                     
-                    toast({ title: 'Sucesso!', description: 'Relatório processado com sucesso.' });
+                    toast({ title: 'Sucesso!', description: 'Relatório de vendas processado e consumo calculado.' });
                     
                     onOpenChange(false);
 
@@ -188,9 +188,9 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, baseProduct
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Importar relatório de consumo</DialogTitle>
+                    <DialogTitle>Importar relatório de vendas</DialogTitle>
                     <DialogDescription>
-                        Faça o upload de um relatório de vendas/consumo em formato CSV para análise.
+                        Faça o upload do seu relatório de vendas em formato CSV. O sistema usará as colunas "codigo" (SKU) e "quantidade" para calcular o consumo de insumos.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...uploadForm}>
