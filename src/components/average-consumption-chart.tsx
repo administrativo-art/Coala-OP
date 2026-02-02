@@ -1,13 +1,13 @@
+
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
 import { DateRange } from "react-day-picker"
-import { format, subDays, startOfWeek, addDays, eachDayOfInterval, isWithinInterval, parseISO, differenceInDays } from "date-fns"
+import { format, subDays, startOfMonth, addMonths, eachDayOfInterval, isWithinInterval, parseISO, differenceInDays, endOfMonth } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 
 // Hooks
-import { useMovementHistory } from "@/hooks/use-movement-history"
-import { useBaseProducts } from "@/hooks/use-base-products"
+import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 import { useProducts } from "@/hooks/use-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 
@@ -48,7 +48,7 @@ const CHART_COLORS = [
 export function AverageConsumptionChart() {
     // State
     const [dateRange, setDateRange] = useState<DateRange | undefined>({
-        from: subDays(new Date(), 29),
+        from: subDays(new Date(), 89), // 3 months default
         to: new Date(),
     });
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
@@ -59,62 +59,58 @@ export function AverageConsumptionChart() {
     const [abcFilter, setAbcFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
 
     // Data Hooks
-    const { history: movementHistory, loading: historyLoading } = useMovementHistory();
-    const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+    const { reports: consumptionReports, loading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
     const { products, loading: productsLoading } = useProducts();
     const { kiosks, loading: kiosksLoading } = useKiosks();
 
-    const loading = historyLoading || baseProductsLoading || productsLoading || kiosksLoading;
+    const loading = consumptionLoading || baseProductsLoading || productsLoading || kiosksLoading;
     
-    const { dailyConsumptions, historicalAverages, abcClasses } = useMemo(() => {
-        if (loading) return { dailyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] } };
+    const { monthlyConsumptions, historicalAverages, abcClasses } = useMemo(() => {
+        if (loading) return { monthlyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] } };
 
-        const filteredHistory = kioskId === 'all' 
-            ? movementHistory 
-            : movementHistory.filter(m => m.fromKioskId === kioskId);
-        
-        const consumptions = new Map<string, Map<string, number>>(); // Map<baseProductId, Map<dateStr, quantity>>
+        const kioskFilteredReports = kioskId === 'all' 
+            ? consumptionReports 
+            : consumptionReports.filter(r => r.kioskId === kioskId);
+
+        const consumptions = new Map<string, Map<string, number>>(); // Map<baseProductId, Map<monthStr, quantity>>
         const totals = new Map<string, number>();
-        const daysWithConsumption = new Map<string, Set<string>>();
+        const monthsWithConsumption = new Map<string, Set<string>>();
+        let totalNetworkConsumption = 0;
+        const consumptionByProduct = new Map<string, number>();
 
-        filteredHistory.forEach(m => {
-            if (m.type !== 'SAIDA_CONSUMO') return;
-            const product = products.find(p => p.id === m.productId);
-            if (!product || !product.baseProductId) return;
+        kioskFilteredReports.forEach(report => {
+            const monthStr = `${report.year}-${String(report.month).padStart(2, '0')}`;
+            report.results.forEach(item => {
+                if (!item.baseProductId) return;
+                
+                if (!consumptions.has(item.baseProductId)) {
+                    consumptions.set(item.baseProductId, new Map());
+                }
+                const monthMap = consumptions.get(item.baseProductId)!;
+                monthMap.set(monthStr, (monthMap.get(monthStr) || 0) + item.consumedQuantity);
+                
+                if (!monthsWithConsumption.has(item.baseProductId)) {
+                    monthsWithConsumption.set(item.baseProductId, new Set());
+                }
+                if (item.consumedQuantity > 0) {
+                    monthsWithConsumption.get(item.baseProductId)!.add(monthStr);
+                    totals.set(item.baseProductId, (totals.get(item.baseProductId) || 0) + item.consumedQuantity);
 
-            const dateStr = format(parseISO(m.timestamp), 'yyyy-MM-dd');
-            
-            if (!consumptions.has(product.baseProductId)) {
-                consumptions.set(product.baseProductId, new Map());
-            }
-            const dayMap = consumptions.get(product.baseProductId)!;
-            dayMap.set(dateStr, (dayMap.get(dateStr) || 0) + m.quantityChange);
-
-            if (!daysWithConsumption.has(product.baseProductId)) {
-                daysWithConsumption.set(product.baseProductId, new Set());
-            }
-            daysWithConsumption.get(product.baseProductId)!.add(dateStr);
-            totals.set(product.baseProductId, (totals.get(product.baseProductId) || 0) + m.quantityChange);
+                    // For ABC
+                    const currentTotal = consumptionByProduct.get(item.baseProductId) || 0;
+                    consumptionByProduct.set(item.baseProductId, currentTotal + item.consumedQuantity);
+                    totalNetworkConsumption += item.consumedQuantity;
+                }
+            });
         });
 
         const averages = new Map<string, number>();
         totals.forEach((total, bpId) => {
-            const daysCount = daysWithConsumption.get(bpId)?.size || 1;
-            averages.set(bpId, total / daysCount);
+            const monthsCount = monthsWithConsumption.get(bpId)?.size || 1;
+            averages.set(bpId, total / monthsCount);
         });
 
         // ABC Calculation
-        let totalNetworkConsumption = 0;
-        const consumptionByProduct = new Map<string, number>();
-        filteredHistory.forEach(m => {
-             if (m.type !== 'SAIDA_CONSUMO') return;
-             const product = products.find(p => p.id === m.productId);
-             if (!product || !product.baseProductId) return;
-             const current = consumptionByProduct.get(product.baseProductId) || 0;
-             consumptionByProduct.set(product.baseProductId, current + m.quantityChange);
-             totalNetworkConsumption += m.quantityChange;
-        });
-        
         const consumptionPercentages = Array.from(consumptionByProduct.entries()).map(([id, total]) => ({
             id,
             total,
@@ -124,21 +120,21 @@ export function AverageConsumptionChart() {
         const classA = consumptionPercentages.slice(0, 5).map(p => p.id);
         const classB = consumptionPercentages.slice(5).map(p => p.id);
 
-        return { dailyConsumptions: consumptions, historicalAverages: averages, abcClasses: { A: classA, B: classB } };
+        return { monthlyConsumptions: consumptions, historicalAverages: averages, abcClasses: { A: classA, B: classB } };
 
-    }, [loading, movementHistory, products, kioskId]);
+    }, [loading, consumptionReports, kioskId]);
     
     const topOfensores = useMemo(() => {
-        if (loading || dailyConsumptions.size === 0) return [];
+        if (loading || monthlyConsumptions.size === 0) return [];
         
-        const ofensores = Array.from(dailyConsumptions.keys()).map(bpId => {
-            const consumptions = Array.from(dailyConsumptions.get(bpId)?.values() || []);
+        const ofensores = Array.from(monthlyConsumptions.keys()).map(bpId => {
+            const consumptions = Array.from(monthlyConsumptions.get(bpId)?.values() || []);
             const deviation = stdDev(consumptions);
             return { id: bpId, deviation };
         });
 
         return ofensores.sort((a,b) => b.deviation - a.deviation).slice(0, 3);
-    }, [loading, dailyConsumptions]);
+    }, [loading, monthlyConsumptions]);
     
     useEffect(() => {
         if (initialLoad && topOfensores.length > 0 && selectedBaseProducts.length === 0) {
@@ -171,27 +167,35 @@ export function AverageConsumptionChart() {
         
         const currentViewMode = uniqueUnitsOnSelected.size > 1 ? 'percentage' : viewMode;
 
-        const interval = eachDayOfInterval({start: dateRange.from, end: dateRange.to || dateRange.from});
+        const start = startOfMonth(dateRange.from);
+        const end = endOfMonth(dateRange.to || dateRange.from);
+        
+        const interval: Date[] = [];
+        let current = start;
+        while (current <= end) {
+            interval.push(current);
+            current = addMonths(current, 1);
+        }
 
-        const finalChartData = interval.map(day => {
-            const dateStr = format(day, 'yyyy-MM-dd');
+        const finalChartData = interval.map(month => {
+            const monthStr = format(month, 'yyyy-MM');
             const dayData: Record<string, any> = {
-                date: format(day, 'dd/MM'),
+                date: format(month, 'MMM/yy', {locale: ptBR}),
             };
             selectedBaseProducts.forEach(bpId => {
                 const bp = baseProducts.find(p => p.id === bpId);
                 if (bp) {
-                    const dailyValue = dailyConsumptions.get(bpId)?.get(dateStr) || 0;
+                    const monthlyValue = monthlyConsumptions.get(bpId)?.get(monthStr) || 0;
                     
                     if (currentViewMode === 'percentage') {
                         const historicalAvg = historicalAverages.get(bpId);
                         if (historicalAvg && historicalAvg > 0) {
-                            dayData[bp.name] = ((dailyValue / historicalAvg) - 1) * 100;
+                            dayData[bp.name] = ((monthlyValue / historicalAvg) - 1) * 100;
                         } else {
-                            dayData[bp.name] = dailyValue > 0 ? 100 : 0;
+                            dayData[bp.name] = monthlyValue > 0 ? 100 : 0;
                         }
                     } else {
-                        dayData[bp.name] = dailyValue;
+                        dayData[bp.name] = monthlyValue;
                     }
                 }
             });
@@ -200,12 +204,16 @@ export function AverageConsumptionChart() {
 
         const finalInsights: Insight[] = selectedBaseProducts.map(bpId => {
             const historicalAvg = historicalAverages.get(bpId) || 0;
-            const periodConsumptions = Array.from(dailyConsumptions.get(bpId)?.entries() || [])
-                .filter(([dateStr,]) => isWithinInterval(parseISO(dateStr), {start: dateRange.from!, end: addDays(dateRange.to || dateRange.from!, 1)}))
-                .map(([, value]) => value);
             
-            const currentAvg = periodConsumptions.length > 0
-                ? periodConsumptions.reduce((a,b) => a + b, 0) / periodConsumptions.length
+            const consumptionsInPeriod = Array.from(monthlyConsumptions.get(bpId)?.entries() || [])
+                .filter(([monthStr,]) => {
+                    const monthDate = parseISO(`${monthStr}-01`);
+                    return isWithinInterval(monthDate, {start, end});
+                })
+                .map(([, value]) => value);
+
+            const currentAvg = consumptionsInPeriod.length > 0
+                ? consumptionsInPeriod.reduce((a,b) => a + b, 0) / consumptionsInPeriod.length
                 : 0;
 
             const change = historicalAvg > 0 ? ((currentAvg / historicalAvg) - 1) * 100 : (currentAvg > 0 ? Infinity : 0);
@@ -228,7 +236,7 @@ export function AverageConsumptionChart() {
 
         return { chartData: finalChartData, yAxisLabel: yLabel, insights: finalInsights };
 
-    }, [dateRange, selectedBaseProducts, loading, baseProducts, viewMode, dailyConsumptions, historicalAverages, uniqueUnitsOnSelected]);
+    }, [dateRange, selectedBaseProducts, loading, baseProducts, viewMode, monthlyConsumptions, historicalAverages, uniqueUnitsOnSelected]);
     
     const availableBaseProducts = useMemo(() => {
         if (abcFilter === 'A') return baseProducts.filter(bp => abcClasses.A.includes(bp.id));
