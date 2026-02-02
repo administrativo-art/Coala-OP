@@ -23,6 +23,7 @@ import { CalendarIcon, TrendingUp, X as XIcon, Inbox, Check, Lightbulb } from 'l
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
 import { InsightCard, type Insight } from './insight-card'
+import type { BaseProduct } from "@/types"
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -115,11 +116,28 @@ export function AverageConsumptionChart() {
     }, [initialLoad, topOfensores, selectedBaseProducts.length]);
 
 
+    const uniqueUnitsOnSelected = useMemo(() => {
+        if (loading || selectedBaseProducts.length === 0) return new Set();
+        const selectedProductsDetails = selectedBaseProducts.map(bpId => baseProducts.find(p => p.id === bpId)).filter(Boolean) as BaseProduct[];
+        return new Set(selectedProductsDetails.map(p => p.unit));
+    }, [selectedBaseProducts, baseProducts, loading]);
+
+    useEffect(() => {
+        if (uniqueUnitsOnSelected.size > 1) {
+            setViewMode('percentage');
+        } else {
+            setViewMode('absolute');
+        }
+    }, [uniqueUnitsOnSelected]);
+
+
     // Memoized Data Processing
     const { chartData, yAxisLabel, insights } = useMemo(() => {
         if (!dateRange?.from || selectedBaseProducts.length === 0 || loading) {
             return { chartData: [], yAxisLabel: 'Consumo', insights: [] };
         }
+        
+        const currentViewMode = uniqueUnitsOnSelected.size > 1 ? 'percentage' : viewMode;
 
         const interval = eachDayOfInterval({start: dateRange.from, end: dateRange.to || dateRange.from});
 
@@ -131,7 +149,18 @@ export function AverageConsumptionChart() {
             selectedBaseProducts.forEach(bpId => {
                 const bp = baseProducts.find(p => p.id === bpId);
                 if (bp) {
-                    dayData[bp.name] = dailyConsumptions.get(bpId)?.get(dateStr) || 0;
+                    const dailyValue = dailyConsumptions.get(bpId)?.get(dateStr) || 0;
+                    
+                    if (currentViewMode === 'percentage') {
+                        const historicalAvg = historicalAverages.get(bpId);
+                        if (historicalAvg && historicalAvg > 0) {
+                            dayData[bp.name] = ((dailyValue / historicalAvg) - 1) * 100;
+                        } else {
+                            dayData[bp.name] = dailyValue > 0 ? 100 : 0;
+                        }
+                    } else {
+                        dayData[bp.name] = dailyValue;
+                    }
                 }
             });
             return dayData;
@@ -157,12 +186,17 @@ export function AverageConsumptionChart() {
             };
         });
 
-        const firstSelectedProduct = baseProducts.find(p => p.id === selectedBaseProducts[0]);
-        const yLabel = viewMode === 'absolute' ? `Consumo (${firstSelectedProduct?.unit || ''})` : 'Variação (%)';
+        let yLabel = 'Consumo';
+        if (currentViewMode === 'percentage') {
+            yLabel = 'Variação (%)';
+        } else if (selectedBaseProducts.length > 0) {
+            const firstSelectedProduct = baseProducts.find(p => p.id === selectedBaseProducts[0]);
+            yLabel = `Consumo (${firstSelectedProduct?.unit || ''})`;
+        }
 
         return { chartData: finalChartData, yAxisLabel: yLabel, insights: finalInsights };
 
-    }, [dateRange, selectedBaseProducts, loading, baseProducts, viewMode, dailyConsumptions, historicalAverages]);
+    }, [dateRange, selectedBaseProducts, loading, baseProducts, viewMode, dailyConsumptions, historicalAverages, uniqueUnitsOnSelected]);
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -254,9 +288,15 @@ export function AverageConsumptionChart() {
                         </PopoverContent>
                     </Popover>
                     
-                    <ToggleGroup type="single" value={viewMode} onValueChange={(value) => {if (value) setViewMode(value as any)}} size="sm">
+                    <ToggleGroup 
+                        type="single" 
+                        value={viewMode} 
+                        onValueChange={(value) => {if (value) setViewMode(value as any)}} 
+                        size="sm"
+                        disabled={uniqueUnitsOnSelected.size > 1}
+                    >
                         <ToggleGroupItem value="absolute">Absoluto</ToggleGroupItem>
-                        <ToggleGroupItem value="percentage" disabled>Variação %</ToggleGroupItem>
+                        <ToggleGroupItem value="percentage">Variação %</ToggleGroupItem>
                     </ToggleGroup>
                 </div>
                 
@@ -283,8 +323,11 @@ export function AverageConsumptionChart() {
                             <LineChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="date" />
-                                <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }}/>
-                                <Tooltip />
+                                <YAxis 
+                                    label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }}
+                                    tickFormatter={(value) => uniqueUnitsOnSelected.size > 1 ? `${value}%` : value}
+                                />
+                                <Tooltip formatter={(value: number) => uniqueUnitsOnSelected.size > 1 ? `${value.toFixed(0)}%` : value} />
                                 <Legend />
                                 {selectedBaseProducts.map((bpId, index) => {
                                     const bp = baseProducts.find(p => p.id === bpId);
