@@ -314,11 +314,12 @@ export function AverageConsumptionChart() {
                             <Command>
                                 <CommandInput placeholder="Buscar insumo..." />
                                 <CommandEmpty>Nenhum insumo encontrado.</CommandEmpty>
-                                <CommandList>
+                                <CommandList className="max-h-[300px] overflow-y-auto">
                                 <CommandGroup>
                                     {availableBaseProducts.map((bp) => (
                                         <CommandItem
                                             key={bp.id}
+                                            value={bp.name}
                                             onSelect={() => {
                                                 setSelectedBaseProducts(prev => 
                                                     prev.includes(bp.id) ? prev.filter(id => id !== bp.id) : [...prev, bp.id]
