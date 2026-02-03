@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { X } from "lucide-react"
-import { Command as CommandPrimitive } from "cmdk"
-import { Badge } from "@/components/ui/badge"
-import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command"
+import { X, Check } from "lucide-react"
+import { useVirtualizer } from '@tanstack/react-virtual'
+
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 
 type Option = {
   value: string
@@ -30,8 +30,10 @@ export function MultiSelect({
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState("")
+  const [activeIndex, setActiveIndex] = React.useState(-1);
 
-  // Filtragem Manual (para evitar travamento)
+  const parentRef = React.useRef<HTMLDivElement>(null)
+
   const filteredOptions = React.useMemo(() => {
     if (!inputValue) return options
     const normalize = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -39,17 +41,26 @@ export function MultiSelect({
     return options.filter((option) => normalize(option.label).includes(query))
   }, [options, inputValue])
 
+  const rowVirtualizer = useVirtualizer({
+    count: filteredOptions.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 36, // Roughly h-9 + py-1.5
+    overscan: 5,
+  })
+
   const handleUnselect = (value: string) => {
     onChange(selected.filter((s) => s !== value))
   }
 
   const handleSelect = (value: string) => {
     setInputValue("")
+    setActiveIndex(-1);
     if (selected.includes(value)) {
       handleUnselect(value)
     } else {
       onChange([...selected, value])
     }
+    inputRef.current?.focus()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -63,16 +74,36 @@ export function MultiSelect({
       if (e.key === "Escape") {
         input.blur()
       }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        const newIndex = Math.min(activeIndex + 1, filteredOptions.length - 1);
+        setActiveIndex(newIndex);
+        rowVirtualizer.scrollToIndex(newIndex, { align: 'auto' });
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        const newIndex = Math.max(activeIndex - 1, 0);
+        setActiveIndex(newIndex);
+        rowVirtualizer.scrollToIndex(newIndex, { align: 'auto' });
+      }
+      if (e.key === "Enter" && activeIndex !== -1) {
+        e.preventDefault();
+        const option = filteredOptions[activeIndex];
+        if (option) {
+            handleSelect(option.value);
+        }
+      }
     }
   }
 
+  React.useEffect(() => {
+    setActiveIndex(-1);
+  }, [inputValue]);
+
+
   return (
-    <div className={cn("relative overflow-visible", className)}>
-      <Command 
-        onKeyDown={handleKeyDown} 
-        className="overflow-visible bg-transparent" 
-        shouldFilter={false} // IMPORTANTE: Desativa filtro nativo
-      >
+    <div className={cn("relative", className)}>
+      <div onKeyDown={handleKeyDown}>
         <div
           className="group border border-input px-3 py-2 text-sm ring-offset-background rounded-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
         >
@@ -84,10 +115,7 @@ export function MultiSelect({
                   {option?.label || value}
                   <button
                     className="ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                    }}
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleUnselect(value)}
                   >
                     <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
@@ -95,11 +123,11 @@ export function MultiSelect({
                 </Badge>
               )
             })}
-            <CommandPrimitive.Input
+            <input
               ref={inputRef}
               value={inputValue}
-              onValueChange={setInputValue}
-              onBlur={() => setOpen(false)}
+              onChange={(e) => setInputValue(e.target.value)}
+              onBlur={() => setTimeout(() => setOpen(false), 100)} // Delay blur to allow click
               onFocus={() => setOpen(true)}
               placeholder={selected.length === 0 ? placeholder : ""}
               className="ml-2 bg-transparent outline-none placeholder:text-muted-foreground flex-1 min-w-[120px]"
@@ -107,46 +135,58 @@ export function MultiSelect({
           </div>
         </div>
         
-        {/* Dropdown Flutuante */}
-        {open && filteredOptions.length > 0 && (
+        {open && (
             <div 
               className="absolute top-full z-50 w-full mt-2 bg-popover text-popover-foreground rounded-md border shadow-md outline-none animate-in fade-in-0 zoom-in-95"
-              onMouseDown={(e) => {
-                e.preventDefault(); // Impede o input de perder foco (blur)
-              }}
+              onMouseDown={(e) => e.preventDefault()}
             >
-            <CommandList className="max-h-[300px] overflow-auto"> 
-                {filteredOptions.map((option) => {
+            <div ref={parentRef} className="max-h-[300px] overflow-auto p-1">
+              {filteredOptions.length > 0 ? (
+                <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+                  {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+                    const option = filteredOptions[virtualItem.index]
                     const isSelected = selected.includes(option.value)
                     return (
-                    <CommandItem
+                      <div
                         key={option.value}
-                        value={option.label} 
-                        onSelect={() => handleSelect(option.value)}
-                        className="cursor-pointer"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                    >
-                        <div
+                        data-value={option.value}
+                        onMouseDown={() => handleSelect(option.value)}
                         className={cn(
-                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                            isSelected
-                            ? "bg-primary text-primary-foreground"
-                            : "opacity-50 [&_svg]:invisible"
+                          "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none",
+                          "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+                          activeIndex === virtualItem.index ? "bg-accent text-accent-foreground" : ""
                         )}
-                        >
-                        <X className={cn("h-4 w-4", !isSelected && "hidden")} />
-                        </div>
-                        {option.label}
-                    </CommandItem>
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: `${virtualItem.size}px`,
+                          transform: `translateY(${virtualItem.start}px)`,
+                        }}
+                      >
+                          <div
+                          className={cn(
+                              "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                              isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : "opacity-50 [&_svg]:invisible"
+                          )}
+                          >
+                          <Check className={cn("h-4 w-4", !isSelected && "hidden")} />
+                          </div>
+                          {option.label}
+                      </div>
                     )
-                })}
-            </CommandList>
+                  })}
+                </div>
+              ) : (
+                <div className="py-6 text-center text-sm">Nenhum insumo encontrado.</div>
+              )}
+            </div>
           </div>
         )}
-      </Command>
+      </div>
     </div>
   )
 }
