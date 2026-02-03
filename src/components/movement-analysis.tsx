@@ -1,4 +1,5 @@
-"use client"
+
+"use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react"
 import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth } from "date-fns"
@@ -21,6 +22,7 @@ import { LineChart, Line, Tooltip, ResponsiveContainer, ReferenceLine } from 're
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Product } from "@/types";
 
 
 // Card model for transfer data
@@ -34,6 +36,7 @@ type TransferCardModel = {
   periodChangePct: number;
   historicalChangePct: number;
   historicalStatus: 'normal' | 'acima' | 'abaixo' | 'sem dados';
+  representativeProduct?: Product;
 };
 
 // Tooltip for the sparkline chart
@@ -72,6 +75,36 @@ function TransferCard({ data }: { data: TransferCardModel }) {
            historicalText = "Histórico de transferências insuficiente";
            historicalColor = "text-muted-foreground";
   }
+  
+  const formatDisplayQuantity = (baseQuantity: number) => {
+    if (!data.representativeProduct || baseQuantity === 0) {
+        return `${baseQuantity.toFixed(1)} ${data.unit}`;
+    }
+
+    const { representativeProduct, unit: baseUnit } = data;
+    const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
+    
+    try {
+        const unitsPerPackage = convertValue(packageSize, contentUnit, baseUnit, category);
+        if (unitsPerPackage <= 0) return `${baseQuantity.toFixed(1)} ${baseUnit}`;
+        
+        const numPackages = baseQuantity / unitsPerPackage;
+        let displayParts: string[] = [];
+        
+        displayParts.push(`${numPackages.toFixed(1)} ${packageType || 'un'}(s)`);
+
+        if (multiplo_caixa && multiplo_caixa > 0 && rotulo_caixa) {
+            const numBoxes = numPackages / multiplo_caixa;
+            displayParts.push(`${numBoxes.toFixed(1)} ${rotulo_caixa}(s)`);
+        }
+
+        return displayParts.join(' / ');
+
+    } catch (e) {
+        return `${baseQuantity.toFixed(1)} ${baseUnit}`;
+    }
+  };
+
 
   return (
     <Card className="flex flex-col h-full">
@@ -97,8 +130,8 @@ function TransferCard({ data }: { data: TransferCardModel }) {
          </div>
       </CardContent>
        <CardFooter className="flex-col items-start gap-1 text-xs text-muted-foreground border-t pt-2 pb-3">
-        <div className="flex justify-between w-full"><span>Média Transferida (Período):</span><span className="font-semibold">{data.periodAvg.toFixed(1)}/mês</span></div>
-        <div className="flex justify-between w-full"><span>Média Histórica (Total):</span><span className="font-semibold">{data.histAvg.toFixed(1)}/mês</span></div>
+        <div className="flex justify-between w-full"><span>Média Transferida (Período):</span><span className="font-semibold">{formatDisplayQuantity(data.periodAvg)}/mês</span></div>
+        <div className="flex justify-between w-full"><span>Média Histórica (Total):</span><span className="font-semibold">{formatDisplayQuantity(data.histAvg)}/mês</span></div>
       </CardFooter>
     </Card>
   )
@@ -349,10 +382,13 @@ export function MovementAnalysis() {
                 }
             }
 
+            const representativeProduct = products.find(p => p.baseProductId === bp.id);
+
             return {
                 id: bp.id, name: bp.name, unit: bp.unit,
                 series: transfersInPeriod, periodAvg, histAvg,
-                periodChangePct, historicalChangePct, historicalStatus
+                periodChangePct, historicalChangePct, historicalStatus,
+                representativeProduct,
             };
         }).filter(d => d.periodAvg > 0 || d.histAvg > 0) // Only show cards with some data
           .sort((a,b) => (b.periodAvg * Math.abs(b.periodChangePct)) - (a.periodAvg * Math.abs(a.periodChangePct)));
@@ -367,7 +403,7 @@ export function MovementAnalysis() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Truck /> Análise de Movimentações</CardTitle>
+                <CardTitle className="flex items-center gap-2"><Truck /> Análise de movimentações</CardTitle>
                 <CardDescription>Visualize o fluxo de entrada de insumos nas unidades por período.</CardDescription>
             </CardHeader>
             <CardContent>
