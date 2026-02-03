@@ -210,6 +210,7 @@ function UnitAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: string
   );
 }
 
+
 export function MovementAnalysis() {
     const [startPeriod, setStartPeriod] = useState<string | null>(null);
     const [endPeriod, setEndPeriod] = useState<string | null>(null);
@@ -223,7 +224,6 @@ export function MovementAnalysis() {
     
     const loading = historyLoading || productsLoading || baseProductsLoading || kiosksLoading;
     const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
-    const baseProductMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
 
     const availablePeriods = useMemo(() => {
         if (loading) return [];
@@ -277,7 +277,7 @@ export function MovementAnalysis() {
             const product = productMap.get(movement.productId);
             if (!product || !product.baseProductId) return;
 
-            const baseProduct = baseProductMap.get(product.baseProductId);
+            const baseProduct = baseProducts.find(bp => bp.id === product.baseProductId);
             if (!baseProduct) return;
             
             let quantityInBaseUnit = 0;
@@ -357,7 +357,7 @@ export function MovementAnalysis() {
         }).filter(d => d.periodAvg > 0 || d.histAvg > 0) // Only show cards with some data
           .sort((a,b) => (b.periodAvg * Math.abs(b.periodChangePct)) - (a.periodAvg * Math.abs(a.periodChangePct)));
 
-    }, [loading, startPeriod, endPeriod, kioskId, selectedBaseProducts, history, products, baseProducts, productMap, baseProductMap]);
+    }, [loading, startPeriod, endPeriod, kioskId, selectedBaseProducts, history, products, baseProducts, productMap]);
 
 
     if (loading) {
