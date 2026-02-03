@@ -15,7 +15,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
@@ -26,6 +25,7 @@ import { InsightCard, type Insight } from './insight-card'
 import type { BaseProduct } from "@/types"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
+import { MultiSelect } from "@/components/ui/multi-select"
 
 
 const stdDev = (arr: number[]): number => {
@@ -52,15 +52,13 @@ export function AverageConsumptionChart() {
     });
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [viewMode, setViewMode] = useState<'absolute' | 'percentage'>('absolute');
-    const [open, setOpen] = useState(false);
     const [initialLoad, setInitialLoad] = useState(true);
     const [kioskId, setKioskId] = useState<string>('all');
-    const [abcFilter, setAbcFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
-    const [searchQuery, setSearchQuery] = useState("");
+    const [abcFilter, setAbcClassFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
 
     // Data Hooks
     const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
-    const { products, loading: productsLoading } = useProducts();
+    const { loading: productsLoading } = useProducts();
     const { kiosks, loading: kiosksLoading } = useKiosks();
 
     const loading = consumptionLoading || productsLoading || kiosksLoading;
@@ -243,18 +241,10 @@ export function AverageConsumptionChart() {
         if (abcFilter === 'B') return baseProducts.filter(bp => abcClasses.B.includes(bp.id));
         return baseProducts;
     }, [baseProducts, abcFilter, abcClasses]);
-    
-    const filteredBaseProducts = useMemo(() => {
-        if (!searchQuery) return availableBaseProducts;
-        
-        const normalize = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const query = normalize(searchQuery);
-    
-        return availableBaseProducts.filter(bp => 
-            normalize(bp.name).includes(query)
-        );
-    }, [availableBaseProducts, searchQuery]);
 
+    const productOptions = useMemo(() => 
+        availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
+    [availableBaseProducts]);
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -318,47 +308,15 @@ export function AverageConsumptionChart() {
                         </PopoverContent>
                     </Popover>
 
-                    {/* Multi-select for base products */}
-                    <Popover open={open} onOpenChange={setOpen}>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="outline"
-                                role="combobox"
-                                aria-expanded={open}
-                                className="flex-1 justify-between"
-                            >
-                                {selectedBaseProducts.length > 0 ? `${selectedBaseProducts.length} insumo(s) selecionado(s)` : "Digite para adicionar insumos ao gráfico"}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                            <Command shouldFilter={false}>
-                                <CommandInput
-                                    placeholder="Buscar insumo..."
-                                    value={searchQuery}
-                                    onValueChange={setSearchQuery}
-                                />
-                                <CommandEmpty>Nenhum insumo encontrado.</CommandEmpty>
-                                <CommandList className="max-h-[300px] overflow-y-auto">
-                                <CommandGroup>
-                                    {filteredBaseProducts.map((bp) => (
-                                        <CommandItem
-                                            key={bp.id}
-                                            value={bp.id}
-                                            onSelect={() => {
-                                                setSelectedBaseProducts(prev => 
-                                                    prev.includes(bp.id) ? prev.filter(id => id !== bp.id) : [...prev, bp.id]
-                                                );
-                                            }}
-                                        >
-                                            <Check className={cn("mr-2 h-4 w-4", selectedBaseProducts.includes(bp.id) ? "opacity-100" : "opacity-0")} />
-                                            {bp.name}
-                                        </CommandItem>
-                                    ))}
-                                </CommandGroup>
-                                </CommandList>
-                            </Command>
-                        </PopoverContent>
-                    </Popover>
+                    <div className="flex-1">
+                        <MultiSelect
+                            options={productOptions}
+                            selected={selectedBaseProducts}
+                            onChange={setSelectedBaseProducts}
+                            placeholder="Selecione os insumos..."
+                            className="w-full"
+                        />
+                    </div>
                     
                     <ToggleGroup 
                         type="single" 
@@ -371,29 +329,13 @@ export function AverageConsumptionChart() {
                         <ToggleGroupItem value="percentage">Variação %</ToggleGroupItem>
                     </ToggleGroup>
                 </div>
-                 <Tabs value={abcFilter} onValueChange={(v) => setAbcFilter(v as any)}>
+                 <Tabs value={abcFilter} onValueChange={(v) => setAbcClassFilter(v as any)}>
                     <TabsList>
                         <TabsTrigger value="ALL">Geral</TabsTrigger>
                         <TabsTrigger value="A">Curva A (Top 5)</TabsTrigger>
                         <TabsTrigger value="B">Curva B (Restante)</TabsTrigger>
                     </TabsList>
                 </Tabs>
-                
-                {selectedBaseProducts.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                        {selectedBaseProducts.map(bpId => {
-                            const bp = baseProducts.find(p => p.id === bpId);
-                            return (
-                                <Badge key={bpId} variant="secondary" className="gap-1">
-                                    {bp?.name}
-                                    <button onClick={() => setSelectedBaseProducts(prev => prev.filter(id => id !== bpId))}>
-                                        <XIcon className="h-3 w-3" />
-                                    </button>
-                                </Badge>
-                            )
-                        })}
-                    </div>
-                )}
                 
                 {/* Chart */}
                 <div className="h-[400px]">
