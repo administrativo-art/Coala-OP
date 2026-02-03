@@ -74,7 +74,7 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 
-function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data: CardModel, onCompareClick: (data: CardModel) => void, formatDisplayQuantity: (qty: number, bp: BaseProduct) => { primary: string, secondary?: string } }) {
+function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data: CardModel, onCompareClick: (data: CardModel) => void, formatDisplayQuantity: (qty: number, bp: BaseProduct) => string }) {
   const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
   const periodColorClass = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
 
@@ -185,14 +185,12 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 w-full">
             <div className="text-muted-foreground">Média Período</div>
             <div className="text-right font-semibold text-foreground">
-                <div>{formattedPeriodAvg.primary}/mês</div>
-                {formattedPeriodAvg.secondary && <div className="text-xs font-normal text-muted-foreground">{formattedPeriodAvg.secondary}</div>}
+                {formattedPeriodAvg}/mês
             </div>
 
             <div className="text-muted-foreground">Média Histórica</div>
             <div className="text-right font-semibold text-foreground">
-                <div>{formattedHistAvg.primary}/mês</div>
-                {formattedHistAvg.secondary && <div className="text-xs font-normal text-muted-foreground">{formattedHistAvg.secondary}</div>}
+                {formattedHistAvg}/mês
             </div>
 
             <div className="text-muted-foreground">Volatilidade</div>
@@ -257,49 +255,52 @@ export function AverageConsumptionChart() {
         }
     };
 
-    const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): { primary: string, secondary?: string } => {
+  const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): string => {
+      const formatNumber = (value: number) => {
+        const options: Intl.NumberFormatOptions = {
+          maximumFractionDigits: 1,
+        };
+        if (value % 1 !== 0) {
+            options.minimumFractionDigits = 1;
+        }
+        return value.toLocaleString('pt-BR', options);
+      };
+
       if (baseQuantity === 0) {
-          return { primary: `0 ${baseProduct.unit}` };
+          return `0 ${baseProduct.unit}`;
       }
   
       const representativeProduct = products.find(p => p.baseProductId === baseProduct.id);
   
-      if (!representativeProduct) {
-          return { primary: `${baseQuantity.toFixed(1)} ${baseProduct.unit}` };
-      }
-  
-      const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
-  
-      try {
-          const unitsPerPackage = convertValue(packageSize, contentUnit, baseProduct.unit, category);
-          if (unitsPerPackage <= 0) return { primary: `${baseQuantity.toFixed(1)} ${baseProduct.unit}` };
-          
-          const numPackages = baseQuantity / unitsPerPackage;
-  
-          let primaryDisplay = '';
-          const secondaryParts: string[] = [];
-  
-          if (multiplo_caixa && multiplo_caixa > 0 && rotulo_caixa) {
-              const numBoxes = numPackages / multiplo_caixa;
-              primaryDisplay = `${numBoxes.toFixed(1)} ${rotulo_caixa}(s)`;
-              if (packageType && packageType.toLowerCase() !== 'unidade' && packageType.toLowerCase() !== 'un') {
-                  secondaryParts.push(`${numPackages.toFixed(1)} ${packageType}(s)`);
-              }
-              secondaryParts.push(`${baseQuantity.toFixed(1)} ${baseProduct.unit}`);
-          } else if (packageType && packageType.toLowerCase() !== 'unidade' && packageType.toLowerCase() !== 'un') {
-               primaryDisplay = `${numPackages.toFixed(1)} ${packageType || 'pct'}(s)`;
-               secondaryParts.push(`${baseQuantity.toFixed(1)} ${baseProduct.unit}`);
-          } else {
-               primaryDisplay = `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
-          }
-          
-          const secondaryDisplay = secondaryParts.length > 0 ? secondaryParts.join(' / ') : undefined;
+      const parts: string[] = [];
 
-          return { primary: primaryDisplay, secondary: secondaryDisplay };
+      parts.push(`${formatNumber(baseQuantity)} ${baseProduct.unit}`);
+
+      if (representativeProduct) {
+          const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
+          
+          try {
+              const unitsPerPackage = convertValue(packageSize, contentUnit, baseProduct.unit, category);
   
-      } catch (e) {
-          return { primary: `${baseQuantity.toFixed(1)} ${baseProduct.unit}` };
+              if (unitsPerPackage > 0) {
+                  const numPackages = baseQuantity / unitsPerPackage;
+                  const packageLabel = packageType || 'Pacote';
+                  
+                  if (Math.abs(numPackages - baseQuantity) > 0.001) {
+                      parts.push(`${formatNumber(numPackages)} ${packageLabel}(s)`);
+                  }
+  
+                  if (multiplo_caixa && multiplo_caixa > 0 && rotulo_caixa) {
+                      const numBoxes = numPackages / multiplo_caixa;
+                      parts.push(`${formatNumber(numBoxes)} ${rotulo_caixa}(s)`);
+                  }
+              }
+          } catch (e) {
+              console.error("Error during quantity conversion:", e);
+          }
       }
+    
+      return parts.join(' / ');
   }, [products]);
     
     const { monthlyConsumptions, historicalAverages, abcClasses, deviations } = useMemo(() => {
