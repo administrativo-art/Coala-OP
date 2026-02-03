@@ -76,7 +76,7 @@ function CustomTooltip({ active, payload, label }: any) {
 function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { 
     data: CardModel, 
     onCompareClick: (data: CardModel) => void, 
-    formatDisplayQuantity: (qty: number, bp: BaseProduct) => { main: string, secondary: string, tooltip: string }
+    formatDisplayQuantity: (qty: number, bp: BaseProduct) => string
 }) {
   const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
   const periodColorClass = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
@@ -189,15 +189,13 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: {
             <div className="space-y-1">
                 <p className="text-xs text-muted-foreground uppercase">Média Período</p>
                 <div>
-                    <p className="text-sm font-bold text-foreground">{formattedPeriod.main}/mês</p>
-                    <p className="text-xs text-muted-foreground">{formattedPeriod.secondary}</p>
+                    <p className="text-sm font-bold text-foreground">{formattedPeriod}/mês</p>
                 </div>
             </div>
             <div className="space-y-1">
                 <p className="text-xs text-muted-foreground uppercase">Média Histórica</p>
                 <div>
-                    <p className="text-sm font-bold text-foreground">{formattedHist.main}/mês</p>
-                    <p className="text-xs text-muted-foreground">{formattedHist.secondary}</p>
+                    <p className="text-sm font-bold text-foreground">{formattedHist}/mês</p>
                 </div>
             </div>
         </div>
@@ -207,16 +205,6 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: {
                 <span className="text-xs text-muted-foreground uppercase">Volatilidade: </span>
                 <span className="font-semibold text-foreground">{volatilityText}</span>
             </div>
-            <TooltipProvider>
-                <UITooltip>
-                    <TooltipTrigger asChild>
-                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>{formattedPeriod.tooltip}</p>
-                    </TooltipContent>
-                </UITooltip>
-            </TooltipProvider>
         </div>
     </CardFooter>
     </Card>
@@ -279,7 +267,7 @@ export function AverageConsumptionChart() {
         }
     };
 
-  const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): { main: string, secondary: string, tooltip: string } => {
+  const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): string => {
       const formatNumber = (value: number) => {
         const options: Intl.NumberFormatOptions = {
           maximumFractionDigits: 1,
@@ -290,69 +278,9 @@ export function AverageConsumptionChart() {
         return value.toLocaleString('pt-BR', options);
       };
 
-      if (baseQuantity === 0) {
-          return {
-              main: `0 ${baseProduct.unit}`,
-              secondary: '',
-              tooltip: 'Sem consumo para calcular parâmetros.',
-          };
-      }
+      return `${formatNumber(baseQuantity)} ${baseProduct.unit}`;
   
-      const representativeProduct = products.find(p => p.baseProductId === baseProduct.id);
-  
-      if (!representativeProduct) {
-          return {
-              main: `${formatNumber(baseQuantity)} ${baseProduct.unit}`,
-              secondary: '',
-              tooltip: 'Nenhum insumo representativo encontrado para conversão.',
-          };
-      }
-      
-      const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
-      const baseUnit = baseProduct.unit;
-  
-      let mainText = '';
-      let secondaryParts: string[] = [];
-      let tooltipParts: string[] = [];
-  
-      try {
-          const unitsPerPackage = convertValue(packageSize, contentUnit, baseUnit, category);
-  
-          if (unitsPerPackage > 0) {
-              const numPackages = baseQuantity / unitsPerPackage;
-  
-              // Determine main display unit
-              if (multiplo_caixa && multiplo_caixa > 0 && rotulo_caixa) {
-                  const numBoxes = numPackages / multiplo_caixa;
-                  mainText = `${formatNumber(numBoxes)} ${rotulo_caixa}(s)`;
-                  secondaryParts.push(`${formatNumber(numPackages)} ${packageType || 'pct'}(s)`);
-                  tooltipParts.push(`1 ${rotulo_caixa} = ${multiplo_caixa} ${packageType || 'pct'}(s)`);
-              } else {
-                  mainText = `${formatNumber(numPackages)} ${packageType || 'pct'}(s)`;
-              }
-  
-              secondaryParts.push(`${formatNumber(baseQuantity)} ${baseUnit}`);
-              tooltipParts.push(`1 ${packageType || 'pct'} = ${packageSize}${contentUnit}`);
-          } else {
-               mainText = `${formatNumber(baseQuantity)} ${baseUnit}`;
-               tooltipParts.push('Não foi possível converter para embalagens.');
-          }
-  
-          return {
-              main: mainText,
-              secondary: secondaryParts.join(' • '),
-              tooltip: tooltipParts.join(' | ')
-          };
-  
-      } catch (e) {
-          return {
-              main: `${formatNumber(baseQuantity)} ${baseUnit}`,
-              secondary: 'Erro de conversão',
-              tooltip: 'Erro ao converter unidades.',
-          };
-      }
-  
-  }, [products]);
+  }, []);
     
     const { monthlyConsumptions, historicalAverages, abcClasses, deviations } = useMemo(() => {
         if (loading) return { monthlyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] }, deviations: new Map() };
