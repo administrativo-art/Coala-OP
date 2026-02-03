@@ -73,7 +73,7 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 
-function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data: CardModel, onCompareClick: (data: CardModel) => void, formatDisplayQuantity: (qty: number, bp: BaseProduct) => string }) {
+function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data: CardModel, onCompareClick: (data: CardModel) => void, formatDisplayQuantity: (qty: number, bp: BaseProduct) => { primary: string, secondary?: string } }) {
   const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
   const periodColorClass = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
 
@@ -115,6 +115,10 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data
     ok: 'border-border',
     no_data: 'border-border'
   };
+  
+  const formattedPeriodAvg = formatDisplayQuantity(data.periodAvg, data.baseProduct);
+  const formattedHistAvg = formatDisplayQuantity(data.histAvg, data.baseProduct);
+
 
   return (
     <Card className={cn("flex flex-col h-full", stateStyles[data.alertState])}>
@@ -176,11 +180,24 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data
            </ResponsiveContainer>
          </div>
       </CardContent>
-      <CardFooter className="flex-col items-start gap-1 text-xs text-muted-foreground border-t pt-2 pb-3">
-        <div className="flex justify-between w-full"><span>Média Período:</span><span className="font-semibold">{formatDisplayQuantity(data.periodAvg, data.baseProduct)}/mês</span></div>
-        <div className="flex justify-between w-full"><span>Média Histórica:</span><span className="font-semibold">{formatDisplayQuantity(data.histAvg, data.baseProduct)}/mês</span></div>
-        <div className="flex justify-between w-full"><span>Volatilidade:</span><span className="font-semibold">{volatilityText}</span></div>
-      </CardFooter>
+       <CardFooter className="flex-col items-start gap-2 text-xs border-t pt-3 pb-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 w-full">
+            <div className="text-muted-foreground">Média Período</div>
+            <div className="text-right font-semibold text-foreground">
+                <div>{formattedPeriodAvg.primary}/mês</div>
+                {formattedPeriodAvg.secondary && <div className="text-xs font-normal text-muted-foreground">{formattedPeriodAvg.secondary}</div>}
+            </div>
+
+            <div className="text-muted-foreground">Média Histórica</div>
+            <div className="text-right font-semibold text-foreground">
+                <div>{formattedHistAvg.primary}/mês</div>
+                {formattedHistAvg.secondary && <div className="text-xs font-normal text-muted-foreground">{formattedHistAvg.secondary}</div>}
+            </div>
+
+            <div className="text-muted-foreground">Volatilidade</div>
+            <div className="text-right font-semibold text-foreground">{volatilityText}</div>
+        </div>
+    </CardFooter>
     </Card>
   )
 }
@@ -239,22 +256,22 @@ export function AverageConsumptionChart() {
         }
     };
 
-    const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct) => {
+    const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): { primary: string, secondary?: string } => {
       if (baseQuantity === 0) {
-          return `0 ${baseProduct.unit}`;
+          return { primary: `0 ${baseProduct.unit}` };
       }
   
       const representativeProduct = products.find(p => p.baseProductId === baseProduct.id);
   
       if (!representativeProduct) {
-          return `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
+          return { primary: `${baseQuantity.toFixed(1)} ${baseProduct.unit}` };
       }
   
       const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
   
       try {
           const unitsPerPackage = convertValue(packageSize, contentUnit, baseProduct.unit, category);
-          if (unitsPerPackage <= 0) return `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
+          if (unitsPerPackage <= 0) return { primary: `${baseQuantity.toFixed(1)} ${baseProduct.unit}` };
           
           const numPackages = baseQuantity / unitsPerPackage;
   
@@ -275,14 +292,12 @@ export function AverageConsumptionChart() {
                primaryDisplay = `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
           }
           
-          if (secondaryParts.length > 0) {
-              return `${primaryDisplay} (${secondaryParts.join(' / ')})`;
-          }
-  
-          return primaryDisplay;
+          const secondaryDisplay = secondaryParts.length > 0 ? `(${secondaryParts.join(' / ')})` : undefined;
+
+          return { primary: primaryDisplay, secondary: secondaryDisplay };
   
       } catch (e) {
-          return `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
+          return { primary: `${baseQuantity.toFixed(1)} ${baseProduct.unit}` };
       }
   }, [products]);
     
@@ -621,11 +636,3 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
-
-    
-
-    
-
-    
-
-    
