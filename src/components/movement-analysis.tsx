@@ -83,22 +83,26 @@ function TransferCard({ data }: { data: TransferCardModel }) {
 
     const { representativeProduct, unit: baseUnit } = data;
     const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
-    
+
     try {
         const unitsPerPackage = convertValue(packageSize, contentUnit, baseUnit, category);
         if (unitsPerPackage <= 0) return `${baseQuantity.toFixed(1)} ${baseUnit}`;
         
         const numPackages = baseQuantity / unitsPerPackage;
-        let displayParts: string[] = [];
-        
-        displayParts.push(`${numPackages.toFixed(1)} ${packageType || 'un'}(s)`);
 
+        // Display in boxes if available
         if (multiplo_caixa && multiplo_caixa > 0 && rotulo_caixa) {
             const numBoxes = numPackages / multiplo_caixa;
-            displayParts.push(`${numBoxes.toFixed(1)} ${rotulo_caixa}(s)`);
+            return `${numBoxes.toFixed(1)} ${rotulo_caixa}(s)`;
+        }
+        
+        // Display in packages if packageType is meaningful
+        if (packageType && packageType.toLowerCase() !== 'unidade' && packageType.toLowerCase() !== 'un') {
+             return `${numPackages.toFixed(1)} ${packageType}(s)`;
         }
 
-        return displayParts.join(' / ');
+        // Fallback to base unit
+        return `${baseQuantity.toFixed(1)} ${baseUnit}`;
 
     } catch (e) {
         return `${baseQuantity.toFixed(1)} ${baseUnit}`;
