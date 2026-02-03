@@ -1,5 +1,3 @@
-
-
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -18,16 +16,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
-import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat, Info } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
-import { type BaseProduct } from "@/types"
+import { type BaseProduct, type Product } from "@/types"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from "./ui/button"
 import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
+import { Separator } from './ui/separator';
 
 
 const stdDev = (arr: number[]): number => {
@@ -74,7 +73,11 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 
-function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data: CardModel, onCompareClick: (data: CardModel) => void, formatDisplayQuantity: (qty: number, bp: BaseProduct) => string }) {
+function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { 
+    data: CardModel, 
+    onCompareClick: (data: CardModel) => void, 
+    formatDisplayQuantity: (qty: number, bp: BaseProduct) => { main: string, secondary: string, tooltip: string }
+}) {
   const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
   const periodColorClass = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
 
@@ -117,8 +120,8 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data
     no_data: 'border-border'
   };
   
-  const formattedPeriodAvg = formatDisplayQuantity(data.periodAvg, data.baseProduct);
-  const formattedHistAvg = formatDisplayQuantity(data.histAvg, data.baseProduct);
+  const formattedPeriod = formatDisplayQuantity(data.periodAvg, data.baseProduct);
+  const formattedHist = formatDisplayQuantity(data.histAvg, data.baseProduct);
 
 
   return (
@@ -181,20 +184,39 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data
            </ResponsiveContainer>
          </div>
       </CardContent>
-       <CardFooter className="flex-col items-start gap-2 text-xs border-t pt-3 pb-3">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 w-full">
-            <div className="text-muted-foreground">Média Período</div>
-            <div className="text-right font-semibold text-foreground">
-                {formattedPeriodAvg}/mês
+       <CardFooter className="flex-col items-start text-xs border-t pt-3 pb-3">
+        <div className="grid grid-cols-2 gap-x-4 w-full">
+            <div className="space-y-1">
+                <p className="text-xs text-muted-foreground uppercase">Média Período</p>
+                <div>
+                    <p className="text-sm font-bold text-foreground">{formattedPeriod.main}/mês</p>
+                    <p className="text-xs text-muted-foreground">{formattedPeriod.secondary}</p>
+                </div>
             </div>
-
-            <div className="text-muted-foreground">Média Histórica</div>
-            <div className="text-right font-semibold text-foreground">
-                {formattedHistAvg}/mês
+            <div className="space-y-1">
+                <p className="text-xs text-muted-foreground uppercase">Média Histórica</p>
+                <div>
+                    <p className="text-sm font-bold text-foreground">{formattedHist.main}/mês</p>
+                    <p className="text-xs text-muted-foreground">{formattedHist.secondary}</p>
+                </div>
             </div>
-
-            <div className="text-muted-foreground">Volatilidade</div>
-            <div className="text-right font-semibold text-foreground">{volatilityText}</div>
+        </div>
+        <Separator className="my-2" />
+        <div className="flex justify-between items-center w-full">
+            <div>
+                <span className="text-xs text-muted-foreground uppercase">Volatilidade: </span>
+                <span className="font-semibold text-foreground">{volatilityText}</span>
+            </div>
+            <TooltipProvider>
+                <UITooltip>
+                    <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{formattedPeriod.tooltip}</p>
+                    </TooltipContent>
+                </UITooltip>
+            </TooltipProvider>
         </div>
     </CardFooter>
     </Card>
@@ -226,7 +248,9 @@ export function AverageConsumptionChart() {
         if (loading) return [];
         const periods = new Set<string>();
         consumptionReports.forEach(report => {
-            periods.add(`${report.year}-${String(report.month).padStart(2, '0')}`);
+            if (report && report.year && report.month) {
+             periods.add(`${report.year}-${String(report.month).padStart(2, '0')}`);
+            }
         });
         return Array.from(periods).sort((a,b) => b.localeCompare(a));
     }, [consumptionReports, loading]);
@@ -255,52 +279,79 @@ export function AverageConsumptionChart() {
         }
     };
 
-  const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): string => {
+  const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): { main: string, secondary: string, tooltip: string } => {
       const formatNumber = (value: number) => {
         const options: Intl.NumberFormatOptions = {
           maximumFractionDigits: 1,
         };
-        if (value % 1 !== 0) {
-            options.minimumFractionDigits = 1;
+        if (value % 1 === 0) {
+            options.maximumFractionDigits = 0;
         }
         return value.toLocaleString('pt-BR', options);
       };
 
       if (baseQuantity === 0) {
-          return `0 ${baseProduct.unit}`;
+          return {
+              main: `0 ${baseProduct.unit}`,
+              secondary: '',
+              tooltip: 'Sem consumo para calcular parâmetros.',
+          };
       }
   
       const representativeProduct = products.find(p => p.baseProductId === baseProduct.id);
   
-      const parts: string[] = [];
-
-      parts.push(`${formatNumber(baseQuantity)} ${baseProduct.unit}`);
-
-      if (representativeProduct) {
-          const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
-          
-          try {
-              const unitsPerPackage = convertValue(packageSize, contentUnit, baseProduct.unit, category);
-  
-              if (unitsPerPackage > 0) {
-                  const numPackages = baseQuantity / unitsPerPackage;
-                  const packageLabel = packageType || 'Pacote';
-                  
-                  if (Math.abs(numPackages - baseQuantity) > 0.001) {
-                      parts.push(`${formatNumber(numPackages)} ${packageLabel}(s)`);
-                  }
-  
-                  if (multiplo_caixa && multiplo_caixa > 0 && rotulo_caixa) {
-                      const numBoxes = numPackages / multiplo_caixa;
-                      parts.push(`${formatNumber(numBoxes)} ${rotulo_caixa}(s)`);
-                  }
-              }
-          } catch (e) {
-              console.error("Error during quantity conversion:", e);
-          }
+      if (!representativeProduct) {
+          return {
+              main: `${formatNumber(baseQuantity)} ${baseProduct.unit}`,
+              secondary: '',
+              tooltip: 'Nenhum insumo representativo encontrado para conversão.',
+          };
       }
-    
-      return parts.join(' / ');
+      
+      const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
+      const baseUnit = baseProduct.unit;
+  
+      let mainText = '';
+      let secondaryParts: string[] = [];
+      let tooltipParts: string[] = [];
+  
+      try {
+          const unitsPerPackage = convertValue(packageSize, contentUnit, baseUnit, category);
+  
+          if (unitsPerPackage > 0) {
+              const numPackages = baseQuantity / unitsPerPackage;
+  
+              // Determine main display unit
+              if (multiplo_caixa && multiplo_caixa > 0 && rotulo_caixa) {
+                  const numBoxes = numPackages / multiplo_caixa;
+                  mainText = `${formatNumber(numBoxes)} ${rotulo_caixa}(s)`;
+                  secondaryParts.push(`${formatNumber(numPackages)} ${packageType || 'pct'}(s)`);
+                  tooltipParts.push(`1 ${rotulo_caixa} = ${multiplo_caixa} ${packageType || 'pct'}(s)`);
+              } else {
+                  mainText = `${formatNumber(numPackages)} ${packageType || 'pct'}(s)`;
+              }
+  
+              secondaryParts.push(`${formatNumber(baseQuantity)} ${baseUnit}`);
+              tooltipParts.push(`1 ${packageType || 'pct'} = ${packageSize}${contentUnit}`);
+          } else {
+               mainText = `${formatNumber(baseQuantity)} ${baseUnit}`;
+               tooltipParts.push('Não foi possível converter para embalagens.');
+          }
+  
+          return {
+              main: mainText,
+              secondary: secondaryParts.join(' • '),
+              tooltip: tooltipParts.join(' | ')
+          };
+  
+      } catch (e) {
+          return {
+              main: `${formatNumber(baseQuantity)} ${baseUnit}`,
+              secondary: 'Erro de conversão',
+              tooltip: 'Erro ao converter unidades.',
+          };
+      }
+  
   }, [products]);
     
     const { monthlyConsumptions, historicalAverages, abcClasses, deviations } = useMemo(() => {
