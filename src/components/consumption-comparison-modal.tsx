@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useMemo } from 'react';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { type BaseProduct, type ConsumptionReport, type MovementRecord } from '@/types';
 import { useMovementHistory } from '@/hooks/use-movement-history';
 import { useValidatedConsumptionData } from '@/hooks/useValidatedConsumptionData';
-import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Skeleton } from './ui/skeleton';
 import { ArrowLeftRight, Truck, BarChart3, Inbox } from 'lucide-react';
@@ -41,10 +42,15 @@ export function ConsumptionComparisonModal({ open, onOpenChange, baseProduct, ki
     const startDate = startOfMonth(parseISO(`${startPeriod}-01`));
     const endDate = endOfMonth(parseISO(`${endPeriod}-01`));
     
+    const kioskFilter = (id: string | undefined) => {
+        if (!id) return false;
+        return kioskId === 'all' || id === kioskId;
+    }
+
     // 1. Calculate Total Transferred
     const transfers = movementHistory.filter(m =>
       m.type === 'TRANSFERENCIA_ENTRADA' &&
-      m.toKioskId === kioskId &&
+      kioskFilter(m.toKioskId) &&
       isWithinInterval(parseISO(m.timestamp), { start: startDate, end: endDate })
     );
 
@@ -66,12 +72,11 @@ export function ConsumptionComparisonModal({ open, onOpenChange, baseProduct, ki
     let currentMonth = new Date(startDate);
     while(currentMonth <= endDate) {
         monthsInRange.push(format(currentMonth, 'yyyy-MM'));
-        currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 2, 1);
-        currentMonth = startOfMonth(currentMonth);
+        currentMonth = addMonths(currentMonth, 1);
     }
     
     const relevantReports = consumptionReports.filter(r => 
-        r.kioskId === kioskId && 
+        kioskFilter(r.kioskId) && 
         monthsInRange.includes(`${r.year}-${String(r.month).padStart(2, '0')}`)
     );
 
