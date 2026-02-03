@@ -16,7 +16,7 @@ import { convertValue } from '@/lib/conversion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
 import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
@@ -75,7 +75,13 @@ function CustomTooltip({ active, payload, label }: any) {
 
 function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data: CardModel, onCompareClick: (data: CardModel) => void, formatDisplayQuantity: (qty: number, bp: BaseProduct) => string }) {
   const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
-  const periodColor = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
+  const periodColorClass = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
+
+  const periodColorValue = useMemo(() => {
+    if (data.periodChangePct > 5) return 'hsl(var(--destructive))';
+    if (data.periodChangePct < -5) return 'hsl(var(--chart-2))'; // Using chart-2 for green
+    return 'hsl(var(--muted-foreground))';
+  }, [data.periodChangePct]);
 
   let historicalText, historicalColor;
   switch(data.historicalStatus) {
@@ -132,7 +138,7 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data
         </div>
       </CardHeader>
       <CardContent className="flex-grow">
-        <div className={cn("text-4xl font-bold flex items-center gap-2", periodColor)}>
+        <div className={cn("text-4xl font-bold flex items-center gap-2", periodColorClass)}>
           <periodIcon className="h-8 w-8" />
           <span>{data.periodChangePct.toFixed(0)}%</span>
         </div>
@@ -140,13 +146,34 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data
          <p className={cn("text-xs font-semibold mt-1", historicalColor)}>{historicalText}</p>
 
          <div className="h-[60px] mt-4 -mx-4">
-            <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data.series}>
-                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
-                    <ReferenceLine y={data.histAvg} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeWidth={1} />
-                    <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} />
-                </LineChart>
-            </ResponsiveContainer>
+           <ResponsiveContainer width="100%" height="100%">
+             <AreaChart data={data.series}>
+               <defs>
+                 <linearGradient id={`fill-${data.id}`} x1="0" y1="0" x2="0" y2="1">
+                   <stop offset="5%" stopColor={periodColorValue} stopOpacity={0.4} />
+                   <stop offset="95%" stopColor={periodColorValue} stopOpacity={0} />
+                 </linearGradient>
+               </defs>
+               <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '3 3' }} />
+               <ReferenceLine y={data.histAvg} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeWidth={1.5} />
+               <Area
+                 type="monotone"
+                 dataKey="value"
+                 stroke={periodColorValue}
+                 strokeWidth={2.5}
+                 fillOpacity={1}
+                 fill={`url(#fill-${data.id})`}
+                 dot={(props: any) => {
+                   const { cx, cy, index } = props;
+                   if (index === data.series.length - 1) {
+                     return <circle cx={cx} cy={cy} r={4} fill={periodColorValue} stroke={"hsl(var(--card))"} strokeWidth={2} />;
+                   }
+                   return null;
+                 }}
+                 activeDot={{ r: 5, strokeWidth: 2, stroke: "hsl(var(--card))" }}
+               />
+             </AreaChart>
+           </ResponsiveContainer>
          </div>
       </CardContent>
       <CardFooter className="flex-col items-start gap-1 text-xs text-muted-foreground border-t pt-2 pb-3">
@@ -594,6 +621,8 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
+    
 
     
 
