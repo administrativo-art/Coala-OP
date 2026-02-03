@@ -9,6 +9,8 @@ import { ptBR } from 'date-fns/locale'
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 import { useProducts } from "@/hooks/use-products"
 import { useKiosks } from "@/hooks/use-kiosks"
+import { convertValue } from '@/lib/conversion';
+
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
@@ -54,6 +56,7 @@ type CardModel = {
   volatility: 'Alta' | 'Média' | 'Baixa' | 'N/A';
   abcClass: 'A' | 'B' | null;
   alertState: 'alert' | 'attention' | 'ok' | 'no_data';
+  baseProduct: BaseProduct;
 };
 
 
@@ -70,7 +73,7 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 
-function ConsumptionCard({ data, onCompareClick }: { data: CardModel, onCompareClick: (data: CardModel) => void }) {
+function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { data: CardModel, onCompareClick: (data: CardModel) => void, formatDisplayQuantity: (qty: number, bp: BaseProduct) => string }) {
   const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
   const periodColor = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
 
@@ -147,8 +150,8 @@ function ConsumptionCard({ data, onCompareClick }: { data: CardModel, onCompareC
          </div>
       </CardContent>
       <CardFooter className="flex-col items-start gap-1 text-xs text-muted-foreground border-t pt-2 pb-3">
-        <div className="flex justify-between w-full"><span>Média Período:</span><span className="font-semibold">{data.periodAvg.toFixed(1)}/mês</span></div>
-        <div className="flex justify-between w-full"><span>Média Histórica:</span><span className="font-semibold">{data.histAvg.toFixed(1)}/mês</span></div>
+        <div className="flex justify-between w-full"><span>Média Período:</span><span className="font-semibold">{formatDisplayQuantity(data.periodAvg, data.baseProduct)}/mês</span></div>
+        <div className="flex justify-between w-full"><span>Média Histórica:</span><span className="font-semibold">{formatDisplayQuantity(data.histAvg, data.baseProduct)}/mês</span></div>
         <div className="flex justify-between w-full"><span>Volatilidade:</span><span className="font-semibold">{volatilityText}</span></div>
       </CardFooter>
     </Card>
@@ -171,7 +174,7 @@ export function AverageConsumptionChart() {
 
     // Data Hooks
     const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
-    const { loading: productsLoading } = useProducts();
+    const { products, loading: productsLoading } = useProducts();
     const { kiosks, loading: kiosksLoading } = useKiosks();
 
     const loading = consumptionLoading || productsLoading || kiosksLoading;
@@ -180,7 +183,7 @@ export function AverageConsumptionChart() {
         if (loading) return [];
         const periods = new Set<string>();
         consumptionReports.forEach(report => {
-            periods.add(`${report.year}-${String(report.month).padStart(2, '0')}`);
+            periods.add(`${'report.year'}-${String(report.month).padStart(2, '0')}`);
         });
         return Array.from(periods).sort((a,b) => b.localeCompare(a));
     }, [consumptionReports, loading]);
@@ -208,6 +211,53 @@ export function AverageConsumptionChart() {
             setStartPeriod(value);
         }
     };
+
+    const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct) => {
+      if (baseQuantity === 0) {
+          return `0 ${baseProduct.unit}`;
+      }
+  
+      const representativeProduct = products.find(p => p.baseProductId === baseProduct.id);
+  
+      if (!representativeProduct) {
+          return `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
+      }
+  
+      const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
+  
+      try {
+          const unitsPerPackage = convertValue(packageSize, contentUnit, baseProduct.unit, category);
+          if (unitsPerPackage <= 0) return `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
+          
+          const numPackages = baseQuantity / unitsPerPackage;
+  
+          let primaryDisplay = '';
+          const secondaryParts: string[] = [];
+  
+          if (multiplo_caixa && multiplo_caixa > 0 && rotulo_caixa) {
+              const numBoxes = numPackages / multiplo_caixa;
+              primaryDisplay = `${numBoxes.toFixed(1)} ${rotulo_caixa}(s)`;
+              if (packageType && packageType.toLowerCase() !== 'unidade' && packageType.toLowerCase() !== 'un') {
+                  secondaryParts.push(`${numPackages.toFixed(1)} ${packageType}(s)`);
+              }
+              secondaryParts.push(`${baseQuantity.toFixed(1)} ${baseProduct.unit}`);
+          } else if (packageType && packageType.toLowerCase() !== 'unidade' && packageType.toLowerCase() !== 'un') {
+               primaryDisplay = `${numPackages.toFixed(1)} ${packageType || 'pct'}(s)`;
+               secondaryParts.push(`${baseQuantity.toFixed(1)} ${baseProduct.unit}`);
+          } else {
+               primaryDisplay = `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
+          }
+          
+          if (secondaryParts.length > 0) {
+              return `${primaryDisplay} (${secondaryParts.join(' / ')})`;
+          }
+  
+          return primaryDisplay;
+  
+      } catch (e) {
+          return `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
+      }
+  }, [products]);
     
     const { monthlyConsumptions, historicalAverages, abcClasses, deviations } = useMemo(() => {
         if (loading) return { monthlyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] }, deviations: new Map() };
@@ -223,7 +273,7 @@ export function AverageConsumptionChart() {
         const consumptionByProduct = new Map<string, number>();
 
         kioskFilteredReports.forEach(report => {
-            const monthStr = `${report.year}-${String(report.month).padStart(2, '0')}`;
+            const monthStr = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
             report.results.forEach(item => {
                 if (!item.baseProductId) return;
                 
@@ -401,6 +451,7 @@ export function AverageConsumptionChart() {
                 volatility,
                 abcClass: abcClasses.A.includes(bp.id) ? 'A' : abcClasses.B.includes(bp.id) ? 'B' : null,
                 alertState,
+                baseProduct: bp,
             };
         }).sort((a,b) => {
             const statusOrder = { 'alert': 1, 'attention': 2, 'ok': 3, 'no_data': 4 };
@@ -419,7 +470,7 @@ export function AverageConsumptionChart() {
             const impactB = Math.abs(b.historicalChangePct);
             return impactB - impactA;
         });
-    }, [loading, startPeriod, endPeriod, selectedBaseProducts, availableBaseProducts, baseProducts, historicalAverages, deviations, monthlyConsumptions, abcClasses]);
+    }, [loading, startPeriod, endPeriod, selectedBaseProducts, availableBaseProducts, baseProducts, historicalAverages, deviations, monthlyConsumptions, abcClasses, products]);
 
     const onCompareClick = (cardData: CardModel) => {
         const bp = baseProducts.find(p => p.id === cardData.id);
@@ -498,7 +549,7 @@ export function AverageConsumptionChart() {
                  {view === 'cards' ? (
                      cardData.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 grid-auto-rows-fr">
-                            {cardData.map(data => <ConsumptionCard key={data.id} data={data} onCompareClick={onCompareClick} />)}
+                            {cardData.map(data => <ConsumptionCard key={data.id} data={data} onCompareClick={onCompareClick} formatDisplayQuantity={formatDisplayQuantity} />)}
                         </div>
                      ) : (
                         <div className="flex h-64 flex-col items-center justify-center text-muted-foreground">
@@ -543,5 +594,7 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
+    
 
     
