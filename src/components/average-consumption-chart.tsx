@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -48,8 +47,9 @@ type CardModel = {
   periodChangePct: number;
   historicalChangePct: number;
   historicalStatus: 'normal' | 'acima' | 'abaixo' | 'sem dados';
-  volatility: 'Alta' | 'Média' | 'Baixa';
+  volatility: 'Alta' | 'Média' | 'Baixa' | 'N/A';
   abcClass: 'A' | 'B' | null;
+  alertState: 'alert' | 'attention' | 'ok' | 'no_data';
 };
 
 
@@ -73,11 +73,11 @@ function ConsumptionCard({ data }: { data: CardModel }) {
   let historicalText, historicalColor;
   switch(data.historicalStatus) {
       case 'acima':
-          historicalText = `${data.historicalChangePct.toFixed(0)}% acima da média`;
+          historicalText = `${data.historicalChangePct.toFixed(0)}% acima do padrão histórico`;
           historicalColor = "text-destructive";
           break;
       case 'abaixo':
-           historicalText = `${Math.abs(data.historicalChangePct).toFixed(0)}% abaixo da média`;
+           historicalText = `${Math.abs(data.historicalChangePct).toFixed(0)}% abaixo do padrão histórico`;
            historicalColor = "text-green-600";
            break;
       case 'normal':
@@ -85,7 +85,7 @@ function ConsumptionCard({ data }: { data: CardModel }) {
            historicalColor = "text-muted-foreground";
            break;
       default:
-           historicalText = "Histórico insuficiente";
+           historicalText = "Histórico de consumo insuficiente";
            historicalColor = "text-muted-foreground";
   }
 
@@ -93,11 +93,18 @@ function ConsumptionCard({ data }: { data: CardModel }) {
       'Alta': 'Consumo imprevisível',
       'Média': 'Consumo com variações',
       'Baixa': 'Padrão de consumo estável',
+      'N/A': 'Não aplicável'
   }[data.volatility];
 
+  const stateStyles = {
+    alert: 'border-destructive/40 bg-destructive/5',
+    attention: 'border-amber-500/40 bg-amber-500/5',
+    ok: 'border-border',
+    no_data: 'border-border'
+  };
 
   return (
-    <Card className={cn("flex flex-col", data.abcClass === 'A' && "border-2 border-primary/20")}>
+    <Card className={cn("flex flex-col h-full", stateStyles[data.alertState])}>
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
             <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name} ({data.unit})</CardTitle>
@@ -345,19 +352,29 @@ export function AverageConsumptionChart() {
                 periodChangePct = first > 0 ? ((last / first) - 1) * 100 : (last > 0 ? Infinity : 0);
             }
 
-            let volatility: CardModel['volatility'] = 'Baixa';
+            let volatility: CardModel['volatility'] = 'N/A';
             if (histAvg > 0) {
                 const cv = deviation / histAvg; // Coefficient of Variation
                 if (cv > 0.5) volatility = 'Alta';
                 else if (cv > 0.2) volatility = 'Média';
+                else volatility = 'Baixa';
             }
 
+            let alertState: CardModel['alertState'] = 'no_data';
             let historicalStatus: CardModel['historicalStatus'] = 'sem dados';
             if(histAvg > 0) {
-                if (Math.abs(historicalChangePct) <= 10) historicalStatus = 'normal';
-                else if (historicalChangePct > 10) historicalStatus = 'acima';
-                else historicalStatus = 'abaixo';
+                if (Math.abs(historicalChangePct) <= 15) {
+                    historicalStatus = 'normal';
+                    alertState = 'ok';
+                } else if (Math.abs(historicalChangePct) <= 30) {
+                    historicalStatus = historicalChangePct > 0 ? 'acima' : 'abaixo';
+                    alertState = 'attention';
+                } else {
+                    historicalStatus = historicalChangePct > 0 ? 'acima' : 'abaixo';
+                    alertState = 'alert';
+                }
             }
+
 
             return {
                 id: bp.id, name: bp.name, unit: bp.unit,
@@ -365,11 +382,24 @@ export function AverageConsumptionChart() {
                 periodChangePct, historicalChangePct, historicalStatus,
                 volatility,
                 abcClass: abcClasses.A.includes(bp.id) ? 'A' : abcClasses.B.includes(bp.id) ? 'B' : null,
+                alertState,
             };
         }).sort((a,b) => {
-            if (a.abcClass === 'A' && b.abcClass !== 'A') return -1;
-            if (b.abcClass === 'A' && a.abcClass !== 'A') return 1;
-            return (b.periodAvg * Math.abs(b.periodChangePct)) - (a.periodAvg * Math.abs(a.periodChangePct));
+            const statusOrder = { 'alert': 1, 'attention': 2, 'ok': 3, 'no_data': 4 };
+    
+            if (statusOrder[a.alertState] !== statusOrder[b.alertState]) {
+                return statusOrder[a.alertState] - statusOrder[b.alertState];
+            }
+            
+            const isA_a = a.abcClass === 'A';
+            const isA_b = b.abcClass === 'A';
+            if (isA_a !== isA_b) {
+                return isA_a ? -1 : 1;
+            }
+            
+            const impactA = Math.abs(a.historicalChangePct);
+            const impactB = Math.abs(b.historicalChangePct);
+            return impactB - impactA;
         });
     }, [loading, startPeriod, endPeriod, selectedBaseProducts, availableBaseProducts, baseProducts, historicalAverages, deviations, monthlyConsumptions, abcClasses]);
 
@@ -450,7 +480,7 @@ export function AverageConsumptionChart() {
                 
                  {view === 'cards' ? (
                      cardData.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 grid-auto-rows-fr">
                             {cardData.map(data => <ConsumptionCard key={data.id} data={data} />)}
                         </div>
                      ) : (
