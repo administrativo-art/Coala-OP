@@ -14,7 +14,7 @@ import { useKiosks } from "@/hooks/use-kiosks"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
 import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
@@ -45,7 +45,9 @@ type CardModel = {
   series: { label: string; value: number }[];
   periodAvg: number;
   histAvg: number;
-  changePct: number;
+  periodChangePct: number;
+  historicalChangePct: number;
+  historicalStatus: 'normal' | 'acima' | 'abaixo' | 'sem dados';
   volatility: 'Alta' | 'Média' | 'Baixa';
   abcClass: 'A' | 'B' | null;
 };
@@ -65,34 +67,65 @@ function CustomTooltip({ active, payload, label }: any) {
 
 
 function ConsumptionCard({ data }: { data: CardModel }) {
-  const Icon = data.changePct > 5 ? TrendingUp : data.changePct < -5 ? TrendingDown : Minus;
-  const color = data.changePct > 5 ? "text-destructive" : data.changePct < -5 ? "text-green-600" : "text-muted-foreground";
+  const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
+  const periodColor = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
+
+  let historicalText, historicalColor;
+  switch(data.historicalStatus) {
+      case 'acima':
+          historicalText = `${data.historicalChangePct.toFixed(0)}% acima da média`;
+          historicalColor = "text-destructive";
+          break;
+      case 'abaixo':
+           historicalText = `${Math.abs(data.historicalChangePct).toFixed(0)}% abaixo da média`;
+           historicalColor = "text-green-600";
+           break;
+      case 'normal':
+           historicalText = "Dentro do padrão histórico";
+           historicalColor = "text-muted-foreground";
+           break;
+      default:
+           historicalText = "Histórico insuficiente";
+           historicalColor = "text-muted-foreground";
+  }
+
+  const volatilityText = {
+      'Alta': 'Consumo imprevisível',
+      'Média': 'Consumo com variações',
+      'Baixa': 'Padrão de consumo estável',
+  }[data.volatility];
+
 
   return (
-    <Card className="flex flex-col">
+    <Card className={cn("flex flex-col", data.abcClass === 'A' && "border-2 border-primary/20")}>
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
             <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name} ({data.unit})</CardTitle>
-            {data.abcClass && <Badge variant="outline">{`Curva ${data.abcClass}`}</Badge>}
+            {data.abcClass && <Badge variant={data.abcClass === 'A' ? 'default' : 'secondary'} className={cn(data.abcClass === 'A' && 'bg-primary/90')}>{`Curva ${data.abcClass}`}</Badge>}
         </div>
       </CardHeader>
       <CardContent className="flex-grow">
-        <div className={cn("text-4xl font-bold flex items-center gap-2", color)}>
-          <Icon className="h-8 w-8" />
-          <span>{data.changePct.toFixed(0)}%</span>
+        <div className={cn("text-4xl font-bold flex items-center gap-2", periodColor)}>
+          <periodIcon className="h-8 w-8" />
+          <span>{data.periodChangePct.toFixed(0)}%</span>
         </div>
-         <p className="text-xs text-muted-foreground">vs. média histórica</p>
+         <p className="text-xs text-muted-foreground">Variação no período</p>
+         <p className={cn("text-xs font-semibold mt-1", historicalColor)}>{historicalText}</p>
+
          <div className="h-[60px] mt-4 -mx-4">
-            <LineChart width={250} height={60} data={data.series}>
-                <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} />
-                <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
-            </LineChart>
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data.series}>
+                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
+                    <ReferenceLine y={data.histAvg} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeWidth={1} />
+                    <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} />
+                </LineChart>
+            </ResponsiveContainer>
          </div>
       </CardContent>
       <CardFooter className="flex-col items-start gap-1 text-xs text-muted-foreground border-t pt-2 pb-3">
         <div className="flex justify-between w-full"><span>Média Período:</span><span className="font-semibold">{data.periodAvg.toFixed(1)}/mês</span></div>
         <div className="flex justify-between w-full"><span>Média Histórica:</span><span className="font-semibold">{data.histAvg.toFixed(1)}/mês</span></div>
-        <div className="flex justify-between w-full"><span>Volatilidade:</span><span className="font-semibold">{data.volatility}</span></div>
+        <div className="flex justify-between w-full"><span>Volatilidade:</span><span className="font-semibold">{volatilityText}</span></div>
       </CardFooter>
     </Card>
   )
@@ -106,10 +139,12 @@ export function AverageConsumptionChart() {
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [view, setView] = useState<'cards' | 'chart'>('cards');
     const [kioskId, setKioskId] = useState<string>('all');
+    const [abcFilter, setAbcClassFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
+
 
     // Data Hooks
     const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
-    const { products, loading: productsLoading } = useProducts();
+    const { loading: productsLoading } = useProducts();
     const { kiosks, loading: kiosksLoading } = useKiosks();
 
     const loading = consumptionLoading || productsLoading || kiosksLoading;
@@ -265,9 +300,11 @@ export function AverageConsumptionChart() {
         });
     }, [startPeriod, endPeriod, selectedBaseProducts, loading, baseProducts, monthlyConsumptions, historicalAverages]);
     
-    const availableBaseProducts = useMemo(() => {
+     const availableBaseProducts = useMemo(() => {
+        if (abcFilter === 'A') return baseProducts.filter(bp => abcClasses.A.includes(bp.id));
+        if (abcFilter === 'B') return baseProducts.filter(bp => abcClasses.B.includes(bp.id));
         return baseProducts;
-    }, [baseProducts]);
+    }, [baseProducts, abcFilter, abcClasses]);
 
     const productOptions = useMemo(() => 
         availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
@@ -299,8 +336,15 @@ export function AverageConsumptionChart() {
                 ? consumptionsInPeriod.reduce((a,b) => a + b.value, 0) / consumptionsInPeriod.length
                 : 0;
             
-            const changePct = histAvg > 0 ? ((periodAvg / histAvg) - 1) * 100 : (periodAvg > 0 ? Infinity : 0);
+            const historicalChangePct = histAvg > 0 ? ((periodAvg / histAvg) - 1) * 100 : (periodAvg > 0 ? Infinity : 0);
             
+            let periodChangePct = 0;
+            if (consumptionsInPeriod.length >= 2) {
+                const first = consumptionsInPeriod[0].value;
+                const last = consumptionsInPeriod[consumptionsInPeriod.length - 1].value;
+                periodChangePct = first > 0 ? ((last / first) - 1) * 100 : (last > 0 ? Infinity : 0);
+            }
+
             let volatility: CardModel['volatility'] = 'Baixa';
             if (histAvg > 0) {
                 const cv = deviation / histAvg; // Coefficient of Variation
@@ -308,18 +352,25 @@ export function AverageConsumptionChart() {
                 else if (cv > 0.2) volatility = 'Média';
             }
 
+            let historicalStatus: CardModel['historicalStatus'] = 'sem dados';
+            if(histAvg > 0) {
+                if (Math.abs(historicalChangePct) <= 10) historicalStatus = 'normal';
+                else if (historicalChangePct > 10) historicalStatus = 'acima';
+                else historicalStatus = 'abaixo';
+            }
+
             return {
-                id: bp.id,
-                name: bp.name,
-                unit: bp.unit,
-                series: consumptionsInPeriod,
-                periodAvg,
-                histAvg,
-                changePct,
+                id: bp.id, name: bp.name, unit: bp.unit,
+                series: consumptionsInPeriod, periodAvg, histAvg,
+                periodChangePct, historicalChangePct, historicalStatus,
                 volatility,
                 abcClass: abcClasses.A.includes(bp.id) ? 'A' : abcClasses.B.includes(bp.id) ? 'B' : null,
             };
-        }).sort((a,b) => (b.periodAvg * Math.abs(b.changePct)) - (a.periodAvg * Math.abs(a.changePct))); // Sort by impact
+        }).sort((a,b) => {
+            if (a.abcClass === 'A' && b.abcClass !== 'A') return -1;
+            if (b.abcClass === 'A' && a.abcClass !== 'A') return 1;
+            return (b.periodAvg * Math.abs(b.periodChangePct)) - (a.periodAvg * Math.abs(a.periodChangePct));
+        });
     }, [loading, startPeriod, endPeriod, selectedBaseProducts, availableBaseProducts, baseProducts, historicalAverages, deviations, monthlyConsumptions, abcClasses]);
 
 
@@ -388,6 +439,14 @@ export function AverageConsumptionChart() {
                         <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
                     </ToggleGroup>
                 </div>
+                
+                 <Tabs value={abcFilter} onValueChange={(v) => setAbcClassFilter(v as any)}>
+                    <TabsList>
+                        <TabsTrigger value="ALL">Geral</TabsTrigger>
+                        <TabsTrigger value="A">Curva A (Top 5)</TabsTrigger>
+                        <TabsTrigger value="B">Curva B (Restante)</TabsTrigger>
+                    </TabsList>
+                </Tabs>
                 
                  {view === 'cards' ? (
                      cardData.length > 0 ? (
