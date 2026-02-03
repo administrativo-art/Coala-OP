@@ -14,13 +14,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
-import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
 import { type BaseProduct } from "@/types"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { MultiSelect } from "@/components/ui/multi-select"
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Button } from "./ui/button"
+import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 
 
 const stdDev = (arr: number[]): number => {
@@ -66,7 +69,7 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 
-function ConsumptionCard({ data }: { data: CardModel }) {
+function ConsumptionCard({ data, onCompareClick }: { data: CardModel, onCompareClick: (data: CardModel) => void }) {
   const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
   const periodColor = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
 
@@ -98,7 +101,7 @@ function ConsumptionCard({ data }: { data: CardModel }) {
 
   const stateStyles = {
     alert: 'border-destructive/40 bg-destructive/5',
-    attention: 'border-amber-500/40 bg-amber-500/5',
+    attention: 'border-orange-500/40 bg-orange-500/5',
     ok: 'border-border',
     no_data: 'border-border'
   };
@@ -108,7 +111,21 @@ function ConsumptionCard({ data }: { data: CardModel }) {
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
             <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name} ({data.unit})</CardTitle>
-            {data.abcClass && <Badge variant={data.abcClass === 'A' ? 'default' : 'secondary'} className={cn(data.abcClass === 'A' && 'bg-primary/90')}>{`Curva ${data.abcClass}`}</Badge>}
+            <div className="flex items-center gap-1">
+                {data.abcClass && <Badge variant={data.abcClass === 'A' ? 'destructive' : 'secondary'} className={cn(data.abcClass === 'A' && 'bg-primary/90')}>{`Curva ${data.abcClass}`}</Badge>}
+                <TooltipProvider>
+                    <UITooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => {e.stopPropagation(); onCompareClick(data);}}>
+                                <Repeat className="h-4 w-4"/>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Comparar com Transferências</p>
+                        </TooltipContent>
+                    </UITooltip>
+                </TooltipProvider>
+            </div>
         </div>
       </CardHeader>
       <CardContent className="flex-grow">
@@ -147,6 +164,10 @@ export function AverageConsumptionChart() {
     const [view, setView] = useState<'cards' | 'chart'>('cards');
     const [kioskId, setKioskId] = useState<string>('all');
     const [abcFilter, setAbcClassFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
+    const [comparisonModalData, setComparisonModalData] = useState<{
+      open: boolean;
+      baseProduct: BaseProduct | null;
+    }>({ open: false, baseProduct: null });
 
 
     // Data Hooks
@@ -308,10 +329,8 @@ export function AverageConsumptionChart() {
     }, [startPeriod, endPeriod, selectedBaseProducts, loading, baseProducts, monthlyConsumptions, historicalAverages]);
     
      const availableBaseProducts = useMemo(() => {
-        if (abcFilter === 'A') return baseProducts.filter(bp => abcClasses.A.includes(bp.id));
-        if (abcFilter === 'B') return baseProducts.filter(bp => abcClasses.B.includes(bp.id));
         return baseProducts;
-    }, [baseProducts, abcFilter, abcClasses]);
+    }, [baseProducts]);
 
     const productOptions = useMemo(() => 
         availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
@@ -403,6 +422,13 @@ export function AverageConsumptionChart() {
         });
     }, [loading, startPeriod, endPeriod, selectedBaseProducts, availableBaseProducts, baseProducts, historicalAverages, deviations, monthlyConsumptions, abcClasses]);
 
+    const onCompareClick = (cardData: CardModel) => {
+        const bp = baseProducts.find(p => p.id === cardData.id);
+        if (bp) {
+          setComparisonModalData({ open: true, baseProduct: bp });
+        }
+    };
+
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -470,18 +496,20 @@ export function AverageConsumptionChart() {
                     </ToggleGroup>
                 </div>
                 
-                 <Tabs value={abcFilter} onValueChange={(v) => setAbcClassFilter(v as any)}>
-                    <TabsList>
-                        <TabsTrigger value="ALL">Geral</TabsTrigger>
-                        <TabsTrigger value="A">Curva A (Top 5)</TabsTrigger>
-                        <TabsTrigger value="B">Curva B (Restante)</TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                {view === 'cards' && (
+                  <Tabs value={abcFilter} onValueChange={(v) => setAbcClassFilter(v as any)}>
+                      <TabsList>
+                          <TabsTrigger value="ALL">Geral</TabsTrigger>
+                          <TabsTrigger value="A">Curva A (Top 5)</TabsTrigger>
+                          <TabsTrigger value="B">Curva B (Restante)</TabsTrigger>
+                      </TabsList>
+                  </Tabs>
+                )}
                 
                  {view === 'cards' ? (
                      cardData.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 grid-auto-rows-fr">
-                            {cardData.map(data => <ConsumptionCard key={data.id} data={data} />)}
+                            {cardData.map(data => <ConsumptionCard key={data.id} data={data} onCompareClick={onCompareClick} />)}
                         </div>
                      ) : (
                         <div className="flex h-64 flex-col items-center justify-center text-muted-foreground">
@@ -515,6 +543,14 @@ export function AverageConsumptionChart() {
                     </div>
                 )}
             </CardContent>
+            <ConsumptionComparisonModal
+                open={comparisonModalData.open}
+                onOpenChange={(open) => setComparisonModalData({ open, baseProduct: null })}
+                baseProduct={comparisonModalData.baseProduct}
+                kioskId={kioskId}
+                startPeriod={startPeriod || ''}
+                endPeriod={endPeriod || ''}
+            />
         </Card>
     );
 }
