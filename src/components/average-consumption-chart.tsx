@@ -106,11 +106,10 @@ export function AverageConsumptionChart() {
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [view, setView] = useState<'cards' | 'chart'>('cards');
     const [kioskId, setKioskId] = useState<string>('all');
-    const [abcFilter, setAbcClassFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
 
     // Data Hooks
     const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
-    const { loading: productsLoading } = useProducts();
+    const { products, loading: productsLoading } = useProducts();
     const { kiosks, loading: kiosksLoading } = useKiosks();
 
     const loading = consumptionLoading || productsLoading || kiosksLoading;
@@ -267,10 +266,8 @@ export function AverageConsumptionChart() {
     }, [startPeriod, endPeriod, selectedBaseProducts, loading, baseProducts, monthlyConsumptions, historicalAverages]);
     
     const availableBaseProducts = useMemo(() => {
-        if (abcFilter === 'A') return baseProducts.filter(bp => abcClasses.A.includes(bp.id));
-        if (abcFilter === 'B') return baseProducts.filter(bp => abcClasses.B.includes(bp.id));
         return baseProducts;
-    }, [baseProducts, abcFilter, abcClasses]);
+    }, [baseProducts]);
 
     const productOptions = useMemo(() => 
         availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
@@ -391,14 +388,6 @@ export function AverageConsumptionChart() {
                         <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
                     </ToggleGroup>
                 </div>
-                
-                 <Tabs value={abcFilter} onValueChange={(v) => setAbcClassFilter(v as any)}>
-                    <TabsList>
-                        <TabsTrigger value="ALL">Geral</TabsTrigger>
-                        <TabsTrigger value="A">Curva A (Top 5)</TabsTrigger>
-                        <TabsTrigger value="B">Curva B (Restante)</TabsTrigger>
-                    </TabsList>
-                </Tabs>
                 
                  {view === 'cards' ? (
                      cardData.length > 0 ? (
