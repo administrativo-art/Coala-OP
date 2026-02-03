@@ -11,15 +11,14 @@ import { useProducts } from "@/hooks/use-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 
 // UI Components
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { TrendingUp, X as XIcon, Inbox, Check, Lightbulb } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
-import { InsightCard, type Insight } from './insight-card'
-import type { BaseProduct } from "@/types"
+import { type BaseProduct } from "@/types"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { MultiSelect } from "@/components/ui/multi-select"
@@ -31,8 +30,6 @@ const stdDev = (arr: number[]): number => {
     return Math.sqrt(arr.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / arr.length);
 };
 
-
-// Chart Colors
 const CHART_COLORS = [
     'hsl(var(--chart-1))',
     'hsl(var(--chart-2))',
@@ -41,13 +38,73 @@ const CHART_COLORS = [
     'hsl(var(--chart-5))',
 ];
 
+type CardModel = {
+  id: string;
+  name: string;
+  unit: string;
+  series: { label: string; value: number }[];
+  periodAvg: number;
+  histAvg: number;
+  changePct: number;
+  volatility: 'Alta' | 'Média' | 'Baixa';
+  abcClass: 'A' | 'B' | null;
+};
+
+
+function CustomTooltip({ active, payload, label }: any) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="p-2 bg-background/80 border rounded-md shadow-lg">
+        <p className="text-xs font-bold">{label}</p>
+        <p className="text-sm text-primary">{`Consumo: ${payload[0].value.toFixed(1)}`}</p>
+      </div>
+    );
+  }
+  return null;
+}
+
+
+function ConsumptionCard({ data }: { data: CardModel }) {
+  const Icon = data.changePct > 5 ? TrendingUp : data.changePct < -5 ? TrendingDown : Minus;
+  const color = data.changePct > 5 ? "text-destructive" : data.changePct < -5 ? "text-green-600" : "text-muted-foreground";
+
+  return (
+    <Card className="flex flex-col">
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-start">
+            <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name} ({data.unit})</CardTitle>
+            {data.abcClass && <Badge variant="outline">{`Curva ${data.abcClass}`}</Badge>}
+        </div>
+      </CardHeader>
+      <CardContent className="flex-grow">
+        <div className={cn("text-4xl font-bold flex items-center gap-2", color)}>
+          <Icon className="h-8 w-8" />
+          <span>{data.changePct.toFixed(0)}%</span>
+        </div>
+         <p className="text-xs text-muted-foreground">vs. média histórica</p>
+         <div className="h-[60px] mt-4 -mx-4">
+            <LineChart width={250} height={60} data={data.series}>
+                <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} />
+                <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
+            </LineChart>
+         </div>
+      </CardContent>
+      <CardFooter className="flex-col items-start gap-1 text-xs text-muted-foreground border-t pt-2 pb-3">
+        <div className="flex justify-between w-full"><span>Média Período:</span><span className="font-semibold">{data.periodAvg.toFixed(1)}/mês</span></div>
+        <div className="flex justify-between w-full"><span>Média Histórica:</span><span className="font-semibold">{data.histAvg.toFixed(1)}/mês</span></div>
+        <div className="flex justify-between w-full"><span>Volatilidade:</span><span className="font-semibold">{data.volatility}</span></div>
+      </CardFooter>
+    </Card>
+  )
+}
+
+
 export function AverageConsumptionChart() {
     // State
     const [startPeriod, setStartPeriod] = useState<string | null>(null);
     const [endPeriod, setEndPeriod] = useState<string | null>(null);
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
-    const [viewMode, setViewMode] = useState<'absolute' | 'percentage'>('absolute');
-    const [initialLoad, setInitialLoad] = useState(true);
+    const [view, setView] = useState<'cards' | 'chart'>('cards');
     const [kioskId, setKioskId] = useState<string>('all');
     const [abcFilter, setAbcClassFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
 
@@ -91,8 +148,8 @@ export function AverageConsumptionChart() {
         }
     };
     
-    const { monthlyConsumptions, historicalAverages, abcClasses } = useMemo(() => {
-        if (loading) return { monthlyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] } };
+    const { monthlyConsumptions, historicalAverages, abcClasses, deviations } = useMemo(() => {
+        if (loading) return { monthlyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] }, deviations: new Map() };
 
         const kioskFilteredReports = kioskId === 'all' 
             ? consumptionReports 
@@ -121,8 +178,6 @@ export function AverageConsumptionChart() {
                 if (item.consumedQuantity > 0) {
                     monthsWithConsumption.get(item.baseProductId)!.add(monthStr);
                     totals.set(item.baseProductId, (totals.get(item.baseProductId) || 0) + item.consumedQuantity);
-
-                    // For ABC
                     const currentTotal = consumptionByProduct.get(item.baseProductId) || 0;
                     consumptionByProduct.set(item.baseProductId, currentTotal + item.consumedQuantity);
                     totalNetworkConsumption += item.consumedQuantity;
@@ -136,7 +191,11 @@ export function AverageConsumptionChart() {
             averages.set(bpId, total / monthsCount);
         });
 
-        // ABC Calculation
+        const devMap = new Map<string, number>();
+        consumptions.forEach((monthData, bpId) => {
+            devMap.set(bpId, stdDev(Array.from(monthData.values())));
+        });
+
         const consumptionPercentages = Array.from(consumptionByProduct.entries()).map(([id, total]) => ({
             id,
             total,
@@ -146,52 +205,28 @@ export function AverageConsumptionChart() {
         const classA = consumptionPercentages.slice(0, 5).map(p => p.id);
         const classB = consumptionPercentages.slice(5).map(p => p.id);
 
-        return { monthlyConsumptions: consumptions, historicalAverages: averages, abcClasses: { A: classA, B: classB } };
+        return { monthlyConsumptions: consumptions, historicalAverages: averages, abcClasses: { A: classA, B: classB }, deviations: devMap };
 
     }, [loading, consumptionReports, kioskId]);
     
-    const topOfensores = useMemo(() => {
-        if (loading || monthlyConsumptions.size === 0) return [];
-        
-        const ofensores = Array.from(monthlyConsumptions.keys()).map(bpId => {
-            const consumptions = Array.from(monthlyConsumptions.get(bpId)?.values() || []);
-            const deviation = stdDev(consumptions);
-            return { id: bpId, deviation };
-        });
-
-        return ofensores.sort((a,b) => b.deviation - a.deviation).slice(0, 3);
-    }, [loading, monthlyConsumptions]);
-    
-    useEffect(() => {
-        if (initialLoad && topOfensores.length > 0 && selectedBaseProducts.length === 0) {
-            setSelectedBaseProducts(topOfensores.map(o => o.id));
-            setInitialLoad(false);
+     useEffect(() => {
+        if (!loading && baseProducts.length > 0 && selectedBaseProducts.length === 0) {
+            const topOfensores = Array.from(deviations.entries())
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 3)
+                .map(([id]) => id);
+            setSelectedBaseProducts(topOfensores);
         }
-    }, [initialLoad, topOfensores, selectedBaseProducts.length]);
+    }, [loading, baseProducts, deviations, selectedBaseProducts.length]);
 
 
-    const uniqueUnitsOnSelected = useMemo(() => {
-        if (loading || selectedBaseProducts.length === 0) return new Set();
-        const selectedProductsDetails = selectedBaseProducts.map(bpId => baseProducts.find(p => p.id === bpId)).filter(Boolean) as BaseProduct[];
-        return new Set(selectedProductsDetails.map(p => p.unit));
-    }, [selectedBaseProducts, baseProducts, loading]);
-
-    useEffect(() => {
-        if (uniqueUnitsOnSelected.size > 1) {
-            setViewMode('percentage');
-        } else {
-            setViewMode('absolute');
-        }
-    }, [uniqueUnitsOnSelected]);
-
-
-    // Memoized Data Processing
-    const { chartData, yAxisLabel, insights } = useMemo(() => {
+    const chartData = useMemo(() => {
         if (!startPeriod || !endPeriod || selectedBaseProducts.length === 0 || loading) {
-            return { chartData: [], yAxisLabel: 'Consumo', insights: [] };
+            return [];
         }
         
-        const currentViewMode = uniqueUnitsOnSelected.size > 1 ? 'percentage' : viewMode;
+        const uniqueUnitsOnSelected = new Set(selectedBaseProducts.map(bpId => baseProducts.find(p => p.id === bpId)?.unit).filter(Boolean));
+        const usePercentage = uniqueUnitsOnSelected.size > 1;
 
         const [startYear, startMonth] = startPeriod.split('-').map(Number);
         const [endYear, endMonth] = endPeriod.split('-').map(Number);
@@ -206,7 +241,7 @@ export function AverageConsumptionChart() {
             current = addMonths(current, 1);
         }
 
-        const finalChartData = interval.map(month => {
+        return interval.map(month => {
             const monthStr = format(month, 'yyyy-MM');
             const dayData: Record<string, any> = {
                 date: format(month, 'MMM/yy', {locale: ptBR}),
@@ -215,8 +250,7 @@ export function AverageConsumptionChart() {
                 const bp = baseProducts.find(p => p.id === bpId);
                 if (bp) {
                     const monthlyValue = monthlyConsumptions.get(bpId)?.get(monthStr) || 0;
-                    
-                    if (currentViewMode === 'percentage') {
+                    if(usePercentage) {
                         const historicalAvg = historicalAverages.get(bpId);
                         if (historicalAvg && historicalAvg > 0) {
                             dayData[bp.name] = ((monthlyValue / historicalAvg) - 1) * 100;
@@ -224,48 +258,13 @@ export function AverageConsumptionChart() {
                             dayData[bp.name] = monthlyValue > 0 ? 100 : 0;
                         }
                     } else {
-                        dayData[bp.name] = monthlyValue;
+                         dayData[bp.name] = monthlyValue;
                     }
                 }
             });
             return dayData;
         });
-
-        const finalInsights: Insight[] = selectedBaseProducts.map(bpId => {
-            const historicalAvg = historicalAverages.get(bpId) || 0;
-            
-            const consumptionsInPeriod = Array.from(monthlyConsumptions.get(bpId)?.entries() || [])
-                .filter(([monthStr,]) => {
-                    const monthDate = parseISO(`${monthStr}-01`);
-                    return isWithinInterval(monthDate, {start, end});
-                })
-                .map(([, value]) => value);
-
-            const currentAvg = consumptionsInPeriod.length > 0
-                ? consumptionsInPeriod.reduce((a,b) => a + b, 0) / consumptionsInPeriod.length
-                : 0;
-
-            const change = historicalAvg > 0 ? ((currentAvg / historicalAvg) - 1) * 100 : (currentAvg > 0 ? Infinity : 0);
-            
-            return {
-                name: baseProducts.find(p => p.id === bpId)?.name || 'N/A',
-                change: change,
-                currentAvg: currentAvg / 30, // Show daily average for consistency
-                unit: baseProducts.find(p => p.id === bpId)?.unit || ''
-            };
-        });
-
-        let yLabel = 'Consumo';
-        if (currentViewMode === 'percentage') {
-            yLabel = 'Variação (%)';
-        } else if (selectedBaseProducts.length > 0) {
-            const firstSelectedProduct = baseProducts.find(p => p.id === selectedBaseProducts[0]);
-            yLabel = `Consumo (${firstSelectedProduct?.unit || ''})`;
-        }
-
-        return { chartData: finalChartData, yAxisLabel: yLabel, insights: finalInsights };
-
-    }, [startPeriod, endPeriod, selectedBaseProducts, loading, baseProducts, viewMode, monthlyConsumptions, historicalAverages, uniqueUnitsOnSelected]);
+    }, [startPeriod, endPeriod, selectedBaseProducts, loading, baseProducts, monthlyConsumptions, historicalAverages]);
     
     const availableBaseProducts = useMemo(() => {
         if (abcFilter === 'A') return baseProducts.filter(bp => abcClasses.A.includes(bp.id));
@@ -276,6 +275,56 @@ export function AverageConsumptionChart() {
     const productOptions = useMemo(() => 
         availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
     [availableBaseProducts]);
+    
+     const cardData: CardModel[] = useMemo(() => {
+        if (loading || !startPeriod || !endPeriod) return [];
+        
+        const baseList = selectedBaseProducts.length > 0 ? baseProducts.filter(bp => selectedBaseProducts.includes(bp.id)) : availableBaseProducts;
+
+        const [startYear, startMonth] = startPeriod.split('-').map(Number);
+        const [endYear, endMonth] = endPeriod.split('-').map(Number);
+        
+        const start = startOfMonth(new Date(startYear, startMonth - 1, 1));
+        const end = endOfMonth(new Date(endYear, endMonth - 1, 1));
+
+        return baseList.map(bp => {
+            const histAvg = historicalAverages.get(bp.id) || 0;
+            const deviation = deviations.get(bp.id) || 0;
+
+            const consumptionsInPeriod = Array.from(monthlyConsumptions.get(bp.id)?.entries() || [])
+                .filter(([monthStr,]) => {
+                    const monthDate = parseISO(`${monthStr}-01`);
+                    return isWithinInterval(monthDate, {start, end});
+                })
+                .map(([label, value]) => ({ label: format(parseISO(`${label}-01`), 'MMM/yy'), value }));
+            
+            const periodAvg = consumptionsInPeriod.length > 0
+                ? consumptionsInPeriod.reduce((a,b) => a + b.value, 0) / consumptionsInPeriod.length
+                : 0;
+            
+            const changePct = histAvg > 0 ? ((periodAvg / histAvg) - 1) * 100 : (periodAvg > 0 ? Infinity : 0);
+            
+            let volatility: CardModel['volatility'] = 'Baixa';
+            if (histAvg > 0) {
+                const cv = deviation / histAvg; // Coefficient of Variation
+                if (cv > 0.5) volatility = 'Alta';
+                else if (cv > 0.2) volatility = 'Média';
+            }
+
+            return {
+                id: bp.id,
+                name: bp.name,
+                unit: bp.unit,
+                series: consumptionsInPeriod,
+                periodAvg,
+                histAvg,
+                changePct,
+                volatility,
+                abcClass: abcClasses.A.includes(bp.id) ? 'A' : abcClasses.B.includes(bp.id) ? 'B' : null,
+            };
+        }).sort((a,b) => (b.periodAvg * Math.abs(b.changePct)) - (a.periodAvg * Math.abs(a.changePct))); // Sort by impact
+    }, [loading, startPeriod, endPeriod, selectedBaseProducts, availableBaseProducts, baseProducts, historicalAverages, deviations, monthlyConsumptions, abcClasses]);
+
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -284,11 +333,10 @@ export function AverageConsumptionChart() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><TrendingUp /> Análise de Consumo</CardTitle>
+                <CardTitle className="flex items-center gap-2"><BarChart3 /> Análise de Consumo</CardTitle>
                 <CardDescription>Visualize e compare o consumo de insumos ao longo do tempo.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                 <InsightCard insights={insights} />
                 
                 <div className="flex flex-col md:flex-row gap-2">
                     <Select value={kioskId} onValueChange={setKioskId}>
@@ -338,18 +386,12 @@ export function AverageConsumptionChart() {
                             className="w-full"
                         />
                     </div>
-                    
-                    <ToggleGroup 
-                        type="single" 
-                        value={viewMode} 
-                        onValueChange={(value) => {if (value) setViewMode(value as any)}} 
-                        size="sm"
-                        disabled={uniqueUnitsOnSelected.size > 1}
-                    >
-                        <ToggleGroupItem value="absolute">Absoluto</ToggleGroupItem>
-                        <ToggleGroupItem value="percentage">Variação %</ToggleGroupItem>
+                     <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
+                        <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
+                        <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
                     </ToggleGroup>
                 </div>
+                
                  <Tabs value={abcFilter} onValueChange={(v) => setAbcClassFilter(v as any)}>
                     <TabsList>
                         <TabsTrigger value="ALL">Geral</TabsTrigger>
@@ -358,33 +400,42 @@ export function AverageConsumptionChart() {
                     </TabsList>
                 </Tabs>
                 
-                {/* Chart */}
-                <div className="h-[400px]">
-                    {selectedBaseProducts.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" />
-                                <YAxis 
-                                    label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }}
-                                    tickFormatter={(value) => uniqueUnitsOnSelected.size > 1 ? `${value}%` : value}
-                                />
-                                <Tooltip formatter={(value: number) => uniqueUnitsOnSelected.size > 1 ? `${value.toFixed(0)}%` : value} />
-                                <Legend />
-                                {selectedBaseProducts.map((bpId, index) => {
-                                    const bp = baseProducts.find(p => p.id === bpId);
-                                    if (!bp) return null;
-                                    return <Line key={bpId} type="monotone" dataKey={bp.name} stroke={CHART_COLORS[index % CHART_COLORS.length]} strokeWidth={2} dot={false} />;
-                                })}
-                            </LineChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
-                            <Inbox className="h-12 w-12 mb-2"/>
-                            <p>Selecione um ou mais insumos para visualizar o gráfico.</p>
+                 {view === 'cards' ? (
+                     cardData.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {cardData.map(data => <ConsumptionCard key={data.id} data={data} />)}
                         </div>
-                    )}
-                </div>
+                     ) : (
+                        <div className="flex h-64 flex-col items-center justify-center text-muted-foreground">
+                            <Inbox className="h-12 w-12 mb-2"/>
+                            <p>Nenhum dado de consumo para os filtros selecionados.</p>
+                        </div>
+                     )
+                ) : (
+                    <div className="h-[500px]">
+                        {selectedBaseProducts.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" />
+                                    <YAxis tickFormatter={(value) => value.toLocaleString()} />
+                                    <Tooltip formatter={(value: number) => value.toLocaleString()} />
+                                    <Legend />
+                                    {selectedBaseProducts.map((bpId, index) => {
+                                        const bp = baseProducts.find(p => p.id === bpId);
+                                        if (!bp) return null;
+                                        return <Line key={bpId} type="monotone" dataKey={bp.name} stroke={CHART_COLORS[index % CHART_COLORS.length]} strokeWidth={2} dot={false} />;
+                                    })}
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
+                                <Inbox className="h-12 w-12 mb-2"/>
+                                <p>Selecione um ou mais insumos para visualizar o gráfico comparativo.</p>
+                            </div>
+                        )}
+                    </div>
+                )}
             </CardContent>
         </Card>
     );
