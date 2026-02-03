@@ -67,7 +67,7 @@ export function MultiSelect({
   }
 
   return (
-    <div className={cn("relative overflow-visible", className)}> {/* Adicionado overflow-visible e relative */}
+    <div className={cn("relative overflow-visible", className)}>
       <Command 
         onKeyDown={handleKeyDown} 
         className="overflow-visible bg-transparent" 
@@ -102,24 +102,32 @@ export function MultiSelect({
               onBlur={() => setOpen(false)}
               onFocus={() => setOpen(true)}
               placeholder={selected.length === 0 ? placeholder : ""}
-              className="ml-2 bg-transparent outline-none placeholder:text-muted-foreground flex-1 min-w-[120px]" // min-w para garantir clique
+              className="ml-2 bg-transparent outline-none placeholder:text-muted-foreground flex-1 min-w-[120px]"
             />
           </div>
         </div>
         
         {/* Dropdown Flutuante */}
         {open && filteredOptions.length > 0 && (
-            <div className="absolute top-full z-50 w-full mt-2 bg-popover text-popover-foreground rounded-md border shadow-md outline-none animate-in fade-in-0 zoom-in-95">
+            <div 
+              className="absolute top-full z-50 w-full mt-2 bg-popover text-popover-foreground rounded-md border shadow-md outline-none animate-in fade-in-0 zoom-in-95"
+              onMouseDown={(e) => {
+                e.preventDefault(); // Impede o input de perder foco (blur)
+              }}
+            >
             <CommandList className="max-h-[300px] overflow-auto"> 
-                {/* Removemos CommandGroup se não for estritamente necessário para limpar o visual */}
                 {filteredOptions.map((option) => {
                     const isSelected = selected.includes(option.value)
                     return (
                     <CommandItem
                         key={option.value}
-                        value={option.value} // ID único
+                        value={option.label} 
                         onSelect={() => handleSelect(option.value)}
                         className="cursor-pointer"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
                     >
                         <div
                         className={cn(
@@ -129,7 +137,7 @@ export function MultiSelect({
                             : "opacity-50 [&_svg]:invisible"
                         )}
                         >
-                        <X className={cn("h-4 w-4", !isSelected && "hidden")} /> {/* Check customizado */}
+                        <X className={cn("h-4 w-4", !isSelected && "hidden")} />
                         </div>
                         {option.label}
                     </CommandItem>
