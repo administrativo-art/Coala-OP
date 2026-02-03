@@ -183,7 +183,7 @@ export function AverageConsumptionChart() {
         if (loading) return [];
         const periods = new Set<string>();
         consumptionReports.forEach(report => {
-            periods.add(`${'report.year'}-${String(report.month).padStart(2, '0')}`);
+            periods.add(`${report.year}-${String(report.month).padStart(2, '0')}`);
         });
         return Array.from(periods).sort((a,b) => b.localeCompare(a));
     }, [consumptionReports, loading]);
@@ -273,7 +273,7 @@ export function AverageConsumptionChart() {
         const consumptionByProduct = new Map<string, number>();
 
         kioskFilteredReports.forEach(report => {
-            const monthStr = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
+            const monthStr = `${report.year}-${String(report.month).padStart(2, '0')}`;
             report.results.forEach(item => {
                 if (!item.baseProductId) return;
                 
@@ -594,6 +594,8 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
+    
 
     
 
