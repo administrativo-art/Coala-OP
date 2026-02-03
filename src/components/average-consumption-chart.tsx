@@ -9,6 +9,7 @@ import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData
 import { useProducts } from "@/hooks/use-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { convertValue } from '@/lib/conversion';
+import { useToast } from "@/hooks/use-toast";
 
 
 // UI Components
@@ -16,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
-import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat, Info } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat, Info, Wand2, Loader2 } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
 import { type BaseProduct, type Product } from "@/types"
@@ -27,6 +28,8 @@ import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 import { Button } from "./ui/button"
 import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 import { Separator } from './ui/separator';
+import { AiAnalysisModal } from './ai-analysis-modal';
+import { analyzeConsumption, type AnalyzeConsumptionOutput } from '@/ai/flows/analyze-consumption-flow';
 
 
 const stdDev = (arr: number[]): number => {
@@ -223,6 +226,10 @@ export function AverageConsumptionChart() {
       open: boolean;
       baseProduct: BaseProduct | null;
     }>({ open: false, baseProduct: null });
+    const { toast } = useToast();
+    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [analysisResult, setAnalysisResult] = useState<AnalyzeConsumptionOutput | null>(null);
 
 
     // Data Hooks
@@ -502,6 +509,44 @@ export function AverageConsumptionChart() {
         }
     };
 
+    const handleRunAnalysis = async () => {
+        setIsAnalyzing(true);
+        setIsAnalysisModalOpen(true);
+        setAnalysisResult(null);
+
+        const kioskName = kioskId === 'all' ? 'Todas as Unidades' : kiosks.find(k => k.id === kioskId)?.name || 'Desconhecido';
+        
+        const inputData = {
+            startPeriod: startPeriod || '',
+            endPeriod: endPeriod || '',
+            kioskName,
+            consumptionData: cardData.map(c => ({
+                name: c.name,
+                unit: c.unit,
+                periodAvg: c.periodAvg,
+                histAvg: c.histAvg,
+                periodChangePct: c.periodChangePct,
+                volatility: c.volatility,
+                abcClass: c.abcClass,
+            }))
+        };
+
+        try {
+            const result = await analyzeConsumption(inputData);
+            setAnalysisResult(result);
+        } catch (error) {
+            console.error("AI Analysis failed:", error);
+            toast({
+                variant: "destructive",
+                title: "Erro na Análise de IA",
+                description: "Não foi possível gerar a análise. Tente novamente mais tarde.",
+            });
+            setIsAnalysisModalOpen(false); // Close modal on error
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -563,6 +608,10 @@ export function AverageConsumptionChart() {
                             className="w-full"
                         />
                     </div>
+                     <Button onClick={handleRunAnalysis} disabled={isAnalyzing || cardData.length === 0}>
+                        {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                        {isAnalyzing ? 'Analisando...' : 'Analisar com IA'}
+                    </Button>
                      <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
                         <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
                         <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
@@ -613,6 +662,12 @@ export function AverageConsumptionChart() {
                 kioskId={kioskId}
                 startPeriod={startPeriod || ''}
                 endPeriod={endPeriod || ''}
+            />
+            <AiAnalysisModal
+                open={isAnalysisModalOpen}
+                onOpenChange={setIsAnalysisModalOpen}
+                result={analysisResult}
+                isLoading={isAnalyzing}
             />
         </Card>
     );
