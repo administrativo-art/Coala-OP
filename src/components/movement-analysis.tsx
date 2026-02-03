@@ -1,94 +1,138 @@
-
 "use client"
 
+import { useMemo, useState, useEffect } from "react"
+import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth } from "date-fns"
+import { ptBR } from 'date-fns/locale'
+
+// Hooks
 import { useMovementHistory } from "@/hooks/use-movement-history";
 import { useProducts } from "@/hooks/use-products";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { History } from 'lucide-react';
-import { useMemo } from "react";
+import { useKiosks } from "@/hooks/use-kiosks";
+import { useBaseProducts } from "@/hooks/use-base-products";
+
+// UI Components
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
+import { MultiSelect } from "@/components/ui/multi-select"
+import { Inbox, Truck } from "lucide-react";
 
 export function MovementAnalysis() {
-    const { history, loading } = useMovementHistory();
-    const { products, getProductFullName, loading: productsLoading } = useProducts();
+    const [startPeriod, setStartPeriod] = useState<string | null>(null);
+    const [endPeriod, setEndPeriod] = useState<string | null>(null);
+    const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
+    const [kioskId, setKioskId] = useState<string>('all');
+    
+    const { history, loading: historyLoading } = useMovementHistory();
+    const { products, loading: productsLoading } = useProducts();
+    const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+    const { kiosks, loading: kiosksLoading } = useKiosks();
+    
+    const loading = historyLoading || productsLoading || baseProductsLoading || kiosksLoading;
 
-    const historyWithProducts = useMemo(() => {
-        if (loading || productsLoading || !products.length) return [];
-        return history.map(record => {
-          const product = products.find(p => record.productName.startsWith(p.baseName));
-          return {
-            ...record,
-            displayName: product ? getProductFullName(product) : record.productName,
-          };
+    const availablePeriods = useMemo(() => {
+        if (loading) return [];
+        const periods = new Set<string>();
+        history.forEach(record => {
+            if (record.timestamp) {
+                periods.add(format(parseISO(record.timestamp), 'yyyy-MM'));
+            }
         });
-    }, [history, products, loading, productsLoading, getProductFullName]);
+        return Array.from(periods).sort((a,b) => b.localeCompare(a));
+    }, [history, loading]);
 
-    if (loading || productsLoading) {
-        return (
-            <Card>
-                <CardHeader>
-                    <Skeleton className="h-8 w-3/4" />
-                    <Skeleton className="h-4 w-1/2" />
-                </CardHeader>
-                <CardContent>
-                    <Skeleton className="h-64 w-full" />
-                </CardContent>
-            </Card>
-        )
-    }
+    useEffect(() => {
+        if (!loading && availablePeriods.length > 0) {
+            if (!endPeriod) setEndPeriod(availablePeriods[0]);
+            if (!startPeriod) {
+                const defaultStartIndex = Math.min(2, availablePeriods.length - 1);
+                setStartPeriod(availablePeriods[defaultStartIndex]);
+            }
+        }
+    }, [availablePeriods, loading, startPeriod, endPeriod]);
 
-    if (historyWithProducts.length === 0) {
-        return (
-            <div className="text-center py-16 flex flex-col items-center text-muted-foreground border-2 border-dashed rounded-lg">
-                <History className="h-16 w-16 mb-4" />
-                <h3 className="text-xl font-semibold text-foreground">Sem histórico de movimentações</h3>
-                <p>Nenhuma transferência de estoque entre quiosques foi registrada ainda.</p>
-            </div>
-        )
+    const handleStartPeriodChange = (value: string) => {
+        setStartPeriod(value);
+        if (endPeriod && value > endPeriod) {
+            setEndPeriod(value);
+        }
+    };
+
+    const handleEndPeriodChange = (value: string) => {
+        setEndPeriod(value);
+        if (startPeriod && value < startPeriod) {
+            setStartPeriod(value);
+        }
+    };
+    
+    const productOptions = useMemo(() => 
+        baseProducts.map(p => ({ value: p.id, label: p.name })),
+    [baseProducts]);
+
+    if (loading) {
+        return <Skeleton className="h-96 w-full" />;
     }
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Histórico de movimentações</CardTitle>
-                <CardDescription>Veja todas as transferências de estoque entre os quiosques.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Truck /> Análise de Transferências</CardTitle>
+                <CardDescription>Visualize o fluxo de entrada de insumos nas unidades por período.</CardDescription>
             </CardHeader>
-            <CardContent>
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Produto</TableHead>
-                                <TableHead>Lote</TableHead>
-                                <TableHead className="text-right">Qtd.</TableHead>
-                                <TableHead>Origem</TableHead>
-                                <TableHead>Destino</TableHead>
-                                <TableHead>Usuário</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {historyWithProducts.map(item => (
-                                <TableRow key={item.id}>
-                                    <TableCell>
-                                        <div className="flex flex-col">
-                                            <span>{format(parseISO(item.timestamp), "dd/MM/yy", { locale: ptBR })}</span>
-                                            <span className="text-xs text-muted-foreground">{format(parseISO(item.timestamp), "HH:mm", { locale: ptBR })}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="font-medium">{item.displayName}</TableCell>
-                                    <TableCell>{item.lotNumber}</TableCell>
-                                    <TableCell className="text-right font-semibold">{item.quantityChange}</TableCell>
-                                    <TableCell>{item.fromKioskName}</TableCell>
-                                    <TableCell>{item.toKioskName}</TableCell>
-                                    <TableCell>{item.username}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+            <CardContent className="space-y-4">
+                 <div className="flex flex-col md:flex-row gap-2">
+                    <Select value={kioskId} onValueChange={setKioskId}>
+                        <SelectTrigger className="w-full md:w-[200px]">
+                            <SelectValue placeholder="Selecione a unidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas as Unidades</SelectItem>
+                            {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    
+                    <div className="flex items-center gap-2">
+                        <Select value={startPeriod || ""} onValueChange={handleStartPeriodChange} disabled={availablePeriods.length === 0}>
+                            <SelectTrigger className="w-full md:w-[150px]">
+                                <SelectValue placeholder="Início" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availablePeriods.map(p => (
+                                    <SelectItem key={`start-${p}`} value={p}>
+                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground">-</span>
+                        <Select value={endPeriod || ""} onValueChange={handleEndPeriodChange} disabled={availablePeriods.length === 0}>
+                            <SelectTrigger className="w-full md:w-[150px]">
+                                <SelectValue placeholder="Fim" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availablePeriods.map(p => (
+                                    <SelectItem key={`end-${p}`} value={p} disabled={!!startPeriod && p < startPeriod}>
+                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="flex-1">
+                        <MultiSelect
+                            options={productOptions}
+                            selected={selectedBaseProducts}
+                            onChange={setSelectedBaseProducts}
+                            placeholder="Selecione os insumos..."
+                            className="w-full"
+                        />
+                    </div>
+                </div>
+
+                <div className="flex h-64 flex-col items-center justify-center text-muted-foreground border-2 border-dashed rounded-lg">
+                    <Inbox className="h-12 w-12 mb-2"/>
+                    <p>Análise de movimentações em desenvolvimento.</p>
                 </div>
             </CardContent>
         </Card>
