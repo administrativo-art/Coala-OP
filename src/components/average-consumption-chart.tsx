@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -292,7 +293,7 @@ export function AverageConsumptionChart() {
                primaryDisplay = `${baseQuantity.toFixed(1)} ${baseProduct.unit}`;
           }
           
-          const secondaryDisplay = secondaryParts.length > 0 ? `(${secondaryParts.join(' / ')})` : undefined;
+          const secondaryDisplay = secondaryParts.length > 0 ? secondaryParts.join(' / ') : undefined;
 
           return { primary: primaryDisplay, secondary: secondaryDisplay };
   
