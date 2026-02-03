@@ -1,4 +1,3 @@
-
       "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -61,5 +60,3 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
 
   return <ConsumptionAnalysisContext.Provider value={value}>{children}</ConsumptionAnalysisContext.Provider>;
 }
-
-    
