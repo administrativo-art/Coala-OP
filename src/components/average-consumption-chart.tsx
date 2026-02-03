@@ -1,8 +1,8 @@
+
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
-import { DateRange } from "react-day-picker"
-import { format, subDays, startOfMonth, addMonths, eachDayOfInterval, isWithinInterval, parseISO, differenceInDays, endOfMonth } from "date-fns"
+import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 
 // Hooks
@@ -12,13 +12,10 @@ import { useKiosks } from "@/hooks/use-kiosks"
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { CalendarIcon, TrendingUp, X as XIcon, Inbox, Check, Lightbulb } from 'lucide-react'
+import { TrendingUp, X as XIcon, Inbox, Check, Lightbulb } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
 import { InsightCard, type Insight } from './insight-card'
@@ -46,10 +43,8 @@ const CHART_COLORS = [
 
 export function AverageConsumptionChart() {
     // State
-    const [dateRange, setDateRange] = useState<DateRange | undefined>({
-        from: subDays(new Date(), 89), // 3 months default
-        to: new Date(),
-    });
+    const [startPeriod, setStartPeriod] = useState<string | null>(null);
+    const [endPeriod, setEndPeriod] = useState<string | null>(null);
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [viewMode, setViewMode] = useState<'absolute' | 'percentage'>('absolute');
     const [initialLoad, setInitialLoad] = useState(true);
@@ -62,6 +57,39 @@ export function AverageConsumptionChart() {
     const { kiosks, loading: kiosksLoading } = useKiosks();
 
     const loading = consumptionLoading || productsLoading || kiosksLoading;
+    
+    const availablePeriods = useMemo(() => {
+        if (loading) return [];
+        const periods = new Set<string>();
+        consumptionReports.forEach(report => {
+            periods.add(`${report.year}-${String(report.month).padStart(2, '0')}`);
+        });
+        return Array.from(periods).sort((a,b) => b.localeCompare(a));
+    }, [consumptionReports, loading]);
+
+    useEffect(() => {
+        if (!loading && availablePeriods.length > 0) {
+            if (!endPeriod) setEndPeriod(availablePeriods[0]);
+            if (!startPeriod) {
+                const defaultStartIndex = Math.min(2, availablePeriods.length - 1);
+                setStartPeriod(availablePeriods[defaultStartIndex]);
+            }
+        }
+    }, [availablePeriods, loading, startPeriod, endPeriod]);
+
+    const handleStartPeriodChange = (value: string) => {
+        setStartPeriod(value);
+        if (endPeriod && value > endPeriod) {
+            setEndPeriod(value);
+        }
+    };
+
+    const handleEndPeriodChange = (value: string) => {
+        setEndPeriod(value);
+        if (startPeriod && value < startPeriod) {
+            setStartPeriod(value);
+        }
+    };
     
     const { monthlyConsumptions, historicalAverages, abcClasses } = useMemo(() => {
         if (loading) return { monthlyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] } };
@@ -159,14 +187,17 @@ export function AverageConsumptionChart() {
 
     // Memoized Data Processing
     const { chartData, yAxisLabel, insights } = useMemo(() => {
-        if (!dateRange?.from || selectedBaseProducts.length === 0 || loading) {
+        if (!startPeriod || !endPeriod || selectedBaseProducts.length === 0 || loading) {
             return { chartData: [], yAxisLabel: 'Consumo', insights: [] };
         }
         
         const currentViewMode = uniqueUnitsOnSelected.size > 1 ? 'percentage' : viewMode;
 
-        const start = startOfMonth(dateRange.from);
-        const end = endOfMonth(dateRange.to || dateRange.from);
+        const [startYear, startMonth] = startPeriod.split('-').map(Number);
+        const [endYear, endMonth] = endPeriod.split('-').map(Number);
+        
+        const start = startOfMonth(new Date(startYear, startMonth - 1, 1));
+        const end = endOfMonth(new Date(endYear, endMonth - 1, 1));
         
         const interval: Date[] = [];
         let current = start;
@@ -219,7 +250,7 @@ export function AverageConsumptionChart() {
             return {
                 name: baseProducts.find(p => p.id === bpId)?.name || 'N/A',
                 change: change,
-                currentAvg: currentAvg,
+                currentAvg: currentAvg / 30, // Show daily average for consistency
                 unit: baseProducts.find(p => p.id === bpId)?.unit || ''
             };
         });
@@ -234,7 +265,7 @@ export function AverageConsumptionChart() {
 
         return { chartData: finalChartData, yAxisLabel: yLabel, insights: finalInsights };
 
-    }, [dateRange, selectedBaseProducts, loading, baseProducts, viewMode, monthlyConsumptions, historicalAverages, uniqueUnitsOnSelected]);
+    }, [startPeriod, endPeriod, selectedBaseProducts, loading, baseProducts, viewMode, monthlyConsumptions, historicalAverages, uniqueUnitsOnSelected]);
     
     const availableBaseProducts = useMemo(() => {
         if (abcFilter === 'A') return baseProducts.filter(bp => abcClasses.A.includes(bp.id));
@@ -269,44 +300,34 @@ export function AverageConsumptionChart() {
                             {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    {/* Date Range Picker */}
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                                id="date"
-                                variant={"outline"}
-                                className={cn("w-full md:w-auto justify-start text-left font-normal", !dateRange && "text-muted-foreground")}
-                            >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {dateRange?.from ? (
-                                    dateRange.to ? (
-                                        <>
-                                            {format(dateRange.from, "LLL dd, y", {locale: ptBR})} - {format(dateRange.to, "LLL dd, y", {locale: ptBR})}
-                                        </>
-                                    ) : (
-                                        format(dateRange.from, "LLL dd, y", {locale: ptBR})
-                                    )
-                                ) : (
-                                    <span>Selecione um período</span>
-                                )}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                             <div className="flex p-2">
-                                <Button variant="ghost" size="sm" onClick={() => setDateRange({from: subDays(new Date(), 29), to: new Date()})}>Últimos 30 dias</Button>
-                                <Button variant="ghost" size="sm" onClick={() => setDateRange({from: subDays(new Date(), 89), to: new Date()})}>Últimos 3 meses</Button>
-                            </div>
-                            <Calendar
-                                initialFocus
-                                mode="range"
-                                defaultMonth={dateRange?.from}
-                                selected={dateRange}
-                                onSelect={setDateRange}
-                                numberOfMonths={2}
-                                locale={ptBR}
-                            />
-                        </PopoverContent>
-                    </Popover>
+                    
+                    <div className="flex items-center gap-2">
+                        <Select value={startPeriod || ""} onValueChange={handleStartPeriodChange} disabled={availablePeriods.length === 0}>
+                            <SelectTrigger className="w-full md:w-[150px]">
+                                <SelectValue placeholder="Início" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availablePeriods.map(p => (
+                                    <SelectItem key={`start-${p}`} value={p}>
+                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground">-</span>
+                        <Select value={endPeriod || ""} onValueChange={handleEndPeriodChange} disabled={availablePeriods.length === 0}>
+                            <SelectTrigger className="w-full md:w-[150px]">
+                                <SelectValue placeholder="Fim" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availablePeriods.map(p => (
+                                    <SelectItem key={`end-${p}`} value={p} disabled={!!startPeriod && p < startPeriod}>
+                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
                     <div className="flex-1">
                         <MultiSelect
