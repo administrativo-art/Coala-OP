@@ -163,7 +163,6 @@ export function AverageConsumptionChart() {
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [view, setView] = useState<'cards' | 'chart'>('cards');
     const [kioskId, setKioskId] = useState<string>('all');
-    const [abcFilter, setAbcClassFilter] = useState<'ALL' | 'A' | 'B'>('ALL');
     const [comparisonModalData, setComparisonModalData] = useState<{
       open: boolean;
       baseProduct: BaseProduct | null;
@@ -495,16 +494,6 @@ export function AverageConsumptionChart() {
                         <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
                     </ToggleGroup>
                 </div>
-                
-                {view === 'cards' && (
-                  <Tabs value={abcFilter} onValueChange={(v) => setAbcClassFilter(v as any)}>
-                      <TabsList>
-                          <TabsTrigger value="ALL">Geral</TabsTrigger>
-                          <TabsTrigger value="A">Curva A (Top 5)</TabsTrigger>
-                          <TabsTrigger value="B">Curva B (Restante)</TabsTrigger>
-                      </TabsList>
-                  </Tabs>
-                )}
                 
                  {view === 'cards' ? (
                      cardData.length > 0 ? (
