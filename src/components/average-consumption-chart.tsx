@@ -113,7 +113,6 @@ function ConsumptionCard({ data, onCompareClick }: { data: CardModel, onCompareC
         <div className="flex justify-between items-start">
             <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name} ({data.unit})</CardTitle>
             <div className="flex items-center gap-1">
-                {data.abcClass && <Badge variant={data.abcClass === 'A' ? 'destructive' : 'secondary'} className={cn(data.abcClass === 'A' && 'bg-primary/90')}>{`Curva ${data.abcClass}`}</Badge>}
                 <TooltipProvider>
                     <UITooltip>
                         <TooltipTrigger asChild>
@@ -544,3 +543,5 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
+    
