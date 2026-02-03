@@ -96,7 +96,7 @@ export default function ReportsPage() {
                         <div className="p-3 bg-primary/10 rounded-full mb-4">
                             <Truck className="h-8 w-8 text-primary" />
                         </div>
-                        <CardTitle className="text-xl mb-2">Análise de Movimentações</CardTitle>
+                        <CardTitle className="text-xl mb-2">Análise de movimentações</CardTitle>
                         <CardDescription className="text-sm">Analise o fluxo de transferências entre quiosques.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
