@@ -20,7 +20,7 @@ export default function ConsumptionAnalysisPage() {
                 </Button>
             </div>
             <div className="space-y-1 mb-6">
-                <h1 className="text-3xl font-bold">Consumo Médio</h1>
+                <h1 className="text-3xl font-bold">Consumo médio</h1>
                 <p className="text-sm text-muted-foreground">Visualize o consumo médio dos seus insumos.</p>
             </div>
             <ConsumptionAnalysisDashboard />
