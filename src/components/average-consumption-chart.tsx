@@ -29,8 +29,8 @@ import { Button } from "./ui/button"
 import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 import { Separator } from './ui/separator';
 import { AiAnalysisModal } from './ai-analysis-modal';
-import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
-import type { AnalyzeConsumptionOutput } from '@/ai/flows/consumption-schemas';
+// import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
+// import type { AnalyzeConsumptionOutput } from '@/ai/flows/consumption-schemas';
 
 
 const stdDev = (arr: number[]): number => {
@@ -231,7 +231,7 @@ export function AverageConsumptionChart() {
     const { toast } = useToast();
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [analysisResult, setAnalysisResult] = useState<AnalyzeConsumptionOutput | null>(null);
+    const [analysisResult, setAnalysisResult] = useState<any | null>(null);
 
 
     // Data Hooks
@@ -516,37 +516,43 @@ export function AverageConsumptionChart() {
         setIsAnalysisModalOpen(true);
         setAnalysisResult(null);
 
-        const kioskName = kioskId === 'all' ? 'Todas as Unidades' : kiosks.find(k => k.id === kioskId)?.name || 'Desconhecido';
-        
-        const inputData = {
-            startPeriod: startPeriod || '',
-            endPeriod: endPeriod || '',
-            kioskName,
-            consumptionData: cardData.map(c => ({
-                name: c.name,
-                unit: c.unit,
-                periodAvg: c.periodAvg,
-                histAvg: c.histAvg,
-                periodChangePct: c.periodChangePct,
-                volatility: c.volatility,
-                abcClass: c.abcClass,
-            }))
-        };
+        toast({
+            variant: "destructive",
+            title: "Função de Análise com IA desativada",
+            description: "Esta funcionalidade foi temporariamente desativada.",
+        });
 
-        try {
-            const result = await analyzeConsumption(inputData);
-            setAnalysisResult(result);
-        } catch (error) {
-            console.error("AI Analysis failed:", error);
-            toast({
-                variant: "destructive",
-                title: "Erro na Análise de IA",
-                description: "Não foi possível gerar a análise. Tente novamente mais tarde.",
-            });
-            setIsAnalysisModalOpen(false); // Close modal on error
-        } finally {
-            setIsAnalyzing(false);
-        }
+        // const kioskName = kioskId === 'all' ? 'Todas as Unidades' : kiosks.find(k => k.id === kioskId)?.name || 'Desconhecido';
+        
+        // const inputData = {
+        //     startPeriod: startPeriod || '',
+        //     endPeriod: endPeriod || '',
+        //     kioskName,
+        //     consumptionData: cardData.map(c => ({
+        //         name: c.name,
+        //         unit: c.unit,
+        //         periodAvg: c.periodAvg,
+        //         histAvg: c.histAvg,
+        //         periodChangePct: c.periodChangePct,
+        //         volatility: c.volatility,
+        //         abcClass: c.abcClass,
+        //     }))
+        // };
+
+        // try {
+        //     const result = await analyzeConsumption(inputData);
+        //     setAnalysisResult(result);
+        // } catch (error) {
+        //     console.error("AI Analysis failed:", error);
+        //     toast({
+        //         variant: "destructive",
+        //         title: "Erro na Análise de IA",
+        //         description: "Não foi possível gerar a análise. Tente novamente mais tarde.",
+        //     });
+        //     setIsAnalysisModalOpen(false); // Close modal on error
+        // } finally {
+        //     setIsAnalyzing(false);
+        // }
     };
 
 
