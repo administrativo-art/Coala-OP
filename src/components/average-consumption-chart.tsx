@@ -77,12 +77,12 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 
-function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: { 
+function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIcon: PeriodIcon }: { 
     data: CardModel, 
     onCompareClick: (data: CardModel) => void, 
-    formatDisplayQuantity: (qty: number, bp: BaseProduct) => string
+    formatDisplayQuantity: (qty: number, bp: BaseProduct) => string,
+    periodIcon: React.ElementType
 }) {
-  const PeriodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
   const periodColorClass = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
 
   const periodColorValue = useMemo(() => {
@@ -622,7 +622,16 @@ export function AverageConsumptionChart() {
                  {view === 'cards' ? (
                      cardData.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 grid-auto-rows-fr">
-                            {cardData.map(data => <ConsumptionCard key={data.id} data={data} onCompareClick={onCompareClick} formatDisplayQuantity={formatDisplayQuantity} />)}
+                            {cardData.map(data => {
+                                const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
+                                return <ConsumptionCard 
+                                    key={data.id} 
+                                    data={data} 
+                                    onCompareClick={onCompareClick} 
+                                    formatDisplayQuantity={formatDisplayQuantity}
+                                    periodIcon={periodIcon}
+                                />
+                            })}
                         </div>
                      ) : (
                         <div className="flex h-64 flex-col items-center justify-center text-muted-foreground">
