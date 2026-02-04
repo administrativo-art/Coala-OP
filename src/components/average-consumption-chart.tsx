@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -32,6 +33,7 @@ import { Button } from "./ui/button"
 import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 import { Separator } from './ui/separator';
 import { AiAnalysisModal } from "./ai-analysis-modal";
+import { AiAnalysisSetupModal } from "./ai-analysis-setup-modal";
 
 
 const stdDev = (arr: number[]): number => {
@@ -231,6 +233,7 @@ export function AverageConsumptionChart() {
     }>({ open: false, baseProduct: null });
     const { toast } = useToast();
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [isAiSetupModalOpen, setIsAiSetupModalOpen] = useState(false);
     const [isAiLoading, setIsAiLoading] = useState(false);
     const [aiAnalysisResult, setAiAnalysisResult] = useState<z.infer<typeof InsightSchema>[] | null>(null);
     const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -512,27 +515,63 @@ export function AverageConsumptionChart() {
         }
     };
 
-    const handleAiAnalysis = async () => {
-        if (!startPeriod || !endPeriod) return;
+    const handleTriggerAiAnalysis = async (params: { kioskId: string; startPeriod: string; endPeriod: string }) => {
+        const { kioskId, startPeriod, endPeriod } = params;
 
+        setIsAiSetupModalOpen(false); // Close setup modal
         setIsAiLoading(true);
         setIsAiModalOpen(true);
         setAiAnalysisResult(null);
         setAiSummary(null);
 
-        const analysisInput = {
-            kioskName: kioskId === 'all' ? 'Todas as Unidades' : (kiosks.find(k => k.id === kioskId)?.name || 'N/A'),
-            period: `${startPeriod} a ${endPeriod}`,
-            items: cardData.map(d => ({
-                name: d.name,
-                unit: d.unit,
-                series: d.series,
-                periodAvg: d.periodAvg,
-                histAvg: d.histAvg,
-                volatility: d.volatility,
-            }))
-        };
+        const kioskFilteredReports = kioskId === 'all' 
+            ? consumptionReports 
+            : consumptionReports.filter(r => r.kioskId === kioskId);
+        
+        const kioskName = kioskId === 'all' ? 'Todas as Unidades' : (kiosks.find(k => k.id === kioskId)?.name || 'N/A');
 
+        const [startYear, startMonth] = startPeriod.split('-').map(Number);
+        const [endYear, endMonth] = endPeriod.split('-').map(Number);
+        const start = startOfMonth(new Date(startYear, startMonth - 1, 1));
+        const end = endOfMonth(new Date(endYear, endMonth - 1, 1));
+
+        const analysisInput = {
+            kioskName,
+            period: `${startPeriod} a ${endPeriod}`,
+            items: baseProducts.map(bp => {
+                 const histReports = kioskFilteredReports.filter(r => r.results.some(res => res.baseProductId === bp.id));
+                 const totalHistConsumption = histReports.reduce((sum, r) => sum + (r.results.find(res => res.baseProductId === bp.id)?.consumedQuantity || 0), 0);
+                 const histAvg = histReports.length > 0 ? totalHistConsumption / histReports.length : 0;
+                 
+                 const reportsInPeriod = histReports.filter(r => {
+                    const reportDate = new Date(r.year, r.month - 1, 1);
+                    return isWithinInterval(reportDate, { start, end });
+                 });
+                 const totalPeriodConsumption = reportsInPeriod.reduce((sum, r) => sum + (r.results.find(res => res.baseProductId === bp.id)?.consumedQuantity || 0), 0);
+                 const periodAvg = reportsInPeriod.length > 0 ? totalPeriodConsumption / reportsInPeriod.length : 0;
+                 
+                 const monthlyValues = reportsInPeriod.map(r => r.results.find(res => res.baseProductId === bp.id)?.consumedQuantity || 0);
+
+                 let volatility: 'Alta' | 'Média' | 'Baixa' | 'N/A' = 'N/A';
+                 if(histAvg > 0) {
+                     const dev = stdDev(monthlyValues);
+                     const cv = dev / histAvg;
+                     if (cv > 0.5) volatility = 'Alta';
+                     else if (cv > 0.2) volatility = 'Média';
+                     else volatility = 'Baixa';
+                 }
+
+                return {
+                    name: bp.name,
+                    unit: bp.unit,
+                    series: reportsInPeriod.map(r => ({ label: `${r.month}/${r.year}`, value: r.results.find(res => res.baseProductId === bp.id)?.consumedQuantity || 0 })),
+                    periodAvg,
+                    histAvg,
+                    volatility,
+                };
+            }).filter(item => item.histAvg > 0 || item.periodAvg > 0)
+        };
+        
         try {
             const result = await analyzeConsumption(analysisInput);
             setAiSummary(result.summary);
@@ -564,44 +603,6 @@ export function AverageConsumptionChart() {
             <CardContent className="space-y-4">
                 
                 <div className="flex flex-col md:flex-row gap-2">
-                    <Select value={kioskId} onValueChange={setKioskId}>
-                        <SelectTrigger className="w-full md:w-[200px]">
-                            <SelectValue placeholder="Selecione a unidade" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todas as Unidades</SelectItem>
-                            {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    
-                    <div className="flex items-center gap-2">
-                        <Select value={startPeriod || ""} onValueChange={handleStartPeriodChange} disabled={availablePeriods.length === 0}>
-                            <SelectTrigger className="w-full md:w-[150px]">
-                                <SelectValue placeholder="Início" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availablePeriods.map(p => (
-                                    <SelectItem key={`start-${p}`} value={p}>
-                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <span className="text-muted-foreground">-</span>
-                        <Select value={endPeriod || ""} onValueChange={handleEndPeriodChange} disabled={availablePeriods.length === 0}>
-                            <SelectTrigger className="w-full md:w-[150px]">
-                                <SelectValue placeholder="Fim" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availablePeriods.map(p => (
-                                    <SelectItem key={`end-${p}`} value={p} disabled={!!startPeriod && p < startPeriod}>
-                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
                     <div className="flex-1">
                         <MultiSelect
                             options={productOptions}
@@ -615,7 +616,7 @@ export function AverageConsumptionChart() {
                         <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
                         <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
                     </ToggleGroup>
-                     <Button onClick={handleAiAnalysis} disabled={cardData.length === 0 || isAiLoading}>
+                     <Button onClick={() => setIsAiSetupModalOpen(true)}>
                         <Wand2 className="mr-2 h-4 w-4"/> Analisar com IA
                     </Button>
                 </div>
@@ -674,6 +675,14 @@ export function AverageConsumptionChart() {
                 startPeriod={startPeriod || ''}
                 endPeriod={endPeriod || ''}
             />
+            
+            <AiAnalysisSetupModal
+                open={isAiSetupModalOpen}
+                onOpenChange={setIsAiSetupModalOpen}
+                onConfirm={handleTriggerAiAnalysis}
+                isLoading={isAiLoading}
+            />
+            
             <AiAnalysisModal
                 open={isAiModalOpen}
                 onOpenChange={setIsAiModalOpen}
