@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -81,7 +82,7 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: {
     onCompareClick: (data: CardModel) => void, 
     formatDisplayQuantity: (qty: number, bp: BaseProduct) => string
 }) {
-  const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
+  const PeriodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
   const periodColorClass = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
 
   const periodColorValue = useMemo(() => {
@@ -150,7 +151,7 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity }: {
       </CardHeader>
       <CardContent className="flex-grow">
         <div className={cn("text-4xl font-bold flex items-center gap-2", periodColorClass)}>
-          <periodIcon className="h-8 w-8" />
+          <PeriodIcon className="h-8 w-8" />
           <span>{data.periodChangePct.toFixed(0)}%</span>
         </div>
          <p className="text-xs text-muted-foreground">Variação no período</p>
