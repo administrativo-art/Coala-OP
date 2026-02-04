@@ -13,7 +13,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { format, parseISO, isWithinInterval, startOfMonth, endOfMonth, addMonths } from 'date-fns';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
 import { type ConsumptionAnalysisOutputSchema } from '@/ai/flows/consumption-schemas';
 import { AiAnalysisModal } from './ai-analysis-modal';
 import { AiAnalysisSetupModal } from './ai-analysis-setup-modal';
@@ -98,14 +97,25 @@ export function ConsumptionAnalysisDashboard() {
         };
         
         try {
-            const result = await analyzeConsumption(analysisInput);
+            const response = await fetch('/api/ai/analyze-consumption', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(analysisInput),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
             setAiAnalysisResult(result);
-        } catch (error) {
+        } catch (error: any) {
             console.error("AI Analysis failed:", error);
             toast({
                 variant: "destructive",
                 title: "Erro na Análise",
-                description: "Não foi possível obter a análise da IA. Tente novamente.",
+                description: error.message || "Não foi possível obter a análise da IA. Tente novamente.",
             });
             setIsAiModalOpen(false);
         } finally {
@@ -116,22 +126,36 @@ export function ConsumptionAnalysisDashboard() {
 
   return (
     <div className="space-y-6">
-        <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setIsHistoryOpen(true)}>
-                <FileClock className="mr-2 h-4 w-4" />
-                Histórico de análises
-            </Button>
-             <Button onClick={() => setIsAiSetupModalOpen(true)}>
-              <Wand2 className="mr-2 h-4 w-4"/> Analisar com IA
-            </Button>
-            {permissions.stock.analysis.consumption && (
-                 <Button onClick={() => setIsImportOpen(true)}>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                  <CardTitle>Consumo médio</CardTitle>
+                  <CardDescription>Visualize o consumo médio dos seus insumos.</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setIsHistoryOpen(true)}>
+                      <FileClock className="mr-2 h-4 w-4" />
+                      Histórico de análises
+                  </Button>
+                  <Button onClick={() => setIsAiSetupModalOpen(true)}>
+                    <Wand2 className="mr-2 h-4 w-4"/> Analisar com IA
+                  </Button>
+              </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+           <AverageConsumptionChart />
+        </CardContent>
+         {permissions.stock.analysis.consumption && (
+            <CardFooter className="border-t pt-4">
+                <Button onClick={() => setIsImportOpen(true)} variant="secondary">
                     <Upload className="mr-2 h-4 w-4" />
-                    Importar relatório
+                    Importar novo relatório de vendas
                 </Button>
-            )}
-        </div>
-        <AverageConsumptionChart />
+            </CardFooter>
+        )}
+      </Card>
         
         <ConsumptionHistoryModal 
             open={isHistoryOpen}

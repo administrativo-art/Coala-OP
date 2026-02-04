@@ -1,4 +1,3 @@
-'use server';
 
 import { ai, DEFAULT_MODEL } from '../genkit';
 import {
