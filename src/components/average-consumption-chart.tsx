@@ -169,6 +169,7 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIc
                <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '3 3' }} />
                <ReferenceLine y={data.histAvg} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeWidth={1.5} />
                <Area
+                 key={`area-${data.id}`}
                  type="monotone"
                  dataKey="value"
                  stroke={periodColorValue}
@@ -206,7 +207,7 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIc
         <Separator className="my-2" />
         <div className="flex justify-between items-center w-full">
             <div>
-                <span className="text-xs text-muted-foreground uppercase">Volatilidade: </span>
+                <span className="text-xs text-muted-foreground uppercase">Volatilidade: </span> 
                 <span className="font-semibold text-foreground">{volatilityText}</span>
             </div>
         </div>
@@ -682,3 +683,6 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
+
+    
