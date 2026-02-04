@@ -3,7 +3,7 @@
  * @fileOverview Consumption analysis AI agent.
  */
 
-import { ai } from '@/ai/genkit';
+import { ai, DEFAULT_MODEL } from '@/ai/genkit';
 import { 
     AnalyzeConsumptionInputSchema, 
     AnalyzeConsumptionOutputSchema,
@@ -16,7 +16,7 @@ import type {
 
 const prompt = ai.definePrompt({
   name: 'analyzeConsumptionPrompt',
-  model: 'googleai/gemini-pro',
+  model: DEFAULT_MODEL,
   input: { schema: AnalyzeConsumptionInputSchema },
   output: { schema: AnalyzeConsumptionOutputSchema },
   prompt: `
