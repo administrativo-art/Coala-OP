@@ -31,7 +31,7 @@ import { ProfilesProvider } from '@/components/profiles-provider';
 export const metadata: Metadata = {
   title: 'Coala Shakes',
   description: 'Sua ferramenta para conversões e gestão de estoque.',
-  manifest: '/manifest.json',
+  manifest: process.env.NODE_ENV === "production" ? "/manifest.json" : undefined,
 };
 
 export default function RootLayout({
