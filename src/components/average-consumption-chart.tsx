@@ -675,11 +675,9 @@ export function AverageConsumptionChart() {
             <CardContent className="space-y-6">
                 
                  <div className="space-y-4">
-                    {/* Zonas 1 e 3 */}
                     <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-                        {/* Zona 1 */}
-                        <div className="flex flex-col sm:flex-row gap-4 items-start">
-                            <div className="space-y-1.5 w-full sm:w-auto">
+                        <div className="flex items-start gap-4">
+                            <div className="flex flex-col gap-1.5">
                                 <Label htmlFor="kiosk-select">Unidade</Label>
                                 <Select value={kioskId} onValueChange={setKioskId}>
                                     <SelectTrigger id="kiosk-select" className="h-10 w-full md:w-[200px]">
@@ -691,18 +689,17 @@ export function AverageConsumptionChart() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="space-y-1.5">
+                            <div className="flex flex-col gap-1.5">
                                 <Label>Período</Label>
-                                 {period && (
-                                    <PeriodRangePicker
-                                        value={period}
-                                        onChange={setPeriod}
-                                        availablePeriods={availablePeriods.map(p => ({ year: p.year, month: p.month }))}
-                                    />
-                                 )}
+                                {period && (
+                                <PeriodRangePicker
+                                    value={period}
+                                    onChange={setPeriod}
+                                    availablePeriods={availablePeriods.map(p => ({ year: p.year, month: p.month }))}
+                                />
+                                )}
                             </div>
                         </div>
-                        {/* Zona 3 */}
                         <div className="flex-shrink-0">
                             <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
                                 <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
@@ -710,7 +707,6 @@ export function AverageConsumptionChart() {
                             </ToggleGroup>
                         </div>
                     </div>
-                    {/* Zona 2 */}
                     <div className="space-y-1.5">
                         <Label htmlFor="product-multiselect">Insumos analisados</Label>
                         <div className="flex gap-2 items-center">
@@ -784,3 +780,4 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
