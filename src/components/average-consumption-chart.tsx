@@ -179,7 +179,7 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIc
                  dot={(props: any) => {
                    const { cx, cy, index } = props;
                    if (index === data.series.length - 1) {
-                     return <circle cx={cx} cy={cy} r={4} fill={periodColorValue} stroke={"hsl(var(--card))"} strokeWidth={2} />;
+                     return <circle key={index} cx={cx} cy={cy} r={4} fill={periodColorValue} stroke={"hsl(var(--card))"} strokeWidth={2} />;
                    }
                    return null;
                  }}
