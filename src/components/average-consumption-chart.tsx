@@ -10,6 +10,9 @@ import { useProducts } from "@/hooks/use-products"
 import { useKiosks } from "@/hooks/use-kiosks"
 import { convertValue } from '@/lib/conversion';
 import { useToast } from "@/hooks/use-toast";
+import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
+import type { ConsumptionAnalysisOutputSchema, InsightSchema } from '@/ai/flows/consumption-schemas';
+import { z } from "zod";
 
 
 // UI Components
@@ -28,8 +31,8 @@ import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 import { Button } from "./ui/button"
 import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 import { Separator } from './ui/separator';
+import { AiAnalysisModal } from "./ai-analysis-modal";
 
-// AI functionality removed to fix build issues.
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -227,6 +230,10 @@ export function AverageConsumptionChart() {
       baseProduct: BaseProduct | null;
     }>({ open: false, baseProduct: null });
     const { toast } = useToast();
+    const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [isAiLoading, setIsAiLoading] = useState(false);
+    const [aiAnalysisResult, setAiAnalysisResult] = useState<z.infer<typeof InsightSchema>[] | null>(null);
+    const [aiSummary, setAiSummary] = useState<string | null>(null);
 
     // Data Hooks
     const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
@@ -505,6 +512,44 @@ export function AverageConsumptionChart() {
         }
     };
 
+    const handleAiAnalysis = async () => {
+        if (!startPeriod || !endPeriod) return;
+
+        setIsAiLoading(true);
+        setIsAiModalOpen(true);
+        setAiAnalysisResult(null);
+        setAiSummary(null);
+
+        const analysisInput = {
+            kioskName: kioskId === 'all' ? 'Todas as Unidades' : (kiosks.find(k => k.id === kioskId)?.name || 'N/A'),
+            period: `${startPeriod} a ${endPeriod}`,
+            items: cardData.map(d => ({
+                name: d.name,
+                unit: d.unit,
+                series: d.series,
+                periodAvg: d.periodAvg,
+                histAvg: d.histAvg,
+                volatility: d.volatility,
+            }))
+        };
+
+        try {
+            const result = await analyzeConsumption(analysisInput);
+            setAiSummary(result.summary);
+            setAiAnalysisResult(result.keyInsights);
+        } catch (error) {
+            console.error("AI Analysis failed:", error);
+            toast({
+                variant: "destructive",
+                title: "Erro na Análise",
+                description: "Não foi possível obter a análise da IA. Tente novamente.",
+            });
+            setIsAiModalOpen(false);
+        } finally {
+            setIsAiLoading(false);
+        }
+    };
+
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -570,6 +615,9 @@ export function AverageConsumptionChart() {
                         <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
                         <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
                     </ToggleGroup>
+                     <Button onClick={handleAiAnalysis} disabled={cardData.length === 0 || isAiLoading}>
+                        <Wand2 className="mr-2 h-4 w-4"/> Analisar com IA
+                    </Button>
                 </div>
                 
                  {view === 'cards' ? (
@@ -625,6 +673,13 @@ export function AverageConsumptionChart() {
                 kioskId={kioskId}
                 startPeriod={startPeriod || ''}
                 endPeriod={endPeriod || ''}
+            />
+            <AiAnalysisModal
+                open={isAiModalOpen}
+                onOpenChange={setIsAiModalOpen}
+                isLoading={isAiLoading}
+                analysisResult={aiAnalysisResult}
+                summary={aiSummary}
             />
         </Card>
     );

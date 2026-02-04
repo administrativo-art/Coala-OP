@@ -1,2 +1,10 @@
-// This file has been temporarily emptied to resolve build issues.
-// The AI analysis functionality can be restored later.
+import "server-only";
+
+import { genkit } from "genkit";
+import { googleAI } from "@genkit-ai/google-genai";
+
+export const ai = genkit({
+  plugins: [googleAI()],
+});
+
+export const DEFAULT_MODEL = "googleai/gemini-pro";
