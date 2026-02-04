@@ -3,19 +3,28 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, Download } from 'lucide-react';
 import { ConsumptionAnalysisOutputSchema } from '@/ai/flows/consumption-schemas';
 import { z } from 'zod';
 import { Separator } from './ui/separator';
+import dynamic from 'next/dynamic';
+import { AiAnalysisDocument } from './pdf/AiAnalysisDocument';
+
+const PDFDownloadLink = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
+  { ssr: false, loading: () => <Button variant="outline" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Gerando...</Button> }
+);
+
 
 interface AiAnalysisModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     isLoading: boolean;
     analysisResult: z.infer<typeof ConsumptionAnalysisOutputSchema> | null;
+    analysisParams: { kioskName: string; period: string; } | null;
 }
 
-export function AiAnalysisModal({ open, onOpenChange, isLoading, analysisResult }: AiAnalysisModalProps) {
+export function AiAnalysisModal({ open, onOpenChange, isLoading, analysisResult, analysisParams }: AiAnalysisModalProps) {
     const detailedAnalysis = analysisResult?.detailedAnalysis;
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -63,7 +72,7 @@ export function AiAnalysisModal({ open, onOpenChange, isLoading, analysisResult 
                                                  <div>
                                                     <p className="font-semibold text-muted-foreground">Síntese analítica:</p>
                                                     <p className="italic">{item.analyticalSynthesis}</p>
-                                                </div>
+                                                 </div>
                                             </div>
                                         </div>
                                     ))
@@ -76,7 +85,28 @@ export function AiAnalysisModal({ open, onOpenChange, isLoading, analysisResult 
                         </ScrollArea>
                     )}
                 </div>
-                <DialogFooter className="pt-4 border-t">
+                <DialogFooter className="pt-4 border-t justify-between">
+                    <div>
+                        {!isLoading && analysisResult && (
+                            <PDFDownloadLink
+                                document={
+                                    <AiAnalysisDocument
+                                        analysisResult={analysisResult}
+                                        kioskName={analysisParams?.kioskName || ''}
+                                        period={analysisParams?.period || ''}
+                                    />
+                                }
+                                fileName={`analise_consumo_${analysisParams?.kioskName.replace(/\s+/g, '_') || 'geral'}.pdf`}
+                            >
+                                {({ loading }) => (
+                                    <Button variant="outline" disabled={loading}>
+                                        <Download className="mr-2 h-4 w-4"/>
+                                        {loading ? 'Gerando...' : 'Exportar análise'}
+                                    </Button>
+                                )}
+                            </PDFDownloadLink>
+                        )}
+                    </div>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
                 </DialogFooter>
             </DialogContent>

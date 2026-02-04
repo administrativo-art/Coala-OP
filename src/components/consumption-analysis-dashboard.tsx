@@ -17,12 +17,6 @@ import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
 import { type ConsumptionAnalysisOutputSchema } from '@/ai/flows/consumption-schemas';
 import { AiAnalysisModal } from './ai-analysis-modal';
 import { AiAnalysisSetupModal } from './ai-analysis-setup-modal';
-import { AiAnalysisDocument } from './pdf/AiAnalysisDocument';
-
-const PDFDownloadLink = dynamic(
-  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
-  { ssr: false, loading: () => <Button variant="outline" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Gerando...</Button> }
-);
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -130,29 +124,6 @@ export function ConsumptionAnalysisDashboard() {
              <Button onClick={() => setIsAiSetupModalOpen(true)}>
               <Wand2 className="mr-2 h-4 w-4"/> Analisar com IA
             </Button>
-             {aiAnalysisResult ? (
-                <PDFDownloadLink
-                    document={
-                        <AiAnalysisDocument
-                            analysisResult={aiAnalysisResult}
-                            kioskName={lastAnalysisParams?.kioskName || ''}
-                            period={lastAnalysisParams?.period || ''}
-                        />
-                    }
-                    fileName={`analise_consumo_${lastAnalysisParams?.kioskName.replace(/\s+/g, '_') || 'geral'}.pdf`}
-                >
-                    {({ loading }) => (
-                        <Button variant="outline" disabled={loading}>
-                            <Download className="mr-2 h-4 w-4"/>
-                            {loading ? 'Gerando...' : 'Exportar análise'}
-                        </Button>
-                    )}
-                </PDFDownloadLink>
-            ) : (
-                  <Button variant="outline" disabled>
-                    <Download className="mr-2 h-4 w-4"/> Exportar análise
-                </Button>
-            )}
             {permissions.stock.analysis.consumption && (
                  <Button onClick={() => setIsImportOpen(true)}>
                     <Upload className="mr-2 h-4 w-4" />
@@ -189,6 +160,7 @@ export function ConsumptionAnalysisDashboard() {
             onOpenChange={setIsAiModalOpen}
             isLoading={isAiLoading}
             analysisResult={aiAnalysisResult}
+            analysisParams={lastAnalysisParams}
         />
     </div>
   )
