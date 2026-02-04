@@ -2,7 +2,7 @@
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
-import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth } from "date-fns"
+import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth, subMonths, startOfYear } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 import dynamic from 'next/dynamic'
 
@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
-import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat, Info } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat, Info, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
 import { type BaseProduct, type Product } from "@/types"
@@ -31,6 +31,9 @@ import { Button } from "./ui/button"
 import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 import { Separator } from './ui/separator';
 import { Label } from "./ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
+
+type YearMonth = { year: number, month: number }; // 1-based month
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -75,6 +78,147 @@ function CustomTooltip({ active, payload, label }: any) {
   return null;
 }
 
+function MonthPicker({
+    value,
+    onChange,
+    disabledMonths,
+}: {
+    value: YearMonth;
+    onChange: (newValue: YearMonth) => void;
+    disabledMonths?: (date: YearMonth) => boolean;
+}) {
+    const [viewYear, setViewYear] = useState(value.year);
+    const months = Array.from({ length: 12 }, (_, i) => i + 1);
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between">
+                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setViewYear(y => y - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                <span className="font-semibold">{viewYear}</span>
+                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setViewYear(y => y + 1)} disabled={viewYear >= new Date().getFullYear()}><ChevronRight className="h-4 w-4" /></Button>
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+                {months.map(month => {
+                    const monthDate = { year: viewYear, month };
+                    const isDisabled = disabledMonths ? disabledMonths(monthDate) : false;
+                    const isSelected = value.year === viewYear && value.month === month;
+                    return (
+                        <Button
+                            key={month}
+                            variant={isSelected ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-8"
+                            disabled={isDisabled}
+                            onClick={() => onChange(monthDate)}
+                        >
+                            {format(new Date(viewYear, month - 1), 'MMM', { locale: ptBR })}
+                        </Button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+const compareYearMonth = (a: YearMonth, b: YearMonth) => {
+    if (a.year !== b.year) return a.year - b.year;
+    return a.month - b.month;
+};
+
+const formatYearMonth = (ym: YearMonth) => {
+    return format(new Date(ym.year, ym.month - 1), 'MMM/yy', { locale: ptBR });
+}
+
+function PeriodRangePicker({
+    value,
+    onChange,
+    availablePeriods
+}: {
+    value: { from: YearMonth, to: YearMonth };
+    onChange: (newValue: { from: YearMonth, to: YearMonth }) => void;
+    availablePeriods: YearMonth[];
+}) {
+    const [open, setOpen] = useState(false);
+    const [activePicker, setActivePicker] = useState<'from' | 'to'>('from');
+
+    const handleMonthSelect = (ym: YearMonth) => {
+        let newPeriod = { ...value };
+        if (activePicker === 'from') {
+            newPeriod.from = ym;
+            if (compareYearMonth(ym, newPeriod.to) > 0) {
+                newPeriod.to = ym; // Auto-swap
+            }
+            setActivePicker('to'); // Move to next picker
+        } else {
+            newPeriod.to = ym;
+            if (compareYearMonth(newPeriod.from, ym) > 0) {
+                newPeriod.from = ym; // Auto-swap
+            }
+            setOpen(false); // Close on second selection
+        }
+        onChange(newPeriod);
+    };
+    
+    const handlePreset = (preset: '3m' | '6m' | '12m' | 'ytd') => {
+        const today = new Date();
+        const lastFullMonth = subMonths(today, 1);
+        let fromDate: Date;
+
+        switch(preset) {
+            case '3m': fromDate = subMonths(lastFullMonth, 2); break;
+            case '6m': fromDate = subMonths(lastFullMonth, 5); break;
+            case '12m': fromDate = subMonths(lastFullMonth, 11); break;
+            case 'ytd': fromDate = startOfYear(today); break;
+        }
+
+        const newPeriod = {
+            from: { year: fromDate.getFullYear(), month: fromDate.getMonth() + 1 },
+            to: { year: lastFullMonth.getFullYear(), month: lastFullMonth.getMonth() + 1 }
+        };
+        onChange(newPeriod);
+        setOpen(false);
+    }
+    
+    const disabledMonthCheck = (date: YearMonth) => {
+        const today = new Date();
+        const currentYm = { year: today.getFullYear(), month: today.getMonth() + 1 };
+        return compareYearMonth(date, currentYm) >= 0;
+    }
+
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline" className="h-10 w-full md:w-[250px] justify-start text-left font-normal gap-2">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    <span>{formatYearMonth(value.from)}</span>
+                    <span className="text-muted-foreground">-</span>
+                    <span>{formatYearMonth(value.to)}</span>
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 flex" align="start">
+                 <div className="p-2 border-r">
+                    <div className="flex flex-col gap-1">
+                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('3m')}>Últimos 3 meses</Button>
+                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('6m')}>Últimos 6 meses</Button>
+                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('12m')}>Últimos 12 meses</Button>
+                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('ytd')}>Este ano</Button>
+                    </div>
+                </div>
+                <div className="p-3 grid grid-cols-2 gap-3">
+                    <div>
+                        <div className="text-center text-sm font-semibold mb-2 py-1.5 border-b-2" style={{ borderColor: activePicker === 'from' ? 'hsl(var(--primary))' : 'transparent' }}>De</div>
+                        <MonthPicker value={value.from} onChange={handleMonthSelect} disabledMonths={disabledMonthCheck} />
+                    </div>
+                     <div>
+                        <div className="text-center text-sm font-semibold mb-2 py-1.5 border-b-2" style={{ borderColor: activePicker === 'to' ? 'hsl(var(--primary))' : 'transparent' }}>Até</div>
+                        <MonthPicker value={value.to} onChange={handleMonthSelect} disabledMonths={disabledMonthCheck} />
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+}
 
 function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIcon: PeriodIcon, periodLabel }: { 
     data: CardModel, 
@@ -228,8 +372,7 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIc
 
 export function AverageConsumptionChart() {
     // State
-    const [startPeriod, setStartPeriod] = useState<string | null>(null);
-    const [endPeriod, setEndPeriod] = useState<string | null>(null);
+    const [period, setPeriod] = useState<{ from: YearMonth, to: YearMonth } | null>(null);
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [view, setView] = useState<'cards' | 'chart'>('cards');
     const [kioskId, setKioskId] = useState<string>('all');
@@ -253,32 +396,29 @@ export function AverageConsumptionChart() {
              periods.add(`${report.year}-${String(report.month).padStart(2, '0')}`);
             }
         });
-        return Array.from(periods).sort((a,b) => b.localeCompare(a));
+        return Array.from(periods)
+            .map(p => {
+                const [year, month] = p.split('-').map(Number);
+                return { year, month };
+            })
+            .sort((a,b) => (b.year - a.year) || (b.month - a.month));
     }, [consumptionReports, loading]);
 
     useEffect(() => {
-        if (!loading && availablePeriods.length > 0) {
-            if (!endPeriod) setEndPeriod(availablePeriods[0]);
-            if (!startPeriod) {
-                const defaultStartIndex = Math.min(2, availablePeriods.length - 1);
-                setStartPeriod(availablePeriods[defaultStartIndex]);
-            }
+        if (!loading && availablePeriods.length > 0 && !period) {
+            const to = availablePeriods[0];
+            const from = availablePeriods[Math.min(2, availablePeriods.length - 1)];
+            setPeriod({ from, to });
         }
-    }, [availablePeriods, loading, startPeriod, endPeriod]);
-
-    const handleStartPeriodChange = (value: string) => {
-        setStartPeriod(value);
-        if (endPeriod && value > endPeriod) {
-            setEndPeriod(value);
-        }
-    };
-
-    const handleEndPeriodChange = (value: string) => {
-        setEndPeriod(value);
-        if (startPeriod && value < startPeriod) {
-            setStartPeriod(value);
-        }
-    };
+    }, [availablePeriods, loading, period]);
+    
+    const { startPeriod, endPeriod } = useMemo(() => {
+        if (!period) return { startPeriod: null, endPeriod: null };
+        return {
+            startPeriod: `${period.from.year}-${String(period.from.month).padStart(2, '0')}`,
+            endPeriod: `${period.to.year}-${String(period.to.month).padStart(2, '0')}`
+        };
+    }, [period]);
 
   const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): string => {
       const formatNumber = (value: number) => {
@@ -516,11 +656,11 @@ export function AverageConsumptionChart() {
     };
     
     const periodLabel = useMemo(() => {
-        if (!startPeriod || !endPeriod) return '';
-        const start = format(parseISO(`${startPeriod}-01`), 'MMM/yy', { locale: ptBR });
-        const end = format(parseISO(`${endPeriod}-01`), 'MMM/yy', { locale: ptBR });
+        if (!period) return '';
+        const start = formatYearMonth(period.from);
+        const end = formatYearMonth(period.to);
         return `${start} - ${end}`;
-    }, [startPeriod, endPeriod]);
+    }, [period]);
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -532,7 +672,7 @@ export function AverageConsumptionChart() {
                 <CardTitle className="flex items-center gap-2"><BarChart3 /> Análise de consumo</CardTitle>
                 <CardDescription>Visualize e compare o consumo de insumos ao longo do tempo.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
                 
                  <div className="space-y-4">
                     <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4">
@@ -551,33 +691,13 @@ export function AverageConsumptionChart() {
                             </div>
                             <div className="space-y-1.5">
                                 <Label>Período</Label>
-                                <div className="flex items-center gap-2">
-                                    <Select value={startPeriod || ""} onValueChange={handleStartPeriodChange} disabled={availablePeriods.length === 0}>
-                                        <SelectTrigger className="h-10 w-full md:w-[150px]">
-                                            <SelectValue placeholder="Início" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {availablePeriods.map(p => (
-                                                <SelectItem key={`start-${p}`} value={p}>
-                                                    {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <span className="text-muted-foreground">-</span>
-                                    <Select value={endPeriod || ""} onValueChange={handleEndPeriodChange} disabled={availablePeriods.length === 0}>
-                                        <SelectTrigger className="h-10 w-full md:w-[150px]">
-                                            <SelectValue placeholder="Fim" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {availablePeriods.map(p => (
-                                                <SelectItem key={`end-${p}`} value={p} disabled={!!startPeriod && p < startPeriod}>
-                                                    {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                 {period && (
+                                    <PeriodRangePicker
+                                        value={period}
+                                        onChange={setPeriod}
+                                        availablePeriods={availablePeriods.map(p => ({ year: p.year, month: p.month }))}
+                                    />
+                                 )}
                             </div>
                         </div>
                         <div className="flex-shrink-0">
@@ -658,4 +778,3 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
-
