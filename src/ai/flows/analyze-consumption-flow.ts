@@ -17,32 +17,48 @@ export async function analyzeConsumption(
             model: DEFAULT_MODEL,
             input: { schema: ConsumptionAnalysisInputSchema },
             output: { schema: ConsumptionAnalysisOutputSchema },
-            prompt: `Você é um analista de dados especialista em otimização de estoque para uma rede de quiosques de shakes.
-            Sua tarefa é analisar os dados de consumo de insumos fornecidos e gerar um resumo e insights valiosos.
+            prompt: `Você é um analista de dados especialista em análise de consumo para uma rede de quiosques de shakes.
 
-            Analise os seguintes dados:
-            - Quiosque: {{kioskName}}
-            - Período: {{period}}
-            - Itens:
-            {{#each items}}
-            - Produto: {{name}} (Unidade: {{unit}})
-                - Média no Período: {{periodAvg}}
-                - Média Histórica: {{histAvg}}
-                - Volatilidade: {{volatility}}
-                - Consumo Mensal:
-                {{#each series}}
-                - {{label}}: {{value}}
-                {{/each}}
-            {{/each}}
+Sua tarefa é analisar minuciosamente o comportamento de consumo médio de cada insumo, item por item, com base nos dados fornecidos e retornar a análise como um objeto JSON.
 
-            Seu resumo deve destacar as tendências gerais.
-            Seus insights devem ser acionáveis e focar em:
-            1.  Maiores aumentos ou quedas de consumo comparando a média do período com a histórica.
-            2.  Produtos com alta volatilidade, que são difíceis de prever.
-            3.  Oportunidades de otimização (ex: produto com consumo em queda pode ter compra reduzida).
-            4.  Alertas de risco (ex: produto com consumo disparando pode levar a ruptura de estoque).
+Analise os seguintes dados:
+- Quiosque: {{kioskName}}
+- Período: {{period}}
+- Itens:
+{{#each items}}
+- Produto: {{name}} (Unidade: {{unit}})
+  - Média no Período: {{periodAvg}}
+  - Média Histórica: {{histAvg}}
+  - Volatilidade: {{volatility}}
+  - Consumo Mensal:
+  {{#each series}}
+  - {{label}}: {{value}}
+  {{/each}}
+{{/each}}
 
-            Seja claro, objetivo e use os nomes dos produtos nos seus insights. Gere pelo menos 3 insights chave.`,
+Regras:
+- NÃO gere resumo geral do quiosque.
+- NÃO faça recomendações de compra, reposição, transferência ou estoque mínimo.
+- Limite a análise exclusivamente ao comportamento de consumo médio e sua variação ao longo do tempo.
+
+Para cada insumo, analise:
+1) Comparação da média do período com a média histórica, indicando direção (alta, queda ou estabilidade) e intensidade aproximada.
+2) Leitura da série mensal de consumo, destacando tendências, picos, quedas ou mudanças de padrão.
+3) Avaliação da volatilidade como indicador de estabilidade ou instabilidade do consumo.
+4) Interpretação do comportamento do consumo médio (ex.: crescimento consistente, retração gradual, oscilação sem tendência clara).
+
+Formato de saída (obrigatório):
+Sua resposta DEVE ser um objeto JSON. Para cada item analisado, crie um objeto JSON com os seguintes campos, e agrupe todos os objetos em um array sob a chave "detailedAnalysis":
+- "product": O nome do produto e sua unidade. Ex: "Morango (kg)".
+- "averageConsumptionBehavior": Descrição clara e objetiva do comportamento do consumo médio.
+- "periodVsHistoricalComparison": Variação aproximada e interpretação da comparação entre período e histórico.
+- "monthlySeriesTrend": O que a série mensal de consumo revela (tendências, picos, etc.).
+- "volatilityAndStability": Leitura analítica da volatilidade e estabilidade do consumo.
+- "analyticalSynthesis": Uma frase conclusiva sobre o padrão de consumo do insumo.
+
+Use sempre os nomes dos produtos.
+Evite linguagem prescritiva ou operacional.
+O foco é diagnóstico analítico, não decisão de reposição.`,
         },
     );
 

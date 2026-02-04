@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -12,7 +11,7 @@ import { useKiosks } from "@/hooks/use-kiosks"
 import { convertValue } from '@/lib/conversion';
 import { useToast } from "@/hooks/use-toast";
 import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
-import type { ConsumptionAnalysisOutputSchema, InsightSchema } from '@/ai/flows/consumption-schemas';
+import type { ConsumptionAnalysisOutputSchema } from '@/ai/flows/consumption-schemas';
 import { z } from "zod";
 
 
@@ -235,8 +234,7 @@ export function AverageConsumptionChart() {
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
     const [isAiSetupModalOpen, setIsAiSetupModalOpen] = useState(false);
     const [isAiLoading, setIsAiLoading] = useState(false);
-    const [aiAnalysisResult, setAiAnalysisResult] = useState<z.infer<typeof InsightSchema>[] | null>(null);
-    const [aiSummary, setAiSummary] = useState<string | null>(null);
+    const [aiAnalysisResult, setAiAnalysisResult] = useState<z.infer<typeof ConsumptionAnalysisOutputSchema> | null>(null);
 
     // Data Hooks
     const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
@@ -529,7 +527,6 @@ export function AverageConsumptionChart() {
         setIsAiLoading(true);
         setIsAiModalOpen(true);
         setAiAnalysisResult(null);
-        setAiSummary(null);
 
         const kioskFilteredReports = kioskId === 'all' 
             ? consumptionReports 
@@ -581,8 +578,7 @@ export function AverageConsumptionChart() {
         
         try {
             const result = await analyzeConsumption(analysisInput);
-            setAiSummary(result.summary);
-            setAiAnalysisResult(result.keyInsights);
+            setAiAnalysisResult(result);
         } catch (error) {
             console.error("AI Analysis failed:", error);
             toast({
@@ -736,7 +732,6 @@ export function AverageConsumptionChart() {
                 onOpenChange={setIsAiModalOpen}
                 isLoading={isAiLoading}
                 analysisResult={aiAnalysisResult}
-                summary={aiSummary}
             />
         </Card>
     );
