@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -30,7 +29,8 @@ import { Button } from "./ui/button"
 import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 import { Separator } from './ui/separator';
 import { AiAnalysisModal } from './ai-analysis-modal';
-import { analyzeConsumption, type AnalyzeConsumptionOutput } from '@/ai/flows/analyze-consumption-flow';
+import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
+import type { AnalyzeConsumptionOutput } from '@/ai/flows/consumption-schemas';
 
 
 const stdDev = (arr: number[]): number => {
@@ -493,7 +493,7 @@ export function AverageConsumptionChart() {
             }
             
             const isA_a = a.abcClass === 'A';
-            const isA_b = b.abcClass === 'A';
+            const isA_b = b.abcClass === 'B';
             if (isA_a !== isA_b) {
                 return isA_a ? -1 : 1;
             }
@@ -624,13 +624,13 @@ export function AverageConsumptionChart() {
                      cardData.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 grid-auto-rows-fr">
                             {cardData.map(data => {
-                                const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
+                                const PeriodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
                                 return <ConsumptionCard 
                                     key={data.id} 
                                     data={data} 
                                     onCompareClick={onCompareClick} 
                                     formatDisplayQuantity={formatDisplayQuantity}
-                                    periodIcon={periodIcon}
+                                    periodIcon={PeriodIcon}
                                 />
                             })}
                         </div>
