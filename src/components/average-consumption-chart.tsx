@@ -28,10 +28,8 @@ import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 import { Button } from "./ui/button"
 import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 import { Separator } from './ui/separator';
-import { AiAnalysisModal } from './ai-analysis-modal';
-// import { analyzeConsumption } from '@/ai/flows/analyze-consumption-flow';
-// import type { AnalyzeConsumptionOutput } from '@/ai/flows/consumption-schemas';
 
+// AI functionality removed to fix build issues.
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -229,10 +227,6 @@ export function AverageConsumptionChart() {
       baseProduct: BaseProduct | null;
     }>({ open: false, baseProduct: null });
     const { toast } = useToast();
-    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [analysisResult, setAnalysisResult] = useState<any | null>(null);
-
 
     // Data Hooks
     const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
@@ -511,50 +505,6 @@ export function AverageConsumptionChart() {
         }
     };
 
-    const handleRunAnalysis = async () => {
-        setIsAnalyzing(true);
-        setIsAnalysisModalOpen(true);
-        setAnalysisResult(null);
-
-        toast({
-            variant: "destructive",
-            title: "Função de Análise com IA desativada",
-            description: "Esta funcionalidade foi temporariamente desativada.",
-        });
-
-        // const kioskName = kioskId === 'all' ? 'Todas as Unidades' : kiosks.find(k => k.id === kioskId)?.name || 'Desconhecido';
-        
-        // const inputData = {
-        //     startPeriod: startPeriod || '',
-        //     endPeriod: endPeriod || '',
-        //     kioskName,
-        //     consumptionData: cardData.map(c => ({
-        //         name: c.name,
-        //         unit: c.unit,
-        //         periodAvg: c.periodAvg,
-        //         histAvg: c.histAvg,
-        //         periodChangePct: c.periodChangePct,
-        //         volatility: c.volatility,
-        //         abcClass: c.abcClass,
-        //     }))
-        // };
-
-        // try {
-        //     const result = await analyzeConsumption(inputData);
-        //     setAnalysisResult(result);
-        // } catch (error) {
-        //     console.error("AI Analysis failed:", error);
-        //     toast({
-        //         variant: "destructive",
-        //         title: "Erro na Análise de IA",
-        //         description: "Não foi possível gerar a análise. Tente novamente mais tarde.",
-        //     });
-        //     setIsAnalysisModalOpen(false); // Close modal on error
-        // } finally {
-        //     setIsAnalyzing(false);
-        // }
-    };
-
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -616,10 +566,6 @@ export function AverageConsumptionChart() {
                             className="w-full"
                         />
                     </div>
-                     <Button onClick={handleRunAnalysis} disabled={isAnalyzing || cardData.length === 0}>
-                        {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                        {isAnalyzing ? 'Analisando...' : 'Analisar com IA'}
-                    </Button>
                      <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
                         <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
                         <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
@@ -680,15 +626,6 @@ export function AverageConsumptionChart() {
                 startPeriod={startPeriod || ''}
                 endPeriod={endPeriod || ''}
             />
-            <AiAnalysisModal
-                open={isAnalysisModalOpen}
-                onOpenChange={setIsAnalysisModalOpen}
-                result={analysisResult}
-                isLoading={isAnalyzing}
-            />
         </Card>
     );
 }
-
-
-    
