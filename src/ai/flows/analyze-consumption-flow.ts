@@ -16,6 +16,7 @@ import type {
 
 const prompt = ai.definePrompt({
   name: 'analyzeConsumptionPrompt',
+  model: 'googleai/gemini-1.5-flash',
   input: { schema: AnalyzeConsumptionInputSchema },
   output: { schema: AnalyzeConsumptionOutputSchema },
   prompt: `
