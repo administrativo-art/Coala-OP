@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react"
 import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth } from "date-fns"
 import { ptBR } from 'date-fns/locale'
+import dynamic from 'next/dynamic'
 
 // Hooks
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
@@ -33,7 +34,13 @@ import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 import { Separator } from './ui/separator';
 import { AiAnalysisModal } from "./ai-analysis-modal";
 import { AiAnalysisSetupModal } from "./ai-analysis-setup-modal";
+import { AiAnalysisDocument } from "./pdf/AiAnalysisDocument";
 
+
+const PDFDownloadLink = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
+  { ssr: false, loading: () => <Button variant="outline" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Gerando...</Button> }
+);
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -235,6 +242,7 @@ export function AverageConsumptionChart() {
     const [isAiSetupModalOpen, setIsAiSetupModalOpen] = useState(false);
     const [isAiLoading, setIsAiLoading] = useState(false);
     const [aiAnalysisResult, setAiAnalysisResult] = useState<z.infer<typeof ConsumptionAnalysisOutputSchema> | null>(null);
+    const [lastAnalysisParams, setLastAnalysisParams] = useState<{kioskName: string, period: string} | null>(null);
 
     // Data Hooks
     const { reports: consumptionReports, isLoading: consumptionLoading, baseProducts, integrityReport } = useValidatedConsumptionData();
@@ -276,13 +284,6 @@ export function AverageConsumptionChart() {
         if (startPeriod && value < startPeriod) {
             setStartPeriod(value);
         }
-    };
-    
-    const onExport = () => {
-        toast({
-            title: "Em breve!",
-            description: "A exportação para PDF da análise de consumo está em desenvolvimento.",
-        });
     };
 
   const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): string => {
@@ -533,6 +534,8 @@ export function AverageConsumptionChart() {
             : consumptionReports.filter(r => r.kioskId === kioskId);
         
         const kioskName = kioskId === 'all' ? 'Todas as Unidades' : (kiosks.find(k => k.id === kioskId)?.name || 'N/A');
+        const period = `${startPeriod} a ${endPeriod}`;
+        setLastAnalysisParams({ kioskName, period });
 
         const [startYear, startMonth] = startPeriod.split('-').map(Number);
         const [endYear, endMonth] = endPeriod.split('-').map(Number);
@@ -541,7 +544,7 @@ export function AverageConsumptionChart() {
 
         const analysisInput = {
             kioskName,
-            period: `${startPeriod} a ${endPeriod}`,
+            period,
             items: baseProducts.map(bp => {
                  const histReports = kioskFilteredReports.filter(r => r.results.some(res => res.baseProductId === bp.id));
                  const totalHistConsumption = histReports.reduce((sum, r) => sum + (r.results.find(res => res.baseProductId === bp.id)?.consumedQuantity || 0), 0);
@@ -660,9 +663,29 @@ export function AverageConsumptionChart() {
                      <Button onClick={() => setIsAiSetupModalOpen(true)}>
                         <Wand2 className="mr-2 h-4 w-4"/> Analisar com IA
                     </Button>
-                     <Button variant="outline" onClick={onExport}>
-                        <Download className="mr-2 h-4 w-4"/> Exportar PDF
-                    </Button>
+                     {aiAnalysisResult ? (
+                        <PDFDownloadLink
+                            document={
+                                <AiAnalysisDocument
+                                    analysisResult={aiAnalysisResult}
+                                    kioskName={lastAnalysisParams?.kioskName || ''}
+                                    period={lastAnalysisParams?.period || ''}
+                                />
+                            }
+                            fileName={`analise_consumo_${lastAnalysisParams?.kioskName.replace(/\s+/g, '_') || 'geral'}.pdf`}
+                        >
+                            {({ loading }) => (
+                                <Button variant="outline" disabled={loading}>
+                                    <Download className="mr-2 h-4 w-4"/>
+                                    {loading ? 'Gerando...' : 'Exportar Análise'}
+                                </Button>
+                            )}
+                        </PDFDownloadLink>
+                    ) : (
+                         <Button variant="outline" disabled>
+                            <Download className="mr-2 h-4 w-4"/> Exportar Análise
+                        </Button>
+                    )}
                 </div>
                 
                  {view === 'cards' ? (
