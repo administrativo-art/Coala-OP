@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -29,6 +30,7 @@ import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 import { Button } from "./ui/button"
 import { ConsumptionComparisonModal } from "./consumption-comparison-modal"
 import { Separator } from './ui/separator';
+import { Label } from "./ui/label"
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -74,11 +76,12 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 
-function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIcon: PeriodIcon }: { 
+function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIcon: PeriodIcon, periodLabel }: { 
     data: CardModel, 
     onCompareClick: (data: CardModel) => void, 
     formatDisplayQuantity: (qty: number, bp: BaseProduct) => string,
-    periodIcon: React.ElementType
+    periodIcon: React.ElementType,
+    periodLabel: string,
 }) {
   const periodColorClass = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
 
@@ -129,7 +132,16 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIc
     <Card className={cn("flex flex-col h-full", stateStyles[data.alertState])}>
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
-            <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name} ({data.unit})</CardTitle>
+             <TooltipProvider>
+                <UITooltip>
+                    <TooltipTrigger asChild>
+                        <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name} ({data.unit})</CardTitle>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Período analisado: {periodLabel}</p>
+                    </TooltipContent>
+                </UITooltip>
+            </TooltipProvider>
             <div className="flex items-center gap-1">
                 <TooltipProvider>
                     <UITooltip>
@@ -502,6 +514,13 @@ export function AverageConsumptionChart() {
           setComparisonModalData({ open: true, baseProduct: bp });
         }
     };
+    
+    const periodLabel = useMemo(() => {
+        if (!startPeriod || !endPeriod) return '';
+        const start = format(parseISO(`${startPeriod}-01`), 'MMM/yy', { locale: ptBR });
+        const end = format(parseISO(`${endPeriod}-01`), 'MMM/yy', { locale: ptBR });
+        return `${start} - ${end}`;
+    }, [startPeriod, endPeriod]);
 
     if (loading) {
         return <Skeleton className="h-96 w-full" />;
@@ -515,58 +534,70 @@ export function AverageConsumptionChart() {
             </CardHeader>
             <CardContent className="space-y-4">
                 
-                <div className="flex flex-col md:flex-row gap-2">
-                    <Select value={kioskId} onValueChange={setKioskId}>
-                        <SelectTrigger className="w-full md:w-[200px]">
-                            <SelectValue placeholder="Selecione a unidade" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todas as Unidades</SelectItem>
-                            {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    
-                    <div className="flex items-center gap-2">
-                        <Select value={startPeriod || ""} onValueChange={handleStartPeriodChange} disabled={availablePeriods.length === 0}>
-                            <SelectTrigger className="w-full md:w-[150px]">
-                                <SelectValue placeholder="Início" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availablePeriods.map(p => (
-                                    <SelectItem key={`start-${p}`} value={p}>
-                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <span className="text-muted-foreground">-</span>
-                        <Select value={endPeriod || ""} onValueChange={handleEndPeriodChange} disabled={availablePeriods.length === 0}>
-                            <SelectTrigger className="w-full md:w-[150px]">
-                                <SelectValue placeholder="Fim" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availablePeriods.map(p => (
-                                    <SelectItem key={`end-${p}`} value={p} disabled={!!startPeriod && p < startPeriod}>
-                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                 <div className="space-y-4">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4">
+                        <div className="flex flex-col sm:flex-row gap-4 items-end">
+                            <div className="space-y-1.5 w-full sm:w-auto">
+                                <Label htmlFor="kiosk-select">Unidade</Label>
+                                <Select value={kioskId} onValueChange={setKioskId}>
+                                    <SelectTrigger id="kiosk-select" className="h-10 w-full md:w-[200px]">
+                                        <SelectValue placeholder="Selecione a unidade" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todas as Unidades</SelectItem>
+                                        {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Período</Label>
+                                <div className="flex items-center gap-2">
+                                    <Select value={startPeriod || ""} onValueChange={handleStartPeriodChange} disabled={availablePeriods.length === 0}>
+                                        <SelectTrigger className="h-10 w-full md:w-[150px]">
+                                            <SelectValue placeholder="Início" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availablePeriods.map(p => (
+                                                <SelectItem key={`start-${p}`} value={p}>
+                                                    {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <span className="text-muted-foreground">-</span>
+                                    <Select value={endPeriod || ""} onValueChange={handleEndPeriodChange} disabled={availablePeriods.length === 0}>
+                                        <SelectTrigger className="h-10 w-full md:w-[150px]">
+                                            <SelectValue placeholder="Fim" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availablePeriods.map(p => (
+                                                <SelectItem key={`end-${p}`} value={p} disabled={!!startPeriod && p < startPeriod}>
+                                                    {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex-shrink-0">
+                            <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
+                                <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
+                                <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
+                            </ToggleGroup>
+                        </div>
                     </div>
-
-                    <div className="flex-1">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="product-multiselect">Insumos analisados</Label>
                         <MultiSelect
+                            id="product-multiselect"
                             options={productOptions}
                             selected={selectedBaseProducts}
                             onChange={setSelectedBaseProducts}
-                            placeholder="Selecione os insumos..."
+                            placeholder="Selecione os insumos ou deixe em branco para ver os mais relevantes"
                             className="w-full"
                         />
                     </div>
-                     <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
-                        <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
-                        <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>
-                    </ToggleGroup>
                 </div>
                 
                  {view === 'cards' ? (
@@ -580,6 +611,7 @@ export function AverageConsumptionChart() {
                                     onCompareClick={onCompareClick} 
                                     formatDisplayQuantity={formatDisplayQuantity}
                                     periodIcon={PeriodIcon}
+                                    periodLabel={periodLabel}
                                 />
                             })}
                         </div>
@@ -596,7 +628,7 @@ export function AverageConsumptionChart() {
                                 <LineChart data={chartData}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" />
-                                    <YAxis tickFormatter={(value) => value.toLocaleString()} />
+                                    <YAxis tickFormatter={(value: number) => value.toLocaleString()} />
                                     <Tooltip formatter={(value: number) => value.toLocaleString()} />
                                     <Legend />
                                     {selectedBaseProducts.map((bpId, index) => {
@@ -626,3 +658,4 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
