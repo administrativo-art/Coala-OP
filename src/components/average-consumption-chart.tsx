@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts'
-import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat, Info, Wand2, Loader2 } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Inbox, Check, BarChart3, ChevronsUpDown, Repeat, Info, Wand2, Loader2, Download } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Badge } from "./ui/badge"
 import { type BaseProduct, type Product } from "@/types"
@@ -278,6 +278,13 @@ export function AverageConsumptionChart() {
         if (startPeriod && value < startPeriod) {
             setStartPeriod(value);
         }
+    };
+    
+    const onExport = () => {
+        toast({
+            title: "Em breve!",
+            description: "A exportação para PDF da análise de consumo está em desenvolvimento.",
+        });
     };
 
   const formatDisplayQuantity = useCallback((baseQuantity: number, baseProduct: BaseProduct): string => {
@@ -603,6 +610,44 @@ export function AverageConsumptionChart() {
             <CardContent className="space-y-4">
                 
                 <div className="flex flex-col md:flex-row gap-2">
+                    <Select value={kioskId} onValueChange={setKioskId}>
+                        <SelectTrigger className="w-full md:w-[200px]">
+                            <SelectValue placeholder="Selecione a unidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas as Unidades</SelectItem>
+                            {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    
+                    <div className="flex items-center gap-2">
+                        <Select value={startPeriod || ""} onValueChange={handleStartPeriodChange} disabled={availablePeriods.length === 0}>
+                            <SelectTrigger className="w-full md:w-[150px]">
+                                <SelectValue placeholder="Início" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availablePeriods.map(p => (
+                                    <SelectItem key={`start-${p}`} value={p}>
+                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground">-</span>
+                        <Select value={endPeriod || ""} onValueChange={handleEndPeriodChange} disabled={availablePeriods.length === 0}>
+                            <SelectTrigger className="w-full md:w-[150px]">
+                                <SelectValue placeholder="Fim" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availablePeriods.map(p => (
+                                    <SelectItem key={`end-${p}`} value={p} disabled={!!startPeriod && p < startPeriod}>
+                                        {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     <div className="flex-1">
                         <MultiSelect
                             options={productOptions}
@@ -618,6 +663,9 @@ export function AverageConsumptionChart() {
                     </ToggleGroup>
                      <Button onClick={() => setIsAiSetupModalOpen(true)}>
                         <Wand2 className="mr-2 h-4 w-4"/> Analisar com IA
+                    </Button>
+                     <Button variant="outline" onClick={onExport}>
+                        <Download className="mr-2 h-4 w-4"/> Exportar PDF
                     </Button>
                 </div>
                 
