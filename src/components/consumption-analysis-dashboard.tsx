@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from 'react';
@@ -16,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { type ConsumptionAnalysisOutputSchema } from '@/ai/flows/consumption-schemas';
 import { AiAnalysisModal } from './ai-analysis-modal';
 import { AiAnalysisSetupModal } from './ai-analysis-setup-modal';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
