@@ -4,7 +4,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 
 // Input schema for a single product's data
 const ConsumptionDataItemSchema = z.object({
