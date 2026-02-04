@@ -675,8 +675,10 @@ export function AverageConsumptionChart() {
             <CardContent className="space-y-6">
                 
                  <div className="space-y-4">
-                    <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4">
-                        <div className="flex flex-col sm:flex-row gap-4 items-end">
+                    {/* Zonas 1 e 3 */}
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+                        {/* Zona 1 */}
+                        <div className="flex flex-col sm:flex-row gap-4 items-start">
                             <div className="space-y-1.5 w-full sm:w-auto">
                                 <Label htmlFor="kiosk-select">Unidade</Label>
                                 <Select value={kioskId} onValueChange={setKioskId}>
@@ -700,6 +702,7 @@ export function AverageConsumptionChart() {
                                  )}
                             </div>
                         </div>
+                        {/* Zona 3 */}
                         <div className="flex-shrink-0">
                             <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
                                 <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
@@ -707,16 +710,19 @@ export function AverageConsumptionChart() {
                             </ToggleGroup>
                         </div>
                     </div>
+                    {/* Zona 2 */}
                     <div className="space-y-1.5">
                         <Label htmlFor="product-multiselect">Insumos analisados</Label>
-                        <MultiSelect
-                            id="product-multiselect"
-                            options={productOptions}
-                            selected={selectedBaseProducts}
-                            onChange={setSelectedBaseProducts}
-                            placeholder="Selecione os insumos ou deixe em branco para ver os mais relevantes"
-                            className="w-full"
-                        />
+                        <div className="flex gap-2 items-center">
+                            <MultiSelect
+                                id="product-multiselect"
+                                options={productOptions}
+                                selected={selectedBaseProducts}
+                                onChange={setSelectedBaseProducts}
+                                placeholder="Selecione os insumos ou deixe em branco para ver os mais relevantes"
+                                className="w-full"
+                            />
+                        </div>
                     </div>
                 </div>
                 
