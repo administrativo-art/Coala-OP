@@ -7,4 +7,4 @@ export const ai = genkit({
   plugins: [googleAI()],
 });
 
-export const DEFAULT_MODEL = "googleai/gemini-2.5-pro";
+export const DEFAULT_MODEL = "googleai/gemini-2.5-flash";
