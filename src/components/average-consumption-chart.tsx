@@ -436,7 +436,7 @@ export function AverageConsumptionChart() {
   }, []);
     
     const { monthlyConsumptions, historicalAverages, abcClasses, deviations } = useMemo(() => {
-        if (loading) return { monthlyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [], B: [] }, deviations: new Map() };
+        if (loading) return { monthlyConsumptions: new Map(), historicalAverages: new Map(), abcClasses: { A: [] as string[], B: [] as string[] }, deviations: new Map() };
 
         const kioskFilteredReports = kioskId === 'all' 
             ? consumptionReports 
@@ -562,7 +562,7 @@ export function AverageConsumptionChart() {
         availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
     [availableBaseProducts]);
     
-    const cardData = useMemo(() => {
+    const cardData: CardModel[] = useMemo(() => {
         if (loading || !startPeriod || !endPeriod) return [];
         
         const baseList = selectedBaseProducts.length > 0 ? baseProducts.filter(bp => selectedBaseProducts.includes(bp.id)) : availableBaseProducts;
@@ -577,7 +577,7 @@ export function AverageConsumptionChart() {
             const histAvg = historicalAverages.get(bp.id) || 0;
             const deviation = deviations.get(bp.id) || 0;
 
-            const consumptionsInPeriod: {label: string, value: number}[] = (Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries()) as [string, number][])
+            const consumptionsInPeriod: { label: string; value: number }[] = (Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries()) as [string, number][])
                 .filter(([monthStr]: [string, number]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
                     return isWithinInterval(monthDate, {start, end});
