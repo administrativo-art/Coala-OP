@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -113,7 +114,7 @@ function TransferCard({ data }: { data: TransferCardModel }) {
   return (
     <Card className="flex flex-col h-full">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name} ({data.unit})</CardTitle>
+        <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name}</CardTitle>
       </CardHeader>
       <CardContent className="flex-grow">
         <div className={cn("text-4xl font-bold flex items-center gap-2", periodColor)}>
@@ -164,23 +165,24 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
   const { history, loading: historyLoading } = useMovementHistory();
   const { products, loading: productsLoading } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
-  const [selectedBaseId, setSelectedBaseId] = useState<string | null>(null);
+  const [selectedBaseIds, setSelectedBaseIds] = useState<string[]>([]);
 
   const loading = historyLoading || productsLoading || baseProductsLoading;
 
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const baseProductMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
 
-  const balanceData = useMemo(() => {
-    if (!selectedBaseId || !startPeriod || !endPeriod || loading) return null;
+  const balancesData = useMemo(() => {
+    if (selectedBaseIds.length === 0 || !startPeriod || !endPeriod || loading) return [];
 
-    const baseProduct = baseProductMap.get(selectedBaseId);
-    if (!baseProduct) return null;
+    return selectedBaseIds.map(selectedBaseId => {
+      const baseProduct = baseProductMap.get(selectedBaseId);
+      if (!baseProduct) return null;
 
-    const startDate = startOfMonth(parseISO(`${startPeriod}-01`));
-    const endDate = endOfMonth(parseISO(`${endPeriod}-01`));
+      const startDate = startOfMonth(parseISO(`${startPeriod}-01`));
+      const endDate = endOfMonth(parseISO(`${endPeriod}-01`));
 
-    const movements = history.filter(movement => {
+      const movements = history.filter(movement => {
         const product = productMap.get(movement.productId);
         if (!product || product.baseProductId !== selectedBaseId) return false;
         
@@ -195,50 +197,60 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
             }
         }
         return true;
-    });
+      });
 
-    const totals = {
-        entradas: { compras: 0, transferencias: 0, ajustes: 0, total: 0 },
-        saidas: { consumo: 0, transferencias: 0, descartes: 0, ajustes: 0, total: 0 },
-        saldo: 0,
-    };
-    
-    movements.forEach(movement => {
-        const product = productMap.get(movement.productId)!;
-        let qtyInBase = 0;
-        try {
-            qtyInBase = convertValue(movement.quantityChange, product.unit, baseProduct.unit, product.category);
-        } catch { return; }
+      const totals = {
+          entradas: { compras: 0, transferencias: 0, ajustes: 0, total: 0 },
+          saidas: { consumo: 0, transferencias: 0, descartes: 0, ajustes: 0, total: 0 },
+          saldo: 0,
+      };
+      
+      movements.forEach(movement => {
+          const product = productMap.get(movement.productId)!;
+          let qtyInBase = 0;
+          try {
+              qtyInBase = convertValue(movement.quantityChange, product.unit, baseProduct.unit, product.category);
+          } catch { return; }
 
-        const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
-        const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
-        
-        if (kioskId === 'all' && movement.type.includes('TRANSFERENCIA')) {
-            return; // Ignore internal transfers when viewing all kiosks
-        }
+          const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
+          const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
+          
+          if (kioskId === 'all' && movement.type.includes('TRANSFERENCIA')) {
+              return;
+          }
 
-        switch(movement.type) {
-            case 'ENTRADA': if (isToKiosk) totals.entradas.compras += qtyInBase; break;
-            case 'TRANSFERENCIA_ENTRADA': if (isToKiosk) totals.entradas.transferencias += qtyInBase; break;
-            case 'ENTRADA_CORRECAO':
-            case 'ENTRADA_ESTORNO': if (isToKiosk) totals.entradas.ajustes += qtyInBase; break;
-            case 'SAIDA_CONSUMO': if (isFromKiosk) totals.saidas.consumo += qtyInBase; break;
-            case 'SAIDA_DESCARTE_VENCIMENTO':
-            case 'SAIDA_DESCARTE_AVARIA':
-            case 'SAIDA_DESCARTE_PERDA':
-            case 'SAIDA_DESCARTE_OUTROS': if (isFromKiosk) totals.saidas.descartes += qtyInBase; break;
-            case 'TRANSFERENCIA_SAIDA': if (isFromKiosk) totals.saidas.transferencias += qtyInBase; break;
-            case 'SAIDA_CORRECAO':
-            case 'SAIDA_ESTORNO': if (isFromKiosk) totals.saidas.ajustes += qtyInBase; break;
-        }
-    });
+          switch(movement.type) {
+              case 'ENTRADA': if (isToKiosk) totals.entradas.compras += qtyInBase; break;
+              case 'TRANSFERENCIA_ENTRADA': if (isToKiosk) totals.entradas.transferencias += qtyInBase; break;
+              case 'ENTRADA_CORRECAO':
+              case 'ENTRADA_ESTORNO': if (isToKiosk) totals.entradas.ajustes += qtyInBase; break;
+              case 'SAIDA_CONSUMO': if (isFromKiosk) totals.saidas.consumo += qtyInBase; break;
+              case 'SAIDA_DESCARTE_VENCIMENTO':
+              case 'SAIDA_DESCARTE_AVARIA':
+              case 'SAIDA_DESCARTE_PERDA':
+              case 'SAIDA_DESCARTE_OUTROS': if (isFromKiosk) totals.saidas.descartes += qtyInBase; break;
+              case 'TRANSFERENCIA_SAIDA': if (isFromKiosk) totals.saidas.transferencias += qtyInBase; break;
+              case 'SAIDA_CORRECAO':
+              case 'SAIDA_ESTORNO': if (isFromKiosk) totals.saidas.ajustes += qtyInBase; break;
+          }
+      });
 
-    totals.entradas.total = totals.entradas.compras + totals.entradas.transferencias + totals.entradas.ajustes;
-    totals.saidas.total = totals.saidas.consumo + totals.saidas.transferencias + totals.saidas.descartes + totals.saidas.ajustes;
-    totals.saldo = totals.entradas.total - totals.saidas.total;
+      totals.entradas.total = totals.entradas.compras + totals.entradas.transferencias + totals.entradas.ajustes;
+      totals.saidas.total = totals.saidas.consumo + totals.saidas.transferencias + totals.saidas.descartes + totals.saidas.ajustes;
+      totals.saldo = totals.entradas.total - totals.saidas.total;
 
-    return { totals, unit: baseProduct.unit };
-  }, [selectedBaseId, startPeriod, endPeriod, history, products, baseProducts, loading, productMap, baseProductMap, kioskId]);
+      return {
+        baseProductId: selectedBaseId,
+        baseProductName: baseProduct.name,
+        totals,
+        unit: baseProduct.unit
+      };
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [selectedBaseIds, startPeriod, endPeriod, history, products, baseProducts, loading, productMap, baseProductMap, kioskId]);
+  
+  const productOptions = useMemo(() => 
+    baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(p => ({ value: p.id, label: p.name })),
+  [baseProducts]);
   
   const formatNumber = (value: number, unit: string) => {
     return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${unit}`;
@@ -256,79 +268,83 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <span className="text-sm font-medium">Analisar insumo:</span>
-        <Select onValueChange={setSelectedBaseId} value={selectedBaseId || ''}>
-          <SelectTrigger className="w-full md:w-1/3">
-            <SelectValue placeholder="Selecione um insumo..." />
-          </SelectTrigger>
-          <SelectContent>
-            {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(bp => (
-              <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <span className="text-sm font-medium">Analisar insumo(s):</span>
+        <MultiSelect
+            options={productOptions}
+            selected={selectedBaseIds}
+            onChange={setSelectedBaseIds}
+            placeholder="Selecione um ou mais insumos..."
+            className="w-full md:w-2/3"
+        />
       </div>
       
-      {loading && selectedBaseId ? <Skeleton className="h-48 w-full" /> : 
-       !selectedBaseId ? (
+      {loading && selectedBaseIds.length > 0 ? <Skeleton className="h-48 w-full" /> : 
+       selectedBaseIds.length === 0 ? (
          <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-            <p className="font-semibold">Selecione um insumo para ver o saldo.</p>
+            <p className="font-semibold">Selecione um ou mais insumos para ver o saldo.</p>
         </div>
        ) :
-       !balanceData ? (
+       balancesData.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
             <Inbox className="mx-auto h-12 w-12" />
             <p className="mt-4 font-semibold">Nenhum dado encontrado para este insumo no período.</p>
         </div>
        ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="bg-green-500/5 border-green-500/20">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2 text-green-700 dark:text-green-300"><TrendingUp /> Total de Entradas</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p className="text-2xl font-bold">{formatNumber(balanceData.totals.entradas.total, balanceData.unit)}</p>
-                <Separator className="my-2"/>
-                <div className="text-xs text-muted-foreground space-y-1">
-                    <p>Compras/Lançamentos: {formatNumber(balanceData.totals.entradas.compras, balanceData.unit)}</p>
-                    <p>Transferências: {formatNumber(balanceData.totals.entradas.transferencias, balanceData.unit)}</p>
-                    <p>Ajustes: {formatNumber(balanceData.totals.entradas.ajustes, balanceData.unit)}</p>
-                </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-red-500/5 border-red-500/20">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2 text-red-700 dark:text-red-300"><TrendingDown /> Total de Saídas</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p className="text-2xl font-bold">{formatNumber(balanceData.totals.saidas.total, balanceData.unit)}</p>
-                 <Separator className="my-2"/>
-                 <div className="text-xs text-muted-foreground space-y-1">
-                    <p>Consumo/Vendas: {formatNumber(balanceData.totals.saidas.consumo, balanceData.unit)}</p>
-                    <p>Transferências: {formatNumber(balanceData.totals.saidas.transferencias, balanceData.unit)}</p>
-                    <p>Descartes: {formatNumber(balanceData.totals.saidas.descartes, balanceData.unit)}</p>
-                     <p>Ajustes: {formatNumber(balanceData.totals.saidas.ajustes, balanceData.unit)}</p>
-                </div>
-            </CardContent>
-          </Card>
-          <Card className={cn(
-              "border-2",
-              balanceData.totals.saldo > 0 && "border-green-500/30",
-              balanceData.totals.saldo < 0 && "border-red-500/30",
-          )}>
-            <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2"><ArrowLeftRight /> Saldo do Período</CardTitle>
-            </CardHeader>
-             <CardContent>
-                <p className="text-2xl font-bold">{balanceData.totals.saldo > 0 ? '+' : ''}{formatNumber(balanceData.totals.saldo, balanceData.unit)}</p>
-                 <p className="text-xs text-muted-foreground">
-                    {balanceData.totals.saldo > 0 ? 'O estoque aumentou neste período.' :
-                     balanceData.totals.saldo < 0 ? 'O estoque diminuiu neste período.' :
-                     'O estoque permaneceu estável.'
-                    }
-                </p>
-            </CardContent>
-          </Card>
+        <div className="space-y-6">
+          {balancesData.map(balanceData => (
+            <div key={balanceData.baseProductId} className="p-4 border rounded-lg">
+              <h3 className="text-lg font-semibold mb-3">{balanceData.baseProductName}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="bg-green-500/5 border-green-500/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2 text-green-700 dark:text-green-300"><TrendingUp /> Total de Entradas</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                      <p className="text-2xl font-bold">{formatNumber(balanceData.totals.entradas.total, balanceData.unit)}</p>
+                      <Separator className="my-2"/>
+                      <div className="text-xs text-muted-foreground space-y-1">
+                          <p>Compras/Lançamentos: {formatNumber(balanceData.totals.entradas.compras, balanceData.unit)}</p>
+                          <p>Transferências: {formatNumber(balanceData.totals.entradas.transferencias, balanceData.unit)}</p>
+                          <p>Ajustes: {formatNumber(balanceData.totals.entradas.ajustes, balanceData.unit)}</p>
+                      </div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-red-500/5 border-red-500/20">
+                  <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2 text-red-700 dark:text-red-300"><TrendingDown /> Total de Saídas</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                      <p className="text-2xl font-bold">{formatNumber(balanceData.totals.saidas.total, balanceData.unit)}</p>
+                       <Separator className="my-2"/>
+                       <div className="text-xs text-muted-foreground space-y-1">
+                          <p>Consumo/Vendas: {formatNumber(balanceData.totals.saidas.consumo, balanceData.unit)}</p>
+                          <p>Transferências: {formatNumber(balanceData.totals.saidas.transferencias, balanceData.unit)}</p>
+                          <p>Descartes: {formatNumber(balanceData.totals.saidas.descartes, balanceData.unit)}</p>
+                           <p>Ajustes: {formatNumber(balanceData.totals.saidas.ajustes, balanceData.unit)}</p>
+                      </div>
+                  </CardContent>
+                </Card>
+                <Card className={cn(
+                    "border-2",
+                    balanceData.totals.saldo > 0 && "border-green-500/30",
+                    balanceData.totals.saldo < 0 && "border-red-500/30",
+                )}>
+                  <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2"><ArrowLeftRight /> Saldo do Período</CardTitle>
+                  </CardHeader>
+                   <CardContent>
+                      <p className="text-2xl font-bold">{balanceData.totals.saldo > 0 ? '+' : ''}{formatNumber(balanceData.totals.saldo, balanceData.unit)}</p>
+                       <p className="text-xs text-muted-foreground">
+                          {balanceData.totals.saldo > 0 ? 'O estoque aumentou neste período.' :
+                           balanceData.totals.saldo < 0 ? 'O estoque diminuiu neste período.' :
+                           'O estoque permaneceu estável.'
+                          }
+                      </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          ))}
         </div>
        )
       }
@@ -646,11 +662,7 @@ export function MovementAnalysis() {
 
     return (
         <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Truck /> Análise de movimentações</CardTitle>
-                <CardDescription>Visualize o fluxo de entrada de insumos nas unidades por período.</CardDescription>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
                <div className="space-y-4">
                   <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                       <div className="flex items-start gap-4">
