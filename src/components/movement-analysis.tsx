@@ -161,6 +161,15 @@ function TransferCard({ data }: { data: TransferCardModel }) {
   )
 }
 
+const formatNumber = (value: number) => {
+    const options: Intl.NumberFormatOptions = {};
+    if (value % 1 !== 0) {
+        options.minimumFractionDigits = 1;
+        options.maximumFractionDigits = 2;
+    }
+    return value.toLocaleString('pt-BR', options);
+};
+
 function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; }) {
   const { history, loading: historyLoading } = useMovementHistory();
   const { products, loading: productsLoading } = useProducts();
@@ -206,11 +215,18 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
       };
       
       movements.forEach(movement => {
-          const product = productMap.get(movement.productId)!;
+          const product = productMap.get(movement.productId);
+          if (!product || product.baseProductId !== selectedBaseId) return;
+
           let qtyInBase = 0;
           try {
-              qtyInBase = convertValue(Number(movement.quantityChange), product.unit, baseProduct.unit, product.category);
-          } catch { return; }
+            // A quantidade da movimentação é em pacotes. Precisamos converter para a unidade base.
+            const valueOfOnePackage = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+            qtyInBase = movement.quantityChange * valueOfOnePackage;
+          } catch(e) {
+            console.error(`Could not convert units for product ${product.id}`, e);
+            return; // Pula esta movimentação se a conversão falhar
+          }
 
           const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
           const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
@@ -252,13 +268,8 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
     baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(p => ({ value: p.id, label: p.name })),
   [baseProducts]);
   
-  const formatNumber = (value: number, unit: string) => {
-    const options: Intl.NumberFormatOptions = {};
-    if (value % 1 !== 0) {
-        options.minimumFractionDigits = 1;
-        options.maximumFractionDigits = 2;
-    }
-    return `${value.toLocaleString('pt-BR', options)} ${unit}`;
+  const formatValue = (value: number, unit: string) => {
+    return `${formatNumber(value)} ${unit}`;
   };
 
   if (kioskId === 'all') {
@@ -305,12 +316,12 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
                     <CardTitle className="text-base flex items-center gap-2 text-green-700 dark:text-green-300"><TrendingUp /> Total de Entradas</CardTitle>
                   </CardHeader>
                   <CardContent>
-                      <p className="text-2xl font-bold">{formatNumber(balanceData.totals.entradas.total, balanceData.unit)}</p>
+                      <p className="text-2xl font-bold">{formatValue(balanceData.totals.entradas.total, balanceData.unit)}</p>
                       <Separator className="my-2"/>
                       <div className="text-xs text-muted-foreground space-y-1">
-                          <p>Compras/Lançamentos: {formatNumber(balanceData.totals.entradas.compras, balanceData.unit)}</p>
-                          <p>Transferências: {formatNumber(balanceData.totals.entradas.transferencias, balanceData.unit)}</p>
-                          <p>Ajustes: {formatNumber(balanceData.totals.entradas.ajustes, balanceData.unit)}</p>
+                          <p>Compras/Lançamentos: {formatValue(balanceData.totals.entradas.compras, balanceData.unit)}</p>
+                          <p>Transferências: {formatValue(balanceData.totals.entradas.transferencias, balanceData.unit)}</p>
+                          <p>Ajustes: {formatValue(balanceData.totals.entradas.ajustes, balanceData.unit)}</p>
                       </div>
                   </CardContent>
                 </Card>
@@ -319,13 +330,13 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
                       <CardTitle className="text-base flex items-center gap-2 text-red-700 dark:text-red-300"><TrendingDown /> Total de Saídas</CardTitle>
                   </CardHeader>
                   <CardContent>
-                      <p className="text-2xl font-bold">{formatNumber(balanceData.totals.saidas.total, balanceData.unit)}</p>
+                      <p className="text-2xl font-bold">{formatValue(balanceData.totals.saidas.total, balanceData.unit)}</p>
                        <Separator className="my-2"/>
                        <div className="text-xs text-muted-foreground space-y-1">
-                          <p>Consumo/Vendas: {formatNumber(balanceData.totals.saidas.consumo, balanceData.unit)}</p>
-                          <p>Transferências: {formatNumber(balanceData.totals.saidas.transferencias, balanceData.unit)}</p>
-                          <p>Descartes: {formatNumber(balanceData.totals.saidas.descartes, balanceData.unit)}</p>
-                           <p>Ajustes: {formatNumber(balanceData.totals.saidas.ajustes, balanceData.unit)}</p>
+                          <p>Consumo/Vendas: {formatValue(balanceData.totals.saidas.consumo, balanceData.unit)}</p>
+                          <p>Transferências: {formatValue(balanceData.totals.saidas.transferencias, balanceData.unit)}</p>
+                          <p>Descartes: {formatValue(balanceData.totals.saidas.descartes, balanceData.unit)}</p>
+                           <p>Ajustes: {formatValue(balanceData.totals.saidas.ajustes, balanceData.unit)}</p>
                       </div>
                   </CardContent>
                 </Card>
@@ -338,7 +349,7 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
                       <CardTitle className="text-base flex items-center gap-2"><ArrowLeftRight /> Saldo do Período</CardTitle>
                   </CardHeader>
                    <CardContent>
-                      <p className="text-2xl font-bold">{balanceData.totals.saldo > 0 ? '+' : ''}{formatNumber(balanceData.totals.saldo, balanceData.unit)}</p>
+                      <p className="text-2xl font-bold">{balanceData.totals.saldo > 0 ? '+' : ''}{formatValue(balanceData.totals.saldo, balanceData.unit)}</p>
                        <p className="text-xs text-muted-foreground">
                           {balanceData.totals.saldo > 0 ? 'O estoque aumentou neste período.' :
                            balanceData.totals.saldo < 0 ? 'O estoque diminuiu neste período.' :
