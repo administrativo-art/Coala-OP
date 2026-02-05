@@ -106,7 +106,7 @@ export function AiAnalysisModal({ open, onOpenChange, isLoading, analysisResult,
                                         <Download className="mr-2 h-4 w-4"/>
                                         {loading ? 'Gerando...' : 'Exportar análise'}
                                     </Button>
-                                )}
+                                ) as any}
                             </PDFDownloadLink>
                         )}
                     </div>

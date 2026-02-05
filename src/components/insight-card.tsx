@@ -275,7 +275,7 @@ export function AverageConsumptionChart() {
         availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
     [availableBaseProducts]);
     
-     const cardData = useMemo((): CardModel[] => {
+     const cardData: CardModel[] = useMemo(() => {
         if (loading || !startPeriod || !endPeriod) return [];
         
         const baseList = selectedBaseProducts.length > 0 ? baseProducts.filter(bp => selectedBaseProducts.includes(bp.id)) : availableBaseProducts;
@@ -290,12 +290,12 @@ export function AverageConsumptionChart() {
             const histAvg = historicalAverages.get(bp.id) || 0;
             const deviation = deviations.get(bp.id) || 0;
 
-            const consumptionsInPeriod: { label: string; value: number }[] = Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries())
-                .filter(([monthStr]) => {
+            const consumptionsInPeriod = Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries() as Iterable<[string, number]>)
+                .filter(([monthStr]: [string, number]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
                     return isWithinInterval(monthDate, {start, end});
                 })
-                .map(([label, value]) => ({ label: format(parseISO(`${label}-01`), 'MMM/yy'), value }));
+                .map(([label, value]: [string, number]) => ({ label: format(parseISO(`${label}-01`), 'MMM/yy'), value }));
             
             const periodAvg = consumptionsInPeriod.length > 0
                 ? consumptionsInPeriod.reduce((a,b) => a + b.value, 0) / consumptionsInPeriod.length
@@ -319,7 +319,7 @@ export function AverageConsumptionChart() {
                 histAvg,
                 changePct,
                 volatility,
-                abcClass: abcClasses.A.includes(bp.id) ? 'A' : abcClasses.B.includes(bp.id) ? 'B' : null,
+                abcClass: (abcClasses.A.includes(bp.id) ? 'A' : abcClasses.B.includes(bp.id) ? 'B' : null) as 'A' | 'B' | null,
             };
         }).sort((a,b) => (b.periodAvg * Math.abs(b.changePct)) - (a.periodAvg * Math.abs(a.changePct))); // Sort by impact
     }, [loading, startPeriod, endPeriod, selectedBaseProducts, availableBaseProducts, baseProducts, historicalAverages, deviations, monthlyConsumptions, abcClasses]);
@@ -439,3 +439,4 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
