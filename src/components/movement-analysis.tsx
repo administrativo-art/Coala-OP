@@ -2,7 +2,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react"
-import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth } from "date-fns"
+import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth, subMonths, startOfYear } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 
 // Hooks
@@ -17,13 +17,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { Inbox, Truck, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { LineChart, Line, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { cn } from "@/lib/utils";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Product } from "@/types";
+import { type Product } from "@/types";
 import { Separator } from "./ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
+import { Button } from "./ui/button";
+import { Label } from "./ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -254,12 +258,155 @@ function UnitAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: string
   );
 }
 
+type YearMonth = { year: number, month: number }; // 1-based month
+
+const compareYearMonth = (a: YearMonth, b: YearMonth) => {
+    if (a.year !== b.year) return a.year - b.year;
+    return a.month - b.month;
+};
+
+const formatYearMonth = (ym: YearMonth) => {
+    return format(new Date(ym.year, ym.month - 1), 'MMM/yy', { locale: ptBR });
+}
+
+function MonthPicker({
+    value,
+    onChange,
+    disabledMonths,
+}: {
+    value: YearMonth;
+    onChange: (newValue: YearMonth) => void;
+    disabledMonths?: (date: YearMonth) => boolean;
+}) {
+    const [viewYear, setViewYear] = useState(value.year);
+    const months = Array.from({ length: 12 }, (_, i) => i + 1);
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between">
+                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setViewYear(y => y - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                <span className="font-semibold">{viewYear}</span>
+                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setViewYear(y => y + 1)} disabled={viewYear >= new Date().getFullYear()}><ChevronRight className="h-4 w-4" /></Button>
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+                {months.map(month => {
+                    const monthDate = { year: viewYear, month };
+                    const isDisabled = disabledMonths ? disabledMonths(monthDate) : false;
+                    const isSelected = value.year === viewYear && value.month === month;
+                    return (
+                        <Button
+                            key={month}
+                            variant={isSelected ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-8"
+                            disabled={isDisabled}
+                            onClick={() => onChange(monthDate)}
+                        >
+                            {format(new Date(viewYear, month - 1), 'MMM', { locale: ptBR })}
+                        </Button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+function PeriodRangePicker({
+    value,
+    onChange,
+    availablePeriods
+}: {
+    value: { from: YearMonth, to: YearMonth };
+    onChange: (newValue: { from: YearMonth, to: YearMonth }) => void;
+    availablePeriods: YearMonth[];
+}) {
+    const [open, setOpen] = useState(false);
+    const [activePicker, setActivePicker] = useState<'from' | 'to'>('from');
+
+    const handleMonthSelect = (ym: YearMonth) => {
+        let newPeriod = { ...value };
+        if (activePicker === 'from') {
+            newPeriod.from = ym;
+            if (compareYearMonth(ym, newPeriod.to) > 0) {
+                newPeriod.to = ym; // Auto-swap
+            }
+            setActivePicker('to'); // Move to next picker
+        } else {
+            newPeriod.to = ym;
+            if (compareYearMonth(newPeriod.from, ym) > 0) {
+                newPeriod.from = ym; // Auto-swap
+            }
+            setOpen(false); // Close on second selection
+        }
+        onChange(newPeriod);
+    };
+    
+    const handlePreset = (preset: '3m' | '6m' | '12m' | 'ytd') => {
+        const today = new Date();
+        const lastFullMonth = subMonths(today, 1);
+        let fromDate: Date;
+
+        switch(preset) {
+            case '3m': fromDate = subMonths(lastFullMonth, 2); break;
+            case '6m': fromDate = subMonths(lastFullMonth, 5); break;
+            case '12m': fromDate = subMonths(lastFullMonth, 11); break;
+            case 'ytd': fromDate = startOfYear(today); break;
+        }
+
+        const newPeriod = {
+            from: { year: fromDate.getFullYear(), month: fromDate.getMonth() + 1 },
+            to: { year: lastFullMonth.getFullYear(), month: lastFullMonth.getMonth() + 1 }
+        };
+        onChange(newPeriod);
+        setOpen(false);
+    }
+    
+    const disabledMonthCheck = (date: YearMonth) => {
+        const today = new Date();
+        const currentYm = { year: today.getFullYear(), month: today.getMonth() + 1 };
+        return compareYearMonth(date, currentYm) >= 0;
+    }
+
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline" className="h-10 w-full md:w-[250px] justify-start text-left font-normal gap-2">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    <span>{formatYearMonth(value.from)}</span>
+                    <span className="text-muted-foreground">-</span>
+                    <span>{formatYearMonth(value.to)}</span>
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 flex" align="start">
+                 <div className="p-2 border-r">
+                    <div className="flex flex-col gap-1">
+                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('3m')}>Últimos 3 meses</Button>
+                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('6m')}>Últimos 6 meses</Button>
+                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('12m')}>Últimos 12 meses</Button>
+                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('ytd')}>Este ano</Button>
+                    </div>
+                </div>
+                <div className="p-3 grid grid-cols-2 gap-3">
+                    <div>
+                        <div className="text-center text-sm font-semibold mb-2 py-1.5 border-b-2" style={{ borderColor: activePicker === 'from' ? 'hsl(var(--primary))' : 'transparent' }}>De</div>
+                        <MonthPicker value={value.from} onChange={handleMonthSelect} disabledMonths={disabledMonthCheck} />
+                    </div>
+                     <div>
+                        <div className="text-center text-sm font-semibold mb-2 py-1.5 border-b-2" style={{ borderColor: activePicker === 'to' ? 'hsl(var(--primary))' : 'transparent' }}>Até</div>
+                        <MonthPicker value={value.to} onChange={handleMonthSelect} disabledMonths={disabledMonthCheck} />
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+}
 
 export function MovementAnalysis() {
-    const [startPeriod, setStartPeriod] = useState<string | null>(null);
-    const [endPeriod, setEndPeriod] = useState<string | null>(null);
+    const [period, setPeriod] = useState<{ from: YearMonth, to: YearMonth } | null>(null);
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [kioskId, setKioskId] = useState<string>('all');
+    const [view, setView] = useState<'cards' | 'unit'>('cards');
     
     const { history, loading: historyLoading } = useMovementHistory();
     const { products, loading: productsLoading } = useProducts();
@@ -277,33 +424,30 @@ export function MovementAnalysis() {
                 periods.add(format(parseISO(record.timestamp), 'yyyy-MM'));
             }
         });
-        return Array.from(periods).sort((a,b) => b.localeCompare(a));
+        return Array.from(periods)
+            .map(p => {
+                const [year, month] = p.split('-').map(Number);
+                return { year, month };
+            })
+            .sort((a,b) => (b.year - a.year) || (b.month - a.month));
     }, [history, loading]);
 
-    useEffect(() => {
-        if (!loading && availablePeriods.length > 0) {
-            if (!endPeriod) setEndPeriod(availablePeriods[0]);
-            if (!startPeriod) {
-                const defaultStartIndex = Math.min(2, availablePeriods.length - 1);
-                setStartPeriod(availablePeriods[defaultStartIndex]);
-            }
+     useEffect(() => {
+        if (!loading && availablePeriods.length > 0 && !period) {
+            const to = availablePeriods[0];
+            const from = availablePeriods[Math.min(2, availablePeriods.length - 1)];
+            setPeriod({ from, to });
         }
-    }, [availablePeriods, loading, startPeriod, endPeriod]);
+    }, [availablePeriods, loading, period]);
 
-    const handleStartPeriodChange = (value: string) => {
-        setStartPeriod(value);
-        if (endPeriod && value > endPeriod) {
-            setEndPeriod(value);
-        }
-    };
+    const { startPeriod, endPeriod } = useMemo(() => {
+        if (!period) return { startPeriod: null, endPeriod: null };
+        return {
+            startPeriod: `${period.from.year}-${String(period.from.month).padStart(2, '0')}`,
+            endPeriod: `${period.to.year}-${String(period.to.month).padStart(2, '0')}`
+        };
+    }, [period]);
 
-    const handleEndPeriodChange = (value: string) => {
-        setEndPeriod(value);
-        if (startPeriod && value < startPeriod) {
-            setStartPeriod(value);
-        }
-    };
-    
     const productOptions = useMemo(() => 
         baseProducts.map(p => ({ value: p.id, label: p.name })),
     [baseProducts]);
@@ -429,76 +573,75 @@ export function MovementAnalysis() {
                 <CardDescription>Visualize o fluxo de entrada de insumos nas unidades por período.</CardDescription>
             </CardHeader>
             <CardContent>
-                <Tabs defaultValue="by-item" className="w-full">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-                        <TabsList>
-                            <TabsTrigger value="by-item">Análise por Insumo</TabsTrigger>
-                            <TabsTrigger value="by-unit">Análise por Unidade</TabsTrigger>
-                        </TabsList>
-                        <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-                            <Select value={kioskId} onValueChange={setKioskId}>
-                                <SelectTrigger className="w-full md:w-[200px]">
-                                    <SelectValue placeholder="Selecione a unidade" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todas as Unidades</SelectItem>
-                                    {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                            
-                            <div className="flex items-center gap-2">
-                                <Select value={startPeriod || ""} onValueChange={handleStartPeriodChange} disabled={availablePeriods.length === 0}>
-                                    <SelectTrigger className="w-full md:w-[150px]">
-                                        <SelectValue placeholder="Início" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {availablePeriods.map(p => (
-                                            <SelectItem key={`start-${p}`} value={p}>
-                                                {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <span className="text-muted-foreground">-</span>
-                                <Select value={endPeriod || ""} onValueChange={handleEndPeriodChange} disabled={availablePeriods.length === 0}>
-                                    <SelectTrigger className="w-full md:w-[150px]">
-                                        <SelectValue placeholder="Fim" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {availablePeriods.map(p => (
-                                            <SelectItem key={`end-${p}`} value={p} disabled={!!startPeriod && p < startPeriod}>
-                                                {format(parseISO(`${p}-01`), 'MMM/yy', { locale: ptBR })}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
+               <div className="space-y-4">
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+                      <div className="flex items-start gap-4">
+                          <div className="flex flex-col gap-1.5">
+                              <Label htmlFor="kiosk-select">Unidade</Label>
+                              <Select value={kioskId} onValueChange={setKioskId}>
+                                  <SelectTrigger id="kiosk-select" className="h-10 w-full md:w-[200px]">
+                                      <SelectValue placeholder="Selecione a unidade" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                      <SelectItem value="all">Todas as Unidades</SelectItem>
+                                      {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                                  </SelectContent>
+                              </Select>
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                              <Label>Período</Label>
+                              {period && (
+                              <PeriodRangePicker
+                                  value={period}
+                                  onChange={setPeriod}
+                                  availablePeriods={availablePeriods.map(p => ({ year: p.year, month: p.month }))}
+                              />
+                              )}
+                          </div>
+                      </div>
+                      <div className="flex-shrink-0">
+                          <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
+                              <ToggleGroupItem value="cards">Por Insumo</ToggleGroupItem>
+                              <ToggleGroupItem value="unit">Por Unidade</ToggleGroupItem>
+                          </ToggleGroup>
+                      </div>
+                  </div>
+                  {view === 'cards' && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="product-multiselect">Filtrar por insumos</Label>
+                      <div className="flex gap-2 items-center">
+                          <MultiSelect
+                              id="product-multiselect"
+                              options={productOptions}
+                              selected={selectedBaseProducts}
+                              onChange={setSelectedBaseProducts}
+                              placeholder="Selecione os insumos ou deixe em branco para ver todos"
+                              className="w-full"
+                          />
+                      </div>
                     </div>
+                  )}
+               </div>
 
-                    <TabsContent value="by-item" className="space-y-4">
-                        <MultiSelect
-                            options={productOptions}
-                            selected={selectedBaseProducts}
-                            onChange={setSelectedBaseProducts}
-                            placeholder="Filtrar por insumos..."
-                            className="w-full"
-                        />
+                {view === 'cards' && (
+                    <div className="mt-6">
                         {cardData.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {cardData.map(data => <TransferCard key={data.id} data={data} />)}
                             </div>
-                         ) : (
+                        ) : (
                             <div className="flex h-64 flex-col items-center justify-center text-muted-foreground border-2 border-dashed rounded-lg">
                                 <Inbox className="h-12 w-12 mb-2"/>
                                 <p>Nenhum dado de transferência encontrado para os filtros selecionados.</p>
                             </div>
-                         )}
-                    </TabsContent>
-                    <TabsContent value="by-unit">
+                        )}
+                    </div>
+                )}
+                 {view === 'unit' && (
+                    <div className="mt-6">
                         <UnitAnalysisView kioskId={kioskId} startPeriod={startPeriod} endPeriod={endPeriod} />
-                    </TabsContent>
-                </Tabs>
+                    </div>
+                 )}
             </CardContent>
         </Card>
     );
