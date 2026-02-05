@@ -329,13 +329,13 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIc
                  strokeWidth={2.5}
                  fillOpacity={1}
                  fill={`url(#fill-${data.id})`}
-                 dot={(props: any) => {
+                 dot={((props: any) => {
                    const { cx, cy, index } = props;
                    if (index === data.series.length - 1) {
                      return <circle key={index} cx={cx} cy={cy} r={4} fill={periodColorValue} stroke={"hsl(var(--card))"} strokeWidth={2} />;
                    }
                    return null;
-                 }}
+                 }) as any}
                  activeDot={{ r: 5, strokeWidth: 2, stroke: "hsl(var(--card))" }}
                />
              </AreaChart>
@@ -489,8 +489,8 @@ export function AverageConsumptionChart() {
             percentage: totalNetworkConsumption > 0 ? (total / totalNetworkConsumption) * 100 : 0
         })).sort((a,b) => b.total - a.total);
         
-        const classA = consumptionPercentages.slice(0, 5).map(p => p.id);
-        const classB = consumptionPercentages.slice(5).map(p => p.id);
+        const classA: string[] = consumptionPercentages.slice(0, 5).map(p => p.id);
+        const classB: string[] = consumptionPercentages.slice(5).map(p => p.id);
 
         return { monthlyConsumptions: consumptions, historicalAverages: averages, abcClasses: { A: classA, B: classB }, deviations: devMap };
 
@@ -576,12 +576,12 @@ export function AverageConsumptionChart() {
             const histAvg = historicalAverages.get(bp.id) || 0;
             const deviation = deviations.get(bp.id) || 0;
 
-            const consumptionsInPeriod = Array.from(monthlyConsumptions.get(bp.id)?.entries() || [])
-                .filter(([monthStr,]) => {
+            const consumptionsInPeriod = Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries())
+                .filter(([monthStr]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
                     return isWithinInterval(monthDate, {start, end});
                 })
-                .map(([label, value]) => ({ label: format(parseISO(`${label}-01`), 'MMM/yy'), value }));
+                .map(([label, value]): { label: string; value: number } => ({ label: format(parseISO(`${label}-01`), 'MMM/yy'), value }));
             
             const periodAvg = consumptionsInPeriod.length > 0
                 ? consumptionsInPeriod.reduce((a,b) => a + b.value, 0) / consumptionsInPeriod.length
@@ -711,7 +711,6 @@ export function AverageConsumptionChart() {
                         <Label htmlFor="product-multiselect">Insumos analisados</Label>
                         <div className="flex gap-2 items-center">
                             <MultiSelect
-                                id="product-multiselect"
                                 options={productOptions}
                                 selected={selectedBaseProducts}
                                 onChange={setSelectedBaseProducts}
@@ -780,4 +779,5 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
 

@@ -618,12 +618,12 @@ export function MovementAnalysis() {
         
         return baseList.map(bp => {
             const histAvg = historicalAverages.get(bp.id) || 0;
-            const transfersInPeriod = Array.from(monthlyTransfers.get(bp.id)?.entries() || [])
+            const transfersInPeriod = Array.from((monthlyTransfers.get(bp.id) || new Map<string, number>()).entries())
                 .filter(([monthStr,]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
                     return isWithinInterval(monthDate, {start, end});
                 })
-                .map(([label, value]) => ({ label: format(parseISO(`${label}-01`), 'MMM/yy'), value }));
+                .map(([label, value]): {label: string, value: number} => ({ label: format(parseISO(`${label}-01`), 'MMM/yy'), value }));
             
             const periodAvg = transfersInPeriod.length > 0
                 ? transfersInPeriod.reduce((a,b) => a + b.value, 0) / transfersInPeriod.length
@@ -717,7 +717,6 @@ export function MovementAnalysis() {
                       <Label htmlFor="product-multiselect">Filtrar por insumos</Label>
                       <div className="flex gap-2 items-center">
                           <MultiSelect
-                              id="product-multiselect"
                               options={productOptions}
                               selected={selectedBaseProducts}
                               onChange={setSelectedBaseProducts}
