@@ -23,7 +23,13 @@ import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Product } from "@/types";
+import { Separator } from "./ui/separator";
 
+const stdDev = (arr: number[]): number => {
+    if (arr.length === 0) return 0;
+    const mean = arr.reduce((a, b) => a + b) / arr.length;
+    return Math.sqrt(arr.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / arr.length);
+};
 
 // Card model for transfer data
 type TransferCardModel = {
@@ -36,6 +42,7 @@ type TransferCardModel = {
   periodChangePct: number;
   historicalChangePct: number;
   historicalStatus: 'normal' | 'acima' | 'abaixo' | 'sem dados';
+  volatility: 'Alta' | 'Média' | 'Baixa' | 'N/A';
   representativeProduct?: Product;
 };
 
@@ -83,6 +90,13 @@ function TransferCard({ data }: { data: TransferCardModel }) {
   const formattedPeriod = formatDisplayQuantity(data.periodAvg);
   const formattedHist = formatDisplayQuantity(data.histAvg);
 
+  const volatilityText = {
+    'Alta': 'Transferências imprevisíveis',
+    'Média': 'Transferências com variações',
+    'Baixa': 'Padrão de transferência estável',
+    'N/A': 'Não aplicável'
+  }[data.volatility];
+
 
   return (
     <Card className="flex flex-col h-full">
@@ -107,10 +121,29 @@ function TransferCard({ data }: { data: TransferCardModel }) {
             </ResponsiveContainer>
          </div>
       </CardContent>
-       <CardFooter className="flex-col items-start gap-1 text-xs text-muted-foreground border-t pt-2 pb-3">
-        <div className="flex justify-between w-full"><span>Média Transferida (Período):</span><span className="font-semibold">{formattedPeriod}/mês</span></div>
-        <div className="flex justify-between w-full"><span>Média Histórica (Total):</span><span className="font-semibold">{formattedHist}/mês</span></div>
-      </CardFooter>
+       <CardFooter className="flex-col items-start text-xs border-t pt-3 pb-3">
+        <div className="grid grid-cols-2 gap-x-4 w-full">
+            <div className="space-y-1">
+                <p className="text-xs text-muted-foreground uppercase">Média Período</p>
+                <div>
+                    <p className="text-sm font-bold text-foreground">{formattedPeriod}/mês</p>
+                </div>
+            </div>
+            <div className="space-y-1">
+                <p className="text-xs text-muted-foreground uppercase">Média Histórica</p>
+                <div>
+                    <p className="text-sm font-bold text-foreground">{formattedHist}/mês</p>
+                </div>
+            </div>
+        </div>
+        <Separator className="my-2" />
+        <div className="flex justify-between items-center w-full">
+            <div>
+                <span className="text-xs text-muted-foreground uppercase">Volatilidade: </span> 
+                <span className="font-semibold text-foreground">{volatilityText}</span>
+            </div>
+        </div>
+    </CardFooter>
     </Card>
   )
 }
@@ -360,12 +393,23 @@ export function MovementAnalysis() {
                 }
             }
 
+            const allMonthlyValues = Array.from(monthlyTransfers.get(bp.id)?.values() || []);
+            const deviation = stdDev(allMonthlyValues);
+            let volatility: TransferCardModel['volatility'] = 'N/A';
+            if (histAvg > 0) {
+                const cv = deviation / histAvg; // Coefficient of Variation
+                if (cv > 0.5) volatility = 'Alta';
+                else if (cv > 0.2) volatility = 'Média';
+                else volatility = 'Baixa';
+            }
+
             const representativeProduct = products.find(p => p.baseProductId === bp.id);
 
             return {
                 id: bp.id, name: bp.name, unit: bp.unit,
                 series: transfersInPeriod, periodAvg, histAvg,
                 periodChangePct, historicalChangePct, historicalStatus,
+                volatility,
                 representativeProduct,
             };
         }).filter(d => d.periodAvg > 0 || d.histAvg > 0) // Only show cards with some data
@@ -459,5 +503,3 @@ export function MovementAnalysis() {
         </Card>
     );
 }
-
-    
