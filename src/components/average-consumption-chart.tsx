@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -328,13 +329,13 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIc
                  strokeWidth={2.5}
                  fillOpacity={1}
                  fill={`url(#fill-${data.id})`}
-                 dot={(props: any) => {
+                 dot={((props: any) => {
                    const { cx, cy, index } = props;
                    if (index === data.series.length - 1) {
                      return <circle key={index} cx={cx} cy={cy} r={4} fill={periodColorValue} stroke={"hsl(var(--card))"} strokeWidth={2} />;
                    }
                    return null;
-                 }}
+                 }) as any}
                  activeDot={{ r: 5, strokeWidth: 2, stroke: "hsl(var(--card))" }}
                />
              </AreaChart>
@@ -560,7 +561,7 @@ export function AverageConsumptionChart() {
         availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
     [availableBaseProducts]);
     
-    const cardData = useMemo((): CardModel[] => {
+    const cardData = useMemo(() => {
         if (loading || !startPeriod || !endPeriod) return [];
         
         const baseList = selectedBaseProducts.length > 0 ? baseProducts.filter(bp => selectedBaseProducts.includes(bp.id)) : availableBaseProducts;
@@ -575,7 +576,7 @@ export function AverageConsumptionChart() {
             const histAvg = historicalAverages.get(bp.id) || 0;
             const deviation = deviations.get(bp.id) || 0;
 
-            const consumptionsInPeriod = Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries() as Iterable<[string, number]>)
+            const consumptionsInPeriod: { label: string, value: number }[] = Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries())
                 .filter(([monthStr]: [string, number]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
                     return isWithinInterval(monthDate, {start, end});
@@ -707,7 +708,7 @@ export function AverageConsumptionChart() {
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="product-multiselect">Insumos analisados</Label>
+                        <Label>Insumos analisados</Label>
                         <div className="flex gap-2 items-center">
                             <MultiSelect
                                 options={productOptions}
@@ -778,7 +779,3 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
-
-
-
-
