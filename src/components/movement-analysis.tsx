@@ -54,7 +54,7 @@ function CustomTooltip({ active, payload, label }: any) {
 
 // Card component to display transfer analysis for a single base product
 function TransferCard({ data }: { data: TransferCardModel }) {
-  const periodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
+  const PeriodIcon = data.periodChangePct > 5 ? TrendingUp : data.periodChangePct < -5 ? TrendingDown : Minus;
   const periodColor = data.periodChangePct > 5 ? "text-destructive" : data.periodChangePct < -5 ? "text-green-600" : "text-muted-foreground";
 
   let historicalText, historicalColor;
@@ -117,7 +117,7 @@ function TransferCard({ data }: { data: TransferCardModel }) {
       </CardHeader>
       <CardContent className="flex-grow">
         <div className={cn("text-4xl font-bold flex items-center gap-2", periodColor)}>
-          <periodIcon className="h-8 w-8" />
+          <PeriodIcon className="h-8 w-8" />
           <span>{data.periodChangePct.toFixed(0)}%</span>
         </div>
          <p className="text-xs text-muted-foreground">Variação no período selecionado</p>
@@ -485,3 +485,5 @@ export function MovementAnalysis() {
         </Card>
     );
 }
+
+    
