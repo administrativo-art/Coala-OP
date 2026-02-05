@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react"
-import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth, subMonths, startOfYear } from "date-fns"
+import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth, subMonths, startOfYear, isValid } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 
 // Hooks
@@ -17,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, ChevronLeft, ChevronRight, Package, Wrench, ArrowLeftRight } from "lucide-react";
 import { LineChart, Line, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -87,8 +86,17 @@ function TransferCard({ data }: { data: TransferCardModel }) {
            historicalColor = "text-muted-foreground";
   }
   
-  const formatDisplayQuantity = (baseQuantity: number) => {
-    return `${baseQuantity.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${data.unit}`;
+  const formatDisplayQuantity = (baseQuantity: number): string => {
+      const formatNumber = (value: number) => {
+        const options: Intl.NumberFormatOptions = {
+          maximumFractionDigits: 1,
+        };
+        if (value % 1 === 0) {
+            options.maximumFractionDigits = 0;
+        }
+        return value.toLocaleString('pt-BR', options);
+      };
+      return `${formatNumber(baseQuantity)} ${data.unit}`;
   };
   
   const formattedPeriod = formatDisplayQuantity(data.periodAvg);
@@ -152,55 +160,98 @@ function TransferCard({ data }: { data: TransferCardModel }) {
   )
 }
 
-function UnitAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; }) {
+function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; }) {
   const { history, loading: historyLoading } = useMovementHistory();
   const { products, loading: productsLoading } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
-  const { kiosks, loading: kiosksLoading } = useKiosks();
   const [selectedBaseId, setSelectedBaseId] = useState<string | null>(null);
 
-  const loading = historyLoading || productsLoading || baseProductsLoading || kiosksLoading;
+  const loading = historyLoading || productsLoading || baseProductsLoading;
 
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const baseProductMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
 
-  const rankingData = useMemo(() => {
-    if (!selectedBaseId || !startPeriod || !endPeriod || loading) return [];
+  const balanceData = useMemo(() => {
+    if (!selectedBaseId || !startPeriod || !endPeriod || loading) return null;
 
     const baseProduct = baseProductMap.get(selectedBaseId);
-    if (!baseProduct) return [];
+    if (!baseProduct) return null;
 
     const startDate = startOfMonth(parseISO(`${startPeriod}-01`));
     const endDate = endOfMonth(parseISO(`${endPeriod}-01`));
 
-    const transfersByKiosk = new Map<string, number>();
-
-    history.forEach(movement => {
-      const product = productMap.get(movement.productId);
-      if (
-        movement.type === 'TRANSFERENCIA_ENTRADA' &&
-        product?.baseProductId === selectedBaseId &&
-        movement.toKioskId &&
-        isWithinInterval(parseISO(movement.timestamp), { start: startDate, end: endDate })
-      ) {
-        let quantityInBaseUnit = 0;
-        try {
-          quantityInBaseUnit = convertValue(movement.quantityChange, product.unit, baseProduct.unit, product.category);
-        } catch { return; }
+    const movements = history.filter(movement => {
+        const product = productMap.get(movement.productId);
+        if (!product || product.baseProductId !== selectedBaseId) return false;
         
-        transfersByKiosk.set(movement.toKioskId, (transfersByKiosk.get(movement.toKioskId) || 0) + quantityInBaseUnit);
-      }
+        const movementDate = parseISO(movement.timestamp);
+        if (!isValid(movementDate) || !isWithinInterval(movementDate, { start: startDate, end: endDate })) {
+            return false;
+        }
+
+        if (kioskId !== 'all') {
+            if (movement.fromKioskId !== kioskId && movement.toKioskId !== kioskId) {
+                return false;
+            }
+        }
+        return true;
     });
 
-    return Array.from(transfersByKiosk.entries())
-      .map(([kioskId, total]) => ({
-        kioskName: kiosks.find(k => k.id === kioskId)?.name || 'Desconhecido',
-        total,
-        unit: baseProduct.unit,
-      }))
-      .sort((a, b) => b.total - a.total);
+    const totals = {
+        entradas: { compras: 0, transferencias: 0, ajustes: 0, total: 0 },
+        saidas: { consumo: 0, transferencias: 0, descartes: 0, ajustes: 0, total: 0 },
+        saldo: 0,
+    };
+    
+    movements.forEach(movement => {
+        const product = productMap.get(movement.productId)!;
+        let qtyInBase = 0;
+        try {
+            qtyInBase = convertValue(movement.quantityChange, product.unit, baseProduct.unit, product.category);
+        } catch { return; }
 
-  }, [selectedBaseId, startPeriod, endPeriod, history, products, baseProducts, kiosks, loading, productMap, baseProductMap]);
+        const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
+        const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
+        
+        if (kioskId === 'all' && movement.type.includes('TRANSFERENCIA')) {
+            return; // Ignore internal transfers when viewing all kiosks
+        }
+
+        switch(movement.type) {
+            case 'ENTRADA': if (isToKiosk) totals.entradas.compras += qtyInBase; break;
+            case 'TRANSFERENCIA_ENTRADA': if (isToKiosk) totals.entradas.transferencias += qtyInBase; break;
+            case 'ENTRADA_CORRECAO':
+            case 'ENTRADA_ESTORNO': if (isToKiosk) totals.entradas.ajustes += qtyInBase; break;
+            case 'SAIDA_CONSUMO': if (isFromKiosk) totals.saidas.consumo += qtyInBase; break;
+            case 'SAIDA_DESCARTE_VENCIMENTO':
+            case 'SAIDA_DESCARTE_AVARIA':
+            case 'SAIDA_DESCARTE_PERDA':
+            case 'SAIDA_DESCARTE_OUTROS': if (isFromKiosk) totals.saidas.descartes += qtyInBase; break;
+            case 'TRANSFERENCIA_SAIDA': if (isFromKiosk) totals.saidas.transferencias += qtyInBase; break;
+            case 'SAIDA_CORRECAO':
+            case 'SAIDA_ESTORNO': if (isFromKiosk) totals.saidas.ajustes += qtyInBase; break;
+        }
+    });
+
+    totals.entradas.total = totals.entradas.compras + totals.entradas.transferencias + totals.entradas.ajustes;
+    totals.saidas.total = totals.saidas.consumo + totals.saidas.transferencias + totals.saidas.descartes + totals.saidas.ajustes;
+    totals.saldo = totals.entradas.total - totals.saidas.total;
+
+    return { totals, unit: baseProduct.unit };
+  }, [selectedBaseId, startPeriod, endPeriod, history, products, baseProducts, loading, productMap, baseProductMap, kioskId]);
+  
+  const formatNumber = (value: number, unit: string) => {
+    return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${unit}`;
+  }
+
+  if (kioskId === 'all') {
+    return (
+        <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+            <Inbox className="mx-auto h-12 w-12" />
+            <p className="mt-4 font-semibold">Selecione uma unidade específica para ver o saldo.</p>
+        </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -211,7 +262,7 @@ function UnitAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: string
             <SelectValue placeholder="Selecione um insumo..." />
           </SelectTrigger>
           <SelectContent>
-            {baseProducts.map(bp => (
+            {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(bp => (
               <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>
             ))}
           </SelectContent>
@@ -219,41 +270,68 @@ function UnitAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: string
       </div>
       
       {loading && selectedBaseId ? <Skeleton className="h-48 w-full" /> : 
-       selectedBaseId && rankingData.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Ranking de Recebimento</CardTitle>
-            <CardDescription>Unidades que mais receberam "{baseProductMap.get(selectedBaseId)?.name}" no período.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Unidade</TableHead>
-                  <TableHead className="text-right">Total Recebido</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rankingData.map(data => (
-                  <TableRow key={data.kioskName}>
-                    <TableCell className="font-medium">{data.kioskName}</TableCell>
-                    <TableCell className="text-right font-bold">{data.total.toFixed(2)} {data.unit}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ) : selectedBaseId ? (
+       !selectedBaseId ? (
          <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+            <p className="font-semibold">Selecione um insumo para ver o saldo.</p>
+        </div>
+       ) :
+       !balanceData ? (
+        <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
             <Inbox className="mx-auto h-12 w-12" />
-            <p className="mt-4 font-semibold">Nenhuma transferência encontrada para este insumo no período.</p>
+            <p className="mt-4 font-semibold">Nenhum dado encontrado para este insumo no período.</p>
         </div>
-      ) : (
-         <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-            <p className="font-semibold">Selecione um insumo para ver a análise por unidade.</p>
+       ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="bg-green-500/5 border-green-500/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2 text-green-700 dark:text-green-300"><TrendingUp /> Total de Entradas</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p className="text-2xl font-bold">{formatNumber(balanceData.totals.entradas.total, balanceData.unit)}</p>
+                <Separator className="my-2"/>
+                <div className="text-xs text-muted-foreground space-y-1">
+                    <p>Compras/Lançamentos: {formatNumber(balanceData.totals.entradas.compras, balanceData.unit)}</p>
+                    <p>Transferências: {formatNumber(balanceData.totals.entradas.transferencias, balanceData.unit)}</p>
+                    <p>Ajustes: {formatNumber(balanceData.totals.entradas.ajustes, balanceData.unit)}</p>
+                </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-red-500/5 border-red-500/20">
+            <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2 text-red-700 dark:text-red-300"><TrendingDown /> Total de Saídas</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p className="text-2xl font-bold">{formatNumber(balanceData.totals.saidas.total, balanceData.unit)}</p>
+                 <Separator className="my-2"/>
+                 <div className="text-xs text-muted-foreground space-y-1">
+                    <p>Consumo/Vendas: {formatNumber(balanceData.totals.saidas.consumo, balanceData.unit)}</p>
+                    <p>Transferências: {formatNumber(balanceData.totals.saidas.transferencias, balanceData.unit)}</p>
+                    <p>Descartes: {formatNumber(balanceData.totals.saidas.descartes, balanceData.unit)}</p>
+                     <p>Ajustes: {formatNumber(balanceData.totals.saidas.ajustes, balanceData.unit)}</p>
+                </div>
+            </CardContent>
+          </Card>
+          <Card className={cn(
+              "border-2",
+              balanceData.totals.saldo > 0 && "border-green-500/30",
+              balanceData.totals.saldo < 0 && "border-red-500/30",
+          )}>
+            <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2"><ArrowLeftRight /> Saldo do Período</CardTitle>
+            </CardHeader>
+             <CardContent>
+                <p className="text-2xl font-bold">{balanceData.totals.saldo > 0 ? '+' : ''}{formatNumber(balanceData.totals.saldo, balanceData.unit)}</p>
+                 <p className="text-xs text-muted-foreground">
+                    {balanceData.totals.saldo > 0 ? 'O estoque aumentou neste período.' :
+                     balanceData.totals.saldo < 0 ? 'O estoque diminuiu neste período.' :
+                     'O estoque permaneceu estável.'
+                    }
+                </p>
+            </CardContent>
+          </Card>
         </div>
-      )}
+       )
+      }
     </div>
   );
 }
@@ -406,7 +484,7 @@ export function MovementAnalysis() {
     const [period, setPeriod] = useState<{ from: YearMonth, to: YearMonth } | null>(null);
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [kioskId, setKioskId] = useState<string>('all');
-    const [view, setView] = useState<'cards' | 'unit'>('cards');
+    const [view, setView] = useState<'cards' | 'saldo'>('cards');
     
     const { history, loading: historyLoading } = useMovementHistory();
     const { products, loading: productsLoading } = useProducts();
@@ -601,8 +679,8 @@ export function MovementAnalysis() {
                       </div>
                       <div className="flex-shrink-0">
                           <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
-                              <ToggleGroupItem value="cards">Por Insumo</ToggleGroupItem>
-                              <ToggleGroupItem value="unit">Por Unidade</ToggleGroupItem>
+                              <ToggleGroupItem value="cards">Análise por Insumo</ToggleGroupItem>
+                              <ToggleGroupItem value="saldo">Saldo</ToggleGroupItem>
                           </ToggleGroup>
                       </div>
                   </div>
@@ -637,9 +715,9 @@ export function MovementAnalysis() {
                         )}
                     </div>
                 )}
-                 {view === 'unit' && (
+                 {view === 'saldo' && (
                     <div className="mt-6">
-                        <UnitAnalysisView kioskId={kioskId} startPeriod={startPeriod} endPeriod={endPeriod} />
+                        <BalanceAnalysisView kioskId={kioskId} startPeriod={startPeriod} endPeriod={endPeriod} />
                     </div>
                  )}
             </CardContent>
