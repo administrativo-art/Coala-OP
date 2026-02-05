@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useState, useEffect, useCallback } from "react"
+import React, { useMemo, useState, useEffect, useCallback } from "react"
 import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth, subMonths, startOfYear, isValid } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 
@@ -16,8 +16,7 @@ import { convertValue } from '@/lib/conversion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Skeleton } from "./ui/skeleton"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
-import { MultiSelect } from "@/components/ui/multi-select"
-import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, ChevronLeft, ChevronRight, Package, Wrench, ArrowLeftRight } from "lucide-react";
+import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, ChevronLeft, ChevronRight, Package, Wrench, ArrowLeftRight, Filter } from "lucide-react";
 import { LineChart, Line, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -28,6 +27,7 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
+import { MultiSelect } from "./ui/multi-select";
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -209,7 +209,7 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
           const product = productMap.get(movement.productId)!;
           let qtyInBase = 0;
           try {
-              qtyInBase = convertValue(movement.quantityChange, product.unit, baseProduct.unit, product.category);
+              qtyInBase = convertValue(Number(movement.quantityChange), product.unit, baseProduct.unit, product.category);
           } catch { return; }
 
           const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
@@ -253,13 +253,12 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
   [baseProducts]);
   
   const formatNumber = (value: number, unit: string) => {
-      const options: Intl.NumberFormatOptions = {
-        maximumFractionDigits: 1,
-      };
-      if (value % 1 === 0) {
-          options.maximumFractionDigits = 0;
-      }
-      return `${value.toLocaleString('pt-BR', options)} ${unit}`;
+    const options: Intl.NumberFormatOptions = {};
+    if (value % 1 !== 0) {
+        options.minimumFractionDigits = 1;
+        options.maximumFractionDigits = 2;
+    }
+    return `${value.toLocaleString('pt-BR', options)} ${unit}`;
   };
 
   if (kioskId === 'all') {
@@ -570,7 +569,7 @@ export function MovementAnalysis() {
             
             let quantityInBaseUnit = 0;
             try {
-                quantityInBaseUnit = convertValue(movement.quantityChange, product.unit, baseProduct.unit, product.category);
+                quantityInBaseUnit = convertValue(Number(movement.quantityChange), product.unit, baseProduct.unit, product.category);
             } catch {
                 return;
             }
@@ -742,5 +741,7 @@ export function MovementAnalysis() {
         </Card>
     );
 }
+
+    
 
     
