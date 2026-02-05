@@ -9,6 +9,9 @@ import { z } from 'zod';
 import { Separator } from './ui/separator';
 import dynamic from 'next/dynamic';
 import { AiAnalysisDocument } from './pdf/AiAnalysisDocument';
+import { type ReactElement, type JSXElementConstructor } from 'react';
+import { type BlobProviderParams } from '@react-pdf/renderer';
+
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),

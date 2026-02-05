@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
@@ -561,7 +560,7 @@ export function AverageConsumptionChart() {
         availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
     [availableBaseProducts]);
     
-     const cardData: CardModel[] = useMemo(() => {
+    const cardData = useMemo((): CardModel[] => {
         if (loading || !startPeriod || !endPeriod) return [];
         
         const baseList = selectedBaseProducts.length > 0 ? baseProducts.filter(bp => selectedBaseProducts.includes(bp.id)) : availableBaseProducts;
@@ -576,7 +575,7 @@ export function AverageConsumptionChart() {
             const histAvg = historicalAverages.get(bp.id) || 0;
             const deviation = deviations.get(bp.id) || 0;
 
-            const consumptionsInPeriod = Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries())
+            const consumptionsInPeriod: { label: string; value: number }[] = Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries())
                 .filter(([monthStr]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
                     return isWithinInterval(monthDate, {start, end});
@@ -779,5 +778,6 @@ export function AverageConsumptionChart() {
         </Card>
     );
 }
+
 
 

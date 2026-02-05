@@ -201,8 +201,8 @@ export function AverageConsumptionChart() {
             percentage: totalNetworkConsumption > 0 ? (total / totalNetworkConsumption) * 100 : 0
         })).sort((a,b) => b.total - a.total);
         
-        const classA = consumptionPercentages.slice(0, 5).map(p => p.id);
-        const classB = consumptionPercentages.slice(5).map(p => p.id);
+        const classA: string[] = consumptionPercentages.slice(0, 5).map(p => p.id);
+        const classB: string[] = consumptionPercentages.slice(5).map(p => p.id);
 
         return { monthlyConsumptions: consumptions, historicalAverages: averages, abcClasses: { A: classA, B: classB }, deviations: devMap };
 
@@ -275,7 +275,7 @@ export function AverageConsumptionChart() {
         availableBaseProducts.map(p => ({ value: p.id, label: p.name })),
     [availableBaseProducts]);
     
-     const cardData: CardModel[] = useMemo(() => {
+     const cardData = useMemo((): CardModel[] => {
         if (loading || !startPeriod || !endPeriod) return [];
         
         const baseList = selectedBaseProducts.length > 0 ? baseProducts.filter(bp => selectedBaseProducts.includes(bp.id)) : availableBaseProducts;
@@ -290,8 +290,8 @@ export function AverageConsumptionChart() {
             const histAvg = historicalAverages.get(bp.id) || 0;
             const deviation = deviations.get(bp.id) || 0;
 
-            const consumptionsInPeriod = Array.from(monthlyConsumptions.get(bp.id)?.entries() || [])
-                .filter(([monthStr,]) => {
+            const consumptionsInPeriod: { label: string; value: number }[] = Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries())
+                .filter(([monthStr]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
                     return isWithinInterval(monthDate, {start, end});
                 })
@@ -417,7 +417,7 @@ export function AverageConsumptionChart() {
                                 <LineChart data={chartData}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" />
-                                    <YAxis tickFormatter={(value) => value.toLocaleString()} />
+                                    <YAxis tickFormatter={(value: number) => value.toLocaleString()} />
                                     <Tooltip formatter={(value: number) => value.toLocaleString()} />
                                     <Legend />
                                     {selectedBaseProducts.map((bpId, index) => {
