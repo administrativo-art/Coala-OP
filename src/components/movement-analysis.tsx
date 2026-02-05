@@ -14,7 +14,7 @@ import { convertValue } from '@/lib/conversion';
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Skeleton } from "./ui/skeleton"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, ChevronLeft, ChevronRight, Package, Wrench, ArrowLeftRight } from "lucide-react";
@@ -253,8 +253,14 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
   [baseProducts]);
   
   const formatNumber = (value: number, unit: string) => {
-    return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${unit}`;
-  }
+      const options: Intl.NumberFormatOptions = {
+        maximumFractionDigits: 1,
+      };
+      if (value % 1 === 0) {
+          options.maximumFractionDigits = 0;
+      }
+      return `${value.toLocaleString('pt-BR', options)} ${unit}`;
+  };
 
   if (kioskId === 'all') {
     return (
@@ -736,3 +742,5 @@ export function MovementAnalysis() {
         </Card>
     );
 }
+
+    
