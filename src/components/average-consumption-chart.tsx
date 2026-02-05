@@ -577,7 +577,7 @@ export function AverageConsumptionChart() {
             const histAvg = historicalAverages.get(bp.id) || 0;
             const deviation = deviations.get(bp.id) || 0;
 
-            const consumptionsInPeriod = (Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries()) as [string, number][])
+            const consumptionsInPeriod: {label: string, value: number}[] = (Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries()) as [string, number][])
                 .filter(([monthStr]: [string, number]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
                     return isWithinInterval(monthDate, {start, end});

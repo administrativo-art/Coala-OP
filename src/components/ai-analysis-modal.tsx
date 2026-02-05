@@ -102,7 +102,7 @@ export function AiAnalysisModal({ open, onOpenChange, isLoading, analysisResult,
                                 }
                                 fileName={`analise_consumo_${analysisParams?.kioskName.replace(/\s+/g, '_') || 'geral'}.pdf`}
                             >
-                                {((props: BlobProviderParams) => (
+                                {((props: any) => (
                                     <Button variant="outline" disabled={props.loading}>
                                         <Download className="mr-2 h-4 w-4"/>
                                         {props.loading ? 'Gerando...' : 'Exportar análise'}
