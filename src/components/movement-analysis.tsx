@@ -77,37 +77,11 @@ function TransferCard({ data }: { data: TransferCardModel }) {
   }
   
   const formatDisplayQuantity = (baseQuantity: number) => {
-    if (!data.representativeProduct || baseQuantity === 0) {
-        return `${baseQuantity.toFixed(1)} ${data.unit}`;
-    }
-
-    const { representativeProduct, unit: baseUnit } = data;
-    const { packageSize, unit: contentUnit, category, packageType, rotulo_caixa, multiplo_caixa } = representativeProduct;
-
-    try {
-        const unitsPerPackage = convertValue(packageSize, contentUnit, baseUnit, category);
-        if (unitsPerPackage <= 0) return `${baseQuantity.toFixed(1)} ${baseUnit}`;
-        
-        const numPackages = baseQuantity / unitsPerPackage;
-
-        // Display in boxes if available
-        if (multiplo_caixa && multiplo_caixa > 0 && rotulo_caixa) {
-            const numBoxes = numPackages / multiplo_caixa;
-            return `${numBoxes.toFixed(1)} ${rotulo_caixa}(s)`;
-        }
-        
-        // Display in packages if packageType is meaningful
-        if (packageType && packageType.toLowerCase() !== 'unidade' && packageType.toLowerCase() !== 'un') {
-             return `${numPackages.toFixed(1)} ${packageType}(s)`;
-        }
-
-        // Fallback to base unit
-        return `${baseQuantity.toFixed(1)} ${baseUnit}`;
-
-    } catch (e) {
-        return `${baseQuantity.toFixed(1)} ${baseUnit}`;
-    }
+    return `${baseQuantity.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${data.unit}`;
   };
+  
+  const formattedPeriod = formatDisplayQuantity(data.periodAvg);
+  const formattedHist = formatDisplayQuantity(data.histAvg);
 
 
   return (
@@ -134,8 +108,8 @@ function TransferCard({ data }: { data: TransferCardModel }) {
          </div>
       </CardContent>
        <CardFooter className="flex-col items-start gap-1 text-xs text-muted-foreground border-t pt-2 pb-3">
-        <div className="flex justify-between w-full"><span>Média Transferida (Período):</span><span className="font-semibold">{formatDisplayQuantity(data.periodAvg)}/mês</span></div>
-        <div className="flex justify-between w-full"><span>Média Histórica (Total):</span><span className="font-semibold">{formatDisplayQuantity(data.histAvg)}/mês</span></div>
+        <div className="flex justify-between w-full"><span>Média Transferida (Período):</span><span className="font-semibold">{formattedPeriod}/mês</span></div>
+        <div className="flex justify-between w-full"><span>Média Histórica (Total):</span><span className="font-semibold">{formattedHist}/mês</span></div>
       </CardFooter>
     </Card>
   )
