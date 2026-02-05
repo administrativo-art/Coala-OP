@@ -483,11 +483,12 @@ export function AverageConsumptionChart() {
             devMap.set(bpId, stdDev(Array.from(monthData.values())));
         });
 
-        const consumptionPercentages = Array.from(consumptionByProduct.entries()).map(([id, total]) => ({
+        const consumptionPercentages: { id: string; total: number; percentage: number }[] = Array.from(consumptionByProduct.entries()).map(([id, total]) => ({
             id,
             total,
             percentage: totalNetworkConsumption > 0 ? (total / totalNetworkConsumption) * 100 : 0
-        })).sort((a,b) => b.total - a.total);
+        }));
+        consumptionPercentages.sort((a,b) => b.total - a.total);
         
         const classA: string[] = consumptionPercentages.slice(0, 5).map(p => p.id);
         const classB: string[] = consumptionPercentages.slice(5).map(p => p.id);
@@ -576,7 +577,7 @@ export function AverageConsumptionChart() {
             const histAvg = historicalAverages.get(bp.id) || 0;
             const deviation = deviations.get(bp.id) || 0;
 
-            const consumptionsInPeriod: { label: string, value: number }[] = Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries())
+            const consumptionsInPeriod = (Array.from((monthlyConsumptions.get(bp.id) || new Map<string, number>()).entries()) as [string, number][])
                 .filter(([monthStr]: [string, number]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
                     return isWithinInterval(monthDate, {start, end});
