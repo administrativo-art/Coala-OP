@@ -120,41 +120,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [profilesLoading]);
 
   useEffect(() => {
-    if (loading || !appUser || profilesLoading) {
+    // 1. Verificações de segurança iniciais
+    if (loading || !appUser || profilesLoading || !profiles) {
       setPermissions(defaultGuestPermissions);
       return;
     }
     
     const userProfile = profiles.find(p => p.id === appUser.profileId);
     
+    // 2. Se for admin padrão, aplica tudo e sai
     if (userProfile?.isDefaultAdmin) {
       setPermissions(defaultAdminPermissions);
       return;
     }
 
-    if (!userProfile || !userProfile.permissions) {
+    // 3. Se não encontrar perfil ou permissões, volta ao padrão convidado
+    if (!userProfile?.permissions) {
       setPermissions(defaultGuestPermissions);
       return;
     }
     
+    // 4. Processamento seguro das permissões
     const finalPermissions = produce(defaultGuestPermissions, draftState => {
         const profilePermissions = userProfile.permissions;
-        if (!profilePermissions || typeof profilePermissions !== 'object') {
-          return;
-        }
 
-        for (const moduleKey of Object.keys(profilePermissions)) {
-            const key = moduleKey as keyof PermissionSet;
-            const modulePerms = profilePermissions[key as keyof typeof profilePermissions];
+        // Loop seguro pelas chaves do objeto de permissões do perfil
+        Object.keys(profilePermissions).forEach((moduleKey) => {
+          const key = moduleKey as keyof PermissionSet;
+          const modulePerms = profilePermissions[key as keyof typeof profilePermissions];
+
+          // Verifica se o módulo existe no draft e se o valor vindo do banco é um objeto válido
+          if (draftState[key] && modulePerms && typeof modulePerms === 'object') {
             
-            if (draftState[key] && typeof draftState[key] === 'object' && modulePerms && typeof modulePerms === 'object') {
-              for (const subKey of Object.keys(modulePerms)) {
-                 if (Object.prototype.hasOwnProperty.call(draftState[key], subKey)) {
-                    (draftState[key] as any)[subKey] = (modulePerms as any)[subKey];
-                 }
+            Object.keys(modulePerms).forEach((subKey) => {
+              // Verifica se a sub-chave existe no nosso estado padrão antes de atribuir
+              if (Object.prototype.hasOwnProperty.call(draftState[key], subKey)) {
+                (draftState[key] as any)[subKey] = (modulePerms as any)[subKey];
               }
-            }
-        }
+            });
+          }
+        });
     });
 
     setPermissions(finalPermissions);
