@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import dynamic from 'next/dynamic';
 import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,6 +60,13 @@ import { useKiosks } from "@/hooks/use-kiosks";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { convertValue } from "@/lib/conversion";
 import { generateFichaTecnicaCompletaPdf } from '@/lib/pdf-generator';
+import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
+import type { BlobProviderParams } from '@react-pdf/renderer';
+
+const PDFDownloadLink = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
+  { ssr: false }
+);
 
 
 const formatCurrency = (value: number | undefined | null) => {
@@ -68,7 +76,7 @@ const formatCurrency = (value: number | undefined | null) => {
     return isNegative ? `- ${formatted}` : formatted;
 };
 
-type SortKey = keyof ProductSimulation | 'name' | 'sku' | 'salePrice' | 'totalCmv' | 'profitGoal' | 'profitPercentage';
+type SortKey = keyof ProductSimulation | 'name' | 'sku' | 'salePrice' | 'totalCmv' | 'profitGoal' | 'profitPercentage' | 'markup';
 type SortDirection = 'asc' | 'desc';
 
 
@@ -256,7 +264,8 @@ export function PricingSimulator() {
             'SKU': sim.ppo?.sku || '',
             'Preço Venda': sim.salePrice,
             'CMV': sim.totalCmv,
-            'Margem Contrib. %': sim.profitPercentage,
+            'M. Contrib (R$)': sim.profitValue,
+            'M Contrib (%)': sim.profitPercentage,
             'Markup': sim.markup,
             'Meta Lucro %': sim.profitGoal || '',
             'NCM': sim.ppo?.ncm || '',
@@ -273,15 +282,15 @@ export function PricingSimulator() {
             const col = cellAddress.replace(/[0-9]/g, '');
             const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
             if (row > 1) { 
-                if (['C', 'D'].includes(col)) {
+                if (['C', 'D', 'E'].includes(col)) {
                     worksheet[cellAddress].z = 'R$ #,##0.00';
                 }
-                if (['E', 'G'].includes(col)) { 
+                if (['F', 'H'].includes(col)) { 
                      worksheet[cellAddress].t = 'n';
                      worksheet[cellAddress].v = worksheet[cellAddress].v / 100;
                      worksheet[cellAddress].z = '0.00%';
                 }
-                 if (['F'].includes(col)) {
+                 if (['G'].includes(col)) {
                     worksheet[cellAddress].z = '0.00"x"';
                 }
             }
@@ -360,6 +369,36 @@ export function PricingSimulator() {
     };
     
     const allFilteredSelected = filteredSimulations.length > 0 && selectedSimulations.size === filteredSimulations.length;
+
+    const singleFilteredSimulation = useMemo(() => {
+        return filteredSimulations.length === 1 ? filteredSimulations[0] : null;
+    }, [filteredSimulations]);
+
+    const pdfDataForSingleSim = useMemo(() => {
+        if (!singleFilteredSimulation) return null;
+
+        const ingredients = simulationItems
+            .filter(item => item.simulationId === singleFilteredSimulation.id)
+            .map(item => {
+                const bp = baseProductMap.get(item.baseProductId);
+                return {
+                    name: bp ? bp.name : 'Insumo não encontrado',
+                    quantity: item.quantity,
+                    unit: item.overrideUnit || (bp ? bp.unit : '')
+                };
+            });
+
+        return {
+            name: singleFilteredSimulation.name,
+            ppo: singleFilteredSimulation.ppo,
+            salePrice: singleFilteredSimulation.salePrice,
+            grossCost: singleFilteredSimulation.totalCmv,
+            profitPercentage: singleFilteredSimulation.profitPercentage,
+            markup: singleFilteredSimulation.markup,
+            ingredients: ingredients
+        };
+    }, [singleFilteredSimulation, simulationItems, baseProductMap]);
+
 
     const renderTable = () => {
         if (isLoading) {
@@ -461,11 +500,11 @@ export function PricingSimulator() {
                                     </div>
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">M. Bruta (R$)</p>
-                                        <p className={cn("font-bold text-lg", profitColorClass)}>{formatCurrency(grossMarginValue)}</p>
+                                        <p className={cn("font-bold", profitColorClass)}>{formatCurrency(grossMarginValue)}</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">M. Bruta (%)</p>
-                                        <p className={cn("font-bold text-lg", profitColorClass)}>{grossMarginPercentage.toFixed(2)}%</p>
+                                        <p className={cn("font-bold", profitColorClass)}>{grossMarginPercentage.toFixed(2)}%</p>
                                     </div>
                                     <div className="flex justify-center items-center gap-2">
                                         {sim.profitGoal !== undefined && sim.profitGoal !== null ? (
@@ -477,7 +516,10 @@ export function PricingSimulator() {
                                                 <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" />Ver Ficha Técnica</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => alert("Exportação de PDF em atualização.")}><Download className="mr-2 h-4 w-4" />Baixar Ficha Completa</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => alert("Exportação de PDF em atualização.")} disabled={filteredSimulations.length !== 1}>
+                                                  Ficha Completa (PDF)
+                                                  {filteredSimulations.length !== 1 && <span className="text-xs text-muted-foreground ml-2">(Selecione 1)</span>}
+                                                </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
                                             </DropdownMenuContent>
@@ -577,9 +619,21 @@ export function PricingSimulator() {
                                     <DropdownMenuItem onSelect={handleExportPriceListPdf}>Lista de Preços (PDF)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportPriceListCsv}>Lista de Preços (CSV)</DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => alert("Exportação de PDF em atualização.")} disabled={filteredSimulations.length !== 1}>
-                                      Ficha Completa (PDF)
-                                      {filteredSimulations.length !== 1 && <span className="text-xs text-muted-foreground ml-2">(Selecione 1)</span>}
+                                    <DropdownMenuItem onSelect={e => e.preventDefault()} disabled={!singleFilteredSimulation}>
+                                        {singleFilteredSimulation && pdfDataForSingleSim ? (
+                                            <PDFDownloadLink
+                                                document={<FichaTecnicaDocument data={pdfDataForSingleSim} />}
+                                                fileName={`ficha_completa_${singleFilteredSimulation.name.replace(/ /g, '_')}.pdf`}
+                                                className="w-full text-left"
+                                            >
+                                                {({ loading }) => loading ? 'Gerando...' : 'Ficha Completa (PDF)'}
+                                            </PDFDownloadLink>
+                                        ) : (
+                                            <div className="flex justify-between w-full items-center">
+                                                <span>Ficha Completa (PDF)</span>
+                                                <span className="text-xs text-muted-foreground ml-2">(Filtre para 1 item)</span>
+                                            </div>
+                                        )}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha técnica simplificada (PDF)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaCsv}>Ficha técnica simplificada (CSV)</DropdownMenuItem>
