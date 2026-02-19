@@ -22,7 +22,6 @@ export interface CompanySettingsContextType {
 export const CompanySettingsContext = createContext<CompanySettingsContextType | undefined>(undefined);
 
 const defaultPricingParameters: PricingParameters = {
-  defaultOperationPercentage: 15,
   averageTaxPercentage: 0,
   averageCardFeePercentage: 0,
   profitGoals: [45, 50, 55, 60, 65],

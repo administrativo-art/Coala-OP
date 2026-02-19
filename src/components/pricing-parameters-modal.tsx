@@ -29,7 +29,8 @@ const profitRangeSchema = z.object({
 });
 
 const parametersSchema = z.object({
-  defaultOperationPercentage: z.coerce.number().min(0, "Deve ser um valor positivo."),
+  averageTaxPercentage: z.coerce.number().min(0, "Deve ser um valor positivo."),
+  averageCardFeePercentage: z.coerce.number().min(0, "Deve ser um valor positivo."),
   profitGoals: z.array(z.coerce.number().min(0).max(100)),
   profitRanges: z.array(profitRangeSchema),
 });
@@ -48,7 +49,8 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   const form = useForm<ParametersFormValues>({
     resolver: zodResolver(parametersSchema),
     defaultValues: { 
-        defaultOperationPercentage: 0,
+        averageTaxPercentage: 0,
+        averageCardFeePercentage: 0,
         profitGoals: [],
         profitRanges: [],
     }
@@ -59,7 +61,8 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
   useEffect(() => {
     if (open && pricingParameters) {
       form.reset({
-        defaultOperationPercentage: pricingParameters.defaultOperationPercentage,
+        averageTaxPercentage: pricingParameters.averageTaxPercentage || 0,
+        averageCardFeePercentage: pricingParameters.averageCardFeePercentage || 0,
         profitGoals: pricingParameters.profitGoals || [45, 50, 55, 60],
         profitRanges: pricingParameters.profitRanges || [],
       });
@@ -127,10 +130,24 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                    <div className="space-y-6 py-4">
                      <FormField
                         control={form.control}
-                        name="defaultOperationPercentage"
+                        name="averageTaxPercentage"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Percentual de operação padrão</FormLabel>
+                            <FormLabel>Imposto médio por mercadoria (%)</FormLabel>
+                            <div className="relative w-32">
+                              <Input type="number" className="pr-8" {...field} />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                       <FormField
+                        control={form.control}
+                        name="averageCardFeePercentage"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Taxa média de transação (%)</FormLabel>
                             <div className="relative w-32">
                               <Input type="number" className="pr-8" {...field} />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
@@ -354,5 +371,3 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
         </div>
     );
 }
-
-    

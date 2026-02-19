@@ -260,10 +260,8 @@ export type ProductSimulation = {
   groupIds: string[];
   userId: string;
   salePrice: number;
-  operationPercentage: number;
   profitGoal?: number | null;
   totalCmv: number;
-  grossCost: number;
   profitValue: number;
   profitPercentage: number;
   markup: number;
@@ -624,9 +622,8 @@ export type ProfitRange = {
 };
 
 export type PricingParameters = {
-  defaultOperationPercentage: number;
-  averageTaxPercentage?: number;
-  averageCardFeePercentage?: number;
+  averageTaxPercentage: number;
+  averageCardFeePercentage: number;
   profitGoals: number[];
   profitRanges: ProfitRange[];
 };

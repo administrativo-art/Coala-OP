@@ -68,7 +68,7 @@ const formatCurrency = (value: number | undefined | null) => {
     return isNegative ? `- ${formatted}` : formatted;
 };
 
-type SortKey = keyof ProductSimulation | 'name' | 'sku' | 'salePrice' | 'grossCost' | 'profitGoal' | 'profitPercentage';
+type SortKey = keyof ProductSimulation | 'name' | 'sku' | 'salePrice' | 'totalCmv' | 'profitGoal' | 'profitPercentage';
 type SortDirection = 'asc' | 'desc';
 
 
@@ -230,8 +230,8 @@ export function PricingSimulator() {
             'Mercadoria': sim.name,
             'SKU': sim.ppo?.sku || '',
             'Preço Venda': sim.salePrice,
-            'Custo Bruto': sim.grossCost,
-            'Lucro %': sim.profitPercentage,
+            'CMV': sim.totalCmv,
+            'Margem Contrib. %': sim.profitPercentage,
             'Markup': sim.markup,
             'Meta Lucro %': sim.profitGoal || '',
             'NCM': sim.ppo?.ncm || '',
@@ -255,8 +255,8 @@ export function PricingSimulator() {
             'Mercadoria': sim.name,
             'SKU': sim.ppo?.sku || '',
             'Preço Venda': sim.salePrice,
-            'Custo Bruto': sim.grossCost,
-            'Lucro %': sim.profitPercentage,
+            'CMV': sim.totalCmv,
+            'Margem Contrib. %': sim.profitPercentage,
             'Markup': sim.markup,
             'Meta Lucro %': sim.profitGoal || '',
             'NCM': sim.ppo?.ncm || '',
@@ -299,7 +299,7 @@ export function PricingSimulator() {
         const dataForCsv = filteredSimulations.map(sim => ({
             'Mercadoria': sim.name,
             'Preço de Venda': sim.salePrice,
-            'Lucro %': sim.profitPercentage.toFixed(2) + '%'
+            'Margem Contrib. %': sim.profitPercentage.toFixed(2) + '%'
         }));
 
         const csv = Papa.unparse(dataForCsv, {
@@ -430,14 +430,22 @@ export function PricingSimulator() {
                                     </div>
                                     <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
                                 </div>
-                                <div className="grid grid-cols-6 items-center px-4 py-3">
+                                <div className="grid grid-cols-7 items-center px-4 py-3">
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">Preço</p>
                                         <p className="font-bold">{formatCurrency(sim.salePrice)}</p>
                                     </div>
                                     <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">Custo</p>
-                                        <p>{formatCurrency(sim.grossCost)}</p>
+                                        <p className="text-xs text-muted-foreground">CMV</p>
+                                        <p>{formatCurrency(sim.totalCmv)}</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-xs text-muted-foreground">Margem (R$)</p>
+                                        <p className={cn("font-bold text-lg", profitColorClass)}>{formatCurrency(sim.profitValue)}</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-xs text-muted-foreground">Margem (%)</p>
+                                        <p className={cn("font-bold text-lg", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">Markup</p>
@@ -446,10 +454,6 @@ export function PricingSimulator() {
                                      <div className="text-center">
                                         <p className="text-xs text-muted-foreground">Meta</p>
                                         <p className="font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">Lucro</p>
-                                        <p className={cn("font-bold text-lg", profitColorClass)}>{sim.profitPercentage.toFixed(2)}%</p>
                                     </div>
                                     <div className="flex justify-center items-center gap-2">
                                         {sim.profitGoal !== undefined && sim.profitGoal !== null ? (
@@ -661,12 +665,12 @@ export function PricingSimulator() {
                                         <DropdownMenuRadioItem value="sku-desc">SKU (Decrescente)</DropdownMenuRadioItem>
                                         <DropdownMenuRadioItem value="salePrice-desc">Preço (Maior-Menor)</DropdownMenuRadioItem>
                                         <DropdownMenuRadioItem value="salePrice-asc">Preço (Menor-Maior)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="grossCost-desc">Custo (Maior-Menor)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="grossCost-asc">Custo (Menor-Maior)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="totalCmv-desc">Custo (Maior-Menor)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="totalCmv-asc">Custo (Menor-Maior)</DropdownMenuRadioItem>
                                         <DropdownMenuRadioItem value="profitGoal-desc">Meta (Maior-Menor)</DropdownMenuRadioItem>
                                         <DropdownMenuRadioItem value="profitGoal-asc">Meta (Menor-Maior)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="profitPercentage-desc">Lucro (Maior-Menor)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="profitPercentage-asc">Lucro (Menor-Maior)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="profitPercentage-desc">Margem (Maior-Menor)</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="profitPercentage-asc">Margem (Menor-Maior)</DropdownMenuRadioItem>
                                     </DropdownMenuRadioGroup>
                                 </DropdownMenuContent>
                             </DropdownMenu>

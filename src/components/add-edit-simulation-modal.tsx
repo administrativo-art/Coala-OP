@@ -50,7 +50,6 @@ const simulationSchema = z.object({
   lineId: z.string().nullable().optional(),
   groupIds: z.array(z.string()),
   items: z.array(simulationItemSchema).min(1, 'Adicione pelo menos um insumo.'),
-  operationPercentage: z.coerce.number().min(0).optional(),
   salePrice: z.coerce.number().min(0).optional(),
   profitGoal: z.coerce.number().nullable().optional(),
   notes: z.string().optional(),
@@ -115,7 +114,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
         lineId: null, 
         groupIds: [],
         items: [], 
-        operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, 
         salePrice: 0, 
         profitGoal: 0, 
         notes: '',
@@ -125,7 +123,6 @@ export function AddEditSimulationModal({ open, onOpenChange, simulationToEdit, o
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
   
   const watchedItems = useWatch({ control: form.control, name: 'items' });
-  const watchedOperationPercentage = form.watch('operationPercentage');
   const watchedSalePrice = form.watch('salePrice');
   
   const [simulatedPrice, setSimulatedPrice] = useState<number | null>(null);
@@ -170,7 +167,6 @@ useEffect(() => {
             lineId: simulationToEdit.lineId,
             groupIds: simulationToEdit.groupIds || [],
             items: itemsForForm,
-            operationPercentage: simulationToEdit.operationPercentage,
             salePrice: simulationToEdit.salePrice,
             profitGoal: simulationToEdit.profitGoal,
             notes: simulationToEdit.notes,
@@ -186,7 +182,6 @@ useEffect(() => {
             lineId: null, 
             groupIds: [],
             items: [], 
-            operationPercentage: pricingParameters?.defaultOperationPercentage ?? 15, 
             salePrice: 0, 
             profitGoal: null, 
             notes: '',
@@ -221,7 +216,6 @@ useEffect(() => {
         lineId: sourceSimulation.lineId,
         groupIds: sourceSimulation.groupIds || [],
         items: sourceItems,
-        operationPercentage: sourceSimulation.operationPercentage,
         salePrice: sourceSimulation.salePrice,
         profitGoal: sourceSimulation.profitGoal,
         notes: sourceSimulation.notes,
@@ -287,26 +281,22 @@ useEffect(() => {
   }, [watchedItems, baseProducts]);
 
 
-  const grossCost = useMemo(() => {
-    const percentage = watchedOperationPercentage || 0;
-    return cmv + (cmv * (percentage / 100));
-  }, [cmv, watchedOperationPercentage]);
-
-  const profitValue = useMemo(() => {
+  const { netRevenue, taxValue, feeValue, contributionMargin, contributionMarginPercentage } = useMemo(() => {
     const price = watchedSalePrice || 0;
-    return price - grossCost;
-  }, [grossCost, watchedSalePrice]);
-
-  const profitPercentage = useMemo(() => {
-    const price = watchedSalePrice || 0;
-    if (price === 0) return 0;
-    return (profitValue / price) * 100;
-  }, [profitValue, watchedSalePrice]);
+    const tax = pricingParameters?.averageTaxPercentage || 0;
+    const fee = pricingParameters?.averageCardFeePercentage || 0;
+    const taxVal = price * (tax / 100);
+    const feeVal = price * (fee / 100);
+    const netRev = price - taxVal - feeVal;
+    const margin = netRev - cmv;
+    const marginPct = price > 0 ? (margin / price) * 100 : 0;
+    return { netRevenue: netRev, taxValue: taxVal, feeValue: feeVal, contributionMargin: margin, contributionMarginPercentage: marginPct };
+  }, [cmv, watchedSalePrice, pricingParameters]);
 
   const markup = useMemo(() => {
-    if (grossCost === 0) return 0;
-    return (watchedSalePrice || 0) / grossCost -1;
-  }, [grossCost, watchedSalePrice]);
+    if (cmv === 0) return 0;
+    return (watchedSalePrice || 0) / cmv -1;
+  }, [cmv, watchedSalePrice]);
 
   const handleAddItem = (baseProductId: string) => {
     const product = baseProducts.find(bp => bp.id === baseProductId);
@@ -348,14 +338,12 @@ useEffect(() => {
       const simulationData = { 
         ...simulationToEdit, 
         ...values,
-        operationPercentage: values.operationPercentage,
         salePrice: values.salePrice,
         profitGoal: values.profitGoal,
         notes: values.notes,
         totalCmv: cmv,
-        grossCost,
-        profitValue,
-        profitPercentage,
+        profitValue: contributionMargin,
+        profitPercentage: contributionMarginPercentage,
         markup,
         ppo: ppoData
       };
@@ -366,9 +354,8 @@ useEffect(() => {
         ...values,
         items: values.items,
         totalCmv: cmv,
-        grossCost,
-        profitValue,
-        profitPercentage,
+        profitValue: contributionMargin,
+        profitPercentage: contributionMarginPercentage,
         markup,
         ppo: ppoData
       };
@@ -393,10 +380,13 @@ useEffect(() => {
       }
       const price = parseFloat(value);
       setSimulatedPrice(price);
-      if (!isNaN(price) && price > 0 && grossCost > 0) {
-          const profit = price - grossCost;
-          const newMargin = (profit / price) * 100;
-          setSimulatedProfitGoal(newMargin);
+      if (!isNaN(price) && price > 0) {
+          const tax = pricingParameters?.averageTaxPercentage || 0;
+          const fee = pricingParameters?.averageCardFeePercentage || 0;
+          const netRev = price * (1 - (tax / 100) - (fee / 100));
+          const margin = netRev - cmv;
+          const newMarginPct = (margin / price) * 100;
+          setSimulatedProfitGoal(newMarginPct);
       } else {
           setSimulatedProfitGoal(null);
       }
@@ -411,9 +401,16 @@ useEffect(() => {
       }
       const goal = parseFloat(value);
       setSimulatedProfitGoal(goal);
-      if (!isNaN(goal) && goal < 100 && grossCost > 0) {
-          const newPrice = grossCost / (1 - (goal / 100));
-          setSimulatedPrice(newPrice);
+      if (!isNaN(goal)) {
+          const tax = pricingParameters?.averageTaxPercentage || 0;
+          const fee = pricingParameters?.averageCardFeePercentage || 0;
+          const priceDenominator = (1 - (tax/100) - (fee/100)) - (goal/100);
+          if (priceDenominator > 0) {
+              const newPrice = cmv / priceDenominator;
+              setSimulatedPrice(newPrice);
+          } else {
+              setSimulatedPrice(null);
+          }
       } else {
           setSimulatedPrice(null);
       }
@@ -430,8 +427,11 @@ useEffect(() => {
   };
   
   const effectiveSimulatedPrice = simulatedPrice ?? watchedSalePrice ?? 0;
-  const simulatedProfitValue = effectiveSimulatedPrice - grossCost;
-  const simulatedProfitPercentage = effectiveSimulatedPrice > 0 ? (simulatedProfitValue / effectiveSimulatedPrice) * 100 : 0;
+  const simulatedTax = effectiveSimulatedPrice * ((pricingParameters?.averageTaxPercentage || 0) / 100);
+  const simulatedFee = effectiveSimulatedPrice * ((pricingParameters?.averageCardFeePercentage || 0) / 100);
+  const simulatedNetRevenue = effectiveSimulatedPrice - simulatedTax - simulatedFee;
+  const simulatedContributionMargin = simulatedNetRevenue - cmv;
+  const simulatedContributionMarginPercentage = effectiveSimulatedPrice > 0 ? (simulatedContributionMargin / effectiveSimulatedPrice) * 100 : 0;
 
   return (
     <>
@@ -769,22 +769,12 @@ useEffect(() => {
 
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">Resultados da análise</h3>
-                  <div className="rounded-lg border p-4 space-y-4">
-                      <FormField control={form.control} name="operationPercentage" render={({ field }) => (
+                  <div className="rounded-lg border p-4 space-y-2 text-sm">
                       <div className="flex justify-between items-center">
-                          <FormLabel>Operacional (%)</FormLabel>
-                          <FormControl>
-                              <div className="relative w-32">
-                                  <Input type="number" className="pr-8 text-right" {...field} value={field.value ?? ''}/>
-                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
-                              </div>
-                          </FormControl>
+                          <FormLabel>Custo dos Insumos (CMV)</FormLabel>
+                          <span className="font-semibold">{formatCurrency(cmv)}</span>
                       </div>
-                      )}/>
-                      <div className="flex justify-between items-center">
-                          <FormLabel className="text-destructive font-bold">= Custo bruto</FormLabel>
-                          <span className="text-xl font-bold text-destructive">{formatCurrency(grossCost)}</span>
-                      </div>
+                      <Separator />
                       <FormField control={form.control} name="salePrice" render={({ field }) => (
                       <div className="flex justify-between items-center">
                           <FormLabel>Preço de venda</FormLabel>
@@ -796,32 +786,45 @@ useEffect(() => {
                           </FormControl>
                       </div>
                       )}/>
-                      <FormField control={form.control} name="profitGoal" render={({ field }) => (
-                          <div className="flex justify-between items-center">
-                              <FormLabel>Meta de Lucro</FormLabel>
-                              <FormControl>
-                                  <Select onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))} value={String(field.value ?? 'none')}>
-                                      <SelectTrigger className="w-32">
-                                          <SelectValue placeholder="Meta..." />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                          <SelectItem value="none">Nenhuma</SelectItem>
-                                          {(pricingParameters?.profitGoals || []).map(goal => (
-                                              <SelectItem key={goal} value={String(goal)}>{goal}%</SelectItem>
-                                          ))}
-                                      </SelectContent>
-                                  </Select>
-                              </FormControl>
-                          </div>
-                      )}/>
+                       <div className="flex justify-between items-center text-muted-foreground">
+                          <FormLabel>- Impostos ({pricingParameters?.averageTaxPercentage || 0}%)</FormLabel>
+                          <span>({formatCurrency(taxValue)})</span>
+                      </div>
+                      <div className="flex justify-between items-center text-muted-foreground">
+                          <FormLabel>- Taxas ({pricingParameters?.averageCardFeePercentage || 0}%)</FormLabel>
+                          <span>({formatCurrency(feeValue)})</span>
+                      </div>
+                      <div className="flex justify-between items-center font-semibold">
+                          <FormLabel>= Faturamento Líquido</FormLabel>
+                          <span>{formatCurrency(netRevenue)}</span>
+                      </div>
+                      <Separator />
                       <div className="flex justify-between items-center text-green-600 font-bold">
-                      <span>= Lucro bruto</span>
-                      <div className="text-right">
-                          <p className="text-xl">{formatCurrency(profitValue)}</p>
-                          <p className="text-sm">({profitPercentage.toFixed(2)}%)</p>
+                        <span>= Margem de Contribuição</span>
+                        <div className="text-right">
+                            <p className="text-xl">{formatCurrency(contributionMargin)}</p>
+                            <p className="text-sm">({contributionMarginPercentage.toFixed(2)}%)</p>
+                        </div>
                       </div>
                   </div>
-                  </div>
+                   <FormField control={form.control} name="profitGoal" render={({ field }) => (
+                        <div className="flex justify-between items-center p-4 border rounded-lg">
+                            <FormLabel>Meta de Margem</FormLabel>
+                            <FormControl>
+                                <Select onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))} value={String(field.value ?? 'none')}>
+                                    <SelectTrigger className="w-32">
+                                        <SelectValue placeholder="Meta..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Nenhuma</SelectItem>
+                                        {(pricingParameters?.profitGoals || []).map(goal => (
+                                            <SelectItem key={goal} value={String(goal)}>{goal}%</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </FormControl>
+                        </div>
+                    )}/>
                 </div>
 
                 <div className="space-y-4">
@@ -841,12 +844,12 @@ useEffect(() => {
                       <div className="p-3 bg-background/50 rounded-md space-y-2">
                           <p className="text-sm font-semibold">Resultados da Simulação:</p>
                           <div className="flex justify-between items-center">
-                              <span className="text-sm">Novo Lucro (R$):</span>
-                              <span className="font-bold">{formatCurrency(simulatedProfitValue)}</span>
+                              <span className="text-sm">Nova Margem (R$):</span>
+                              <span className="font-bold">{formatCurrency(simulatedContributionMargin)}</span>
                           </div>
                           <div className="flex justify-between items-center">
                               <span className="text-sm">Nova Margem (%):</span>
-                              <span className="font-bold">{simulatedProfitPercentage.toFixed(2)}%</span>
+                              <span className="font-bold">{simulatedContributionMarginPercentage.toFixed(2)}%</span>
                           </div>
                       </div>
                       <Button type="button" className="w-full" onClick={applySimulation} disabled={simulatedPrice === null}>Aplicar valores simulados</Button>
