@@ -133,33 +133,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    const deepMergePermissions = (defaultPerms: any, profilePerms: any): PermissionSet => {
-        const merged = JSON.parse(JSON.stringify(defaultPerms));
+    const safeMerge = (defaultPerms: PermissionSet, profilePerms: Partial<PermissionSet>): PermissionSet => {
+        const finalPerms = JSON.parse(JSON.stringify(defaultPerms));
 
         const merge = (target: any, source: any) => {
             if (!source || typeof source !== 'object') {
                 return;
             }
 
-            Object.keys(target).forEach(key => {
-                if (Object.prototype.hasOwnProperty.call(source, key) && source[key] !== undefined) {
-                    if (
-                        typeof target[key] === 'object' && target[key] !== null && !Array.isArray(target[key]) &&
-                        typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])
-                    ) {
-                        merge(target[key], source[key]);
-                    } else if (source[key] !== null) {
-                        target[key] = source[key];
+            for (const key of Object.keys(source)) {
+                if (Object.prototype.hasOwnProperty.call(target, key)) {
+                    const sourceValue = source[key];
+                    const targetValue = target[key];
+
+                    if (sourceValue !== null && typeof sourceValue === 'object' && !Array.isArray(sourceValue) &&
+                        targetValue !== null && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
+                        merge(targetValue, sourceValue);
+                    } else if (sourceValue !== undefined) {
+                        target[key] = sourceValue;
                     }
                 }
-            });
+            }
         };
 
-        merge(merged, profilePerms);
-        return merged;
+        merge(finalPerms, profilePerms);
+        return finalPerms;
     };
 
-    const finalPermissions = deepMergePermissions(defaultGuestPermissions, userProfile.permissions);
+    const finalPermissions = safeMerge(defaultGuestPermissions, userProfile.permissions);
     setPermissions(finalPermissions);
   }, [appUser, profiles, loading, profilesLoading, adminProfileId]);
 
