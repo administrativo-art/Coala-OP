@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // 1. Verificações de segurança iniciais
-    if (loading || !appUser || profilesLoading || !profiles) {
+    if (loading || !appUser || profilesLoading || !profiles || !adminProfileId) {
       setPermissions(defaultGuestPermissions);
       return;
     }
@@ -134,16 +134,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 3. Se não encontrar perfil ou permissões, volta ao padrão convidado
-    if (!userProfile?.permissions) {
+    const profilePermissions = userProfile?.permissions;
+    // 3. Se não encontrar perfil ou permissões, ou se permissões não for um objeto, volta ao padrão convidado
+    if (!profilePermissions || typeof profilePermissions !== 'object') {
       setPermissions(defaultGuestPermissions);
       return;
     }
     
     // 4. Processamento seguro das permissões
     const finalPermissions = produce(defaultGuestPermissions, draftState => {
-        const profilePermissions = userProfile.permissions;
-
         // Loop seguro pelas chaves do objeto de permissões do perfil
         Object.keys(profilePermissions).forEach((moduleKey) => {
           const key = moduleKey as keyof PermissionSet;
@@ -163,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     setPermissions(finalPermissions);
-  }, [appUser, profiles, loading, profilesLoading]);
+  }, [appUser, profiles, loading, profilesLoading, adminProfileId]);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
