@@ -803,8 +803,8 @@ useEffect(() => {
                       <div className="flex justify-between items-center text-green-600 font-bold">
                         <span>= Margem de Contribuição</span>
                         <div className="text-right">
-                            <p className="text-xl">{formatCurrency(contributionMargin)}</p>
-                            <p className="text-sm">({contributionMarginPercentage.toFixed(2)}%)</p>
+                            <p className="text-xl">{contributionMargin.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                            <p className="text-sm">({contributionMarginPercentage.toFixed(2)})</p>
                         </div>
                       </div>
                   </div>
@@ -900,5 +900,3 @@ useEffect(() => {
     </>
   );
 }
-
-    
