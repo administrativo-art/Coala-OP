@@ -434,7 +434,7 @@ export function PricingSimulator() {
                                     </div>
                                     <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
                                 </div>
-                                <div className="grid grid-cols-9 items-center px-4 py-3">
+                                <div className="grid grid-cols-10 items-center px-4 py-3">
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">Preço</p>
                                         <p className="font-bold">{formatCurrency(sim.salePrice)}</p>
@@ -443,19 +443,19 @@ export function PricingSimulator() {
                                         <p className="text-xs text-muted-foreground">CMV</p>
                                         <p>{formatCurrency(sim.totalCmv)}</p>
                                     </div>
-                                     <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">M. Contrib.</p>
+                                    <div className="text-center">
+                                        <p className="text-xs text-muted-foreground">M. Contrib (R$)</p>
                                         <p className="font-semibold">{formatCurrency(sim.profitValue)}</p>
                                     </div>
                                     <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">% Contrib.</p>
+                                        <p className="text-xs text-muted-foreground">M Contrib (%)</p>
                                         <p className="font-semibold">{sim.profitPercentage.toFixed(2)}%</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">Markup</p>
                                         <p>{sim.markup.toFixed(1)}x</p>
                                     </div>
-                                     <div className="text-center">
+                                    <div className="text-center">
                                         <p className="text-xs text-muted-foreground">Meta</p>
                                         <p className="font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</p>
                                     </div>
@@ -464,7 +464,7 @@ export function PricingSimulator() {
                                         <p className={cn("font-bold text-lg", profitColorClass)}>{formatCurrency(grossMarginValue)}</p>
                                     </div>
                                     <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">% M. Bruta</p>
+                                        <p className="text-xs text-muted-foreground">M. Bruta (%)</p>
                                         <p className={cn("font-bold text-lg", profitColorClass)}>{grossMarginPercentage.toFixed(2)}%</p>
                                     </div>
                                     <div className="flex justify-center items-center gap-2">
