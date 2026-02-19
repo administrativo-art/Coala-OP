@@ -31,6 +31,7 @@ import { Popover, PopoverTrigger, PopoverContent } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { usePurchase } from '@/hooks/use-purchase';
 import { useKiosks } from '@/hooks/use-kiosks';
+import { Separator } from './ui/separator';
 
 
 const simulationItemSchema = z.object({
@@ -899,3 +900,5 @@ useEffect(() => {
     </>
   );
 }
+
+    
