@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -59,9 +60,11 @@ import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { convertValue } from "@/lib/conversion";
-import { generateFichaTecnicaCompletaPdf } from '@/lib/pdf-generator';
 import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
 import type { BlobProviderParams } from '@react-pdf/renderer';
+import { GerencialReportDocument } from './pdf/GerencialReportDocument';
+import { useToast } from "@/hooks/use-toast";
+
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -87,6 +90,7 @@ export function PricingSimulator() {
     const { pricingParameters, loading: loadingParams } = useCompanySettings();
     const { permissions } = useAuth();
     const { kiosks, loading: kiosksLoading } = useKiosks();
+    const { toast } = useToast();
     
     const [selectedSimulations, setSelectedSimulations] = useState<Set<string>>(new Set());
     const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
@@ -200,12 +204,12 @@ export function PricingSimulator() {
         return 'text-primary'; 
     };
 
-    const handleExportGerencialPdf = () => {
-        alert("Exportação de PDF em atualização.");
-    };
-
     const handleExportFichaTecnicaSimplificadaPdf = () => {
-        alert("Exportação de PDF em atualização.");
+        toast({
+            title: "Exportação em manutenção",
+            description: "A função de exportar para PDF está sendo atualizada. Tente a exportação para CSV.",
+            variant: "destructive",
+        });
     };
 
     const handleExportFichaTecnicaSimplificadaCsv = () => {
@@ -301,7 +305,11 @@ export function PricingSimulator() {
     };
 
     const handleExportPriceListPdf = () => {
-        alert("Exportação de PDF em atualização.");
+        toast({
+            title: "Exportação em manutenção",
+            description: "A função de exportar para PDF está sendo atualizada. Tente a exportação para CSV.",
+            variant: "destructive",
+        })
     };
 
     const handleExportPriceListCsv = () => {
@@ -482,13 +490,13 @@ export function PricingSimulator() {
                                         <p className="text-xs text-muted-foreground">CMV</p>
                                         <p>{formatCurrency(sim.totalCmv)}</p>
                                     </div>
-                                    <div className="text-center">
+                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">M. Contrib (R$)</p>
-                                        <p className="font-semibold">{formatCurrency(sim.profitValue)}</p>
+                                        <p className="font-semibold">{sim.profitValue.toFixed(2)}</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">M Contrib (%)</p>
-                                        <p className="font-semibold">{sim.profitPercentage.toFixed(2)}%</p>
+                                        <p className="font-semibold">{sim.profitPercentage.toFixed(2)}</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">Markup</p>
@@ -504,7 +512,7 @@ export function PricingSimulator() {
                                     </div>
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">M. Bruta (%)</p>
-                                        <p className={cn("font-bold", profitColorClass)}>{grossMarginPercentage.toFixed(2)}%</p>
+                                        <p className={cn("font-bold", profitColorClass)}>{grossMarginPercentage.toFixed(2)}</p>
                                     </div>
                                     <div className="flex justify-center items-center gap-2">
                                         {sim.profitGoal !== undefined && sim.profitGoal !== null ? (
@@ -516,9 +524,21 @@ export function PricingSimulator() {
                                                 <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" />Ver Ficha Técnica</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => alert("Exportação de PDF em atualização.")} disabled={filteredSimulations.length !== 1}>
-                                                  Ficha Completa (PDF)
-                                                  {filteredSimulations.length !== 1 && <span className="text-xs text-muted-foreground ml-2">(Selecione 1)</span>}
+                                                <DropdownMenuItem onSelect={e => e.preventDefault()} disabled={filteredSimulations.length !== 1}>
+                                                  {singleFilteredSimulation && pdfDataForSingleSim ? (
+                                                      <PDFDownloadLink
+                                                          document={<FichaTecnicaDocument data={pdfDataForSingleSim} />}
+                                                          fileName={`ficha_completa_${singleFilteredSimulation.name.replace(/ /g, '_')}.pdf`}
+                                                          className="w-full text-left"
+                                                      >
+                                                          {({ loading }: BlobProviderParams) => loading ? 'Gerando...' : 'Ficha Completa (PDF)'}
+                                                      </PDFDownloadLink>
+                                                  ) : (
+                                                      <div className="flex justify-between w-full items-center">
+                                                          <span>Ficha Completa (PDF)</span>
+                                                          <span className="text-xs text-muted-foreground ml-2">(Filtre para 1 item)</span>
+                                                      </div>
+                                                  )}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
@@ -612,7 +632,15 @@ export function PricingSimulator() {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
-                                    <DropdownMenuItem onSelect={handleExportGerencialPdf}>Relatório Gerencial (PDF)</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={e => e.preventDefault()}>
+                                        <PDFDownloadLink
+                                            document={<GerencialReportDocument data={filteredSimulations} />}
+                                            fileName={`relatorio_gerencial_${new Date().toISOString().slice(0, 10)}.pdf`}
+                                            className="w-full text-left"
+                                        >
+                                            {({ loading }: BlobProviderParams) => (loading ? 'Gerando...' : 'Relatório Gerencial (PDF)')}
+                                        </PDFDownloadLink>
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportGerencialCsv}>Relatório Gerencial (CSV)</DropdownMenuItem>
                                     <DropdownMenuItem onSelect={handleExportXlsx}>Relatório Gerencial (XLSX)</DropdownMenuItem>
                                     <DropdownMenuSeparator />
@@ -626,7 +654,7 @@ export function PricingSimulator() {
                                                 fileName={`ficha_completa_${singleFilteredSimulation.name.replace(/ /g, '_')}.pdf`}
                                                 className="w-full text-left"
                                             >
-                                                {({ loading }) => loading ? 'Gerando...' : 'Ficha Completa (PDF)'}
+                                                {({ loading }: BlobProviderParams) => loading ? 'Gerando...' : 'Ficha Completa (PDF)'}
                                             </PDFDownloadLink>
                                         ) : (
                                             <div className="flex justify-between w-full items-center">
