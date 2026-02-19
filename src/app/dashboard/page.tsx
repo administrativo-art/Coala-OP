@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -251,7 +252,7 @@ function PricingReportDashboard() {
     const totalMarkup = filteredSimulations.reduce((acc, s) => acc + s.markup, 0);
 
     const priceDeltas = itemsBelowGoal.map(s => {
-        const priceForGoal = s.grossCost / (1 - (s.profitGoal! / 100));
+        const priceForGoal = s.totalCmv / (1 - ((pricingParameters?.averageTaxPercentage || 0) / 100) - ((pricingParameters?.averageCardFeePercentage || 0) / 100) - (s.profitGoal! / 100));
         return priceForGoal - s.salePrice;
     });
 
@@ -297,7 +298,7 @@ function PricingReportDashboard() {
         .sort((a, b) => a['Lucro %'] - b['Lucro %']);
 
     return { kpis: kpisResult, profitChartData: profitChartDataResult };
-}, [activeSimulations, categories, chartFilter]);
+}, [activeSimulations, categories, chartFilter, pricingParameters]);
 
 
   const activeFilters = {

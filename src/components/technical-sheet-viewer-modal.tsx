@@ -53,6 +53,7 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
     
     const pdfData = {
         ...simulation,
+        grossCost: simulation.totalCmv,
         ingredients: ingredients
     };
 
@@ -78,7 +79,7 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                             </div>
                             <div className="p-3 border rounded-lg">
                                 <p className="text-xs text-muted-foreground">Custo Bruto</p>
-                                <p className="text-lg font-bold">{formatCurrency(simulation.grossCost)}</p>
+                                <p className="text-lg font-bold">{formatCurrency(simulation.totalCmv)}</p>
                             </div>
                             <div className="p-3 border rounded-lg">
                                 <p className="text-xs text-muted-foreground">Lucro %</p>
