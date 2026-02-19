@@ -60,33 +60,44 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         const adminPerms = adminProfile.permissions || {};
         const defaultAdminPerms = defaultAdminPermissions;
         let needsUpdate = false;
-
-        // Deep-check and merge permissions
-        for (const key in defaultAdminPerms) {
-          const typedKey = key as keyof typeof defaultAdminPerms;
-          if (!adminPerms[typedKey]) {
-            (adminPerms as any)[typedKey] = defaultAdminPerms[typedKey];
-            needsUpdate = true;
-          } else if (typeof (defaultAdminPerms as any)[typedKey] === 'object' && (defaultAdminPerms as any)[typedKey] !== null) {
-            for (const subKey in (defaultAdminPerms as any)[typedKey]) {
-              if ((adminPerms[typedKey] as any)?.[subKey as keyof typeof adminPerms[typeof typedKey]] === undefined) {
-                 if (!(adminPerms[typedKey])) (adminPerms as any)[typedKey] = {};
-                 (adminPerms[typedKey] as any)[subKey] = (defaultAdminPerms[typedKey] as any)[subKey];
-                 needsUpdate = true;
-              }
-            }
-          }
-        }
         
+        // Create a deep copy to modify
+        const newAdminPerms = JSON.parse(JSON.stringify(adminPerms));
+
+        Object.keys(defaultAdminPerms).forEach(key => {
+            const moduleKey = key as keyof typeof defaultAdminPerms;
+            const defaultModule = defaultAdminPerms[moduleKey];
+            let currentModule = newAdminPerms[moduleKey];
+
+            if (currentModule === undefined) {
+                newAdminPerms[moduleKey] = defaultModule;
+                needsUpdate = true;
+            } else if (typeof defaultModule === 'object' && defaultModule !== null && !Array.isArray(defaultModule)) {
+                if (typeof currentModule !== 'object' || currentModule === null || Array.isArray(currentModule)) {
+                    // Overwrite if the type is wrong
+                    newAdminPerms[moduleKey] = defaultModule;
+                    needsUpdate = true;
+                } else {
+                    // Merge sub-permissions
+                    Object.keys(defaultModule).forEach(subKey => {
+                        if (currentModule[subKey] === undefined) {
+                            currentModule[subKey] = (defaultModule as any)[subKey];
+                            needsUpdate = true;
+                        }
+                    });
+                }
+            }
+        });
+
         if (needsUpdate) {
             console.log("Admin profile is outdated. Auto-updating...");
             const adminProfileRef = doc(db, "profiles", adminProfile.id);
-            const updatedAdminProfile = {...adminProfile, permissions: adminPerms};
+            const updatedAdminProfile = {...adminProfile, permissions: newAdminPerms};
             const index = profilesData.findIndex(p => p.id === adminProfile.id);
             if(index !== -1) {
               profilesData[index] = updatedAdminProfile;
             }
-            updateDoc(adminProfileRef, { permissions: adminPerms }).catch(error => {
+            updateDoc(adminProfileRef, { permissions: newAdminPerms }).catch(error => {
                 console.error("Failed to auto-update admin profile:", error);
             });
         }
