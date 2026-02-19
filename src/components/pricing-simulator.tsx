@@ -403,8 +403,12 @@ export function PricingSimulator() {
                         const simCategories = (sim.categoryIds || []).map(id => categoryMap.get(id)).filter((c): c is SimulationCategory => !!c);
                         const line = sim.lineId ? categoryMap.get(sim.lineId) : null;
                         const simGroups = (sim.groupIds || []).map(id => categories.find(c => c.id === id && c.type === 'group')).filter(Boolean) as SimulationCategory[];
-                        const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && sim.profitPercentage >= sim.profitGoal;
-                        const profitColorClass = getProfitColorClass(sim.profitPercentage);
+                        
+                        const grossMarginValue = sim.salePrice - sim.totalCmv;
+                        const grossMarginPercentage = sim.salePrice > 0 ? (grossMarginValue / sim.salePrice) * 100 : 0;
+
+                        const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && grossMarginPercentage >= sim.profitGoal;
+                        const profitColorClass = getProfitColorClass(grossMarginPercentage);
 
                         return (
                              <AccordionItem value={sim.id} key={sim.id} className="border-b-0">
@@ -440,12 +444,12 @@ export function PricingSimulator() {
                                         <p>{formatCurrency(sim.totalCmv)}</p>
                                     </div>
                                     <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">Margem de contribuição</p>
-                                        <p className={cn("font-bold text-lg", profitColorClass)}>{sim.profitValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        <p className="text-xs text-muted-foreground">Margem bruta (R$)</p>
+                                        <p className={cn("font-bold text-lg", profitColorClass)}>{formatCurrency(grossMarginValue)}</p>
                                     </div>
                                     <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">% Contribuição</p>
-                                        <p className={cn("font-bold text-lg", profitColorClass)}>{sim.profitPercentage.toFixed(2)}</p>
+                                        <p className="text-xs text-muted-foreground">Margem bruta (%)</p>
+                                        <p className={cn("font-bold text-lg", profitColorClass)}>{grossMarginPercentage.toFixed(2)}%</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-xs text-muted-foreground">Markup</p>
