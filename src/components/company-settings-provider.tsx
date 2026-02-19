@@ -23,6 +23,8 @@ export const CompanySettingsContext = createContext<CompanySettingsContextType |
 
 const defaultPricingParameters: PricingParameters = {
   defaultOperationPercentage: 15,
+  averageTaxPercentage: 0,
+  averageCardFeePercentage: 0,
   profitGoals: [45, 50, 55, 60, 65],
   profitRanges: [
     { id: '1', from: 50, to: Infinity, color: 'text-green-600' },

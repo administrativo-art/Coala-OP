@@ -625,6 +625,8 @@ export type ProfitRange = {
 
 export type PricingParameters = {
   defaultOperationPercentage: number;
+  averageTaxPercentage?: number;
+  averageCardFeePercentage?: number;
   profitGoals: number[];
   profitRanges: ProfitRange[];
 };
