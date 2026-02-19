@@ -138,18 +138,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     
     const finalPermissions = produce(defaultGuestPermissions, draftState => {
-      const profilePermissions = userProfile.permissions;
-      for (const moduleKey in profilePermissions) {
-        const key = moduleKey as keyof PermissionSet;
-        const modulePerms = profilePermissions[key];
-        if (draftState[key] && typeof modulePerms === 'object' && modulePerms !== null) {
-          for (const subKey in modulePerms) {
-             if (subKey in draftState[key]) {
-                (draftState[key] as any)[subKey] = (modulePerms as any)[subKey];
-             }
+        const profilePermissions = userProfile.permissions;
+        for (const moduleKey in profilePermissions) {
+          if (Object.prototype.hasOwnProperty.call(profilePermissions, moduleKey)) {
+            const key = moduleKey as keyof PermissionSet;
+            const modulePerms = profilePermissions[key];
+            if (draftState[key] && typeof modulePerms === 'object' && modulePerms !== null) {
+              for (const subKey in modulePerms) {
+                 if (Object.prototype.hasOwnProperty.call(modulePerms, subKey) && subKey in draftState[key]) {
+                    (draftState[key] as any)[subKey] = (modulePerms as any)[subKey];
+                 }
+              }
+            }
           }
         }
-      }
     });
 
     setPermissions(finalPermissions);
