@@ -9,7 +9,6 @@ import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, getDoc, setDoc } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { useProfiles } from '@/hooks/use-profiles';
-import { produce } from 'immer';
 
 const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user';
 
@@ -78,11 +77,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (userDocSnap.exists()) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
           
-          // 1. Verifica se existe um usuário original e se o ID atual é diferente (Indica personificação ativa)
           const isImpersonating = !!originalUser && appUser?.id !== originalUser.id;
           
-          // 2. SÓ atualiza o appUser se NÃO estivermos personificando.
-          // Isso evita que o Firestore "force" a volta para a conta do admin.
           if (!isImpersonating) {
             if (!appUser || JSON.stringify(userData) !== JSON.stringify(appUser)) {
               setAppUser(userData);
@@ -107,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => unsubscribeAuth();
-  }, [profilesLoading, adminProfileId, originalUser]);
+  }, [profilesLoading, adminProfileId, originalUser, appUser]);
 
   useEffect(() => {
     if (profilesLoading) return; 
@@ -120,7 +116,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [profilesLoading]);
 
   useEffect(() => {
-    // 1. Verificações de segurança iniciais
     if (loading || !appUser || profilesLoading || !profiles || !adminProfileId) {
       setPermissions(defaultGuestPermissions);
       return;
@@ -128,39 +123,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     const userProfile = profiles.find(p => p.id === appUser.profileId);
     
-    // 2. Se for admin padrão, aplica tudo e sai
     if (userProfile?.isDefaultAdmin) {
       setPermissions(defaultAdminPermissions);
       return;
     }
 
-    const profilePermissions = userProfile?.permissions;
-    // 3. Se não encontrar perfil ou permissões, ou se permissões não for um objeto, volta ao padrão convidado
-    if (!profilePermissions || typeof profilePermissions !== 'object') {
+    if (!userProfile?.permissions) {
       setPermissions(defaultGuestPermissions);
       return;
     }
     
-    // 4. Processamento seguro das permissões
-    const finalPermissions = produce(defaultGuestPermissions, draftState => {
-        // Loop seguro pelas chaves do objeto de permissões do perfil
-        Object.keys(profilePermissions).forEach((moduleKey) => {
-          const key = moduleKey as keyof PermissionSet;
-          const modulePerms = profilePermissions[key as keyof typeof profilePermissions];
+    const deepMergePermissions = (defaultPerms: any, profilePerms: any): PermissionSet => {
+        const merged = JSON.parse(JSON.stringify(defaultPerms));
 
-          // Verifica se o módulo existe no draft e se o valor vindo do banco é um objeto válido
-          if (draftState[key] && modulePerms && typeof modulePerms === 'object') {
-            
-            Object.keys(modulePerms).forEach((subKey) => {
-              // Verifica se a sub-chave existe no nosso estado padrão antes de atribuir
-              if (Object.prototype.hasOwnProperty.call(draftState[key], subKey)) {
-                (draftState[key] as any)[subKey] = (modulePerms as any)[subKey];
-              }
+        const merge = (target: any, source: any) => {
+            if (!source || typeof source !== 'object') {
+                return;
+            }
+
+            Object.keys(target).forEach(key => {
+                if (Object.prototype.hasOwnProperty.call(source, key) && source[key] !== undefined) {
+                    if (
+                        typeof target[key] === 'object' && target[key] !== null && !Array.isArray(target[key]) &&
+                        typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])
+                    ) {
+                        merge(target[key], source[key]);
+                    } else if (source[key] !== null) {
+                        target[key] = source[key];
+                    }
+                }
             });
-          }
-        });
-    });
+        };
 
+        merge(merged, profilePerms);
+        return merged;
+    };
+
+    const finalPermissions = deepMergePermissions(defaultGuestPermissions, userProfile.permissions);
     setPermissions(finalPermissions);
   }, [appUser, profiles, loading, profilesLoading, adminProfileId]);
 
