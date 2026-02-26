@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -56,13 +55,7 @@ function SafePDFDownloadLink({ activity, products }: { activity: RepositionActiv
 
     return (
         <PDFDownloadLink
-            document={
-              <Document>
-                <Page size="A4">
-                  <Text>OK</Text>
-                </Page>
-              </Document>
-            }
+            document={<SeparationListDocument activity={safeActivity as RepositionActivity} products={safeProducts} />}
             fileName={`separacao_reposicao_${safeActivity.id.slice(-6)}.pdf`}
         >
             {((props: any) => (
