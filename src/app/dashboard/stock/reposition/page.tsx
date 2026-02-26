@@ -15,14 +15,13 @@ import { useProducts } from '@/hooks/use-products';
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Inbox, Truck, CheckSquare, Undo2, BadgeCheck, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal, ArrowRight, UserCheck } from "lucide-react";
+import { Inbox, Truck, CheckSquare, Undo2, BadgeCheck, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal, ArrowRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DispatchModal } from "@/components/dispatch-modal";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { AuditReceiptModal } from "@/components/audit-receipt-modal";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -35,6 +34,38 @@ const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
   { ssr: false, loading: () => <Button variant="outline" size="sm" disabled>Carregando...</Button> }
 );
+
+function SafePDFDownloadLink({ activity, products }: { activity: RepositionActivity; products: Product[] }) {
+    const safeActivity = useMemo(() => {
+        if (!activity || !activity.id || !activity.items) return null;
+        return {
+            ...activity,
+            items: Array.isArray(activity.items) 
+                ? activity.items.filter(item => item != null && typeof item === 'object')
+                : [],
+        };
+    }, [activity]);
+
+    const safeProducts = useMemo(() => {
+        if (!Array.isArray(products)) return [];
+        return products.filter(p => p != null && typeof p === 'object');
+    }, [products]);
+
+    if (!safeActivity) return null;
+
+    return (
+        <PDFDownloadLink
+            document={<SeparationListDocument activity={safeActivity as RepositionActivity} products={safeProducts} />}
+            fileName={`separacao_reposicao_${safeActivity.id.slice(-6)}.pdf`}
+        >
+            {((props: any) => (
+                <Button variant="outline" size="sm" disabled={props.loading}>
+                    <FileText className="mr-2 h-4 w-4" /> {props.loading ? 'Gerando...' : 'Doc. de separação'}
+                </Button>
+            )) as any}
+        </PDFDownloadLink>
+    );
+}
 
 function RepositionActivityCard({ 
   activity, 
@@ -116,20 +147,7 @@ function RepositionActivityCard({
                     </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                    <PDFDownloadLink
-                        document={
-                            products && products.length >= 0 && activity
-                                ? <SeparationListDocument activity={activity} products={products} />
-                                : null
-                        }
-                        fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
-                    >
-                        {((props: any) => (
-                            <Button variant="outline" size="sm" disabled={props.loading}>
-                                <FileText className="mr-2 h-4 w-4" /> {props.loading ? 'Gerando...' : 'Doc. de separação'}
-                            </Button>
-                        )) as any}
-                    </PDFDownloadLink>
+                    <SafePDFDownloadLink activity={activity} products={products} />
                      {activity.transportSignature?.physicalCopyUrl && (
                         <Button variant="outline" size="sm" onClick={() => handleDownloadFile(activity.transportSignature!.physicalCopyUrl!, `despacho_${activity.id.slice(-6)}.jpg`)}>
                             <BadgeCheck className="mr-2 h-4 w-4 text-green-600" /> Doc. assinado
