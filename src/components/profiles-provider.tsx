@@ -29,13 +29,10 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       let profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
 
       if (querySnapshot.empty && !localStorage.getItem('profiles_seeded')) {
-        console.log("No profiles found. Seeding default profiles...");
         const batch = writeBatch(db);
-        
         const adminProfileRef = doc(db, "profiles", "admin");
         const adminData = { name: 'Administrador', permissions: defaultAdminPermissions, isDefaultAdmin: true };
         batch.set(adminProfileRef, adminData);
-        
         const userProfileRef = doc(collection(db, "profiles"));
         const userData = { name: 'Usuário padrão', permissions: defaultUserPermissions };
         batch.set(userProfileRef, userData);
@@ -43,7 +40,6 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         try {
             await batch.commit();
             localStorage.setItem('profiles_seeded', 'true');
-            // Manually set state since listener won't re-fire immediately
             setProfiles([{id: 'admin', ...adminData}, {id: userProfileRef.id, ...userData}]);
             setAdminProfileId('admin');
             setLoading(false);
@@ -58,55 +54,44 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       if (adminProfile) {
         setAdminProfileId(adminProfile.id);
         const adminPerms = adminProfile.permissions || {};
-        const defaultAdminPerms = defaultAdminPermissions;
+        const templatePerms = defaultAdminPermissions;
         let needsUpdate = false;
         
-        // Create a deep copy to modify
-        const newAdminPerms = JSON.parse(JSON.stringify(adminPerms));
+        const deepUpdateRecursive = (target: any, template: any) => {
+            if (!template || typeof template !== 'object' || Array.isArray(template)) return;
+            if (!target || typeof target !== 'object' || Array.isArray(target)) return;
+            
+            Object.keys(template).forEach(key => {
+                const templateValue = template[key];
+                const targetValue = target[key];
 
-        Object.keys(defaultAdminPerms).forEach(key => {
-            const moduleKey = key as keyof typeof defaultAdminPerms;
-            const defaultModule = defaultAdminPerms[moduleKey];
-            let currentModule = newAdminPerms[moduleKey];
-
-            if (currentModule === undefined) {
-                newAdminPerms[moduleKey] = defaultModule;
-                needsUpdate = true;
-            } else if (typeof defaultModule === 'object' && defaultModule !== null && !Array.isArray(defaultModule)) {
-                if (typeof currentModule !== 'object' || currentModule === null || Array.isArray(currentModule)) {
-                    // Overwrite if the type is wrong
-                    newAdminPerms[moduleKey] = defaultModule;
+                if (targetValue === undefined) {
+                    target[key] = JSON.parse(JSON.stringify(templateValue));
                     needsUpdate = true;
-                } else {
-                    // Merge sub-permissions
-                    Object.keys(defaultModule).forEach(subKey => {
-                        if (currentModule[subKey] === undefined) {
-                            currentModule[subKey] = (defaultModule as any)[subKey];
-                            needsUpdate = true;
-                        }
-                    });
+                } else if (templateValue && typeof templateValue === 'object' && !Array.isArray(templateValue)) {
+                    if (!targetValue || typeof targetValue !== 'object' || Array.isArray(targetValue)) {
+                        target[key] = JSON.parse(JSON.stringify(templateValue));
+                        needsUpdate = true;
+                    } else {
+                        deepUpdateRecursive(targetValue, templateValue);
+                    }
                 }
-            }
-        });
+            });
+        };
+
+        const newAdminPerms = JSON.parse(JSON.stringify(adminPerms));
+        deepUpdateRecursive(newAdminPerms, templatePerms);
 
         if (needsUpdate) {
-            console.log("Admin profile is outdated. Auto-updating...");
             const adminProfileRef = doc(db, "profiles", adminProfile.id);
-            const updatedAdminProfile = {...adminProfile, permissions: newAdminPerms};
-            const index = profilesData.findIndex(p => p.id === adminProfile.id);
-            if(index !== -1) {
-              profilesData[index] = updatedAdminProfile;
-            }
-            updateDoc(adminProfileRef, { permissions: newAdminPerms }).catch(error => {
-                console.error("Failed to auto-update admin profile:", error);
-            });
+            updateDoc(adminProfileRef, { permissions: newAdminPerms }).catch(console.error);
         }
       }
       
       setProfiles(profilesData);
       setLoading(false);
     }, (error) => {
-        console.error("Error fetching profiles from Firestore: ", error);
+        console.error("Error fetching profiles:", error);
         setLoading(false);
     });
 
@@ -133,10 +118,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProfile = useCallback(async (profileId: string) => {
     const profileToDelete = profiles.find(p => p.id === profileId);
-    if (profileToDelete?.isDefaultAdmin) {
-      console.error("Cannot delete the default admin profile.");
-      return;
-    }
+    if (profileToDelete?.isDefaultAdmin) return;
     try {
         await deleteDoc(doc(db, "profiles", profileId));
     } catch(error) {
@@ -153,5 +135,9 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     adminProfileId
   }), [profiles, loading, addProfile, updateProfile, deleteProfile, adminProfileId]);
 
-  return <ProfilesContext.Provider value={value}>{children}</ProfilesContext.Provider>;
+  return (
+    <ProfilesContext.Provider value={value}>
+      {children}
+    </ProfilesContext.Provider>
+  );
 }

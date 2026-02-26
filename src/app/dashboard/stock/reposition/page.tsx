@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/glass-card";
 import { Inbox, Truck, AlertTriangle, Trash2, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal, ArrowRight, UserCheck } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +30,6 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
 import { ResolveDivergenceModal } from '@/components/resolve-divergence-modal';
-import { type BlobProviderParams } from '@react-pdf/renderer';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -91,18 +90,19 @@ function RepositionActivityCard({
     };
 
     const currentStep = useMemo(() => {
+        if (!activity?.status) return 1;
         switch (activity.status) {
             case 'Aguardando despacho':
-                return isSeparated ? 2 : 1; // 1: Separação, 2: Despacho
+                return isSeparated ? 2 : 1; 
             case 'Aguardando recebimento':
-                return 3; // Recebimento
+                return 3; 
             case 'Recebido com divergência':
             case 'Recebido sem divergência':
-                return 4; // Efetivação
+                return 4; 
             default:
-                return 5; // Concluído/Cancelada (won't be shown)
+                return 5; 
         }
-    }, [activity.status, isSeparated]);
+    }, [activity?.status, isSeparated]);
 
     const steps = [
         { name: 'Separação', icon: Package, step: 1 },
@@ -111,6 +111,8 @@ function RepositionActivityCard({
         { name: 'Efetivação', icon: CheckSquare, step: 4 },
     ];
     
+    if (!activity || !products) return <Skeleton className="h-40 w-full" />;
+
     const hasDivergence = activity.status === 'Recebido com divergência';
 
     return (
@@ -131,17 +133,22 @@ function RepositionActivityCard({
                     </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                    <PDFDownloadLink
-                        document={<SeparationListDocument activity={activity} products={products} />}
-                        fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
-                    >
-                        {(({ loading }: any) => (
-                            <Button variant="outline" size="sm" className="relative" disabled={loading}>
-                                <FileText className="mr-2 h-4 w-4" />
-                                {loading ? 'Gerando...' : 'Doc. de separação'}
-                            </Button>
-                        )) as any}
-                    </PDFDownloadLink>
+                    {PDFDownloadLink && (
+                        <PDFDownloadLink
+                            document={<SeparationListDocument activity={activity} products={products} />}
+                            fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
+                        >
+                            {((props: any) => {
+                                const loading = props.loading;
+                                return (
+                                    <Button variant="outline" size="sm" className="relative" disabled={loading}>
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        {loading ? 'Gerando...' : 'Doc. de separação'}
+                                    </Button>
+                                );
+                            }) as any}
+                        </PDFDownloadLink>
+                    )}
                      {activity.transportSignature?.physicalCopyUrl && (
                         <Button 
                           variant="outline" 
@@ -280,7 +287,7 @@ function RepositionManagement() {
   const [activityToReopenAudit, setActivityToReopenAudit] = useState<RepositionActivity | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
   
-  const canRevertSteps = permissions.reposition.cancel;
+  const canRevertSteps = permissions?.reposition?.cancel || false;
 
   const handleToggleSeparated = async (activity: RepositionActivity) => {
     await updateRepositionActivity(activity.id, {
@@ -640,7 +647,7 @@ function RepositionHistory() {
                                                     document={<SeparationListDocument activity={activity} products={products} />}
                                                     fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                                                 >
-                                                    {(({ loading }: { loading: boolean }): React.ReactNode => (
+                                                    {(({ loading }: any) => (
                                                         <Button variant="outline" size="sm" disabled={loading}>
                                                             <FileText className="mr-2 h-4 w-4" /> {loading ? 'Gerando...' : 'PDF de separação'}
                                                         </Button>
@@ -688,7 +695,7 @@ function RepositionHistory() {
                                             <TableBody>
                                                 {activity.items.flatMap((item: RepositionItem) => 
                                                     item.suggestedLots.map((lot: RepositionSuggestedLot) => {
-                                                        const receivedLot = activity.items.flatMap((i: RepositionItem) => i.receivedLots || []).find((rl: RepositionSuggestedLot) => rl.lotId === lot.lotId);
+                                                        const receivedLot = activity.items.flatMap((i: RepositionItem) => i.receivedLots || []).find((rl: any) => rl.lotId === lot.lotId);
                                                         const receivedQty = (receivedLot as any)?.receivedQuantity;
                                                         const sentQty = lot.quantityToMove;
                                                         const isDivergent = receivedQty !== undefined && sentQty !== receivedQty;
@@ -753,7 +760,8 @@ function RepositionHistory() {
 
                                 </AccordionContent>
                             </AccordionItem>
-                        )})}
+                        );
+                        })}
                     </Accordion>
                 )}
             </CardContent>
@@ -763,7 +771,22 @@ function RepositionHistory() {
 }
 
 export default function RepositionPage() {
+    const { permissions } = useAuth();
     const router = useRouter();
+
+    if (!permissions?.stock?.analysis?.restock) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <div className="text-center py-16 text-muted-foreground">
+                    <Inbox className="h-12 w-12 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-foreground">Acesso Negado</h3>
+                    <p className="max-w-md mt-2">
+                        Você não tem permissão para visualizar o gerenciamento de reposição.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-4">

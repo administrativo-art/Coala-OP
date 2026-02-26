@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -9,6 +8,7 @@ import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, getDoc, setDoc } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { useProfiles } from '@/hooks/use-profiles';
+import { produce } from 'immer';
 
 const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user';
 
@@ -58,7 +58,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let userDocSnap = await getDoc(userDocRef);
         
         if (!userDocSnap.exists() && user.email === 'administrativo@coalashakes.com') {
-          console.log("Admin user logged in, but no Firestore document found. Creating one...");
           if (adminProfileId) {
             const firstAdminData: Omit<User, 'id'> = {
                 username: user.displayName || user.email!.split('@')[0],
@@ -68,24 +67,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             };
             await setDoc(userDocRef, firstAdminData);
             userDocSnap = await getDoc(userDocRef);
-            console.log("Admin user document created.");
-          } else {
-            console.error("CRITICAL: Admin Profile ID not found. Cannot create admin user document.");
           }
         }
         
         if (userDocSnap.exists()) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
-          
           const isImpersonating = !!originalUser && appUser?.id !== originalUser.id;
           
           if (!isImpersonating) {
-            if (!appUser || JSON.stringify(userData) !== JSON.stringify(appUser)) {
-              setAppUser(userData);
-            }
+            setAppUser(userData);
           }
         } else {
-           console.warn(`Firestore document not found for authenticated user ${user.uid}. Logging out.`);
            await signOut(auth);
            setAppUser(null);
         }
@@ -133,34 +125,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    const safeMerge = (defaultPerms: PermissionSet, profilePerms: Partial<PermissionSet>): PermissionSet => {
-        const finalPerms = JSON.parse(JSON.stringify(defaultPerms));
+    const finalPermissions = produce(defaultGuestPermissions, (draft: any) => {
+        const profilePermissions = userProfile.permissions;
+        if (!profilePermissions || typeof profilePermissions !== 'object') return;
 
-        const merge = (target: any, source: any) => {
-            if (!source || typeof source !== 'object') {
-                return;
-            }
+        // Definitive recursive merge to prevent 'hasOwnProperty' of undefined/null
+        const mergeRecursive = (target: any, source: any) => {
+            if (!source || typeof source !== 'object' || Array.isArray(source)) return;
+            if (!target || typeof target !== 'object' || Array.isArray(target)) return;
 
-            for (const key of Object.keys(source)) {
-                if (Object.prototype.hasOwnProperty.call(target, key)) {
-                    const sourceValue = source[key];
-                    const targetValue = target[key];
+            Object.keys(source).forEach(key => {
+                // Verify target is an object and has the key from the template
+                if (target && Object.prototype.hasOwnProperty.call(target, key)) {
+                    const sourceVal = source[key];
+                    const targetVal = target[key];
 
-                    if (sourceValue !== null && typeof sourceValue === 'object' && !Array.isArray(sourceValue) &&
-                        targetValue !== null && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
-                        merge(targetValue, sourceValue);
-                    } else if (sourceValue !== undefined) {
-                        target[key] = sourceValue;
+                    if (sourceVal !== null && typeof sourceVal === 'object' && !Array.isArray(sourceVal) &&
+                        targetVal !== null && typeof targetVal === 'object' && !Array.isArray(targetVal)) {
+                        mergeRecursive(targetVal, sourceVal);
+                    } else if (sourceVal !== undefined && sourceVal !== null) {
+                        target[key] = sourceVal;
                     }
                 }
-            }
+            });
         };
 
-        merge(finalPerms, profilePerms);
-        return finalPerms;
-    };
+        mergeRecursive(draft, profilePermissions);
+    });
 
-    const finalPermissions = safeMerge(defaultGuestPermissions, userProfile.permissions);
     setPermissions(finalPermissions);
   }, [appUser, profiles, loading, profilesLoading, adminProfileId]);
 
@@ -194,37 +186,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
     const originalAdminAuth = auth.currentUser;
-    if (!originalAdminAuth) {
-        console.error("Admin not logged in, cannot create user.");
-        return null;
-    }
+    if (!originalAdminAuth) return null;
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const newUser = userCredential.user;
-      
       const userDocRef = doc(db, 'users', newUser.uid);
       await setDoc(userDocRef, { ...userData, email });
-      
       await signOut(auth);
       
       if (adminCredentials.current) {
          await signInWithEmailAndPassword(auth, adminCredentials.current.email, adminCredentials.current.password);
       } else {
-        console.warn("Could not automatically re-login admin. Manual login may be required.");
         router.push('/login');
       }
-
       return newUser.uid;
     } catch (error) {
       console.error("Error adding user:", error);
-      try {
-        if (auth.currentUser?.uid !== originalAdminAuth.uid) {
-           await signInWithEmailAndPassword(auth, originalAdminAuth.email!, 'a-dummy-password-that-will-fail-but-is-not-the-point');
-        }
-      } catch (reauthError) {
-         router.push('/login');
-      }
       return null;
     }
   }, [router]);
@@ -252,34 +230,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
     const user = auth.currentUser;
-    if (!user || !user.email) {
-      return { success: false, error: 'Usuário não autenticado.' };
-    }
-
+    if (!user || !user.email) return { success: false, error: 'Usuário não autenticado.' };
     const credential = EmailAuthProvider.credential(user.email, oldPassword);
-
     try {
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
-      if (adminCredentials.current) {
-        adminCredentials.current.password = newPassword;
-      }
+      if (adminCredentials.current) adminCredentials.current.password = newPassword;
       return { success: true };
     } catch (error: any) {
-      console.error("Password change error:", error);
       let errorMessage = 'Ocorreu um erro ao alterar a senha.';
-      if (error.code === 'auth/wrong-password') {
-        errorMessage = 'A senha antiga está incorreta.';
-      }
+      if (error.code === 'auth/wrong-password') errorMessage = 'A senha antiga está incorreta.';
       return { success: false, error: errorMessage };
     }
   }, []);
 
   const impersonate = useCallback((userId: string) => {
-    if (!permissions.settings.impersonate) {
-        console.error("Permissão negada: você não pode personificar usuários.");
-        return;
-    }
+    if (!permissions.settings.impersonate) return;
     const userToImpersonate = users.find(u => u.id === userId);
     if (userToImpersonate && appUser && !originalUser) {
       setOriginalUser(appUser);
