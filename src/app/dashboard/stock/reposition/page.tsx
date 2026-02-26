@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
+import { Document, Page, Text } from '@react-pdf/renderer';
 
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
@@ -54,7 +55,13 @@ function SafePDFDownloadLink({ activity, products }: { activity: RepositionActiv
 
     return (
         <PDFDownloadLink
-            document={<SeparationListDocument activity={safeActivity as RepositionActivity} products={safeProducts} />}
+            document={
+              <Document>
+                <Page size="A4">
+                  <Text>OK</Text>
+                </Page>
+              </Document>
+            }
             fileName={`separacao_reposicao_${safeActivity.id.slice(-6)}.pdf`}
         >
             {((props: any) => (
