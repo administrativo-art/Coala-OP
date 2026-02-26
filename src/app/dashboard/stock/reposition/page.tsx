@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -23,7 +24,6 @@ import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialo
 import { AuditReceiptModal } from "@/components/audit-receipt-modal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -117,7 +117,11 @@ function RepositionActivityCard({
                 </div>
                 <div className="flex items-center gap-2">
                     <PDFDownloadLink
-                        document={<SeparationListDocument activity={activity} products={products} />}
+                        document={
+                            products && products.length >= 0 && activity
+                                ? <SeparationListDocument activity={activity} products={products} />
+                                : null
+                        }
                         fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
                     >
                         {((props: any) => (
@@ -201,7 +205,7 @@ function RepositionActivityCard({
 function RepositionManagement() {
   const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
   const { permissions } = useAuth();
-  const { products } = useProducts();
+  const { products, loading: productsLoading } = useProducts();
   const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
   const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
@@ -211,7 +215,7 @@ function RepositionManagement() {
   
   const canRevertSteps = permissions?.reposition?.cancel || false;
 
-  if (loading) return <div className="space-y-4"><Skeleton className="h-40 w-full" /><Skeleton className="h-40 w-full" /></div>;
+  if (loading || productsLoading) return <div className="space-y-4"><Skeleton className="h-40 w-full" /><Skeleton className="h-40 w-full" /></div>;
 
   const activeActivities = activities.filter(a => a.status !== 'Concluído' && a.status !== 'Cancelada');
 
@@ -248,7 +252,7 @@ function RepositionManagement() {
                   onReopenDispatch={(a) => updateRepositionActivity(a.id, { status: 'Aguardando despacho' })}
                   onReopenAudit={(a) => updateRepositionActivity(a.id, { status: 'Aguardando recebimento' })}
                   canRevert={canRevertSteps}
-                  products={products}
+                  products={products ?? []}
               />
           ))}
       </div>

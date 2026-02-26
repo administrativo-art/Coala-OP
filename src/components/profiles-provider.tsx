@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -56,7 +57,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         const templatePerms = defaultAdminPermissions;
         let needsUpdate = false;
         
-        const deepUpdateRecursive = (target: any, template: any) => {
+        const deepUpdateRecursive = (target: Record<string, any>, template: Record<string, any>) => {
             if (!template || typeof template !== 'object' || Array.isArray(template)) return;
             if (!target || typeof target !== 'object' || Array.isArray(target)) return;
             
@@ -67,13 +68,15 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
                 if (targetValue === undefined) {
                     target[key] = JSON.parse(JSON.stringify(templateValue));
                     needsUpdate = true;
-                } else if (templateValue && typeof templateValue === 'object' && !Array.isArray(templateValue)) {
-                    if (!targetValue || typeof targetValue !== 'object' || Array.isArray(targetValue)) {
-                        target[key] = JSON.parse(JSON.stringify(templateValue));
-                        needsUpdate = true;
-                    } else {
-                        deepUpdateRecursive(targetValue, templateValue);
-                    }
+                } else if (
+                  templateValue && 
+                  typeof templateValue === 'object' && 
+                  !Array.isArray(templateValue) &&
+                  targetValue &&
+                  typeof targetValue === 'object' &&
+                  !Array.isArray(targetValue)
+                ) {
+                    deepUpdateRecursive(targetValue, templateValue);
                 }
             });
         };

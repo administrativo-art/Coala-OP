@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -120,29 +121,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    const mergeRecursive = (target: any, source: any) => {
-        if (!source || typeof source !== 'object' || Array.isArray(source)) return;
-        if (!target || typeof target !== 'object' || Array.isArray(target)) return;
+    const mergeRecursive = (target: Record<string, any>, source: Record<string, any>) => {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) return;
+      if (!target || typeof target !== 'object' || Array.isArray(target)) return;
 
-        Object.keys(source).forEach(key => {
-            const sourceValue = source[key];
-            const targetValue = target[key];
+      Object.keys(source).forEach(key => {
+        const sourceValue = source[key];
+        const targetValue = target[key];
 
-            if (
-                sourceValue !== null &&
-                sourceValue !== undefined &&
-                typeof sourceValue === 'object' &&
-                !Array.isArray(sourceValue) &&
-                targetValue !== null &&
-                targetValue !== undefined &&
-                typeof targetValue === 'object' &&
-                !Array.isArray(targetValue)
-            ) {
-                mergeRecursive(targetValue, sourceValue);
-            } else if (sourceValue !== undefined && sourceValue !== null) {
-                target[key] = sourceValue;
-            }
-        });
+        if (
+          sourceValue !== null &&
+          sourceValue !== undefined &&
+          typeof sourceValue === 'object' &&
+          !Array.isArray(sourceValue) &&
+          targetValue !== null &&
+          targetValue !== undefined &&
+          typeof targetValue === 'object' &&
+          !Array.isArray(targetValue)
+        ) {
+          mergeRecursive(targetValue, sourceValue);
+        } else if (sourceValue !== undefined && sourceValue !== null) {
+          target[key] = sourceValue;
+        }
+      });
     };
 
     const finalPermissions = produce(defaultGuestPermissions, (draft: any) => {

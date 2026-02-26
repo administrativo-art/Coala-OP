@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -116,29 +117,29 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const handleEdit = (profile: Profile) => {
     setEditingProfile(profile);
     
-    const mergeRecursive = (target: any, source: any) => {
-        if (!source || typeof source !== 'object' || Array.isArray(source)) return;
-        if (!target || typeof target !== 'object' || Array.isArray(target)) return;
+    const mergeRecursive = (target: Record<string, any>, source: Record<string, any>) => {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) return;
+      if (!target || typeof target !== 'object' || Array.isArray(target)) return;
 
-        Object.keys(source).forEach(key => {
-            const sourceValue = source[key];
-            const targetValue = target[key];
+      Object.keys(source).forEach(key => {
+        const sourceValue = source[key];
+        const targetValue = target[key];
 
-            if (
-                sourceValue !== null &&
-                sourceValue !== undefined &&
-                typeof sourceValue === 'object' &&
-                !Array.isArray(sourceValue) &&
-                targetValue !== null &&
-                targetValue !== undefined &&
-                typeof targetValue === 'object' &&
-                !Array.isArray(targetValue)
-            ) {
-                mergeRecursive(targetValue, sourceValue);
-            } else if (sourceValue !== undefined && sourceValue !== null) {
-                target[key] = sourceValue;
-            }
-        });
+        if (
+          sourceValue !== null &&
+          sourceValue !== undefined &&
+          typeof sourceValue === 'object' &&
+          !Array.isArray(sourceValue) &&
+          targetValue !== null &&
+          targetValue !== undefined &&
+          typeof targetValue === 'object' &&
+          !Array.isArray(targetValue)
+        ) {
+          mergeRecursive(targetValue, sourceValue);
+        } else if (sourceValue !== undefined && sourceValue !== null) {
+          target[key] = sourceValue;
+        }
+      });
     };
     
     const initialPermissions = JSON.parse(JSON.stringify(defaultGuestPermissions));
