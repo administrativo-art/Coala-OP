@@ -1,3 +1,4 @@
+
 {
   "name": "nextn",
   "version": "0.1.0",
@@ -10,6 +11,10 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
+  },
+  "overrides": {
+    "fast-xml-parser": "^5.3.6",
+    "minimatch": "^10.2.3"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "0.4.4",
