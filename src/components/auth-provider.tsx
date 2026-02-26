@@ -72,11 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (userDocSnap.exists()) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
-          const isImpersonating = !!originalUser && appUser?.id !== originalUser.id;
-          
-          if (!isImpersonating) {
-            setAppUser(userData);
-          }
+          setAppUser(userData);
         } else {
            await signOut(auth);
            setAppUser(null);
@@ -95,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => unsubscribeAuth();
-  }, [profilesLoading, adminProfileId, originalUser, appUser]);
+  }, [profilesLoading, adminProfileId]);
 
   useEffect(() => {
     if (profilesLoading) return; 
@@ -125,28 +121,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
+    // Recursive defensive merge function
+    const mergeRecursive = (target: any, source: any) => {
+        if (!source || typeof source !== 'object') return;
+        
+        Object.keys(source).forEach(key => {
+            const sourceValue = source[key];
+            const targetValue = target[key];
+
+            if (sourceValue !== null && typeof sourceValue === 'object' && !Array.isArray(sourceValue) &&
+                targetValue !== null && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
+                mergeRecursive(targetValue, sourceValue);
+            } else if (sourceValue !== undefined && sourceValue !== null) {
+                target[key] = sourceValue;
+            }
+        });
+    };
+
     const finalPermissions = produce(defaultGuestPermissions, (draft: any) => {
-        const profilePermissions = userProfile.permissions;
-        if (!profilePermissions || typeof profilePermissions !== 'object') return;
-
-        const mergeRecursive = (target: any, source: any) => {
-            if (!source || typeof source !== 'object' || Array.isArray(source)) return;
-            if (!target || typeof target !== 'object' || Array.isArray(target)) return;
-
-            Object.keys(source).forEach(key => {
-                const sourceVal = source[key];
-                const targetVal = target[key];
-
-                if (sourceVal !== null && typeof sourceVal === 'object' && !Array.isArray(sourceVal) &&
-                    targetVal !== null && typeof targetVal === 'object' && !Array.isArray(targetVal)) {
-                    mergeRecursive(targetVal, sourceVal);
-                } else if (sourceVal !== undefined && sourceVal !== null) {
-                    target[key] = sourceVal;
-                }
-            });
-        };
-
-        mergeRecursive(draft, profilePermissions);
+        mergeRecursive(draft, userProfile.permissions);
     });
 
     setPermissions(finalPermissions);
@@ -181,27 +174,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router, stopImpersonating]);
 
   const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
-    const originalAdminAuth = auth.currentUser;
-    if (!originalAdminAuth) return null;
-
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const newUser = userCredential.user;
       const userDocRef = doc(db, 'users', newUser.uid);
       await setDoc(userDocRef, { ...userData, email });
-      await signOut(auth);
       
-      if (adminCredentials.current) {
+      // Se não for o admin principal, o fluxo de logout/login é necessário para manter a sessão correta
+      if (adminCredentials.current && auth.currentUser?.email !== 'administrativo@coalashakes.com') {
          await signInWithEmailAndPassword(auth, adminCredentials.current.email, adminCredentials.current.password);
-      } else {
-        router.push('/login');
       }
       return newUser.uid;
     } catch (error) {
       console.error("Error adding user:", error);
       return null;
     }
-  }, [router]);
+  }, []);
 
   const updateUser = useCallback(async (updatedUser: User) => {
     const userRef = doc(db, "users", updatedUser.id);

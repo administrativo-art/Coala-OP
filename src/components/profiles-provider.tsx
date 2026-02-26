@@ -57,9 +57,10 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         const templatePerms = defaultAdminPermissions;
         let needsUpdate = false;
         
+        // Recursive defensive update function
         const deepUpdateRecursive = (target: any, template: any) => {
-            if (!template || typeof template !== 'object' || Array.isArray(template)) return;
-            if (!target || typeof target !== 'object' || Array.isArray(target)) return;
+            if (!template || typeof template !== 'object') return;
+            if (!target || typeof target !== 'object') return;
             
             Object.keys(template).forEach(key => {
                 const templateValue = template[key];

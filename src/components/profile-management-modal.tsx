@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -118,21 +117,23 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const handleEdit = (profile: Profile) => {
     setEditingProfile(profile);
     
+    // Robust merge function instead of direct deepMerge
     const deepMerge = (target: any, source: any): any => {
+      if (!source || typeof source !== 'object') return target;
       const output = { ...target };
-      for (const key in source) {
-        if (source.hasOwnProperty(key)) {
-          if (source[key] instanceof Object && !Array.isArray(source[key])) {
-            if (!(key in target)) {
-              Object.assign(output, { [key]: source[key] });
-            } else {
-              output[key] = deepMerge(target[key], source[key]);
-            }
+      
+      Object.keys(source).forEach(key => {
+        if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+          if (!(key in target)) {
+            output[key] = source[key];
           } else {
-            Object.assign(output, { [key]: source[key] });
+            output[key] = deepMerge(target[key], source[key]);
           }
+        } else if (source[key] !== undefined && source[key] !== null) {
+          output[key] = source[key];
         }
-      }
+      });
+      
       return output;
     };
     
@@ -260,17 +261,16 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     );
   };
 
-  const dashboardViewWatch = form.watch('permissions.dashboard.view');
-  const stockViewWatch = form.watch('permissions.stock.view');
-  const inventoryControlViewWatch = form.watch('permissions.stock.inventoryControl.view');
-  const stockCountViewWatch = form.watch('permissions.stock.stockCount.view');
-  const analysisViewWatch = form.watch('permissions.stock.analysis.view');
-  const purchasingViewWatch = form.watch('permissions.stock.purchasing.view');
-  const returnsViewWatch = form.watch('permissions.stock.returns.view');
-  const registrationViewWatch = form.watch('permissions.registration.view');
-  const pricingViewWatch = form.watch('permissions.pricing.view');
-  const settingsViewWatch = form.watch('permissions.settings.view');
-  const tasksViewWatch = form.watch('permissions.tasks.view');
+  const dashboardViewWatch = form.watch('permissions.dashboard.view' as any);
+  const stockViewWatch = form.watch('permissions.stock.view' as any);
+  const stockCountViewWatch = form.watch('permissions.stock.stockCount.view' as any);
+  const analysisViewWatch = form.watch('permissions.stock.analysis.view' as any);
+  const purchasingViewWatch = form.watch('permissions.stock.purchasing.view' as any);
+  const returnsViewWatch = form.watch('permissions.stock.returns.view' as any);
+  const registrationViewWatch = form.watch('permissions.registration.view' as any);
+  const pricingViewWatch = form.watch('permissions.pricing.view' as any);
+  const tasksViewWatch = form.watch('permissions.tasks.view' as any);
+  const settingsViewWatch = form.watch('permissions.settings.view' as any);
 
   return (
     <>
@@ -304,12 +304,12 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="dashboard">
                                 <AccordionTrigger className="text-lg font-semibold"><LayoutDashboard className="mr-2 h-5 w-5" /> Dashboard</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.dashboard.view", "Visualizar Dashboard Principal", "Permite que o usuário veja a página inicial do dashboard.")}
+                                    {renderModuleToggle("permissions.dashboard.view" as any, "Visualizar Dashboard Principal", "Permite que o usuário veja a página inicial do dashboard.")}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Operacional</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
-                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Custo e Preço</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
-                                        <FormField control={form.control} name="permissions.dashboard.technicalSheets" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Fichas Técnicas</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
-                                        <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Auditoria</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )}/>
+                                        <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Operacional</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
+                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Custo e Preço</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
+                                        <FormField control={form.control} name="permissions.dashboard.technicalSheets" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Fichas Técnicas</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
+                                        <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Auditoria</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                     </div>
                                 </AccordionContent>
                             </AccordionItem>
@@ -317,85 +317,84 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="registration">
                                 <AccordionTrigger className="text-lg font-semibold"><ListPlus className="mr-2 h-5 w-5" /> Cadastros</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.registration.view", "Ver Módulo de Cadastros")}
-                                    {renderPermissionSwitch("permissions.registration.items.add", "Adicionar Insumos", "Permite cadastrar novos insumos (itens físicos).", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.items.edit", "Editar Insumos", "Permite editar insumos existentes.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.items.delete", "Excluir Insumos", "Permite excluir insumos (ação perigosa).", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.baseProducts.add", "Adicionar Produtos Base", "Permite criar novos produtos base.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.baseProducts.edit", "Editar Produtos Base", "Permite editar produtos base existentes.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.baseProducts.delete", "Excluir Produtos Base", "Permite excluir produtos base.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.entities.add", "Adicionar Entidades", "Permite cadastrar Pessoas e Empresas.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.entities.edit", "Editar Entidades", "Permite editar Pessoas e Empresas.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.entities.delete", "Excluir Entidades", "Permite excluir Pessoas e Empresas.", !registrationViewWatch)}
+                                    {renderModuleToggle("permissions.registration.view" as any, "Ver Módulo de Cadastros")}
+                                    {renderPermissionSwitch("permissions.registration.items.add" as any, "Adicionar Insumos", "Permite cadastrar novos insumos (itens físicos).", !registrationViewWatch)}
+                                    {renderPermissionSwitch("permissions.registration.items.edit" as any, "Editar Insumos", "Permite editar insumos existentes.", !registrationViewWatch)}
+                                    {renderPermissionSwitch("permissions.registration.items.delete" as any, "Excluir Insumos", "Permite excluir insumos (ação perigosa).", !registrationViewWatch)}
+                                    {renderPermissionSwitch("permissions.registration.baseProducts.add" as any, "Adicionar Produtos Base", "Permite criar novos produtos base.", !registrationViewWatch)}
+                                    {renderPermissionSwitch("permissions.registration.baseProducts.edit" as any, "Editar Produtos Base", "Permite editar produtos base existentes.", !registrationViewWatch)}
+                                    {renderPermissionSwitch("permissions.registration.baseProducts.delete" as any, "Excluir Produtos Base", "Permite excluir produtos base.", !registrationViewWatch)}
+                                    {renderPermissionSwitch("permissions.registration.entities.add" as any, "Adicionar Entidades", "Permite cadastrar Pessoas e Empresas.", !registrationViewWatch)}
+                                    {renderPermissionSwitch("permissions.registration.entities.edit" as any, "Editar Entidades", "Permite editar Pessoas e Empresas.", !registrationViewWatch)}
+                                    {renderPermissionSwitch("permissions.registration.entities.delete" as any, "Excluir Entidades", "Permite excluir Pessoas e Empresas.", !registrationViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>
 
                             <AccordionItem value="stock">
                                 <AccordionTrigger className="text-lg font-semibold"><ClipboardCheck className="mr-2 h-5 w-5" /> Gestão de Estoque</AccordionTrigger>
                                 <AccordionContent className="space-y-4 p-1 pt-4">
-                                    {renderModuleToggle("permissions.stock.view", "Visualizar Módulo de Estoque", "Permissão geral para acessar a seção.")}
+                                    {renderModuleToggle("permissions.stock.view" as any, "Visualizar Módulo de Estoque", "Permissão geral para acessar a seção.")}
                                     
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Controle de Estoque</h4>
-                                        {renderPermissionSwitch("permissions.stock.inventoryControl.view", "Visualizar Controle de Estoque", "Permite ver a tela principal de controle de estoque.", !stockViewWatch)}
+                                        {renderPermissionSwitch("permissions.stock.inventoryControl.view" as any, "Visualizar Controle de Estoque", "Permite ver a tela principal de controle de estoque.", !stockViewWatch)}
                                         <div className="pl-6 space-y-2">
-                                            {renderPermissionSwitch("permissions.stock.inventoryControl.addLot", "Adicionar Lotes", "Permite adicionar novos lotes de produtos ao estoque.", !inventoryControlViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.inventoryControl.editLot", "Editar Lotes", "Permite editar informações de lotes existentes.", !inventoryControlViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.inventoryControl.writeDown", "Dar Baixa em Lotes", "Permite registrar saídas por consumo ou descarte.", !inventoryControlViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.inventoryControl.transfer", "Transferir Lotes", "Permite mover estoque entre quiosques.", !inventoryControlViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.inventoryControl.viewHistory", "Ver Histórico de Lotes", "Permite ver o histórico de movimentações de um lote.", !inventoryControlViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.inventoryControl.addLot" as any, "Adicionar Lotes", "Permite adicionar novos lotes de produtos ao estoque.", !stockViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.inventoryControl.editLot" as any, "Editar Lotes", "Permite editar informações de lotes existentes.", !stockViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.inventoryControl.writeDown" as any, "Dar Baixa em Lotes", "Permite registrar saídas por consumo ou descarte.", !stockViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.inventoryControl.transfer" as any, "Transferir Lotes", "Permite mover estoque entre quiosques.", !stockViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.inventoryControl.viewHistory" as any, "Ver Histórico de Lotes", "Permite ver o histórico de movimentações de um lote.", !stockViewWatch, true)}
                                         </div>
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Contagem de estoque</h4>
-                                        {createSyncedSwitch("permissions.stock.stockCount.view", "permissions.stock.audit.view", "Visualizar Histórico", "Permite ver as sessões salvas.", !stockViewWatch)}
+                                        {createSyncedSwitch("permissions.stock.stockCount.view" as any, "permissions.stock.audit.view" as any, "Visualizar Histórico", "Permite ver as sessões salvas.", !stockViewWatch)}
                                         <div className="pl-6 space-y-2">
-                                            {createSyncedSwitch("permissions.stock.stockCount.perform", "permissions.stock.audit.start", "Realizar contagem", "Permite iniciar uma nova sessão de contagem.", !stockCountViewWatch, true)}
-                                            {createSyncedSwitch("permissions.stock.stockCount.approve", "permissions.stock.audit.approve", "Concluir contagem", "Permite aprovar divergências, ajustando o estoque.", !stockCountViewWatch, true)}
+                                            {createSyncedSwitch("permissions.stock.stockCount.perform" as any, "permissions.stock.audit.start" as any, "Realizar contagem", "Permite iniciar uma nova sessão de contagem.", !stockCountViewWatch, true)}
+                                            {createSyncedSwitch("permissions.stock.stockCount.approve" as any, "permissions.stock.audit.approve" as any, "Concluir contagem", "Permite aprovar divergências, ajustando o estoque.", !stockCountViewWatch, true)}
                                         </div>
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Análise de Estoque</h4>
-                                        {renderPermissionSwitch("permissions.stock.analysis.view", "Visualizar Análises de Estoque", "Permite ver a tela de análises.", !stockViewWatch)}
+                                        {renderPermissionSwitch("permissions.stock.analysis.view" as any, "Visualizar Análises de Estoque", "Permite ver a tela de análises.", !stockViewWatch)}
                                          <div className="pl-6 space-y-2">
-                                            {renderPermissionSwitch("permissions.stock.analysis.restock", "Analisar Reposição", "Permite ver a tela de análise de reposição.", !analysisViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.analysis.consumption", "Analisar Consumo", "Permite ver a tela de consumo médio.", !analysisViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.analysis.projection", "Analisar Projeção", "Permite ver o valor financeiro do estoque.", !analysisViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.analysis.valuation", "Analisar Avaliação Financeira", "Permite ver o valor financeiro do estoque.", !analysisViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.analysis.restock" as any, "Analisar Reposição", "Permite ver a tela de análise de reposição.", !analysisViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.analysis.consumption" as any, "Analisar Consumo", "Permite ver a tela de consumo médio.", !analysisViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.analysis.projection" as any, "Analisar Projeção", "Permite ver projeções futuras.", !analysisViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.analysis.valuation" as any, "Analisar Avaliação Financeira", "Permite ver o valor financeiro do estoque.", !analysisViewWatch, true)}
                                          </div>
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Compras</h4>
-                                        {renderPermissionSwitch("permissions.stock.purchasing.view", "Visualizar Módulo de Compras", "Permite ver a tela de compras.", !stockViewWatch)}
+                                        {renderPermissionSwitch("permissions.stock.purchasing.view" as any, "Visualizar Módulo de Compras", "Permite ver a tela de compras.", !stockViewWatch)}
                                          <div className="pl-6 space-y-2">
-                                            {renderPermissionSwitch("permissions.stock.purchasing.suggest", "Sugerir Preços", "Permite criar sessões de compra e adicionar cotações.", !purchasingViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.purchasing.approve", "Efetivar Compra", "Permite confirmar um preço, atualizando o custo do insumo.", !purchasingViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.purchasing.deleteHistory", "Excluir Histórico de Preços", "Permite apagar registros de preços efetivados.", !purchasingViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.purchasing.suggest" as any, "Sugerir Preços", "Permite criar sessões de compra e adicionar cotações.", !purchasingViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.purchasing.approve" as any, "Efetivar Compra", "Permite confirmar um preço, atualizando o custo do insumo.", !purchasingViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.purchasing.deleteHistory" as any, "Excluir Histórico de Preços", "Permite apagar registros de preços efetivados.", !purchasingViewWatch, true)}
                                          </div>
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Avarias</h4>
-                                        {renderPermissionSwitch("permissions.stock.returns.view", "Visualizar Módulo de Avarias", "Permite ver a tela de avarias.", !stockViewWatch)}
+                                        {renderPermissionSwitch("permissions.stock.returns.view" as any, "Visualizar Módulo de Avarias", "Permite ver a tela de avarias.", !stockViewWatch)}
                                          <div className="pl-6 space-y-2">
-                                            {renderPermissionSwitch("permissions.stock.returns.add", "Abrir Chamados", "Permite criar novos chamados de avaria/devolução.", !returnsViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.returns.updateStatus", "Atualizar Status de Chamados", "Permite avançar o status de um chamado.", !returnsViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.returns.delete", "Excluir Chamados", "Permite apagar chamados de avaria.", !returnsViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.returns.add" as any, "Abrir Chamados", "Permite criar novos chamados de avaria/devolução.", !returnsViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.returns.updateStatus" as any, "Atualizar Status de Chamados", "Permite avançar o status de um chamado.", !returnsViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.returns.delete" as any, "Excluir Chamados", "Permite apagar chamados de avaria.", !returnsViewWatch, true)}
                                          </div>
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Conversões e Listas</h4>
-                                        {renderPermissionSwitch("permissions.stock.conversions.view", "Visualizar Conversor de Medidas", "Permite acessar a ferramenta de conversão.", !stockViewWatch)}
-                                        {renderPermissionSwitch("permissions.stock.predefinedLists.manage", "Gerenciar Listas", "Permite criar, editar e excluir listas de contagem.", !stockViewWatch, true)}
+                                        {renderPermissionSwitch("permissions.stock.conversions.view" as any, "Visualizar Conversor de Medidas", "Permite acessar a ferramenta de conversão.", !stockViewWatch)}
                                     </div>
                                     
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Reposição</h4>
-                                        {renderPermissionSwitch("permissions.reposition.cancel", "Cancelar Atividade", "Permite cancelar uma atividade de reposição em andamento.", !stockViewWatch)}
+                                        {renderPermissionSwitch("permissions.reposition.cancel" as any, "Cancelar Atividade", "Permite cancelar uma atividade de reposição em andamento.", !stockViewWatch)}
                                     </div>
 
                                 </AccordionContent>
@@ -404,36 +403,36 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="pricing">
                                 <AccordionTrigger className="text-lg font-semibold"><DollarSign className="mr-2 h-5 w-5" /> Custo e Preço</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.pricing.view", "Ver Módulo de Custo e Preço")}
-                                    {renderPermissionSwitch("permissions.pricing.simulate", "Simular Custo e Preço", "Permite criar/editar fichas técnicas e simulações.", !pricingViewWatch)}
-                                    {renderPermissionSwitch("permissions.pricing.manageParameters", "Gerenciar Parâmetros de Preço", "Permite editar o % operacional e faixas de lucro.", !pricingViewWatch)}
+                                    {renderModuleToggle("permissions.pricing.view" as any, "Ver Módulo de Custo e Preço")}
+                                    {renderPermissionSwitch("permissions.pricing.simulate" as any, "Simular Custo e Preço", "Permite criar/editar fichas técnicas e simulações.", !pricingViewWatch)}
+                                    {renderPermissionSwitch("permissions.pricing.manageParameters" as any, "Gerenciar Parâmetros de Preço", "Permite editar o % operacional e faixas de lucro.", !pricingViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>
                             
                             <AccordionItem value="settings">
                                 <AccordionTrigger className="text-lg font-semibold"><Settings className="mr-2 h-5 w-5" /> Configurações</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.settings.view", "Ver Módulo de Configurações")}
-                                    {renderPermissionSwitch("permissions.settings.manageUsers", "Gerenciar Usuários", "Permite criar, editar e excluir usuários.", !settingsViewWatch)}
-                                    {renderPermissionSwitch("permissions.settings.impersonate", "Navegar como Outro Usuário", "Permite entrar no sistema como se fosse outro usuário.", !settingsViewWatch)}
-                                    {renderPermissionSwitch("permissions.settings.manageKiosks", "Gerenciar Quiosques", "Permite criar e excluir quiosques.", !settingsViewWatch)}
-                                    {renderPermissionSwitch("permissions.settings.manageProfiles", "Gerenciar Perfis", "Permite criar e editar perfis de permissão.", !settingsViewWatch)}
-                                    {renderPermissionSwitch("permissions.settings.manageLabels", "Gerenciar Etiquetas", "Permite alterar o tamanho padrão das etiquetas.", !settingsViewWatch)}
+                                    {renderModuleToggle("permissions.settings.view" as any, "Ver Módulo de Configurações")}
+                                    {renderPermissionSwitch("permissions.settings.manageUsers" as any, "Gerenciar Usuários", "Permite criar, editar e excluir usuários.", !settingsViewWatch)}
+                                    {renderPermissionSwitch("permissions.settings.impersonate" as any, "Navegar como Outro Usuário", "Permite entrar no sistema como se fosse outro usuário.", !settingsViewWatch)}
+                                    {renderPermissionSwitch("permissions.settings.manageKiosks" as any, "Gerenciar Quiosques", "Permite criar e excluir quiosques.", !settingsViewWatch)}
+                                    {renderPermissionSwitch("permissions.settings.manageProfiles" as any, "Gerenciar Perfis", "Permite criar e editar perfis de permissão.", !settingsViewWatch)}
+                                    {renderPermissionSwitch("permissions.settings.manageLabels" as any, "Gerenciar Etiquetas", "Permite alterar o tamanho padrão das etiquetas.", !settingsViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>
 
                             <AccordionItem value="tasks">
                                 <AccordionTrigger className="text-lg font-semibold"><ListTodo className="mr-2 h-5 w-5" /> Tarefas</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.tasks.view", "Visualizar Tarefas", "Permite visualizar todas as tarefas do sistema.")}
-                                    {renderPermissionSwitch("permissions.tasks.manage", "Gerenciar Tarefas", "Permite criar, atribuir, editar e excluir tarefas.", !tasksViewWatch)}
+                                    {renderModuleToggle("permissions.tasks.view" as any, "Visualizar Tarefas", "Permite visualizar todas as tarefas do sistema.")}
+                                    {renderPermissionSwitch("permissions.tasks.manage" as any, "Gerenciar Tarefas", "Permite criar, atribuir, editar e excluir tarefas.", !tasksViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>
 
                             <AccordionItem value="help">
                                 <AccordionTrigger className="text-lg font-semibold"><BookOpen className="mr-2 h-5 w-5" /> Ajuda</AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.help.view", "Ver Central de Ajuda")}
+                                    {renderModuleToggle("permissions.help.view" as any, "Ver Central de Ajuda")}
                                 </AccordionContent>
                             </AccordionItem>
                             </Accordion>

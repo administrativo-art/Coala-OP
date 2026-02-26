@@ -9,13 +9,13 @@ import dynamic from 'next/dynamic';
 
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
-import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot, type Product } from '@/types';
+import { type RepositionActivity, type RepositionItem, type Product } from '@/types';
 import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Inbox, Truck, CheckSquare, Undo2, BadgeCheck, Download, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal, ArrowRight, UserCheck } from "lucide-react";
+import { Inbox, Truck, CheckSquare, Undo2, BadgeCheck, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal, ArrowRight, UserCheck } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SeparationListDocument } from '@/components/pdf/SeparationListDocument';
 import { ResolveDivergenceModal } from '@/components/resolve-divergence-modal';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -207,8 +208,6 @@ function RepositionManagement() {
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
   const [activityToFinalize, setActivityToFinalize] = useState<RepositionActivity | null>(null);
   const [activityToResolve, setActivityToResolve] = useState<RepositionActivity | null>(null);
-  const [activityToReopenDispatch, setActivityToReopenDispatch] = useState<RepositionActivity | null>(null);
-  const [activityToReopenAudit, setActivityToReopenAudit] = useState<RepositionActivity | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
   
   const canRevertSteps = permissions?.reposition?.cancel || false;
@@ -247,8 +246,8 @@ function RepositionManagement() {
                   onAudit={setActivityToAudit}
                   onFinalize={(a) => a.status === 'Recebido com divergência' ? setActivityToResolve(a) : setActivityToFinalize(a)}
                   onCancel={setActivityToCancel}
-                  onReopenDispatch={setActivityToReopenDispatch}
-                  onReopenAudit={setActivityToReopenAudit}
+                  onReopenDispatch={(a) => updateRepositionActivity(a.id, { status: 'Aguardando despacho' })}
+                  onReopenAudit={(a) => updateRepositionActivity(a.id, { status: 'Aguardando recebimento' })}
                   canRevert={canRevertSteps}
                   products={products}
               />
@@ -265,7 +264,6 @@ function RepositionManagement() {
 
 function RepositionHistory() {
   const { activities, loading } = useReposition();
-  const { products, loading: productsLoading } = useProducts();
   const [statusFilter, setStatusFilter] = useState<'all' | 'Concluído' | 'Cancelada'>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>((new Date().getMonth() + 1).toString());
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
@@ -280,7 +278,7 @@ function RepositionHistory() {
     }).sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
   }, [activities, statusFilter, selectedMonth, selectedYear]);
 
-  if (loading || productsLoading) return <Skeleton className="h-64 w-full" />;
+  if (loading) return <Skeleton className="h-64 w-full" />;
   
   return (
     <Card>
