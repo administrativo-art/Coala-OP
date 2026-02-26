@@ -2,9 +2,9 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type Profile, defaultAdminPermissions, defaultUserPermissions, defaultGuestPermissions } from '@/types';
+import { type Profile, defaultAdminPermissions, defaultUserPermissions } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, query, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, query } from 'firebase/firestore';
 
 export interface ProfilesContextType {
   profiles: Profile[];
@@ -57,10 +57,6 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         const templatePerms = defaultAdminPermissions;
         let needsUpdate = false;
         
-        /**
-         * Defensive recursive update for the admin profile permissions.
-         * Ensures newly added permissions in the code are synced to the admin profile in the database.
-         */
         const deepUpdateRecursive = (target: any, template: any) => {
             if (!template || typeof template !== 'object' || Array.isArray(template)) return;
             if (!target || typeof target !== 'object' || Array.isArray(target)) return;
@@ -73,7 +69,6 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
                     target[key] = JSON.parse(JSON.stringify(templateValue));
                     needsUpdate = true;
                 } else if (templateValue && typeof templateValue === 'object' && !Array.isArray(templateValue)) {
-                    // Check if target is also an object, if not, overwrite it with the template object
                     if (!targetValue || typeof targetValue !== 'object' || Array.isArray(targetValue)) {
                         target[key] = JSON.parse(JSON.stringify(templateValue));
                         needsUpdate = true;
