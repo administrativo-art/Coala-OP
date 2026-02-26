@@ -98,7 +98,6 @@ interface DocumentProps {
 }
 
 export const SeparationListDocument = ({ activity, products }: DocumentProps) => {
-    // Guard: se activity for inválido, retorna documento vazio
     if (!activity || typeof activity !== 'object') {
         return <Document><Page size="A4"><Text>Dados indisponíveis</Text></Page></Document>;
     }
@@ -106,11 +105,9 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
     const safeProducts = Array.isArray(products) ? products.filter(Boolean) : [];
     const productMap = new Map(safeProducts.map(p => [p.id, p]));
 
-    // Guard: items pode ser undefined/null quando Firestore está offline
     const safeItems = Array.isArray(activity.items) ? activity.items.filter(Boolean) : [];
 
     const allItems = safeItems.flatMap(item => {
-        // Guard: suggestedLots pode ser undefined
         const safeLots = Array.isArray(item?.suggestedLots) ? item.suggestedLots.filter(Boolean) : [];
 
         return safeLots.map(lot => {
@@ -150,10 +147,9 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
         }).filter(Boolean);
     });
 
-    // Guard: ID e dados do usuário
+    const requestedByName = activity.requestedBy?.username ?? 'N/A';
     const activityIdRaw = activity.id;
     const activityId = typeof activityIdRaw === 'string' ? activityIdRaw : '------';
-    const requestedByName = activity.requestedBy?.username ?? 'N/A';
     const originName = activity.kioskOriginName ?? 'N/A';
     const destinationName = activity.kioskDestinationName ?? 'N/A';
     const createdAtDisplay = activity.createdAt
