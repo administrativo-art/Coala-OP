@@ -5,7 +5,7 @@ import React, { createContext, useState, useEffect, useCallback, useMemo, useRef
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth } from '@/lib/firebase';
-import { collection, onSnapshot, doc, query, getDoc, setDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, query, getDoc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
@@ -134,16 +134,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!target || typeof target !== 'object' || Array.isArray(target)) return;
 
             Object.keys(source).forEach(key => {
-                if (target && Object.prototype.hasOwnProperty.call(target, key)) {
-                    const sourceVal = source[key];
-                    const targetVal = target[key];
+                const sourceVal = source[key];
+                const targetVal = target[key];
 
-                    if (sourceVal !== null && typeof sourceVal === 'object' && !Array.isArray(sourceVal) &&
-                        targetVal !== null && typeof targetVal === 'object' && !Array.isArray(targetVal)) {
-                        mergeRecursive(targetVal, sourceVal);
-                    } else if (sourceVal !== undefined && sourceVal !== null) {
-                        target[key] = sourceVal;
-                    }
+                if (sourceVal !== null && typeof sourceVal === 'object' && !Array.isArray(sourceVal) &&
+                    targetVal !== null && typeof targetVal === 'object' && !Array.isArray(targetVal)) {
+                    mergeRecursive(targetVal, sourceVal);
+                } else if (sourceVal !== undefined && sourceVal !== null) {
+                    target[key] = sourceVal;
                 }
             });
         };
