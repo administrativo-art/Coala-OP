@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -14,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Inbox, Truck, CheckSquare, Undo2, BadgeCheck, Ban, History, ArrowLeft, Package, FileText, MoreHorizontal, ArrowRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
