@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribeUsers();
   }, [profilesLoading]);
 
-  const mergeRecursive = (target: Record<string, any>, source: Record<string, any>) => {
+  const mergeRecursive = useCallback((target: Record<string, any>, source: Record<string, any>) => {
     if (!source || typeof source !== 'object' || Array.isArray(source)) return;
     if (!target || typeof target !== 'object' || Array.isArray(target)) return;
 
@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         target[key] = sourceValue;
       }
     });
-  };
+  }, []);
 
   useEffect(() => {
     if (loading || !appUser || profilesLoading || !profiles || !adminProfileId) {
@@ -151,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     setPermissions(finalPermissions);
-  }, [appUser, profiles, loading, profilesLoading, adminProfileId]);
+  }, [appUser, profiles, loading, profilesLoading, adminProfileId, mergeRecursive]);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
