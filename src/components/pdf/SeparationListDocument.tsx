@@ -74,7 +74,9 @@ const styles = StyleSheet.create({
         paddingTop: 20,
     },
     signatureLine: {
-        borderTop: '1px solid #333',
+        borderTopWidth: 1,
+        borderTopColor: '#333',
+        borderTopStyle: 'solid',
         width: '50%',
         marginBottom: 5,
     },
@@ -103,7 +105,7 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
     const safeProducts = Array.isArray(products) ? products.filter(Boolean) : [];
     const productMap = new Map(safeProducts.map(p => [p.id, p]));
 
-    // Guard: items pode ser undefined/null quando Firestore está offline ou carregando
+    // Guard: items pode ser undefined/null quando Firestore está offline
     const safeItems = Array.isArray(activity.items) ? activity.items.filter(Boolean) : [];
 
     const allItems = safeItems.flatMap(item => {
@@ -147,9 +149,10 @@ export const SeparationListDocument = ({ activity, products }: DocumentProps) =>
         }).filter(Boolean);
     });
 
-    // Guards para campos de cabeçalho
+    // Guard: ID e dados do usuário
+    const activityIdRaw = activity.id;
+    const activityId = typeof activityIdRaw === 'string' ? activityIdRaw : '------';
     const requestedByName = activity.requestedBy?.username ?? 'N/A';
-    const activityId = activity.id ?? '------';
     const originName = activity.kioskOriginName ?? 'N/A';
     const destinationName = activity.kioskDestinationName ?? 'N/A';
     const createdAtDisplay = activity.createdAt
