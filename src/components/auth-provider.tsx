@@ -129,21 +129,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profilePermissions = userProfile.permissions;
         if (!profilePermissions || typeof profilePermissions !== 'object') return;
 
-        // Definitive recursive merge to prevent 'hasOwnProperty' of undefined/null
+        /**
+         * Recursively and safely merges permissions.
+         * Explicitly checks for object types and keys to prevent crashes.
+         */
         const mergeRecursive = (target: any, source: any) => {
             if (!source || typeof source !== 'object' || Array.isArray(source)) return;
             if (!target || typeof target !== 'object' || Array.isArray(target)) return;
 
             Object.keys(source).forEach(key => {
-                // Verify target is an object and has the key from the template
+                // Verify target has the key from the template to prevent rogue properties
                 if (target && Object.prototype.hasOwnProperty.call(target, key)) {
                     const sourceVal = source[key];
                     const targetVal = target[key];
 
+                    // If both are objects (and not null/arrays), recurse
                     if (sourceVal !== null && typeof sourceVal === 'object' && !Array.isArray(sourceVal) &&
                         targetVal !== null && typeof targetVal === 'object' && !Array.isArray(targetVal)) {
                         mergeRecursive(targetVal, sourceVal);
                     } else if (sourceVal !== undefined && sourceVal !== null) {
+                        // Otherwise, copy value if it's valid
                         target[key] = sourceVal;
                     }
                 }
