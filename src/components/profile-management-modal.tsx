@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -25,7 +24,7 @@ import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
-const permissionsSchema = z.object({}).passthrough(); // Looser validation
+const permissionsSchema = z.object({}).passthrough(); 
 
 const profileSchema = z.object({
   name: z.string().min(3, 'O nome do perfil deve ter pelo menos 3 caracteres.'),
@@ -117,31 +116,37 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const handleEdit = (profile: Profile) => {
     setEditingProfile(profile);
     
-    // Robust merge function instead of direct deepMerge
-    const deepMerge = (target: any, source: any): any => {
-      if (!source || typeof source !== 'object') return target;
-      const output = { ...target };
-      
-      Object.keys(source).forEach(key => {
-        if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-          if (!(key in target)) {
-            output[key] = source[key];
-          } else {
-            output[key] = deepMerge(target[key], source[key]);
-          }
-        } else if (source[key] !== undefined && source[key] !== null) {
-          output[key] = source[key];
-        }
-      });
-      
-      return output;
+    const mergeRecursive = (target: any, source: any) => {
+        if (!source || typeof source !== 'object' || Array.isArray(source)) return;
+        if (!target || typeof target !== 'object' || Array.isArray(target)) return;
+
+        Object.keys(source).forEach(key => {
+            const sourceValue = source[key];
+            const targetValue = target[key];
+
+            if (
+                sourceValue !== null &&
+                sourceValue !== undefined &&
+                typeof sourceValue === 'object' &&
+                !Array.isArray(sourceValue) &&
+                targetValue !== null &&
+                targetValue !== undefined &&
+                typeof targetValue === 'object' &&
+                !Array.isArray(targetValue)
+            ) {
+                mergeRecursive(targetValue, sourceValue);
+            } else if (sourceValue !== undefined && sourceValue !== null) {
+                target[key] = sourceValue;
+            }
+        });
     };
     
-    const mergedPermissions = deepMerge(defaultGuestPermissions, profile.permissions || {});
+    const initialPermissions = JSON.parse(JSON.stringify(defaultGuestPermissions));
+    mergeRecursive(initialPermissions, profile.permissions || {});
 
     form.reset({
       name: profile.name,
-      permissions: mergedPermissions,
+      permissions: initialPermissions,
     });
     setShowForm(true);
   };

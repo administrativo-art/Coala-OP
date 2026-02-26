@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -121,16 +120,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    // Recursive defensive merge function
     const mergeRecursive = (target: any, source: any) => {
-        if (!source || typeof source !== 'object') return;
-        
+        if (!source || typeof source !== 'object' || Array.isArray(source)) return;
+        if (!target || typeof target !== 'object' || Array.isArray(target)) return;
+
         Object.keys(source).forEach(key => {
             const sourceValue = source[key];
             const targetValue = target[key];
 
-            if (sourceValue !== null && typeof sourceValue === 'object' && !Array.isArray(sourceValue) &&
-                targetValue !== null && typeof targetValue === 'object' && !Array.isArray(targetValue)) {
+            if (
+                sourceValue !== null &&
+                sourceValue !== undefined &&
+                typeof sourceValue === 'object' &&
+                !Array.isArray(sourceValue) &&
+                targetValue !== null &&
+                targetValue !== undefined &&
+                typeof targetValue === 'object' &&
+                !Array.isArray(targetValue)
+            ) {
                 mergeRecursive(targetValue, sourceValue);
             } else if (sourceValue !== undefined && sourceValue !== null) {
                 target[key] = sourceValue;
@@ -180,7 +187,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userDocRef = doc(db, 'users', newUser.uid);
       await setDoc(userDocRef, { ...userData, email });
       
-      // Se não for o admin principal, o fluxo de logout/login é necessário para manter a sessão correta
       if (adminCredentials.current && auth.currentUser?.email !== 'administrativo@coalashakes.com') {
          await signInWithEmailAndPassword(auth, adminCredentials.current.email, adminCredentials.current.password);
       }
