@@ -82,7 +82,8 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
   const updatePricingParameters = useCallback(async (params: PricingParameters) => {
     const settingsRef = doc(db, 'settings', 'company');
     try {
-        await updateDoc(settingsRef, { 'pricingParameters': params });
+        // Use setDoc with merge: true to ensure the document exists and fields are correctly updated
+        await setDoc(settingsRef, { 'pricingParameters': params }, { merge: true });
     } catch (error) {
         console.error("Error updating pricing parameters:", error);
         throw error;

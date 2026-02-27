@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -57,16 +58,20 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
 
   const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
 
+  // Reset form only when the modal is opened
   useEffect(() => {
     if (open && pricingParameters) {
       form.reset({
-        averageTaxPercentage: pricingParameters.averageTaxPercentage || 0,
-        averageCardFeePercentage: pricingParameters.averageCardFeePercentage || 0,
-        profitGoals: pricingParameters.profitGoals || [45, 50, 55, 60],
+        averageTaxPercentage: pricingParameters.averageTaxPercentage ?? 0,
+        averageCardFeePercentage: pricingParameters.averageCardFeePercentage ?? 0,
+        profitGoals: pricingParameters.profitGoals || [45, 50, 55, 60, 65],
         profitRanges: pricingParameters.profitRanges || [],
       });
     }
-  }, [open, pricingParameters, form]);
+    // We intentionally only run this when 'open' changes to avoid overwriting 
+    // user edits if the background data updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const onSubmit = (values: ParametersFormValues) => {
     const sortedGoals = [...values.profitGoals].sort((a,b) => a - b);
@@ -134,7 +139,15 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                           <FormItem>
                             <FormLabel>Imposto médio por mercadoria (%)</FormLabel>
                             <div className="relative w-32">
-                              <Input type="number" className="pr-8" {...field} />
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  className="pr-8" 
+                                  {...field} 
+                                  value={field.value ?? ''}
+                                  onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                                />
+                              </FormControl>
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                             </div>
                             <FormMessage />
@@ -148,7 +161,15 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                           <FormItem>
                             <FormLabel>Taxa média de transação (%)</FormLabel>
                             <div className="relative w-32">
-                              <Input type="number" className="pr-8" {...field} />
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  className="pr-8" 
+                                  {...field} 
+                                  value={field.value ?? ''}
+                                  onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                                />
+                              </FormControl>
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                             </div>
                             <FormMessage />
