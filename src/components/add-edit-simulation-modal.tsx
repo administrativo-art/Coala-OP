@@ -433,6 +433,11 @@ useEffect(() => {
   const simulatedContributionMargin = simulatedNetRevenue - cmv;
   const simulatedContributionMarginPercentage = effectiveSimulatedPrice > 0 ? (simulatedContributionMargin / effectiveSimulatedPrice) * 100 : 0;
 
+  const allUniqueUnits = useMemo(() => {
+    const all = unitCategories.flatMap(cat => getUnitsForCategory(cat as UnitCategory));
+    return Array.from(new Set(all));
+  }, []);
+
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -697,12 +702,8 @@ useEffect(() => {
                                                               </SelectTrigger>
                                                           </FormControl>
                                                           <SelectContent>
-                                                              {unitCategories.map(cat => (
-                                                                  <React.Fragment key={cat}>
-                                                                      {getUnitsForCategory(cat as UnitCategory).map(unit => (
-                                                                          <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                                                                      ))}
-                                                                  </React.Fragment>
+                                                              {allUniqueUnits.map(unit => (
+                                                                  <SelectItem key={unit} value={unit}>{unit}</SelectItem>
                                                               ))}
                                                           </SelectContent>
                                                       </Select>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo, useState, useRef } from 'react';
@@ -22,8 +21,8 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
 import dynamic from 'next/dynamic';
 import { Separator } from './ui/separator';
-import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { units, unitCategories, type UnitCategory, getUnitsForCategory } from '@/lib/conversion';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 const PhotoCaptureModal = dynamic(
@@ -391,8 +390,9 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const allUnits = useMemo(() => {
-        return unitCategories.flatMap(category => Object.keys(units[category]));
+    const allUniqueUnits = useMemo(() => {
+        const all = unitCategories.flatMap(category => Object.keys(units[category]));
+        return Array.from(new Set(all));
     }, []);
 
     const handlePhotoCaptured = async (dataUrl: string) => {
@@ -438,7 +438,15 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
                         </FormItem>
                     )}/>
                      <FormField control={form.control} name={`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.unit`} render={({ field }) => (
-                        <FormItem><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger></FormControl><SelectContent>{allUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                        <FormItem>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    {allUniqueUnits.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
                     )}/>
                 </div>
             )}
@@ -461,5 +469,3 @@ function EtapaExtras({ form, phaseIndex, etapaIndex }: { form: any, phaseIndex: 
         </>
     )
 }
-
-    

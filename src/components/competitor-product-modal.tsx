@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
@@ -59,8 +58,9 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     }
   });
   
-  const allUnits = useMemo(() => {
-    return unitCategories.flatMap(category => Object.keys(units[category]));
+  const allUniqueUnits = useMemo(() => {
+    const all = unitCategories.flatMap(category => Object.keys(units[category]));
+    return Array.from(new Set(all));
   }, []);
 
 
@@ -265,7 +265,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                                 </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                    {allUnits.map(unit => (
+                                    {allUniqueUnits.map(unit => (
                                         <SelectItem key={unit} value={unit}>{unit}</SelectItem>
                                     ))}
                                 </SelectContent>
@@ -356,7 +356,7 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
              </div>
             </ScrollArea>
              <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Cancelar</Button>
+              <Button type="button" variant="outline" onClose={onClose} disabled={isSubmitting}>Cancelar</Button>
               <Button type="button" variant="secondary" onClick={form.handleSubmit(handleSaveAndClose)} disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar e fechar
