@@ -10,7 +10,7 @@ import Image from 'next/image';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
-import { Video, Info, Utensils, Award, Clock, Download, FileText } from 'lucide-react';
+import { Video, Info, Utensils, Award, Clock, Download, FileText, Check } from 'lucide-react';
 import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
 
 const PDFDownloadLink = dynamic(
