@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -238,18 +236,25 @@ export function PricingSimulator() {
     };
 
     const handleExportGerencialCsv = () => {
-        const dataForCsv = filteredSimulations.map(sim => ({
-            'Mercadoria': sim.name,
-            'SKU': sim.ppo?.sku || '',
-            'Preço Venda': sim.salePrice,
-            'CMV': sim.totalCmv,
-            'Margem Contrib. %': sim.profitPercentage,
-            'Markup': sim.markup,
-            'Meta Lucro %': sim.profitGoal || '',
-            'NCM': sim.ppo?.ncm || '',
-            'CEST': sim.ppo?.cest || '',
-            'CFOP': sim.ppo?.cfop || '',
-        }));
+        const dataForCsv = filteredSimulations.map(sim => {
+            const grossMarginValue = sim.salePrice - sim.totalCmv;
+            const grossMarginPercentage = sim.salePrice > 0 ? (grossMarginValue / sim.salePrice) * 100 : 0;
+
+            return {
+                'Mercadoria': sim.name,
+                'SKU': sim.ppo?.sku || '',
+                'Preço Venda': sim.salePrice,
+                'CMV': sim.totalCmv,
+                'Margem Bruta (R$)': grossMarginValue,
+                'Margem Bruta (%)': grossMarginPercentage,
+                'Margem Contrib. %': sim.profitPercentage,
+                'Markup': sim.markup,
+                'Meta Lucro %': sim.profitGoal || '',
+                'NCM': sim.ppo?.ncm || '',
+                'CEST': sim.ppo?.cest || '',
+                'CFOP': sim.ppo?.cfop || '',
+            };
+        });
 
         const csv = Papa.unparse(dataForCsv);
         const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
@@ -263,19 +268,26 @@ export function PricingSimulator() {
     };
     
     const handleExportXlsx = () => {
-        const dataForSheet = filteredSimulations.map(sim => ({
-            'Mercadoria': sim.name,
-            'SKU': sim.ppo?.sku || '',
-            'Preço Venda': sim.salePrice,
-            'CMV': sim.totalCmv,
-            'M. Contrib (R$)': sim.profitValue,
-            'M Contrib (%)': sim.profitPercentage,
-            'Markup': sim.markup,
-            'Meta Lucro %': sim.profitGoal || '',
-            'NCM': sim.ppo?.ncm || '',
-            'CEST': sim.ppo?.cest || '',
-            'CFOP': sim.ppo?.cfop || '',
-        }));
+        const dataForSheet = filteredSimulations.map(sim => {
+            const grossMarginValue = sim.salePrice - sim.totalCmv;
+            const grossMarginPercentage = sim.salePrice > 0 ? (grossMarginValue / sim.salePrice) * 100 : 0;
+
+            return {
+                'Mercadoria': sim.name,
+                'SKU': sim.ppo?.sku || '',
+                'Preço Venda': sim.salePrice,
+                'CMV': sim.totalCmv,
+                'Margem Bruta (R$)': grossMarginValue,
+                'Margem Bruta (%)': grossMarginPercentage,
+                'M. Contrib (R$)': sim.profitValue,
+                'M Contrib (%)': sim.profitPercentage,
+                'Markup': sim.markup,
+                'Meta Lucro %': sim.profitGoal || '',
+                'NCM': sim.ppo?.ncm || '',
+                'CEST': sim.ppo?.cest || '',
+                'CFOP': sim.ppo?.cfop || '',
+            };
+        });
 
         const worksheet = XLSX.utils.json_to_sheet(dataForSheet);
         const workbook = XLSX.utils.book_new();
@@ -286,15 +298,15 @@ export function PricingSimulator() {
             const col = cellAddress.replace(/[0-9]/g, '');
             const row = parseInt(cellAddress.replace(/[A-Z]/g, ''));
             if (row > 1) { 
-                if (['C', 'D', 'E'].includes(col)) {
+                if (['C', 'D', 'E', 'G'].includes(col)) {
                     worksheet[cellAddress].z = 'R$ #,##0.00';
                 }
-                if (['F', 'H'].includes(col)) { 
+                if (['F', 'H', 'J'].includes(col)) { 
                      worksheet[cellAddress].t = 'n';
                      worksheet[cellAddress].v = worksheet[cellAddress].v / 100;
                      worksheet[cellAddress].z = '0.00%';
                 }
-                 if (['G'].includes(col)) {
+                 if (['I'].includes(col)) {
                     worksheet[cellAddress].z = '0.00"x"';
                 }
             }

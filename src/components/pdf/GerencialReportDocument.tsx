@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -9,10 +8,10 @@ import { format } from 'date-fns';
 const styles = StyleSheet.create({
   page: {
     fontFamily: 'Helvetica',
-    fontSize: 9,
+    fontSize: 8,
     paddingTop: 30,
-    paddingLeft: 30,
-    paddingRight: 30,
+    paddingLeft: 20,
+    paddingRight: 20,
     paddingBottom: 50,
   },
   header: {
@@ -58,7 +57,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   tableCell: {
-    fontSize: 8,
+    fontSize: 7,
   },
   footer: {
     position: 'absolute',
@@ -71,6 +70,9 @@ const styles = StyleSheet.create({
   },
   textRight: {
       textAlign: 'right',
+  },
+  textCenter: {
+      textAlign: 'center',
   }
 });
 
@@ -91,28 +93,37 @@ export const GerencialReportDocument = ({ data }: DocumentProps) => (
       
       <View style={styles.table}>
         <View style={styles.tableRow}>
-          <View style={[styles.tableColHeader, { width: '25%' }]}><Text style={styles.tableCell}>Mercadoria</Text></View>
-          <View style={[styles.tableColHeader, { width: '8%' }]}><Text style={styles.tableCell}>SKU</Text></View>
-          <View style={[styles.tableColHeader, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>Preço Venda</Text></View>
-          <View style={[styles.tableColHeader, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>CMV</Text></View>
-          <View style={[styles.tableColHeader, { width: '12%', ...styles.textRight }]}><Text style={styles.tableCell}>M. Contrib (R$)</Text></View>
-          <View style={[styles.tableColHeader, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>M. Contrib (%)</Text></View>
-          <View style={[styles.tableColHeader, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>Markup</Text></View>
-          <View style={[styles.tableColHeader, { width: '15%', ...styles.textRight }]}><Text style={styles.tableCell}>Meta Lucro (%)</Text></View>
+          <View style={[styles.tableColHeader, { width: '20%' }]}><Text style={styles.tableCell}>Mercadoria</Text></View>
+          <View style={[styles.tableColHeader, { width: '7%' }]}><Text style={styles.tableCell}>SKU</Text></View>
+          <View style={[styles.tableColHeader, { width: '8%', ...styles.textRight }]}><Text style={styles.tableCell}>Preço Venda</Text></View>
+          <View style={[styles.tableColHeader, { width: '8%', ...styles.textRight }]}><Text style={styles.tableCell}>CMV</Text></View>
+          <View style={[styles.tableColHeader, { width: '9%', ...styles.textRight }]}><Text style={styles.tableCell}>M. Bruta (R$)</Text></View>
+          <View style={[styles.tableColHeader, { width: '8%', ...styles.textRight }]}><Text style={styles.tableCell}>M. Bruta (%)</Text></View>
+          <View style={[styles.tableColHeader, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>M. Contrib (R$)</Text></View>
+          <View style={[styles.tableColHeader, { width: '9%', ...styles.textRight }]}><Text style={styles.tableCell}>M. Contrib (%)</Text></View>
+          <View style={[styles.tableColHeader, { width: '8%', ...styles.textRight }]}><Text style={styles.tableCell}>Markup</Text></View>
+          <View style={[styles.tableColHeader, { width: '13%', ...styles.textRight }]}><Text style={styles.tableCell}>Meta Lucro (%)</Text></View>
         </View>
 
-        {data.map((sim, index) => (
-          <View style={styles.tableRow} key={sim.id} wrap={false}>
-            <View style={[styles.tableCol, { width: '25%' }]}><Text style={styles.tableCell}>{sim.name}</Text></View>
-            <View style={[styles.tableCol, { width: '8%' }]}><Text style={styles.tableCell}>{sim.ppo?.sku || 'N/A'}</Text></View>
-            <View style={[styles.tableCol, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>{formatCurrency(sim.salePrice)}</Text></View>
-            <View style={[styles.tableCol, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>{formatCurrency(sim.totalCmv)}</Text></View>
-            <View style={[styles.tableCol, { width: '12%', ...styles.textRight }]}><Text style={styles.tableCell}>{formatCurrency(sim.profitValue)}</Text></View>
-            <View style={[styles.tableCol, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>{sim.profitPercentage.toFixed(2)}%</Text></View>
-            <View style={[styles.tableCol, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>{sim.markup.toFixed(2)}x</Text></View>
-            <View style={[styles.tableCol, { width: '15%', ...styles.textRight }]}><Text style={styles.tableCell}>{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</Text></View>
-          </View>
-        ))}
+        {data.map((sim, index) => {
+          const grossMarginValue = sim.salePrice - sim.totalCmv;
+          const grossMarginPercentage = sim.salePrice > 0 ? (grossMarginValue / sim.salePrice) * 100 : 0;
+
+          return (
+            <View style={styles.tableRow} key={sim.id} wrap={false}>
+              <View style={[styles.tableCol, { width: '20%' }]}><Text style={styles.tableCell}>{sim.name}</Text></View>
+              <View style={[styles.tableCol, { width: '7%' }]}><Text style={styles.tableCell}>{sim.ppo?.sku || 'N/A'}</Text></View>
+              <View style={[styles.tableCol, { width: '8%', ...styles.textRight }]}><Text style={styles.tableCell}>{formatCurrency(sim.salePrice)}</Text></View>
+              <View style={[styles.tableCol, { width: '8%', ...styles.textRight }]}><Text style={styles.tableCell}>{formatCurrency(sim.totalCmv)}</Text></View>
+              <View style={[styles.tableCol, { width: '9%', ...styles.textRight }]}><Text style={styles.tableCell}>{formatCurrency(grossMarginValue)}</Text></View>
+              <View style={[styles.tableCol, { width: '8%', ...styles.textRight }]}><Text style={styles.tableCell}>{grossMarginPercentage.toFixed(2)}%</Text></View>
+              <View style={[styles.tableCol, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>{formatCurrency(sim.profitValue)}</Text></View>
+              <View style={[styles.tableCol, { width: '9%', ...styles.textRight }]}><Text style={styles.tableCell}>{sim.profitPercentage.toFixed(2)}%</Text></View>
+              <View style={[styles.tableCol, { width: '8%', ...styles.textRight }]}><Text style={styles.tableCell}>{sim.markup.toFixed(2)}x</Text></View>
+              <View style={[styles.tableCol, { width: '13%', ...styles.textRight }]}><Text style={styles.tableCell}>{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</Text></View>
+            </View>
+          );
+        })}
       </View>
 
       <Text style={styles.footer} render={({ pageNumber, totalPages }) => (
