@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -158,7 +157,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">{kpis.itemsMeetingGoal?.length || 0}</div>
-                         <p className="text-xs text-muted-foreground">Mercadorias que atendem ou superam a meta de lucro</p>
+                         <p className="text-xs text-muted-foreground">Mercadorias que atendem ou superam a meta de margem bruta</p>
                     </CardContent>
                 </Card>
                  <Card>
@@ -170,7 +169,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-orange-500">{kpis.itemsBelowGoal?.length || 0}</div>
-                        <p className="text-xs text-muted-foreground">Mercadorias abaixo da meta de lucro definida</p>
+                        <p className="text-xs text-muted-foreground">Mercadorias abaixo da meta de margem bruta definida</p>
                     </CardContent>
                 </Card>
                  <Card>
@@ -258,7 +257,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                                 <YAxis unit="%" />
                                 <Tooltip formatter={(value: number, name, props) => [`${value.toFixed(2)}%`, props.payload.name]} cursor={{ fill: 'hsl(var(--muted))' }}/>
                                 {activeFilters.profitGoalFilter !== 'all' && (
-                                    <ReferenceLine y={Number(activeFilters.profitGoalFilter)} label={{ value: `Meta ${activeFilters.profitGoalFilter}%`, position: 'insideTopRight' }} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
+                                    <ReferenceLine y={Number(activeFilters.profitGoalFilter)} label={{ value: `Meta M.B. ${activeFilters.profitGoalFilter}%`, position: 'insideTopRight' }} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
                                 )}
                                 <Bar dataKey="Lucro %" radius={[4, 4, 0, 0]}>
                                     {profitChartData.map((entry, index) => (

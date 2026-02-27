@@ -249,7 +249,7 @@ export function PricingSimulator() {
                 'Margem Bruta (%)': grossMarginPercentage,
                 'Margem Contrib. %': sim.profitPercentage,
                 'Markup': sim.markup,
-                'Meta Lucro %': sim.profitGoal || '',
+                'Meta margem bruta %': sim.profitGoal || '',
                 'NCM': sim.ppo?.ncm || '',
                 'CEST': sim.ppo?.cest || '',
                 'CFOP': sim.ppo?.cfop || '',
@@ -282,7 +282,7 @@ export function PricingSimulator() {
                 'M. Contrib (R$)': sim.profitValue,
                 'M Contrib (%)': sim.profitPercentage,
                 'Markup': sim.markup,
-                'Meta Lucro %': sim.profitGoal || '',
+                'Meta margem bruta %': sim.profitGoal || '',
                 'NCM': sim.ppo?.ncm || '',
                 'CEST': sim.ppo?.cest || '',
                 'CFOP': sim.ppo?.cfop || '',
@@ -515,7 +515,7 @@ export function PricingSimulator() {
                                         <p>{sim.markup.toFixed(1)}x</p>
                                     </div>
                                     <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">Meta</p>
+                                        <p className="text-xs text-muted-foreground">Meta M.B.</p>
                                         <p className="font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</p>
                                     </div>
                                     <div className="text-center">

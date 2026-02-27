@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo, useState, useRef } from 'react';
@@ -810,7 +809,7 @@ useEffect(() => {
                   </div>
                    <FormField control={form.control} name="profitGoal" render={({ field }) => (
                         <div className="flex justify-between items-center p-4 border rounded-lg">
-                            <FormLabel>Meta de Margem</FormLabel>
+                            <FormLabel>Meta de margem bruta</FormLabel>
                             <FormControl>
                                 <Select onValueChange={(v) => field.onChange(v === 'none' ? null : Number(v))} value={String(field.value ?? 'none')}>
                                     <SelectTrigger className="w-32">
@@ -838,7 +837,7 @@ useEffect(() => {
                               <Input id="sim-price" type="number" placeholder="Ex: 19.90" value={simulatedPrice ?? ''} onChange={handleSimulatedPriceChange} />
                           </div>
                           <div className="space-y-1">
-                              <Label htmlFor="sim-goal">Simular Meta (%)</Label>
+                              <Label htmlFor="sim-goal">Simular Margem Bruta (%)</Label>
                               <Input id="sim-goal" type="number" placeholder="Ex: 65" value={simulatedProfitGoal ?? ''} onChange={handleSimulatedGoalChange} />
                           </div>
                       </div>

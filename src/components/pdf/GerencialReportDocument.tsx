@@ -102,7 +102,7 @@ export const GerencialReportDocument = ({ data }: DocumentProps) => (
           <View style={[styles.tableColHeader, { width: '10%', ...styles.textRight }]}><Text style={styles.tableCell}>M. Contrib (R$)</Text></View>
           <View style={[styles.tableColHeader, { width: '9%', ...styles.textRight }]}><Text style={styles.tableCell}>M. Contrib (%)</Text></View>
           <View style={[styles.tableColHeader, { width: '8%', ...styles.textRight }]}><Text style={styles.tableCell}>Markup</Text></View>
-          <View style={[styles.tableColHeader, { width: '13%', ...styles.textRight }]}><Text style={styles.tableCell}>Meta Lucro (%)</Text></View>
+          <View style={[styles.tableColHeader, { width: '13%', ...styles.textRight }]}><Text style={styles.tableCell}>Meta margem bruta %</Text></View>
         </View>
 
         {data.map((sim, index) => {

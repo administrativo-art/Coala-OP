@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -27,7 +26,9 @@ interface SimulationItemsModalProps {
 
 const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const isNegative = value < 0;
+    const formatted = Math.abs(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return isNegative ? `- ${formatted}` : formatted;
 };
 
 export function SimulationItemsModal({ open, onOpenChange, title, items }: SimulationItemsModalProps) {
@@ -48,20 +49,21 @@ export function SimulationItemsModal({ open, onOpenChange, title, items }: Simul
                     <TableRow>
                         <TableHead>Mercadoria</TableHead>
                         <TableHead className="text-right">Preço de Venda</TableHead>
-                        <TableHead className="text-right">Meta de Lucro</TableHead>
-                        <TableHead className="text-right">Lucro Atual</TableHead>
+                        <TableHead className="text-right">Meta margem bruta</TableHead>
+                        <TableHead className="text-right">Margem Bruta %</TableHead>
                         <TableHead className="text-center">Status</TableHead>
                     </TableRow>
                     </TableHeader>
                     <TableBody>
                         {items.length > 0 ? items.map(item => {
-                            const meetsGoal = item.profitGoal !== undefined && item.profitGoal !== null && item.profitPercentage >= item.profitGoal;
+                            const grossMarginPercentage = item.salePrice > 0 ? ((item.salePrice - item.totalCmv) / item.salePrice) * 100 : 0;
+                            const meetsGoal = item.profitGoal !== undefined && item.profitGoal !== null && grossMarginPercentage >= item.profitGoal;
                             return (
                                 <TableRow key={item.id}>
                                     <TableCell className="font-medium">{item.name}</TableCell>
                                     <TableCell className="text-right">{formatCurrency(item.salePrice)}</TableCell>
                                     <TableCell className="text-right">{item.profitGoal ? `${item.profitGoal.toFixed(2)}%` : 'N/A'}</TableCell>
-                                    <TableCell className="text-right font-bold">{item.profitPercentage.toFixed(2)}%</TableCell>
+                                    <TableCell className="text-right font-bold">{grossMarginPercentage.toFixed(2)}%</TableCell>
                                     <TableCell className="text-center">
                                          {item.profitGoal !== undefined && item.profitGoal !== null ? (
                                             meetsGoal ? (

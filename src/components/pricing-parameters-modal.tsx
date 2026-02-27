@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -158,7 +157,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                       />
                       
                       <div>
-                        <FormLabel>Metas de Lucro Disponíveis (%)</FormLabel>
+                        <FormLabel>Metas de margem bruta Disponíveis (%)</FormLabel>
                         <div className="space-y-2 mt-2 p-3 border rounded-lg">
                             {(form.watch('profitGoals') || []).map((goal, index) => (
                                 <div key={index} className="flex items-center gap-2">
