@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -24,7 +23,7 @@ import { Button } from './ui/button';
 import { RestockSuggestionModal } from './restock-suggestion-modal';
 import { useReposition } from '@/hooks/use-reposition';
 import { useToast } from '@/hooks/use-toast';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -33,7 +32,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
-  { ssr: false, loading: () => <p>Carregando...</p> }
+  { ssr: false, loading: () => <Button variant="outline" size="sm" className="relative" disabled>Carregando...</Button> }
 );
 
 interface SuggestedLot {
@@ -339,12 +338,14 @@ export function RestockAnalysis() {
       } else if (hasConversionError) {
         // Cannot determine status if there's a conversion error
       } else {
-        restockNeeded = Math.max(0, minimumStock - currentStock);
+        restockNeeded = Math.max(0, (minimumStock || 0) - currentStock);
         if (currentStock < minimumStock) {
           status = 'repor';
         }
-        if (minimumStock > 0) {
-            stockPercentage = Math.min(100, (currentStock / minimumStock) * 100);
+        if (minimumStock && minimumStock > 0) {
+            // Note: We don't cap at 100% anymore for the calculation, 
+            // only for the progress bar display in the UI.
+            stockPercentage = (currentStock / minimumStock) * 100;
         } else if (currentStock > 0) {
             stockPercentage = 100;
         }
@@ -480,20 +481,19 @@ export function RestockAnalysis() {
               </CardHeader>
               <CardContent className="flex-grow space-y-3">
                 <div className="space-y-1.5">
-                  {result.stockPercentage !== null && (
-                    <>
-                      <div className="flex justify-between items-end mb-1">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tight">Atual</span>
-                            <span className="text-sm font-semibold">{formatNumberDisplay(result.currentStock, result.baseProduct.unit)}</span>
-                        </div>
-                        <div className="text-right flex flex-col items-end">
-                            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tight">Ideal</span>
-                            <span className="text-sm font-semibold text-muted-foreground">{formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</span>
-                        </div>
-                      </div>
-                      
-                      <div className="relative pt-1">
+                  <div className="flex justify-between items-end mb-1">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tight">Atual</span>
+                        <span className="text-sm font-semibold">{formatNumberDisplay(result.currentStock, result.baseProduct.unit)}</span>
+                    </div>
+                    <div className="text-right flex flex-col items-end">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tight">Ideal</span>
+                        <span className="text-sm font-semibold text-muted-foreground">{formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="relative pt-1">
+                     {result.stockPercentage !== null && (
                          <div className="flex justify-between items-center text-[10px] font-bold mb-1">
                             <span className={cn(
                                 "px-1.5 py-0.5 rounded-sm shadow-sm",
@@ -504,10 +504,9 @@ export function RestockAnalysis() {
                                 {result.stockPercentage.toFixed(0)}% do ideal
                             </span>
                          </div>
-                         <Progress value={result.stockPercentage} indicatorClassName={statusStyle.progress} />
-                      </div>
-                    </>
-                  )}
+                     )}
+                     <Progress value={Math.min(100, result.stockPercentage ?? 0)} indicatorClassName={statusStyle.progress} />
+                  </div>
                    {result.restockNeeded > 0 && (
                       <p className="text-sm font-bold text-destructive pt-1 flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" />
