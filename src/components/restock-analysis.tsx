@@ -343,8 +343,6 @@ export function RestockAnalysis() {
           status = 'repor';
         }
         if (minimumStock && minimumStock > 0) {
-            // Note: We don't cap at 100% anymore for the calculation, 
-            // only for the progress bar display in the UI.
             stockPercentage = (currentStock / minimumStock) * 100;
         } else if (currentStock > 0) {
             stockPercentage = 100;
@@ -405,13 +403,39 @@ export function RestockAnalysis() {
         suggestion,
       };
     }).sort((a, b) => {
-        const statusOrder = { 'repor': 1, 'sem_meta': 2, 'excesso': 3, 'ok': 4 };
-        const aOrder = a.hasConversionError ? 0 : statusOrder[a.status];
-        const bOrder = b.hasConversionError ? 0 : statusOrder[b.status];
-        
-        if (aOrder !== bOrder) {
-            return aOrder - bOrder;
+        // Hierarquia de ordenação:
+        // 1. Erro de conversão (mais crítico para o sistema)
+        // 2. Urgente (Status repor E estoque <= 25%)
+        // 3. Repor (Status repor E estoque > 25%)
+        // 4. Sem Meta
+        // 5. OK / Excesso
+
+        const getRank = (item: AnalysisResult) => {
+            if (item.hasConversionError) return 0;
+            if (item.status === 'repor') {
+                return (item.stockPercentage !== null && item.stockPercentage <= 25) ? 1 : 2;
+            }
+            if (item.status === 'sem_meta') return 3;
+            if (item.status === 'excesso') return 4;
+            return 5; // 'ok'
+        };
+
+        const aRank = getRank(a);
+        const bRank = getRank(b);
+
+        if (aRank !== bRank) {
+            return aRank - bRank;
         }
+        
+        // Critério de desempate dentro do mesmo rank (ex: dois urgentes)
+        // Prioriza o que tem menor percentual de estoque
+        if (aRank === 1 || aRank === 2) {
+            const aPct = a.stockPercentage ?? 0;
+            const bPct = b.stockPercentage ?? 0;
+            if (aPct !== bPct) return aPct - bPct;
+        }
+
+        // Alfabetico como último recurso
         return a.baseProduct.name.localeCompare(b.baseProduct.name);
     });
   }, [kioskId, baseProducts, products, lots, loading, isMatriz]);
