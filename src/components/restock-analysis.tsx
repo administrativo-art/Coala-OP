@@ -15,7 +15,7 @@ import { useProducts } from '@/hooks/use-products';
 import { convertValue, units, type UnitCategory } from '@/lib/conversion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { Badge } from './ui/badge';
+import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight, PlusCircle } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type Product } from '@/types';
@@ -110,7 +110,7 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+            <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Revisão da Atividade de Reposição</DialogTitle>
                     <DialogDescription>
@@ -345,6 +345,8 @@ export function RestockAnalysis() {
         }
         if (minimumStock > 0) {
             stockPercentage = Math.min(100, (currentStock / minimumStock) * 100);
+        } else if (currentStock > 0) {
+            stockPercentage = 100;
         }
 
         if (status === 'repor' && restockNeeded > 0 && !isMatriz) {
@@ -432,11 +434,12 @@ export function RestockAnalysis() {
         badge: <Badge variant="destructive">Erro Conversão</Badge>,
       };
     }
-    const quarterMin = result.minimumStock / 4;
+    
+    const percentage = result.stockPercentage ?? 0;
     
     if (result.status === 'sem_meta') {
          return {
-            card: 'bg-muted/30',
+            card: 'bg-muted/30 border-transparent',
             progress: 'bg-muted-foreground',
             badge: <Badge variant="outline">Sem Meta</Badge>,
         };
@@ -446,15 +449,15 @@ export function RestockAnalysis() {
             progress: 'bg-green-600',
             badge: <Badge variant="secondary" className="bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" /> OK</Badge>
         };
-    } else if (result.currentStock <= quarterMin) {
+    } else if (percentage <= 25) {
         return {
-            card: 'border-red-600/20 bg-red-500/5',
-            progress: 'bg-red-600',
+            card: 'border-destructive border-2 bg-destructive/10 shadow-sm',
+            progress: 'bg-destructive',
             badge: <Badge variant="destructive"><AlertTriangle className="mr-1 h-3 w-3" /> Urgente</Badge>
         };
-    } else { // currentStock < minimumStock
+    } else { // percentage between 25 and 100
         return {
-            card: 'border-orange-500/20 bg-orange-500/5',
+            card: 'border-orange-500/40 bg-orange-500/5',
             progress: 'bg-orange-500',
             badge: <Badge variant="destructive" className="bg-orange-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" /> Repor</Badge>
         };
@@ -467,50 +470,76 @@ export function RestockAnalysis() {
         {analysisResults.map(result => {
            const statusStyle = getCardStatus(result);
           return (
-            <Card key={result.baseProduct.id} className={cn("flex flex-col", statusStyle.card)}>
+            <Card key={result.baseProduct.id} className={cn("flex flex-col transition-all duration-300", statusStyle.card)}>
               <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start gap-2">
                   <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{result.baseProduct.name}</CardTitle>
-                  {statusStyle.badge}
+                  <div className="shrink-0">{statusStyle.badge}</div>
                 </div>
                 <CardDescription>{result.baseProduct.unit}</CardDescription>
               </CardHeader>
               <CardContent className="flex-grow space-y-3">
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {result.stockPercentage !== null && (
                     <>
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{formatNumberDisplay(result.currentStock, result.baseProduct.unit)}</span>
-                        <span>{formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</span>
+                      <div className="flex justify-between items-end mb-1">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tight">Atual</span>
+                            <span className="text-sm font-semibold">{formatNumberDisplay(result.currentStock, result.baseProduct.unit)}</span>
+                        </div>
+                        <div className="text-right flex flex-col items-end">
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tight">Ideal</span>
+                            <span className="text-sm font-semibold text-muted-foreground">{formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</span>
+                        </div>
                       </div>
-                      <Progress value={result.stockPercentage} indicatorClassName={statusStyle.progress} />
+                      
+                      <div className="relative pt-1">
+                         <div className="flex justify-between items-center text-[10px] font-bold mb-1">
+                            <span className={cn(
+                                "px-1.5 py-0.5 rounded-sm shadow-sm",
+                                result.stockPercentage <= 25 ? "bg-destructive text-white" : 
+                                result.stockPercentage < 100 ? "bg-orange-500 text-white" : 
+                                "bg-green-600 text-white"
+                            )}>
+                                {result.stockPercentage.toFixed(0)}% do ideal
+                            </span>
+                         </div>
+                         <Progress value={result.stockPercentage} indicatorClassName={statusStyle.progress} />
+                      </div>
                     </>
                   )}
                    {result.restockNeeded > 0 && (
-                      <p className="text-sm font-bold text-destructive">
+                      <p className="text-sm font-bold text-destructive pt-1 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
                         Repor: {formatNumberDisplay(result.restockNeeded, result.baseProduct.unit)}
                       </p>
                   )}
                 </div>
               </CardContent>
               <CardFooter className="pt-2">
-                {!isMatriz && result.status === 'repor' && (
-                  <Button variant="outline" size="sm" className="w-full" onClick={() => setSuggestionToView(result)}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Adicionar insumo
+                {!isMatriz && (result.status === 'repor' || result.status === 'ok') && (
+                  <Button 
+                    variant={result.status === 'repor' ? 'default' : 'ghost'} 
+                    size="sm" 
+                    className={cn(
+                        "w-full h-auto text-sm",
+                        result.status === 'ok' && "text-xs text-muted-foreground hover:bg-green-500/10"
+                    )} 
+                    onClick={() => setSuggestionToView(result)}
+                  >
+                    {result.status === 'repor' ? (
+                        <><PlusCircle className="mr-2 h-4 w-4" /> Adicionar insumo</>
+                    ) : (
+                        "O estoque está ótimo, mas quero enviar mesmo assim"
+                    )}
                   </Button>
-                )}
-                 {!isMatriz && result.status === 'ok' && (
-                    <Button variant="ghost" size="sm" className="w-full h-auto text-center text-xs text-muted-foreground p-2 hover:bg-green-500/10 whitespace-normal" onClick={() => setSuggestionToView(result)}>
-                        O estoque está ótimo, mas quero enviar mesmo assim
-                    </Button>
                 )}
               </CardFooter>
             </Card>
           )
         })}
         {analysisResults.length === 0 && !loading && (
-            <div className="col-span-full text-center py-16 text-muted-foreground">
+            <div className="col-span-full text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                 <Inbox className="mx-auto h-12 w-12" />
                 <p className="mt-4 font-semibold">Nenhum produto base encontrado para este quiosque.</p>
             </div>
@@ -518,19 +547,19 @@ export function RestockAnalysis() {
       </div>
 
        {stagedItems.length > 0 && !isMatriz && (
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-sm border-t z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]">
+            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-sm border-t z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom duration-300">
                 <div className="max-w-7xl mx-auto flex justify-between items-center px-4">
                     <div>
                         <h3 className="font-semibold">{stagedItems.length} {stagedItems.length === 1 ? 'item' : 'itens'} para reposição</h3>
-                        <p className="text-sm text-muted-foreground">Pronto para criar a atividade de transferência.</p>
+                        <p className="text-sm text-muted-foreground">Revise e crie a atividade de transferência.</p>
                     </div>
                     <div className="flex gap-2">
                         <Button variant="outline" onClick={() => setStagedItems([])}>
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Cancelar
+                            Limpar
                         </Button>
                         <Button onClick={() => setIsSummaryModalOpen(true)}>
-                            Próximo
+                            Revisar Envio
                             <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
                     </div>
