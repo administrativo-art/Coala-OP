@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight, PlusCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight, PlusCircle, LayoutGrid, List } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type Product } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -29,6 +29,7 @@ import { RestockAnalysisDocument } from './pdf/RestockAnalysisDocument';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Checkbox } from './ui/checkbox';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -199,6 +200,7 @@ export function RestockAnalysis() {
   const [suggestionToView, setSuggestionToView] = useState<AnalysisResult | null>(null);
   const [stagedItems, setStagedItems] = useState<RepositionItem[]>([]);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
@@ -207,6 +209,19 @@ export function RestockAnalysis() {
   const { createRepositionActivity, loading: repositionLoading } = useReposition();
 
   const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
+
+  useEffect(() => {
+    const saved = localStorage.getItem('restock-view-mode');
+    if (saved === 'grid' || saved === 'list') {
+        setViewMode(saved);
+    }
+  }, []);
+
+  const handleViewModeChange = (val: 'grid' | 'list') => {
+    if (!val) return;
+    setViewMode(val);
+    localStorage.setItem('restock-view-mode', val);
+  };
   
   const handleStageItem = (item: RepositionItem) => {
     setStagedItems(prev => {
@@ -403,13 +418,6 @@ export function RestockAnalysis() {
         suggestion,
       };
     }).sort((a, b) => {
-        // Hierarquia de ordenação:
-        // 1. Erro de conversão (mais crítico para o sistema)
-        // 2. Urgente (Status repor E estoque <= 25%)
-        // 3. Repor (Status repor E estoque > 25%)
-        // 4. Sem Meta
-        // 5. OK / Excesso
-
         const getRank = (item: AnalysisResult) => {
             if (item.hasConversionError) return 0;
             if (item.status === 'repor') {
@@ -417,7 +425,7 @@ export function RestockAnalysis() {
             }
             if (item.status === 'sem_meta') return 3;
             if (item.status === 'excesso') return 4;
-            return 5; // 'ok'
+            return 5;
         };
 
         const aRank = getRank(a);
@@ -427,15 +435,12 @@ export function RestockAnalysis() {
             return aRank - bRank;
         }
         
-        // Critério de desempate dentro do mesmo rank (ex: dois urgentes)
-        // Prioriza o que tem menor percentual de estoque
         if (aRank === 1 || aRank === 2) {
             const aPct = a.stockPercentage ?? 0;
             const bPct = b.stockPercentage ?? 0;
             if (aPct !== bPct) return aPct - bPct;
         }
 
-        // Alfabetico como último recurso
         return a.baseProduct.name.localeCompare(b.baseProduct.name);
     });
   }, [kioskId, baseProducts, products, lots, loading, isMatriz]);
@@ -457,6 +462,7 @@ export function RestockAnalysis() {
         card: 'border-destructive/20 bg-destructive/5',
         progress: 'bg-destructive',
         badge: <Badge variant="destructive">Erro Conversão</Badge>,
+        rowDot: 'bg-destructive'
       };
     }
     
@@ -467,31 +473,34 @@ export function RestockAnalysis() {
             card: 'bg-muted/30 border-transparent',
             progress: 'bg-muted-foreground',
             badge: <Badge variant="outline">Sem Meta</Badge>,
+            rowDot: 'bg-muted-foreground'
         };
     } else if (result.currentStock >= result.minimumStock) {
         return {
             card: 'border-green-600/20 bg-green-500/5',
             progress: 'bg-green-600',
-            badge: <Badge variant="secondary" className="bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" /> OK</Badge>
+            badge: <Badge variant="secondary" className="bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" /> OK</Badge>,
+            rowDot: 'bg-green-600'
         };
     } else if (percentage <= 25) {
         return {
             card: 'border-destructive border-2 bg-destructive/10 shadow-sm',
             progress: 'bg-destructive',
-            badge: <Badge variant="destructive"><AlertTriangle className="mr-1 h-3 w-3" /> Urgente</Badge>
+            badge: <Badge variant="destructive"><AlertTriangle className="mr-1 h-3 w-3" /> Urgente</Badge>,
+            rowDot: 'bg-destructive'
         };
     } else { // percentage between 25 and 100
         return {
             card: 'border-orange-500/40 bg-orange-500/5',
             progress: 'bg-orange-500',
-            badge: <Badge variant="destructive" className="bg-orange-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" /> Repor</Badge>
+            badge: <Badge variant="destructive" className="bg-orange-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" /> Repor</Badge>,
+            rowDot: 'bg-orange-500'
         };
     }
   };
 
-  return (
-    <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+  const renderGridView = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {analysisResults.map(result => {
            const statusStyle = getCardStatus(result);
           return (
@@ -561,13 +570,117 @@ export function RestockAnalysis() {
             </Card>
           )
         })}
-        {analysisResults.length === 0 && !loading && (
-            <div className="col-span-full text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                <Inbox className="mx-auto h-12 w-12" />
-                <p className="mt-4 font-semibold">Nenhum produto base encontrado para este quiosque.</p>
-            </div>
-        )}
+    </div>
+  );
+
+  const renderListView = () => (
+    <div className="rounded-md border bg-card">
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead className="w-4"></TableHead>
+                    <TableHead>Produto Base</TableHead>
+                    <TableHead className="text-right">Atual</TableHead>
+                    <TableHead className="text-right">Ideal</TableHead>
+                    <TableHead className="text-right">Repor</TableHead>
+                    <TableHead className="text-center">Status (%)</TableHead>
+                    {!isMatriz && <TableHead className="text-right w-10"></TableHead>}
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {analysisResults.map(result => {
+                    const statusStyle = getCardStatus(result);
+                    const percentage = result.stockPercentage ?? 0;
+                    
+                    return (
+                        <TableRow key={result.baseProduct.id} className="group h-12">
+                            <TableCell className="pr-0">
+                                <div className={cn("w-2 h-2 rounded-full", statusStyle.rowDot)} />
+                            </TableCell>
+                            <TableCell className="py-2">
+                                <p className="font-semibold text-sm leading-tight">{result.baseProduct.name}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase">{result.baseProduct.unit}</p>
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                                {formatNumberDisplay(result.currentStock, '')}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                                {formatNumberDisplay(result.minimumStock, '')}
+                            </TableCell>
+                            <TableCell className={cn("text-right font-bold", result.restockNeeded > 0 ? "text-destructive" : "text-muted-foreground/30")}>
+                                {result.restockNeeded > 0 ? formatNumberDisplay(result.restockNeeded, '') : '-'}
+                            </TableCell>
+                            <TableCell className="text-center">
+                                {result.stockPercentage !== null ? (
+                                    <Badge variant="outline" className={cn(
+                                        "text-[10px] font-bold",
+                                        percentage <= 25 ? "border-destructive text-destructive bg-destructive/5" :
+                                        percentage < 100 ? "border-orange-500 text-orange-600 bg-orange-500/5" :
+                                        "border-green-600 text-green-600 bg-green-500/5"
+                                    )}>
+                                        {percentage.toFixed(0)}%
+                                    </Badge>
+                                ) : '-'}
+                            </TableCell>
+                            {!isMatriz && (
+                                <TableCell className="text-right">
+                                    {(result.status === 'repor' || result.status === 'ok') && (
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setSuggestionToView(result)}>
+                                            <PlusCircle className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </TableCell>
+                            )}
+                        </TableRow>
+                    );
+                })}
+            </TableBody>
+        </Table>
+    </div>
+  );
+
+  return (
+    <>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div className="flex items-center gap-2">
+              <ToggleGroup type="single" value={viewMode} onValueChange={handleViewModeChange as any} className="border p-1 rounded-lg bg-background">
+                  <ToggleGroupItem value="grid" aria-label="Visualização em Grade" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                      <LayoutGrid className="h-4 w-4" />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="list" aria-label="Visualização em Lista" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                      <List className="h-4 w-4" />
+                  </ToggleGroupItem>
+              </ToggleGroup>
+              <span className="text-xs text-muted-foreground hidden sm:inline">Modo de exibição</span>
+          </div>
+          
+          <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={analysisResults.length === 0}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar CSV
+              </Button>
+              <PDFDownloadLink
+                  document={<RestockAnalysisDocument data={analysisResults} kioskName={kiosk?.name || 'Unidade'} />}
+                  fileName={`analise_reposicao_${kiosk?.name.replace(/\s+/g, '_') || 'unidade'}.pdf`}
+              >
+                  {((props: any) => (
+                      <Button variant="outline" size="sm" disabled={props.loading || analysisResults.length === 0}>
+                          <Download className="mr-2 h-4 w-4" />
+                          {props.loading ? 'Gerando...' : 'Exportar PDF'}
+                      </Button>
+                  )) as any}
+              </PDFDownloadLink>
+          </div>
       </div>
+
+      {analysisResults.length === 0 && !loading ? (
+          <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg bg-card">
+              <Inbox className="mx-auto h-12 w-12 mb-4" />
+              <p className="font-semibold">Nenhum produto base encontrado para este quiosque.</p>
+          </div>
+      ) : (
+          viewMode === 'grid' ? renderGridView() : renderListView()
+      )}
 
        {stagedItems.length > 0 && !isMatriz && (
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-sm border-t z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom duration-300">
