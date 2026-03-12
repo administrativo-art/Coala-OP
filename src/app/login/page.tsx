@@ -1,150 +1,157 @@
+"use client";
 
-"use client"
-
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { useAuth } from '@/hooks/use-auth';
-import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Loader2, User, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { brand } from "@/config/brand";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, LogIn, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 const loginSchema = z.object({
-  email: z.string().email('Por favor, insira um e-mail válido.'),
-  password: z.string().min(1, 'A senha é obrigatória.'),
+  email: z.string().email("E-mail inválido"),
+  password: z.string().min(6, "Mínimo 6 caracteres"),
 });
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isAuthenticated, loading: authLoading } = useAuth();
-  const { toast } = useToast();
+  const { login, isAuthenticated, loading } = useAuth();
+  const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
 
-
-  const form = useForm<LoginFormValues>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: '',
-      password: '',
-    },
   });
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      router.push('/dashboard');
+    if (!loading && isAuthenticated) {
+      router.push("/dashboard");
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, loading, router]);
 
-  const onSubmit = async (values: LoginFormValues) => {
-    setLoginError(null);
-    const success = await login(values.email, values.password);
+  async function onSubmit(data: LoginFormData) {
+    setError(null);
+    const success = await login(data.email, data.password);
     if (success) {
-      router.push('/dashboard');
+      router.push("/dashboard");
     } else {
-      setLoginError("E-mail ou senha inválidos. Verifique seus dados e tente novamente.");
-      form.setValue('password', '');
+      setError("E-mail ou senha inválidos. Verifique seus dados e tente novamente.");
     }
-  };
+  }
 
-  if (authLoading || isAuthenticated) {
+  if (loading || isAuthenticated) {
     return <div className="flex h-screen items-center justify-center">Carregando...</div>;
   }
-  
+
   return (
-    <div style={{ backgroundImage: "url('/login-background.svg')", backgroundSize: 'cover', backgroundPosition: 'center' }}
-         className="flex min-h-screen flex-col items-center justify-center p-4">
-      
-      <div className="w-full max-w-[350px] rounded-3xl bg-white/20 backdrop-blur-xl border-2 border-white/30 shadow-2xl p-8 flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
-        <div className="text-center font-logo select-none mb-8">
-            <div className="text-5xl font-bold text-primary">coala</div>
-            <div className="text-4xl font-bold text-accent -mt-4 pl-6">shakes</div>
+    <div className="relative flex min-h-screen w-full overflow-hidden font-sans">
+      {/* Imagem de fundo */}
+      <img
+        src={brand.loginBg}
+        alt=""
+        aria-hidden
+        className="absolute inset-0 h-full w-full object-cover"
+        style={{ objectPosition: "left center" }}
+      />
+
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-slate-900/20" />
+
+      {/* Layout duas colunas */}
+      <div className="relative z-10 flex min-h-screen w-full">
+        <div className="hidden lg:flex flex-1 items-center justify-center p-12">
+            <div className="max-w-xl text-white space-y-4">
+                <h2 className="text-5xl font-bold leading-tight">{brand.name}</h2>
+                <p className="text-xl text-white/80">{brand.description}</p>
+            </div>
         </div>
-        
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-full">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                     <div className="relative">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/50" />
-                        <FormControl>
-                            <Input
-                                id="email-input"
-                                placeholder="E-mail"
-                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center px-12"
-                                {...field}
-                            />
-                        </FormControl>
-                    </div>
-                    <FormMessage className="text-primary/90 text-center" />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                     <div className={cn("relative", form.formState.errors.password && "animate-shake")}>
-                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/50" />
-                        <FormControl>
-                           <Input
-                                id="password-input"
-                                type={showPassword ? 'text' : 'password'}
-                                placeholder="Senha"
-                                className="h-12 rounded-full bg-accent/80 border-none text-white placeholder:text-white/80 focus-visible:ring-4 focus-visible:ring-accent/40 text-center px-12"
-                                {...field}
-                            />
-                        </FormControl>
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80"
-                        >
-                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                        </button>
-                    </div>
-                    <FormMessage className="text-primary/90 text-center" />
-                  </FormItem>
-                )}
-              />
 
-              {loginError && (
-                <div className="bg-destructive/80 text-destructive-foreground p-3 rounded-lg text-center text-sm flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 shrink-0"/>
-                    {loginError}
-                </div>
-              )}
-
-              <div className="pt-2">
-                <Button
-                    type="submit"
-                    className="h-12 w-full rounded-full bg-gradient-to-r from-primary to-[#FF5A8A] text-white text-lg shadow-lg transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-px"
-                    disabled={form.formState.isSubmitting}
-                  >
-                    {form.formState.isSubmitting && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-                    Entrar
-                </Button>
-              </div>
-            </form>
-          </Form>
-
-          <div className="text-center mt-4">
-            <Link href="/forgot-password" className="text-sm text-black/60 hover:text-black/80 transition-colors duration-200">
-              Esqueci minha senha
-            </Link>
+        {/* Painel de login */}
+        <div
+          className="flex w-full max-w-md flex-col justify-center px-10 py-12 shadow-2xl"
+          style={{
+            background: "rgba(255, 255, 255, 0.88)",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+          }}
+        >
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-slate-800 tracking-tight">
+              Acesso ao Sistema
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">Entre com suas credenciais para continuar</p>
           </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-slate-700">E-mail</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="seu@email.com"
+                autoComplete="email"
+                {...register("email")}
+                className="bg-white/70 h-12 rounded-xl"
+              />
+              {errors.email && (
+                <p className="text-xs text-destructive">{errors.email.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-slate-700">Senha</Label>
+              <div className="relative">
+                <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    {...register("password")}
+                    className="bg-white/70 h-12 rounded-xl pr-10"
+                />
+                <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {errors.password && (
+                <p className="text-xs text-destructive">{errors.password.message}</p>
+              )}
+            </div>
+
+            {error && (
+              <div className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive border border-destructive/20">
+                {error}
+              </div>
+            )}
+
+            <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold shadow-lg shadow-primary/20" size="lg" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                <LogIn className="mr-2 h-5 w-5" />
+              )}
+              {isSubmitting ? "Autenticando..." : "Entrar no sistema"}
+            </Button>
+          </form>
+
+          <p className="mt-8 text-center text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+            {brand.shortName} · {brand.version}
+          </p>
+        </div>
       </div>
     </div>
   );

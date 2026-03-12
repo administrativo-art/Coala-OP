@@ -1,6 +1,5 @@
-
-import type {Metadata} from 'next';
-import './globals.css';
+import type { Metadata } from "next";
+import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/components/auth-provider';
 import { ProductsProvider } from '@/components/products-provider';
@@ -27,34 +26,29 @@ import { AuthorBoardDiaryProvider } from '@/components/author-board-diary-provid
 import { ClassificationsProvider } from '@/components/classifications-provider';
 import { CompetitorProvider } from '@/components/competitor-provider';
 import { ProfilesProvider } from '@/components/profiles-provider';
+import { brand } from "@/config/brand";
 
 export const metadata: Metadata = {
-  title: 'Coala Shakes',
-  description: 'Sua ferramenta para conversões e gestão de estoque.',
-  manifest: process.env.NODE_ENV === "production" ? "/manifest.json" : undefined,
+  title: brand.name,
+  description: brand.description,
+  manifest: "/manifest.json",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <meta name="color-scheme" content="light dark" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500;600;700&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+          rel="stylesheet"
+        />
         <link rel="apple-touch-icon" href="/icons/Icon PWM (192 x 192 px).png" />
       </head>
-      <body className="font-body antialiased">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
+      <body className="font-sans antialiased">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <ProfilesProvider>
             <AuthProvider>
                 <KiosksProvider>
@@ -104,7 +98,7 @@ export default function RootLayout({
                 </KiosksProvider>
             </AuthProvider>
           </ProfilesProvider>
-        <Toaster />
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

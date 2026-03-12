@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -7,12 +6,10 @@ import { useAuth, useUser } from '@/hooks/use-auth';
 import { GlassSidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Undo2 } from 'lucide-react';
 import { DebugPanel } from '@/components/debug-panel';
 import { useAllTasks } from '@/hooks/use-all-tasks';
-
 
 function LoadingSkeleton() {
     return (
@@ -31,7 +28,6 @@ function LoadingSkeleton() {
       </div>
     );
 }
-
 
 export default function DashboardLayout({
   children,
@@ -72,7 +68,7 @@ export default function DashboardLayout({
       <div className="flex flex-col flex-1">
         <Header tasks={legacyTasks} onMenuClick={() => setIsSidebarOpen(true)} />
         {originalUser && (
-          <div className="flex items-center justify-center gap-4 bg-yellow-400 text-black font-bold text-center py-2 px-4 shadow-md">
+          <div className="flex items-center justify-center gap-4 bg-yellow-400 text-black font-bold text-center py-2 px-4 shadow-md z-20">
             <span>Você está navegando como <strong>{user?.username}</strong>.</span>
             <Button variant="ghost" className="h-auto p-0 underline text-black hover:bg-yellow-400/50 hover:text-black" onClick={stopImpersonating}>
               <Undo2 className="mr-1 h-4 w-4"/>
