@@ -61,7 +61,7 @@ export default function LoginPage() {
         alt=""
         aria-hidden
         className="absolute inset-0 h-full w-full object-cover"
-        style={{ objectPosition: "left center" }}
+        style={{ objectPosition: "right center" }}
       />
 
       {/* Overlay */}
@@ -69,14 +69,8 @@ export default function LoginPage() {
 
       {/* Layout duas colunas */}
       <div className="relative z-10 flex min-h-screen w-full">
-        <div className="hidden lg:flex flex-1 items-center justify-center p-12">
-            <div className="max-w-xl text-white space-y-4">
-                <h2 className="text-5xl font-bold leading-tight">{brand.name}</h2>
-                <p className="text-xl text-white/80">{brand.description}</p>
-            </div>
-        </div>
-
-        {/* Painel de login */}
+        
+        {/* Painel de login (Esquerda) */}
         <div
           className="flex w-full max-w-md flex-col justify-center px-10 py-12 shadow-2xl"
           style={{
@@ -149,8 +143,16 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-8 text-center text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-            {brand.shortName} · {brand.version}
+            © {new Date().getFullYear()} Coala Operação. Todos os direitos reservados.
           </p>
+        </div>
+
+        {/* Coluna direita (Livre para a imagem) */}
+        <div className="hidden lg:flex flex-1 items-center justify-center p-12">
+            <div className="max-w-xl text-white space-y-4">
+                <h2 className="text-5xl font-bold leading-tight">{brand.name}</h2>
+                <p className="text-xl text-white/80">{brand.description}</p>
+            </div>
         </div>
       </div>
     </div>
