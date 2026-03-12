@@ -43,6 +43,13 @@ const userSchema = z.object({
 }, {
     message: "A senha deve ter pelo menos 6 caracteres.",
     path: ["password"],
+}).refine(data => {
+    // Quiosque obrigatório apenas para não-admins
+    if (data.profileId === 'admin') return true;
+    return data.assignedKioskIds.length > 0;
+}, {
+    message: 'Selecione pelo menos um quiosque.',
+    path: ['assignedKioskIds'],
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
