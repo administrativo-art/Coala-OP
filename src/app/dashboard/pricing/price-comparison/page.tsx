@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -7,107 +6,102 @@ import { Button } from '@/components/ui/button';
 import { PriceComparisonTable } from '@/components/price-comparison-table';
 import { CompetitorManagementModal } from '@/components/competitor-management-modal';
 import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
-import { ArrowLeft, LineChart, SlidersHorizontal, Group, Users, History, Menu, Trash2 } from 'lucide-react';
+import { ArrowLeft, LineChart, SlidersHorizontal, Group, Users, Menu } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCompetitors } from '@/hooks/use-competitors';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { Skeleton } from '@/components/ui/skeleton';
 import { CompetitorSelectionModal } from '@/components/competitor-selection-modal';
-import { Badge } from '@/components/ui/badge';
-import { X } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useAuth } from "@/hooks/use-auth";
+import { PermissionGuard } from "@/components/permission-guard";
 
 
 export default function PriceComparisonPage() {
   const router = useRouter();
+  const { permissions } = useAuth();
   const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
-  const { competitors, loading: loadingCompetitors } = useCompetitors();
+  const { competitors } = useCompetitors();
   const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<string[]>([]);
   
   const selectedCompetitors = useMemo(() => {
     return competitors.filter(c => selectedCompetitorIds.includes(c.id));
   }, [selectedCompetitorIds, competitors]);
 
-  const handleRemoveCompetitor = (competitorId: string) => {
-      setSelectedCompetitorIds(prev => prev.filter(id => id !== competitorId));
-  };
-
   return (
-    <div className="space-y-6">
-       <div className="flex items-center gap-4 mb-2">
-          <Button 
-            onClick={() => router.push('/dashboard/pricing')}
-            variant="ghost"
-            className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-            aria-label="Voltar para custo e preço"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Estudo de preço</h1>
-            <p className="text-sm text-muted-foreground">Voltar para custo e preço</p>
-          </div>
-        </div>
-      <Card>
-        <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                    <LineChart />
-                    Estudo de preço
-                </CardTitle>
-                <CardDescription>
-                    Compare os preços das suas mercadorias com os da concorrência para se manter competitivo.
-                </CardDescription>
-              </div>
-               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon">
-                    <Menu className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setIsSelectionModalOpen(true)}>
-                    <SlidersHorizontal className="mr-2 h-4 w-4" />
-                    Selecionar concorrentes
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setIsProductModalOpen(true)}>
-                    <Group className="mr-2 h-4 w-4" />
-                    Mercadorias dos Concorrentes
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setIsCompetitorModalOpen(true)}>
-                    <Users className="mr-2 h-4 w-4" />
-                    Gerenciar Concorrentes
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+    <PermissionGuard allowed={permissions.pricing.view}>
+        <div className="space-y-6">
+        <div className="flex items-center gap-4 mb-2">
+            <Button 
+                onClick={() => router.push('/dashboard/pricing')}
+                variant="ghost"
+                className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
+                aria-label="Voltar para custo e preço"
+            >
+                <ArrowLeft className="w-6 h-6" />
+            </Button>
+            <div>
+                <h1 className="text-3xl font-bold">Estudo de preço</h1>
+                <p className="text-sm text-muted-foreground">Voltar para custo e preço</p>
             </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-            <PriceComparisonTable 
-              selectedCompetitorIds={selectedCompetitorIds} 
+            </div>
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-start">
+                <div>
+                    <CardTitle className="flex items-center gap-2">
+                        <LineChart />
+                        Estudo de preço
+                    </CardTitle>
+                    <CardDescription>
+                        Compare os preços das suas mercadorias com os da concorrência para se manter competitivo.
+                    </CardDescription>
+                </div>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon">
+                        <Menu className="h-4 w-4" />
+                    </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setIsSelectionModalOpen(true)}>
+                        <SlidersHorizontal className="mr-2 h-4 w-4" />
+                        Selecionar concorrentes
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setIsProductModalOpen(true)}>
+                        <Group className="mr-2 h-4 w-4" />
+                        Mercadorias dos Concorrentes
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setIsCompetitorModalOpen(true)}>
+                        <Users className="mr-2 h-4 w-4" />
+                        Gerenciar Concorrentes
+                    </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <PriceComparisonTable 
+                selectedCompetitorIds={selectedCompetitorIds} 
+                />
+            </CardContent>
+        </Card>
+            
+            <CompetitorManagementModal
+                isOpen={isCompetitorModalOpen}
+                onClose={() => setIsCompetitorModalOpen(false)}
             />
-        </CardContent>
-      </Card>
-        
-        <CompetitorManagementModal
-            isOpen={isCompetitorModalOpen}
-            onClose={() => setIsCompetitorModalOpen(false)}
-        />
-         <CompetitorProductManagementModal
-            isOpen={isProductModalOpen}
-            onClose={() => setIsProductModalOpen(false)}
-        />
-        <CompetitorSelectionModal
-            isOpen={isSelectionModalOpen}
-            onClose={() => setIsSelectionModalOpen(false)}
-            selectedCompetitorIds={selectedCompetitorIds}
-            setSelectedCompetitorIds={setSelectedCompetitorIds}
-        />
-    </div>
+            <CompetitorProductManagementModal
+                isOpen={isProductModalOpen}
+                onClose={() => setIsProductModalOpen(false)}
+            />
+            <CompetitorSelectionModal
+                isOpen={isSelectionModalOpen}
+                onClose={() => setIsSelectionModalOpen(false)}
+                selectedCompetitorIds={selectedCompetitorIds}
+                setSelectedCompetitorIds={setSelectedCompetitorIds}
+            />
+        </div>
+    </PermissionGuard>
   );
 }

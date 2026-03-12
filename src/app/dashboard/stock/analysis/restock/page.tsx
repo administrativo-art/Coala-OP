@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -9,6 +7,8 @@ import { ArrowLeft } from 'lucide-react';
 import { Suspense } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useKiosks } from '@/hooks/use-kiosks';
+import { useAuth } from "@/hooks/use-auth";
+import { PermissionGuard } from "@/components/permission-guard";
 
 function RestockAnalysisContent() {
     const router = useRouter();
@@ -38,9 +38,13 @@ function RestockAnalysisContent() {
 }
 
 export default function RestockAnalysisPage() {
+    const { permissions } = useAuth();
+
     return (
-        <Suspense fallback={<Skeleton className="h-[80vh] w-full" />}>
-            <RestockAnalysisContent />
-        </Suspense>
+        <PermissionGuard allowed={permissions.stock.analysis.restock}>
+            <Suspense fallback={<Skeleton className="h-[80vh] w-full" />}>
+                <RestockAnalysisContent />
+            </Suspense>
+        </PermissionGuard>
     );
 }
