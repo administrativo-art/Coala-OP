@@ -4,7 +4,6 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { brand } from "@/config/brand";
 import { UserProfile } from "./user-profile";
-import { ThemeToggle } from "./theme-toggle";
 import { type LegacyTask, NotificationCenter } from "./notification-center";
 import { GlobalBarcodeScanner } from "./global-barcode-scanner";
 
@@ -35,7 +34,6 @@ export function Header({ onMenuClick, tasks }: HeaderProps) {
       <div className="flex items-center gap-2">
         <GlobalBarcodeScanner />
         <NotificationCenter tasks={tasks} />
-        <ThemeToggle />
         <UserProfile />
       </div>
     </header>
