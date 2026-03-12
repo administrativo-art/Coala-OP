@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -19,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@radix-ui/react-accordion";
 import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -307,7 +308,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <Accordion type="multiple" defaultValue={['dashboard', 'stock']} className="w-full">
                             
                             <AccordionItem value="dashboard">
-                                <AccordionTrigger className="text-lg font-semibold"><LayoutDashboard className="mr-2 h-5 w-5" /> Dashboard</AccordionTrigger>
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><LayoutDashboard className="mr-2 h-5 w-5" /> Dashboard</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderModuleToggle("permissions.dashboard.view" as any, "Visualizar Dashboard Principal", "Permite que o usuário veja a página inicial do dashboard.")}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
@@ -320,7 +321,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             </AccordionItem>
 
                             <AccordionItem value="registration">
-                                <AccordionTrigger className="text-lg font-semibold"><ListPlus className="mr-2 h-5 w-5" /> Cadastros</AccordionTrigger>
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><ListPlus className="mr-2 h-5 w-5" /> Cadastros</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderModuleToggle("permissions.registration.view" as any, "Ver Módulo de Cadastros")}
                                     {renderPermissionSwitch("permissions.registration.items.add" as any, "Adicionar Insumos", "Permite cadastrar novos insumos (itens físicos).", !registrationViewWatch)}
@@ -336,7 +337,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             </AccordionItem>
 
                             <AccordionItem value="stock">
-                                <AccordionTrigger className="text-lg font-semibold"><ClipboardCheck className="mr-2 h-5 w-5" /> Gestão de Estoque</AccordionTrigger>
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><ClipboardCheck className="mr-2 h-5 w-5" /> Gestão de Estoque</div></AccordionTrigger>
                                 <AccordionContent className="space-y-4 p-1 pt-4">
                                     {renderModuleToggle("permissions.stock.view" as any, "Visualizar Módulo de Estoque", "Permissão geral para acessar a seção.")}
                                     
@@ -406,7 +407,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             </AccordionItem>
 
                             <AccordionItem value="pricing">
-                                <AccordionTrigger className="text-lg font-semibold"><DollarSign className="mr-2 h-5 w-5" /> Custo e Preço</AccordionTrigger>
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><DollarSign className="mr-2 h-5 w-5" /> Custo e Preço</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderModuleToggle("permissions.pricing.view" as any, "Ver Módulo de Custo e Preço")}
                                     {renderPermissionSwitch("permissions.pricing.simulate" as any, "Simular Custo e Preço", "Permite criar/editar fichas técnicas e simulações.", !pricingViewWatch)}
@@ -415,11 +416,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             </AccordionItem>
                             
                             <AccordionItem value="settings">
-                                <AccordionTrigger className="text-lg font-semibold"><Settings className="mr-2 h-5 w-5" /> Configurações</AccordionTrigger>
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><Settings className="mr-2 h-5 w-5" /> Configurações</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderModuleToggle("permissions.settings.view" as any, "Ver Módulo de Configurações")}
                                     {renderPermissionSwitch("permissions.settings.manageUsers" as any, "Gerenciar Usuários", "Permite criar, editar e excluir usuários.", !settingsViewWatch)}
-                                    {renderPermissionSwitch("permissions.settings.impersonate" as any, "Navegar como Outro Usuário", "Permite entrar no sistema como se fosse outro usuário.", !settingsViewWatch)}
                                     {renderPermissionSwitch("permissions.settings.manageKiosks" as any, "Gerenciar Quiosques", "Permite criar e excluir quiosques.", !settingsViewWatch)}
                                     {renderPermissionSwitch("permissions.settings.manageProfiles" as any, "Gerenciar Perfis", "Permite criar e editar perfis de permissão.", !settingsViewWatch)}
                                     {renderPermissionSwitch("permissions.settings.manageLabels" as any, "Gerenciar Etiquetas", "Permite alterar o tamanho padrão das etiquetas.", !settingsViewWatch)}
@@ -427,7 +427,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             </AccordionItem>
 
                             <AccordionItem value="tasks">
-                                <AccordionTrigger className="text-lg font-semibold"><ListTodo className="mr-2 h-5 w-5" /> Tarefas</AccordionTrigger>
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><ListTodo className="mr-2 h-5 w-5" /> Tarefas</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderModuleToggle("permissions.tasks.view" as any, "Visualizar Tarefas", "Permite visualizar todas as tarefas do sistema.")}
                                     {renderPermissionSwitch("permissions.tasks.manage" as any, "Gerenciar Tarefas", "Permite criar, atribuir, editar e excluir tarefas.", !tasksViewWatch)}
@@ -435,7 +435,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             </AccordionItem>
 
                             <AccordionItem value="help">
-                                <AccordionTrigger className="text-lg font-semibold"><BookOpen className="mr-2 h-5 w-5" /> Ajuda</AccordionTrigger>
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><BookOpen className="mr-2 h-5 w-5" /> Ajuda</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderModuleToggle("permissions.help.view" as any, "Ver Central de Ajuda")}
                                 </AccordionContent>

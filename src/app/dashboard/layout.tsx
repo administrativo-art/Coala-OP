@@ -1,13 +1,12 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth, useUser } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { GlassSidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { Undo2 } from 'lucide-react';
 import { DebugPanel } from '@/components/debug-panel';
 import { useAllTasks } from '@/hooks/use-all-tasks';
 
@@ -34,7 +33,6 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { user, originalUser, stopImpersonating } = useUser();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { legacyTasks, loading: tasksLoading } = useAllTasks();
   const router = useRouter();
@@ -67,15 +65,6 @@ export default function DashboardLayout({
       <GlassSidebar open={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
       <div className="flex flex-col flex-1">
         <Header tasks={legacyTasks} onMenuClick={() => setIsSidebarOpen(true)} />
-        {originalUser && (
-          <div className="flex items-center justify-center gap-4 bg-yellow-400 text-black font-bold text-center py-2 px-4 shadow-md z-20">
-            <span>Você está navegando como <strong>{user?.username}</strong>.</span>
-            <Button variant="ghost" className="h-auto p-0 underline text-black hover:bg-yellow-400/50 hover:text-black" onClick={stopImpersonating}>
-              <Undo2 className="mr-1 h-4 w-4"/>
-              Voltar para sua conta
-            </Button>
-          </div>
-        )}
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
           {children}
         </main>

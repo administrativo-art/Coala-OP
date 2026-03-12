@@ -21,9 +21,6 @@ export const useUser = () => {
     return {
         user: context.user,
         users: context.users,
-        originalUser: context.originalUser,
-        impersonate: context.impersonate,
-        stopImpersonating: context.stopImpersonating,
         logout: context.logout,
         updateUser: context.updateUser,
     }

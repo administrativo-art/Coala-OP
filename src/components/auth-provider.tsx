@@ -10,12 +10,9 @@ import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndP
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
 
-const ORIGINAL_USER_STORAGE_KEY = 'smart-converter-original-user';
-
 export interface AuthContextType {
   user: User | null;
   firebaseUser: FirebaseUser | null;
-  originalUser: User | null;
   users: User[];
   isAuthenticated: boolean;
   loading: boolean;
@@ -27,8 +24,6 @@ export interface AuthContextType {
   deleteUser: (userId: string) => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
-  impersonate: (userId: string) => void;
-  stopImpersonating: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,7 +31,6 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<User | null>(null);
-  const [originalUser, setOriginalUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [permissions, setPermissions] = useState<PermissionSet>(defaultGuestPermissions);
   const [loading, setLoading] = useState(true);
@@ -82,13 +76,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setLoading(false);
     });
-
-    try {
-      const storedOriginalUser = localStorage.getItem(ORIGINAL_USER_STORAGE_KEY);
-      if (storedOriginalUser) setOriginalUser(JSON.parse(storedOriginalUser));
-    } catch (error) {
-        console.error("Failed to load original user state from storage", error);
-    }
 
     return () => unsubscribeAuth();
   }, [profilesLoading, adminProfileId]);
@@ -166,20 +153,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const stopImpersonating = useCallback(() => {
-    if (originalUser) {
-      setAppUser(originalUser);
-      setOriginalUser(null);
-      localStorage.removeItem(ORIGINAL_USER_STORAGE_KEY);
-    }
-  }, [originalUser]);
-
   const logout = useCallback(async () => {
-    stopImpersonating();
     adminCredentials.current = null;
     await signOut(auth);
     router.push('/login');
-  }, [router, stopImpersonating]);
+  }, [router]);
 
   const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string):Promise<string | null> => {
     try {
@@ -235,20 +213,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const impersonate = useCallback((userId: string) => {
-    if (!permissions.settings.impersonate) return;
-    const userToImpersonate = users.find(u => u.id === userId);
-    if (userToImpersonate && appUser && !originalUser) {
-      setOriginalUser(appUser);
-      setAppUser(userToImpersonate);
-      localStorage.setItem(ORIGINAL_USER_STORAGE_KEY, JSON.stringify(appUser));
-    }
-  }, [appUser, originalUser, users, permissions.settings.impersonate]);
-
   const value = useMemo(() => ({
     user: appUser,
     firebaseUser,
-    originalUser,
     users,
     isAuthenticated: !!appUser,
     loading: loading || profilesLoading,
@@ -260,10 +227,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     deleteUser,
     resetPassword,
     changePassword,
-    impersonate,
-    stopImpersonating,
   }), [
-    appUser, firebaseUser, originalUser, users, loading, profilesLoading, permissions, login, logout, addUser, updateUser, deleteUser, resetPassword, changePassword, impersonate, stopImpersonating
+    appUser, firebaseUser, users, loading, profilesLoading, permissions, login, logout, addUser, updateUser, deleteUser, resetPassword, changePassword
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

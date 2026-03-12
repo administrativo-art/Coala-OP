@@ -1,8 +1,7 @@
 
-
 "use client"
 
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -13,22 +12,17 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
-  DropdownMenuPortal
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from "@/components/ui/button";
 import { Input } from '@/components/ui/input';
-import { LogOut, Warehouse, Camera, Upload, Users, Undo2, KeyRound } from 'lucide-react';
+import { LogOut, Warehouse, Camera, Upload, KeyRound } from 'lucide-react';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
 import { ChangePasswordModal } from './change-password-modal';
 
 export function UserProfile() {
-  const { user, users, permissions, originalUser, impersonate, stopImpersonating, logout, updateUser } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles } = useProfiles();
   const { toast } = useToast();
@@ -37,8 +31,6 @@ export function UserProfile() {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const isImpersonating = !!originalUser;
-
   if (!user) {
     return null;
   }
@@ -83,10 +75,6 @@ export function UserProfile() {
     }
   };
   
-  const canImpersonate = useMemo(() => {
-    return permissions.settings.impersonate;
-  }, [permissions]);
-
   return (
     <>
       <DropdownMenu>
@@ -105,19 +93,6 @@ export function UserProfile() {
               </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
-              {isImpersonating && (
-                <>
-                  <DropdownMenuLabel className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200">
-                    Navegando como {user.username}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={stopImpersonating}>
-                    <Undo2 className="mr-2" />
-                    <span>Voltar para {originalUser.username}</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              )}
               <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium leading-none">{user.username}</p>
@@ -145,32 +120,6 @@ export function UserProfile() {
                 <span>Alterar senha</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-
-              {canImpersonate && !isImpersonating && (
-                <>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <Users className="mr-2 h-4 w-4" />
-                      <span>Navegar como</span>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuPortal>
-                      <DropdownMenuSubContent>
-                        <ScrollArea className="h-64">
-                          {users
-                            .filter(u => u.id !== user.id)
-                            .sort((a,b) => a.username.localeCompare(b.username))
-                            .map(u => (
-                              <DropdownMenuItem key={u.id} onSelect={() => impersonate(u.id)}>
-                                  {u.username}
-                              </DropdownMenuItem>
-                          ))}
-                        </ScrollArea>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuPortal>
-                  </DropdownMenuSub>
-                  <DropdownMenuSeparator />
-                </>
-              )}
 
               <DropdownMenuItem onClick={logout}>
                   <LogOut className="mr-2 h-4 w-4" />
@@ -200,5 +149,3 @@ export function UserProfile() {
     </>
   );
 }
-
-    
