@@ -3,24 +3,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- FUNÇÕES DE APOIO ---
+    // --- FUNÇÕES DE APOIO OTIMIZADAS (Usando Custom Claims) ---
 
     function isAuth() {
       return request.auth != null;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function getPerms() {
-      let profileId = getUserData().profileId;
-      return get(/databases/$(database)/documents/profiles/$(profileId)).data.permissions;
-    }
-
+    // Verifica se o usuário é administrador via Custom Claim no token
     function isAdmin() {
-      let profileId = getUserData().profileId;
-      return get(/databases/$(database)/documents/profiles/$(profileId)).data.isDefaultAdmin == true;
+      return isAuth() && request.auth.token.isDefaultAdmin == true;
+    }
+
+    // Busca permissões do perfil usando o profileId presente no token
+    function getPerms() {
+      let profileId = request.auth.token.profileId;
+      return get(/databases/$(database)/documents/profiles/$(profileId)).data.permissions;
     }
 
     // --- FUNÇÕES DE VALIDAÇÃO DE SCHEMA ---
@@ -177,8 +174,8 @@ service cloud.firestore {
     }
 
     match /stockAuditSessions/{sessionId} {
-      allow read: if isAuth() && (isAdmin() || getPerms().stock.audit.view == true);
-      allow write: if isAuth() && (isAdmin() || getPerms().stock.audit.start == true || getPerms().stock.audit.approve == true)
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.stockCount.view == true);
+      allow write: if isAuth() && (isAdmin() || getPerms().stock.stockCount.perform == true || getPerms().stock.stockCount.approve == true)
         && isValidStockCount(request.resource.data);
     }
 
