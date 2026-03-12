@@ -1,5 +1,3 @@
-
-
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -28,8 +26,8 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
-import { useCompanySettings } from '@/hooks/use-company-settings';
-import Image from 'next/image';
+import { storage } from '@/lib/firebase';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 
 
 const userSchema = z.object({
@@ -37,7 +35,7 @@ const userSchema = z.object({
   email: z.string().email("O e-mail é inválido."),
   password: z.string().optional(),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
-  assignedKioskIds: z.array(z.string()).min(1, 'Selecione pelo menos um quiosque.'),
+  assignedKioskIds: z.array(z.string()),
   avatarUrl: z.string().optional(),
   operacional: z.boolean().optional(),
 }).refine(data => {
@@ -66,6 +64,7 @@ export function UserManagement() {
   const [kioskFilter, setKioskFilter] = useState('all');
   const [showPassword, setShowPassword] = useState(false);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<UserFormValues>({
@@ -178,26 +177,38 @@ export function UserManagement() {
   };
   
   const handlePhotoUpdate = async (dataUrl: string) => {
-    form.setValue('avatarUrl', dataUrl, { shouldDirty: true });
-    toast({ title: "Foto de perfil atualizada!" });
+    setIsUploadingPhoto(true);
+    const targetUserId = editingUser?.id || `new-user-${Date.now()}`;
+    try {
+      const storageRef = ref(storage, `avatars/${targetUserId}`);
+      await uploadString(storageRef, dataUrl, 'data_url');
+      const downloadURL = await getDownloadURL(storageRef);
+      form.setValue('avatarUrl', downloadURL, { shouldDirty: true });
+      toast({ title: "Foto atualizada!" });
+    } catch (error) {
+      console.error(error);
+      toast({ variant: 'destructive', title: 'Erro ao salvar foto.', description: 'Tente novamente.' });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
   };
   
   const handlePhotoCaptured = async (dataUrl: string) => {
-      handlePhotoUpdate(dataUrl);
+      await handlePhotoUpdate(dataUrl);
       setIsPhotoModalOpen(false);
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) { // 2MB limit
-        toast({ variant: 'destructive', title: 'Arquivo muito grande' });
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ variant: 'destructive', title: 'Arquivo muito grande', description: 'Selecione uma imagem menor que 5MB.' });
         return;
       }
       const reader = new FileReader();
       reader.onloadend = async () => {
         const dataUrl = reader.result as string;
-        handlePhotoUpdate(dataUrl);
+        await handlePhotoUpdate(dataUrl);
       };
       reader.readAsDataURL(file);
     }
@@ -247,14 +258,22 @@ export function UserManagement() {
                         <div className="space-y-2">
                             <Label>Foto do perfil</Label>
                             <Avatar className="h-24 w-24">
-                            <AvatarImage src={form.watch('avatarUrl') || undefined} />
-                            <AvatarFallback className="text-3xl bg-primary text-primary-foreground">
-                                {form.watch('username')?.charAt(0).toUpperCase() || '?'}
-                            </AvatarFallback>
+                            {isUploadingPhoto ? (
+                                <AvatarFallback>
+                                    <Loader2 className="h-6 w-6 animate-spin" />
+                                </AvatarFallback>
+                            ) : (
+                                <>
+                                    <AvatarImage src={form.watch('avatarUrl') || undefined} />
+                                    <AvatarFallback className="text-3xl bg-primary text-primary-foreground">
+                                        {form.watch('username')?.charAt(0).toUpperCase() || '?'}
+                                    </AvatarFallback>
+                                </>
+                            )}
                             </Avatar>
                             <div className="flex flex-col gap-1.5">
-                                <Button type="button" size="sm" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2 h-4 w-4"/> Tirar foto</Button>
-                                <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4"/> Carregar</Button>
+                                <Button type="button" size="sm" variant="outline" onClick={() => setIsPhotoModalOpen(true)} disabled={isUploadingPhoto}><Camera className="mr-2 h-4 w-4"/> Tirar foto</Button>
+                                <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto}><Upload className="mr-2 h-4 w-4"/> Carregar</Button>
                             </div>
                             <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
                         </div>
@@ -358,7 +377,7 @@ export function UserManagement() {
                                         <DropdownMenuTrigger asChild>
                                             <FormControl>
                                                 <Button variant="outline" className="w-full justify-between font-normal">
-                                                    {field.value?.length > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
+                                                    {(field.value?.length || 0) > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
                                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                 </Button>
                                             </FormControl>
@@ -394,7 +413,7 @@ export function UserManagement() {
 
                     <div className="flex justify-end gap-2 pt-4">
                     <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                    <Button type="submit">{editingUser ? 'Salvar alterações' : 'Criar usuário'}</Button>
+                    <Button type="submit" disabled={isUploadingPhoto}>{editingUser ? 'Salvar alterações' : 'Criar usuário'}</Button>
                     </div>
                 </form>
                 </Form>
@@ -551,5 +570,3 @@ export function UserManagement() {
     </>
   );
 }
-
-    
