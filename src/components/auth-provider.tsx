@@ -3,9 +3,10 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
-import { db, auth } from '@/lib/firebase';
+import { db, auth, functions } from '@/lib/firebase';
 import { collection, onSnapshot, doc, query, getDoc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
 
@@ -160,31 +161,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string): Promise<string | null> => {
     try {
-      console.log('adminCredentials antes:', adminCredentials.current);
-      // 1. Guarda credenciais do admin antes de criar o novo usuário
-      const savedCredentials = adminCredentials.current;
-
-      // 2. Cria o usuário no Firebase Auth (o Firebase faz login automático do novo usuário aqui)
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const newUser = userCredential.user;
-      console.log('novo usuário criado:', newUser.uid);
-
-      // 3. Reconecta o admin IMEDIATAMENTE (antes de gravar no Firestore para manter permissão de admin)
-      if (savedCredentials) {
-        await signInWithEmailAndPassword(auth, savedCredentials.email, savedCredentials.password);
-        console.log('admin reconectado');
-      } else {
-        console.log('savedCredentials é null — admin não vai reconectar!');
-      }
-
-      // 4. Agora grava o documento com a sessão do administrador restaurada
-      const userDocRef = doc(db, 'users', newUser.uid);
-      await setDoc(userDocRef, { ...userData, email });
-      console.log('documento salvo!');
-
-      return newUser.uid;
+      const createUserFn = httpsCallable(functions, 'createUser');
+      const result = await createUserFn({
+        email,
+        password,
+        username: userData.username,
+        profileId: userData.profileId,
+        assignedKioskIds: userData.assignedKioskIds,
+        avatarUrl: userData.avatarUrl,
+        operacional: userData.operacional
+      });
+      
+      return (result.data as any).uid;
     } catch (error) {
-      console.error("Error adding user:", error);
+      console.error("Error adding user via Cloud Function:", error);
       return null;
     }
   }, []);
@@ -210,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+  const changePassword = useCallback(async (oldPassword: string, newPassword: string) => {
     const user = auth.currentUser;
     if (!user || !user.email) return { success: false, error: 'Usuário não autenticado.' };
     const credential = EmailAuthProvider.credential(user.email, oldPassword);

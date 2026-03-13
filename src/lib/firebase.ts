@@ -1,8 +1,8 @@
-
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { initializeFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCn2V94gjX_Y1n4IOY40Y0JBKgXl--Sgns",
@@ -22,5 +22,6 @@ const db = initializeFirestore(app, {
 }, "coala");
 const storage = getStorage(app);
 const auth = getAuth(app);
+const functions = getFunctions(app);
 
-export { db, storage, auth };
+export { db, storage, auth, functions };
