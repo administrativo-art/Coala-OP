@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -307,6 +306,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             />
                             <Accordion type="multiple" defaultValue={['dashboard', 'stock']} className="w-full">
                             
+                            {/* ── DASHBOARD ── */}
                             <AccordionItem value="dashboard">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><LayoutDashboard className="mr-2 h-5 w-5" /> Dashboard</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -320,6 +320,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </AccordionContent>
                             </AccordionItem>
 
+                            {/* ── CADASTROS ── */}
                             <AccordionItem value="registration">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><ListPlus className="mr-2 h-5 w-5" /> Cadastros</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -336,11 +337,13 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </AccordionContent>
                             </AccordionItem>
 
+                            {/* ── GESTÃO DE ESTOQUE ── */}
                             <AccordionItem value="stock">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><ClipboardCheck className="mr-2 h-5 w-5" /> Gestão de Estoque</div></AccordionTrigger>
                                 <AccordionContent className="space-y-4 p-1 pt-4">
                                     {renderModuleToggle("permissions.stock.view" as any, "Visualizar Módulo de Estoque", "Permissão geral para acessar a seção.")}
                                     
+                                    {/* Controle de Estoque */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Controle de Estoque</h4>
                                         {renderPermissionSwitch("permissions.stock.inventoryControl.view" as any, "Visualizar Controle de Estoque", "Permite ver a tela principal de controle de estoque.", !stockViewWatch)}
@@ -353,15 +356,25 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                         </div>
                                     </div>
 
+                                    {/* Contagem de Estoque */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Contagem de estoque</h4>
                                         {createSyncedSwitch("permissions.stock.stockCount.view" as any, "permissions.stock.audit.view" as any, "Visualizar Histórico", "Permite ver as sessões salvas.", !stockViewWatch)}
                                         <div className="pl-6 space-y-2">
                                             {createSyncedSwitch("permissions.stock.stockCount.perform" as any, "permissions.stock.audit.start" as any, "Realizar contagem", "Permite iniciar uma nova sessão de contagem.", !stockCountViewWatch, true)}
                                             {createSyncedSwitch("permissions.stock.stockCount.approve" as any, "permissions.stock.audit.approve" as any, "Concluir contagem", "Permite aprovar divergências, ajustando o estoque.", !stockCountViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.stockCount.requestItem" as any, "Solicitar adição de insumo", "Permite solicitar a inclusão de um insumo não listado na contagem.", !stockCountViewWatch, true)}
                                         </div>
                                     </div>
 
+                                    {/* Solicitações de Adição */}
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                        <h4 className="font-semibold text-md mb-2">Solicitações de Adição de Insumo</h4>
+                                        {renderPermissionSwitch("permissions.itemRequests.add" as any, "Criar Solicitações", "Permite abrir solicitações de adição de insumo.", !stockViewWatch)}
+                                        {renderPermissionSwitch("permissions.itemRequests.approve" as any, "Aprovar Solicitações", "Permite aprovar ou rejeitar solicitações de adição de insumo.", !stockViewWatch, true)}
+                                    </div>
+
+                                    {/* Análise de Estoque */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Análise de Estoque</h4>
                                         {renderPermissionSwitch("permissions.stock.analysis.view" as any, "Visualizar Análises de Estoque", "Permite ver a tela de análises.", !stockViewWatch)}
@@ -373,6 +386,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                          </div>
                                     </div>
 
+                                    {/* Compras */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Compras</h4>
                                         {renderPermissionSwitch("permissions.stock.purchasing.view" as any, "Visualizar Módulo de Compras", "Permite ver a tela de compras.", !stockViewWatch)}
@@ -383,6 +397,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                          </div>
                                     </div>
 
+                                    {/* Avarias */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Avarias</h4>
                                         {renderPermissionSwitch("permissions.stock.returns.view" as any, "Visualizar Módulo de Avarias", "Permite ver a tela de avarias.", !stockViewWatch)}
@@ -393,11 +408,15 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                          </div>
                                     </div>
 
+                                    {/* Conversões e Listas */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Conversões e Listas</h4>
                                         {renderPermissionSwitch("permissions.stock.conversions.view" as any, "Visualizar Conversor de Medidas", "Permite acessar a ferramenta de conversão.", !stockViewWatch)}
+                                        {renderPermissionSwitch("permissions.stock.predefinedLists.view" as any, "Visualizar Listas Predefinidas", "Permite ver as listas de insumos predefinidas.", !stockViewWatch)}
+                                        {renderPermissionSwitch("permissions.stock.predefinedLists.manage" as any, "Gerenciar Listas Predefinidas", "Permite criar e editar listas predefinidas.", !stockViewWatch, true)}
                                     </div>
                                     
+                                    {/* Reposição */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Reposição</h4>
                                         {renderPermissionSwitch("permissions.reposition.cancel" as any, "Cancelar Atividade", "Permite cancelar uma atividade de reposição em andamento.", !stockViewWatch)}
@@ -406,6 +425,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </AccordionContent>
                             </AccordionItem>
 
+                            {/* ── CUSTO E PREÇO ── */}
                             <AccordionItem value="pricing">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><DollarSign className="mr-2 h-5 w-5" /> Custo e Preço</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -415,6 +435,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </AccordionContent>
                             </AccordionItem>
                             
+                            {/* ── CONFIGURAÇÕES ── */}
                             <AccordionItem value="settings">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><Settings className="mr-2 h-5 w-5" /> Configurações</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -426,6 +447,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </AccordionContent>
                             </AccordionItem>
 
+                            {/* ── TAREFAS ── */}
                             <AccordionItem value="tasks">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><ListTodo className="mr-2 h-5 w-5" /> Tarefas</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
@@ -434,12 +456,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </AccordionContent>
                             </AccordionItem>
 
+                            {/* ── AJUDA ── */}
                             <AccordionItem value="help">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><BookOpen className="mr-2 h-5 w-5" /> Ajuda</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
                                     {renderModuleToggle("permissions.help.view" as any, "Ver Central de Ajuda")}
                                 </AccordionContent>
                             </AccordionItem>
+
                             </Accordion>
                         </div>
                     </ScrollArea>
