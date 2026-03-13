@@ -3,18 +3,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- FUNÇÕES DE APOIO OTIMIZADAS (Usando Custom Claims) ---
+    // --- FUNÇÕES DE APOIO ---
 
     function isAuth() {
       return request.auth != null;
     }
 
-    // Verifica se o usuário é administrador via Custom Claim no token
     function isAdmin() {
       return isAuth() && request.auth.token.isDefaultAdmin == true;
     }
 
-    // Busca permissões do perfil usando o profileId presente no token
     function getPerms() {
       let profileId = request.auth.token.profileId;
       return get(/databases/$(database)/documents/profiles/$(profileId)).data.permissions;
@@ -192,9 +190,12 @@ service cloud.firestore {
         && request.resource.data.sessionId is string;
     }
 
+    // ✅ CORRIGIDO: tasks agora exige permissão por perfil
     match /tasks/{taskId} {
-      allow read: if isAuth();
-      allow write: if isAuth() && isValidTask(request.resource.data);
+      allow read: if isAuth() && (isAdmin() || getPerms().tasks.view == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().tasks.manage == true)
+        && isValidTask(request.resource.data);
+      allow delete: if isAuth() && (isAdmin() || getPerms().tasks.manage == true);
     }
 
     match /kiosks/{kioskId} {
@@ -227,9 +228,9 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ✅ CORRIGIDO: catch-all bloqueia tudo por padrão
     match /{document=**} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read, write: if false;
     }
   }
 }
