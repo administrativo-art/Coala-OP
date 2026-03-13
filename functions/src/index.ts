@@ -14,10 +14,7 @@ const auth = getAuth();
 // --- Criar usuário (Auth + Firestore) server-side ---
 export const createUser = onCall(
   { 
-    cors: [
-      "https://6000-firebase-studio-1750786823522.cluster-duylic2g3fbzerqpzxxbw6helm.cloudworkstations.dev",
-      "https://*.cloudworkstations.dev",
-    ] 
+    cors: true 
   },
   async (request) => {
     // Apenas admins podem criar usuários
