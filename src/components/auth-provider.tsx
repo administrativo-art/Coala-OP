@@ -1,10 +1,10 @@
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth, functions } from '@/lib/firebase';
-import { collection, onSnapshot, doc, query, getDoc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, query, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
@@ -37,8 +37,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const router = useRouter();
 
-  const adminCredentials = useRef<{email: string, password: string} | null>(null);
-
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
@@ -49,20 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const userDocRef = doc(db, 'users', user.uid);
-        let userDocSnap = await getDoc(userDocRef);
-        
-        if (!userDocSnap.exists() && user.email === 'administrativo@coalashakes.com') {
-          if (adminProfileId) {
-            const firstAdminData: Omit<User, 'id'> = {
-                username: user.displayName || user.email!.split('@')[0],
-                email: user.email!,
-                profileId: adminProfileId,
-                assignedKioskIds: [],
-            };
-            await setDoc(userDocRef, firstAdminData);
-            userDocSnap = await getDoc(userDocRef);
-          }
-        }
+        const userDocSnap = await getDoc(userDocRef);
         
         if (userDocSnap.exists()) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
@@ -143,9 +128,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      if (email === 'administrativo@coalashakes.com') {
-        adminCredentials.current = { email, password };
-      }
       return true;
     } catch (error) {
       console.error("Login error:", error);
@@ -154,7 +136,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    adminCredentials.current = null;
     await signOut(auth);
     router.push('/login');
   }, [router]);
@@ -162,19 +143,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string): Promise<string | null> => {
     try {
       const createUserFn = httpsCallable(functions, 'createUser');
+      
       const result = await createUserFn({
         email,
         password,
         username: userData.username,
         profileId: userData.profileId,
         assignedKioskIds: userData.assignedKioskIds,
-        avatarUrl: userData.avatarUrl,
-        operacional: userData.operacional
+        avatarUrl: userData.avatarUrl || '',
+        operacional: userData.operacional || false,
       });
-      
-      return (result.data as any).uid;
+
+      const { uid } = result.data as { uid: string };
+      return uid;
     } catch (error) {
-      console.error("Error adding user via Cloud Function:", error);
+      console.error("Error adding user:", error);
       return null;
     }
   }, []);
@@ -207,7 +190,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
-      if (adminCredentials.current) adminCredentials.current.password = newPassword;
       return { success: true };
     } catch (error: any) {
       let errorMessage = 'Ocorreu um erro ao alterar a senha.';
