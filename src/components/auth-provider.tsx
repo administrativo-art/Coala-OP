@@ -48,20 +48,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const userDocRef = doc(db, 'users', user.uid);
-        let userDocSnap = await getDoc(userDocRef);
+        const userDocSnap = await getDoc(userDocRef);
         
-        if (!userDocSnap.exists()) {
-          // Aguarda documento ser criado pela Cloud Function
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          userDocSnap = await getDoc(userDocRef);
-        }
-
         if (userDocSnap.exists()) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
           setAppUser(userData);
         } else {
-          await signOut(auth);
-          setAppUser(null);
+          // Aguarda documento ser criado pela Cloud Function
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const retrySnap = await getDoc(userDocRef);
+          if (retrySnap.exists()) {
+            const userData = { id: retrySnap.id, ...retrySnap.data() } as User;
+            setAppUser(userData);
+          } else {
+            await signOut(auth);
+            setAppUser(null);
+          }
         }
       } else {
         setAppUser(null);
@@ -147,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login');
   }, [router]);
 
-  const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string): Promise<string | null> => {
+  const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => {
     try {
       const createUserFn = httpsCallable(functions, 'createUser');
       
