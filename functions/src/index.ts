@@ -66,6 +66,35 @@ export const createUser = onCall(
   }
 );
 
+// --- Deletar usuário (Auth + Firestore) server-side ---
+export const deleteUser = onCall(
+  { cors: ["*"] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Não autenticado.');
+    }
+    if (!request.auth.token.isDefaultAdmin) {
+      throw new HttpsError('permission-denied', 'Apenas administradores podem excluir usuários.');
+    }
+
+    const { uid } = request.data;
+    if (!uid) {
+      throw new HttpsError('invalid-argument', 'O UID do usuário é obrigatório.');
+    }
+
+    try {
+      // 1. Deleta do Firebase Auth
+      await auth.deleteUser(uid);
+      // 2. Deleta o documento no Firestore
+      await db.collection('users').doc(uid).delete();
+      return { success: true };
+    } catch (error: any) {
+      console.error("Erro ao deletar usuário:", error);
+      throw new HttpsError('internal', error.message || 'Erro ao deletar usuário.');
+    }
+  }
+);
+
 // --- Custom Claims Sync: quando o documento do usuário muda ---
 export const onUserProfileChange = onDocumentWritten(
   { document: 'users/{userId}', database: 'coala' },

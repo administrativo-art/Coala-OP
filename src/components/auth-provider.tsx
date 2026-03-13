@@ -48,22 +48,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const userDocRef = doc(db, 'users', user.uid);
-        const userDocSnap = await getDoc(userDocRef);
+        let userDocSnap = await getDoc(userDocRef);
         
+        if (!userDocSnap.exists()) {
+          // Aguarda documento ser criado pela Cloud Function
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          userDocSnap = await getDoc(userDocRef);
+        }
+
         if (userDocSnap.exists()) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
           setAppUser(userData);
         } else {
-          // Aguarda documento ser criado pela Cloud Function
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          const retrySnap = await getDoc(userDocRef);
-          if (retrySnap.exists()) {
-            const userData = { id: retrySnap.id, ...retrySnap.data() } as User;
-            setAppUser(userData);
-          } else {
-            await signOut(auth);
-            setAppUser(null);
-          }
+          await signOut(auth);
+          setAppUser(null);
         }
       } else {
         setAppUser(null);
@@ -184,7 +182,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
   
   const deleteUser = useCallback(async (userId: string) => {
-    await deleteDoc(doc(db, "users", userId));
+    try {
+      const deleteUserFn = httpsCallable(functions, 'deleteUser');
+      await deleteUserFn({ uid: userId });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      throw error;
+    }
   }, []);
   
   const resetPassword = useCallback(async (email: string): Promise<boolean> => {
