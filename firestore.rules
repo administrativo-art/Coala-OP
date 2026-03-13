@@ -242,6 +242,8 @@ service cloud.firestore {
     match /formTemplates/{id} { allow read, write: if isAuth(); }
     match /stockCounts/{id} { allow read, write: if isAuth(); }
     match /userProfiles/{id} { allow read, write: if isAuth(); }
+    match /predefinedLists/{id} { allow read, write: if isAuth(); }
+    match /competitorProducts/{id} { allow read, write: if isAuth(); }
 
     // ✅ CORRIGIDO: catch-all bloqueia tudo por padrão
     match /{document=**} {
