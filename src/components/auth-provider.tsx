@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
@@ -53,8 +54,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
           setAppUser(userData);
         } else {
-           await signOut(auth);
-           setAppUser(null);
+          // Aguarda 2s para o documento ser criado pela Cloud Function
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const retrySnap = await getDoc(userDocRef);
+          if (retrySnap.exists()) {
+            const userData = { id: retrySnap.id, ...retrySnap.data() } as User;
+            setAppUser(userData);
+          } else {
+            await signOut(auth);
+            setAppUser(null);
+          }
         }
       } else {
         setAppUser(null);
