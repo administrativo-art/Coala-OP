@@ -160,21 +160,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string): Promise<string | null> => {
     try {
+      console.log('adminCredentials antes:', adminCredentials.current);
       // 1. Guarda credenciais do admin antes de criar o novo usuário
       const savedCredentials = adminCredentials.current;
 
       // 2. Cria o usuário no Firebase Auth (o Firebase faz login automático do novo usuário aqui)
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const newUser = userCredential.user;
+      console.log('novo usuário criado:', newUser.uid);
 
       // 3. Reconecta o admin IMEDIATAMENTE (antes de gravar no Firestore para manter permissão de admin)
       if (savedCredentials) {
         await signInWithEmailAndPassword(auth, savedCredentials.email, savedCredentials.password);
+        console.log('admin reconectado');
+      } else {
+        console.log('savedCredentials é null — admin não vai reconectar!');
       }
 
       // 4. Agora grava o documento com a sessão do administrador restaurada
       const userDocRef = doc(db, 'users', newUser.uid);
       await setDoc(userDocRef, { ...userData, email });
+      console.log('documento salvo!');
 
       return newUser.uid;
     } catch (error) {
