@@ -14,7 +14,7 @@ const auth = getAuth();
 // --- Criar usuário (Auth + Firestore) server-side ---
 export const createUser = onCall(
   { 
-    cors: true 
+    cors: ["*"] 
   },
   async (request) => {
     // Apenas admins podem criar usuários
