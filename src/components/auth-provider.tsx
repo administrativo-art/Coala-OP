@@ -136,7 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      // Força refresh do token para pegar os custom claims mais recentes
+      await credential.user.getIdToken(true);
       return true;
     } catch (error) {
       console.error("Login error:", error);
@@ -151,6 +153,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => {
     try {
+      // Força refresh do token para garantir que os claims estão atualizados antes de chamar a cloud function
+      await auth.currentUser?.getIdToken(true);
+
       const createUserFn = httpsCallable(functions, 'createUser');
       
       const result = await createUserFn({
