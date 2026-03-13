@@ -150,7 +150,12 @@ service cloud.firestore {
 
     // Lotes de estoque
     match /lots/{lotId} {
-      allow read: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.view == true);
+      allow read: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.inventoryControl.view == true ||
+        getPerms().stock.stockCount.perform == true ||
+        getPerms().stock.stockCount.approve == true
+      );
       allow create: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.addLot == true)
         && isValidLot(request.resource.data);
       allow update: if isAuth() && (
