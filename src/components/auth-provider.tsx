@@ -57,6 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (userDocSnap.exists()) {
+          // Força refresh do token para garantir claims atualizados (profileId, isDefaultAdmin)
+          await user.getIdToken(true);
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
           setAppUser(userData);
         } else {
