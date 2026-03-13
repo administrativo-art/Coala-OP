@@ -374,7 +374,11 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   
   const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
 
-  const pendingAudits = useMemo(() => auditSessions.filter(s => s.status === 'pending_review'), [auditSessions]);
+  const isAdmin = permissions.settings.manageUsers; // admin vê tudo
+  const pendingAudits = useMemo(() => auditSessions.filter(s => 
+    s.status === 'pending_review' && 
+    (isAdmin || user?.assignedKioskIds?.includes(s.kioskId))
+  ), [auditSessions, isAdmin, user]);
   
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
@@ -526,7 +530,12 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
                 </div>
             </CardContent>
         </Card>
-      <KioskSelectionModal open={isKioskSelectionOpen} onOpenChange={setIsKioskSelectionOpen} kiosks={kiosks} onSelectKiosk={handleStartSession} />
+      <KioskSelectionModal 
+        open={isKioskSelectionOpen} 
+        onOpenChange={setIsKioskSelectionOpen} 
+        kiosks={isAdmin ? kiosks : kiosks.filter(k => user?.assignedKioskIds?.includes(k.id))} 
+        onSelectKiosk={handleStartSession} 
+      />
     </>
   );
 }
