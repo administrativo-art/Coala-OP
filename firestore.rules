@@ -190,7 +190,6 @@ service cloud.firestore {
         && request.resource.data.sessionId is string;
     }
 
-    // ✅ CORRIGIDO: tasks agora exige permissão por perfil
     match /tasks/{taskId} {
       allow read: if isAuth() && (isAdmin() || getPerms().tasks.view == true);
       allow create, update: if isAuth() && (isAdmin() || getPerms().tasks.manage == true)
@@ -227,6 +226,22 @@ service cloud.firestore {
         && request.resource.data.simulationId is string;
       allow update, delete: if false;
     }
+
+    // --- COLEÇÕES AUXILIARES ---
+    match /classifications/{id} { allow read, write: if isAuth(); }
+    match /competitorGroups/{id} { allow read, write: if isAuth(); }
+    match /concorrentes/{id} { allow read, write: if isAuth(); }
+    match /concorrente_precos/{id} { allow read, write: if isAuth(); }
+    match /concorrente_produtos/{id} { allow read, write: if isAuth(); }
+    match /consumptionReports/{id} { allow read, write: if isAuth(); }
+    match /entities/{id} { allow read, write: if isAuth(); }
+    match /itemAdditionRequests/{id} { allow read, write: if isAuth(); }
+    match /locations/{id} { allow read, write: if isAuth(); }
+    match /settings/{id} { allow read, write: if isAuth(); }
+    match /counters/{id} { allow read, write: if isAuth(); }
+    match /formTemplates/{id} { allow read, write: if isAuth(); }
+    match /stockCounts/{id} { allow read, write: if isAuth(); }
+    match /userProfiles/{id} { allow read, write: if isAuth(); }
 
     // ✅ CORRIGIDO: catch-all bloqueia tudo por padrão
     match /{document=**} {
