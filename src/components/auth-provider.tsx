@@ -5,7 +5,7 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth, functions } from '@/lib/firebase';
-import { collection, onSnapshot, doc, query, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { disableNetwork, enableNetwork, collection, onSnapshot, doc, query, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
@@ -147,7 +147,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    await disableNetwork(db);
     await signOut(auth);
+    await enableNetwork(db);
     router.push('/login');
   }, [router]);
 
