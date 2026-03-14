@@ -281,7 +281,7 @@ service cloud.firestore {
 
     // Simulações de preço
     match /productSimulations/{simId} {
-      allow read: if isAuth() && (isAdmin() || getPerms().pricing.view == true);
+      allow read: if isAuth() && (isAdmin() || getPerms().pricing.view == true || getPerms().dashboard.technicalSheets == true);
       allow create, update: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true)
         && request.resource.data.keys().hasAll(['name'])
         && request.resource.data.name is string;
