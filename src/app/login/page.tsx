@@ -55,41 +55,42 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen w-full overflow-hidden font-sans">
-      {/* Imagem de fundo ancorada à esquerda */}
+      {/* Imagem de fundo — apenas desktop */}
       <img
         src={brand.loginBg}
         alt=""
         aria-hidden
-        className="absolute inset-0 h-full w-full object-cover"
+        className="absolute inset-0 h-full w-full object-cover hidden lg:block"
         style={{ objectPosition: "left center" }}
       />
 
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-slate-900/20" />
+      {/* Overlay — apenas desktop */}
+      <div className="absolute inset-0 bg-slate-900/20 hidden lg:block" />
 
-      {/* Layout duas colunas */}
+      {/* Layout */}
       <div className="relative z-10 flex min-h-screen w-full">
-        
-        {/* Coluna esquerda (Livre para a imagem) */}
-        <div className="hidden lg:flex flex-1 items-center justify-center p-12">
-            <div className="max-w-xl text-white space-y-4">
-                <h2 className="text-5xl font-bold leading-tight">{brand.name}</h2>
-                <p className="text-xl text-white/80">{brand.description}</p>
-            </div>
-        </div>
 
-        {/* Painel de login (Direita) */}
+        {/* Coluna esquerda — apenas desktop, livre para imagem */}
+        <div className="hidden lg:flex flex-1" />
+
+        {/* Painel de login */}
         <div
-          className="flex w-full max-w-md flex-col justify-center px-10 py-12 shadow-2xl"
+          className="flex w-full lg:max-w-md flex-col justify-center px-8 py-12 lg:shadow-2xl min-h-screen lg:min-h-0"
           style={{
-            background: "rgba(255, 255, 255, 0.88)",
+            background: "rgba(255, 255, 255, 0.92)",
             backdropFilter: "blur(24px)",
             WebkitBackdropFilter: "blur(24px)",
           }}
         >
+          {/* Nome do sistema — aparece sempre acima do formulário */}
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-slate-800">{brand.name}</h2>
+            <p className="text-sm text-slate-500 mt-0.5">{brand.description}</p>
+          </div>
+
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-slate-800 tracking-tight">
-              Acesso ao Sistema
+              Acesso ao sistema
             </h1>
             <p className="mt-1 text-sm text-slate-500">Entre com suas credenciais para continuar</p>
           </div>
@@ -114,19 +115,19 @@ export default function LoginPage() {
               <Label htmlFor="password" className="text-slate-700">Senha</Label>
               <div className="relative">
                 <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    {...register("password")}
-                    className="bg-white/70 h-12 rounded-xl pr-10"
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  {...register("password")}
+                  className="bg-white/70 h-12 rounded-xl pr-10"
                 />
                 <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
               {errors.password && (
@@ -140,7 +141,12 @@ export default function LoginPage() {
               </div>
             )}
 
-            <Button type="submit" className="w-full h-12 rounded-xl text-base font-semibold shadow-lg shadow-primary/20" size="lg" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              className="w-full h-12 rounded-xl text-base font-semibold shadow-lg shadow-primary/20"
+              size="lg"
+              disabled={isSubmitting}
+            >
               {isSubmitting ? (
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               ) : (
