@@ -70,8 +70,18 @@ export default function LoginPage() {
       {/* Layout */}
       <div className="relative z-10 flex min-h-screen w-full">
 
-        {/* Coluna esquerda — apenas desktop, espaço livre para a imagem */}
-        <div className="hidden lg:flex flex-1" />
+        {/* Coluna esquerda — apenas desktop, assinatura sobre a imagem */}
+        <div className="hidden lg:flex flex-1 relative">
+          <div style={{ position: "absolute", top: "64px", left: "48px", display: "flex", flexDirection: "column", gap: "4px" }}>
+            <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#FFFFFF", margin: 0, lineHeight: 1.2 }}>
+              Coala Operação{" "}
+              <span style={{ fontWeight: 300, color: "rgba(255,255,255,0.7)" }}>| Estoque</span>
+            </h2>
+            <p style={{ fontSize: "12px", fontWeight: 500, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
+              Gestão Inteligente de Estoque
+            </p>
+          </div>
+        </div>
 
         {/* Painel de login */}
         <div
@@ -82,50 +92,21 @@ export default function LoginPage() {
             WebkitBackdropFilter: "blur(24px)",
           }}
         >
-          {/* Assinatura do produto — canto superior esquerdo */}
-          <div
-            style={{
-              position: "absolute",
-              top: "64px",
-              left: "48px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "4px",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: "22px",
-                fontWeight: 600,
-                color: "#111827",
-                margin: 0,
-                lineHeight: 1.2,
-              }}
-            >
-              Coala Operação{" "}
-              <span style={{ fontWeight: 300, color: "#6B7280" }}>
-                | Estoque
-              </span>
-            </h2>
-            <p
-              style={{
-                fontSize: "12px",
-                fontWeight: 500,
-                color: "#6B7280",
-                textTransform: "uppercase",
-                letterSpacing: "0.5px",
-                margin: 0,
-              }}
-            >
-              Gestão Inteligente de Estoque
-            </p>
-          </div>
-
           {/* Formulário centralizado com espaço para a assinatura */}
           <div
             className="flex flex-col justify-center flex-1 px-12"
-            style={{ paddingTop: "180px", paddingBottom: "64px" }}
+            style={{ paddingTop: "64px", paddingBottom: "64px" }}
           >
+            {/* Assinatura — apenas mobile (no desktop aparece sobre a imagem) */}
+            <div className="lg:hidden mb-8" style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#111827", margin: 0, lineHeight: 1.2 }}>
+                Coala Operação{" "}
+                <span style={{ fontWeight: 300, color: "#6B7280" }}>| Estoque</span>
+              </h2>
+              <p style={{ fontSize: "12px", fontWeight: 500, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
+                Gestão Inteligente de Estoque
+              </p>
+            </div>
             <div className="mb-8">
               <h1 className="text-3xl font-bold text-slate-800 tracking-tight">
                 Acesso ao sistema
