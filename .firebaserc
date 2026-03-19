@@ -1,6 +1,7 @@
 {
   "projects": {
-    "default": "smart-converter-752gf"
+    "default": "smart-converter-752gf",
+    "Estoque": "smart-converter-752gf"
   },
   "targets": {},
   "etags": {}
