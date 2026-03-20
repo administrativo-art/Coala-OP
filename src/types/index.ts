@@ -147,6 +147,25 @@ export type ConsumptionReport = {
   results: ConsumptionAnalysisItem[];
 };
 
+export type SalesReportItem = {
+  sku: string;
+  productName: string;
+  simulationId: string;
+  quantity: number;
+};
+ 
+export type SalesReport = {
+  id: string;
+  reportName?: string;
+  month: number;
+  year: number;
+  kioskId: string;
+  kioskName?: string;
+  createdAt: string;
+  consumptionReportId?: string;
+  items: SalesReportItem[];
+};
+
 export type Shift = {
     id: string;
     userId: string;
