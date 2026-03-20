@@ -70,7 +70,6 @@ function OnlineUsersPanel() {
             setOnlineUsers(users.sort((a,b) => a.username.localeCompare(b.username)));
         });
 
-        // Update 'now' every 30 seconds to refresh the 'time ago' display
         const timer = setInterval(() => setNow(new Date()), 30 * 1000);
 
         return () => {
@@ -265,11 +264,11 @@ function PricingReportDashboard() {
     const categoryCounts: { [name: string]: number } = {};
     const lineCounts: { [name: string]: number } = {};
 
-    activeSimulations.forEach(s => { // Count from all simulations, not just filtered ones
+    activeSimulations.forEach(s => { 
         s.categoryIds.forEach(catId => {
             const category = categories.find(c => c.id === catId);
             if (category && category.type === 'category') {
-                categoryCounts[category.name] = (categoryCounts[category.name] || 0) + count as number;
+                categoryCounts[category.name] = (categoryCounts[category.name] || 0) + 1;
             }
         });
         if (s.lineId) {
@@ -346,14 +345,13 @@ export default function DashboardPage() {
         );
     }
     
-    // Determine the default tab based on permissions
     const getDefaultTab = () => {
         if (permissions.dashboard.operational) return 'operational';
         if (permissions.dashboard.pricing) return 'pricing';
         if (permissions.dashboard.technicalSheets) return 'technical-sheets';
         if (permissions.dashboard.audit) return 'audit';
         if (permissions.tasks.view) return 'tasks';
-        return 'operational'; // Fallback
+        return 'operational'; 
     }
 
     return (

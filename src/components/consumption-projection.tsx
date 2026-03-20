@@ -6,26 +6,20 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
-import { convertValue, units } from '@/lib/conversion';
+import { convertValue } from '@/lib/conversion';
 import { format, parseISO, addDays, isAfter, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from './ui/skeleton';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, HelpCircle, ArrowUpDown, TrendingUp, Download, LineChart, ShoppingCart, CalendarDays, BellRing, ListTodo, Check, Search } from 'lucide-react';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, ArrowUpDown, TrendingUp, LineChart, ShoppingCart, CalendarDays, BellRing, Search, Warehouse, ChevronsUpDown } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from './ui/scroll-area';
-import { type LotEntry, type BaseProduct, type Product, type Task, type UnitCategory } from '@/types';
-import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Input } from '@/components/ui/input';
+import { type LotEntry, type BaseProduct, type Product } from '@/types';
+import { Input } from './ui/input';
 import { cn } from '@/lib/utils';
-import { QuickProjectionModal } from './quick-projection-modal';
-import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
 import { useAllTasks } from '@/hooks/use-all-tasks';
 
 interface ProjectionResult {
@@ -54,9 +48,12 @@ interface GroupedProjectionResult {
     monthlyAvg: number;
 }
 
-function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[], kioskId: string }) {
-    const { legacyTasks } = useAllTasks();
+const formatCurrency = (value: number | undefined | null) => {
+    if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
 
+function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[], kioskId: string }) {
     const alerts = useMemo(() => {
         return results
             .filter(r => r.orderStatus === 'urgent' || r.orderStatus === 'soon')
@@ -128,10 +125,7 @@ export function ConsumptionProjection() {
     const [showOnlyAtRisk, setShowOnlyAtRisk] = useState(false);
     const [sortConfig, setSortConfig] = useState<{ key: keyof ProjectionResult | 'productName', direction: 'asc' | 'desc' }>({ key: 'daysRemaining', direction: 'asc' });
     const [simulationPercentage, setSimulationPercentage] = useState<number>(0);
-    const [quickProjectionProduct, setQuickProjectionProduct] = useState<BaseProduct | null>(null);
     const [searchTerm, setSearchTerm] = useState<string>('');
-    const router = useRouter();
-
 
     const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading || consumptionLoading;
 
@@ -184,15 +178,6 @@ export function ConsumptionProjection() {
                 }
             });
         });
-        
-        const allNetworkMonths = new Set<string>();
-        if (isMatrixView) {
-            for (const report of relevantReports) {
-                const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
-                const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
-                if (anyConsumption) allNetworkMonths.add(key);
-            }
-        }
         
         const dailyAverages = new Map<string, number>();
         const monthlyAverages = new Map<string, number>();
@@ -494,7 +479,7 @@ export function ConsumptionProjection() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Filtrar Insumos</CardTitle>
-                        <ListFilter className="h-4 w-4 text-muted-foreground" />
+                        <Warehouse className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <DropdownMenu>
