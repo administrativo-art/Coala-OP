@@ -84,20 +84,29 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
                                     <Accordion type="multiple" className="w-full space-y-3">
                                         {reports.map(report => (
                                             <AccordionItem value={report.id} key={report.id} className="border-none">
-                                                <Card>
-                                                    <AccordionTrigger className="p-4 hover:no-underline rounded-lg w-full">
+                                                <Card className="relative">
+                                                    <AccordionTrigger className="p-4 pr-16 hover:no-underline rounded-lg w-full">
                                                         <div className="flex items-center justify-between gap-4 w-full">
                                                             <div className="grid gap-1 flex-grow text-left">
                                                                 <p className="font-semibold">Relatório de {report.month}/{report.year}</p>
                                                                 <p className="text-sm text-muted-foreground">Analisado em: {report.createdAt && isValid(parseISO(report.createdAt)) ? format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'Data indisponível'}</p>
                                                             </div>
-                                                            <div className="flex items-center gap-1 shrink-0">
-                                                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(report); }}>
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </Button>
-                                                            </div>
                                                         </div>
                                                     </AccordionTrigger>
+                                                    <div className="absolute right-10 top-1/2 -translate-y-1/2 z-10">
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            className="text-destructive hover:text-destructive h-8 w-8" 
+                                                            onClick={(e) => { 
+                                                                e.preventDefault();
+                                                                e.stopPropagation(); 
+                                                                handleDeleteClick(report); 
+                                                            }}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
                                                     <AccordionContent className="p-4 pt-0">
                                                         {report.results && report.results.length > 0 ? (
                                                         <div className="rounded-md border">
@@ -134,7 +143,7 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+                <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle>Histórico de análises de consumo</DialogTitle>
                         <DialogDescription>

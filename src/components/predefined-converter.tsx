@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -114,20 +113,38 @@ export function PredefinedConverter() {
       <Accordion type="single" collapsible className="w-full space-y-2">
         {lists.map(list => (
           <AccordionItem value={list.id} key={list.id} className="border-none">
-            <Card>
-              <AccordionTrigger className="p-4 hover:no-underline rounded-lg">
+            <Card className="relative">
+              <AccordionTrigger className="p-4 pr-24 hover:no-underline rounded-lg">
                   <div className="flex justify-between items-center w-full">
                     <span className="text-lg font-semibold">{list.name}</span>
-                    <div className="flex items-center gap-1">
-                          <Button asChild variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleEdit(list); }}>
-                              <span><Edit className="h-4 w-4" /></span>
-                          </Button>
-                          <Button asChild variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteClick(list); }}>
-                               <span><Trash2 className="h-4 w-4" /></span>
-                          </Button>
-                    </div>
                   </div>
               </AccordionTrigger>
+              <div className="absolute right-10 top-1/2 -translate-y-1/2 z-10 flex items-center gap-1">
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            handleEdit(list); 
+                        }}
+                    >
+                        <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-destructive hover:text-destructive h-8 w-8"
+                        onClick={(e) => { 
+                            e.preventDefault();
+                            e.stopPropagation(); 
+                            handleDeleteClick(list); 
+                        }}
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+              </div>
               <AccordionContent>
                 <div className="p-4 pt-0 space-y-4">
                   {list.items.length > 0 ? (
