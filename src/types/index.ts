@@ -1,4 +1,3 @@
-
 "use client"
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 export const packageTypes = ['Unidade', 'Caixa', 'Pacote', 'Lata', 'Garrafa', 'Frasco', 'Sachê', 'Pote', 'Balde', 'Galão', 'Bag'] as const;
