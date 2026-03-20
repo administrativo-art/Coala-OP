@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, CheckCircle, PackageOpen, TrendingDown, Inbox } from "lucide-react";
+import { AlertTriangle, CheckCircle, PackageOpen, TrendingDown, Inbox, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
 interface RestockResult {
   baseProduct: BaseProduct;
@@ -136,6 +137,7 @@ export function RestockPanel() {
   }, [kiosks, user, isAdmin]);
 
   const [selectedKioskId, setSelectedKioskId] = useState<string>("all");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (loading) return;
@@ -159,20 +161,17 @@ export function RestockPanel() {
     return kioskIdsToAnalyze.map((kioskId) => {
       const kiosk = kiosks.find((k) => k.id === kioskId);
       const results = calcRestockResults(kioskId, lots, baseProducts, products)
-        .filter((r) => r.status !== "sem_meta") // oculta sem meta
-        .sort((a, b) => {
-          // Ordem: repor > ok > excesso
-          const order = { repor: 0, ok: 1, excesso: 2, sem_meta: 3 };
-          return order[a.status] - order[b.status];
-        });
+        .filter((r) => r.status === "repor") // Só mostra quem precisa repor
+        .filter((r) => r.baseProduct.name.toLowerCase().includes(search.toLowerCase())) // Busca por nome
+        .sort((a, b) => (a.stockPercentage ?? 0) - (b.stockPercentage ?? 0)); // Menor percentual primeiro
       return { kiosk, results };
     });
-  }, [kioskIdsToAnalyze, lots, baseProducts, products, kiosks, loading]);
+  }, [kioskIdsToAnalyze, lots, baseProducts, products, kiosks, loading, search]);
 
   const totalRepor = useMemo(
     () =>
       resultsByKiosk.reduce(
-        (sum, { results }) => sum + results.filter((r) => r.status === "repor").length,
+        (sum, { results }) => sum + results.length,
         0
       ),
     [resultsByKiosk]
@@ -204,59 +203,67 @@ export function RestockPanel() {
               Painel de Reposição
               {totalRepor > 0 && (
                 <Badge variant="destructive" className="ml-1">
-                  {totalRepor} item{totalRepor > 1 ? "s" : ""} para repor
+                  {totalRepor} item{totalRepor > 1 ? "s" : ""} crítico{totalRepor > 1 ? "s" : ""}
                 </Badge>
               )}
             </CardTitle>
             <CardDescription>
-              Estoque atual vs mínimo por quiosque em tempo real.
+              Itens com estoque abaixo do mínimo configurado.
             </CardDescription>
           </div>
-          <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
-            <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Selecione um quiosque" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableKiosks.length > 1 && (
-                <SelectItem value="all">Todos os quiosques</SelectItem>
-              )}
-              {availableKiosks.map((k) => (
-                <SelectItem key={k.id} value={k.id}>
-                  {k.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Selecione um quiosque" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableKiosks.length > 1 && (
+                  <SelectItem value="all">Todos os quiosques</SelectItem>
+                )}
+                {availableKiosks.map((k) => (
+                  <SelectItem key={k.id} value={k.id}>
+                    {k.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="relative w-full sm:w-[220px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Filtrar insumo..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {resultsByKiosk.length === 0 ? (
+        {resultsByKiosk.length === 0 || resultsByKiosk.every(k => k.results.length === 0) ? (
           <div className="flex flex-col items-center justify-center text-muted-foreground py-10">
-            <Inbox className="h-10 w-10 mb-3" />
-            <p>Nenhum quiosque disponível.</p>
+            <CheckCircle className="h-10 w-10 mb-3 text-green-500" />
+            <p className="font-semibold text-foreground">Estoque em dia!</p>
+            <p className="text-sm">Nenhuma necessidade de reposição encontrada.</p>
           </div>
         ) : (
-          resultsByKiosk.map(({ kiosk, results }) => (
-            <div key={kiosk?.id}>
-              {selectedKioskId === "all" && (
-                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
-                  {kiosk?.name}
-                </h3>
-              )}
-              {results.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic">
-                  Nenhum insumo com meta definida.
-                </p>
-              ) : (
+          resultsByKiosk.map(({ kiosk, results }) => {
+            if (results.length === 0) return null;
+            
+            return (
+              <div key={kiosk?.id}>
+                {selectedKioskId === "all" && (
+                  <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
+                    {kiosk?.name}
+                  </h3>
+                )}
                 <div className="space-y-3">
                   {results.map(({ baseProduct, currentStock, minimumStock, restockNeeded, status, stockPercentage }) => (
                     <div
                       key={baseProduct.id}
                       className={cn(
                         "p-4 rounded-lg border transition-colors",
-                        status === "repor" && "border-destructive/40 bg-destructive/5",
-                        status === "ok" && "border-border bg-muted/20",
-                        status === "excesso" && "border-blue-200 bg-blue-50/30"
+                        status === "repor" && "border-destructive/40 bg-destructive/5 shadow-sm"
                       )}
                     >
                       <div className="flex items-center justify-between mb-2">
@@ -269,9 +276,7 @@ export function RestockPanel() {
                         value={Math.min(stockPercentage ?? 0, 100)}
                         className={cn(
                           "h-2 mb-2",
-                          status === "repor" && "[&>div]:bg-destructive",
-                          status === "ok" && "[&>div]:bg-green-500",
-                          status === "excesso" && "[&>div]:bg-blue-500"
+                          status === "repor" && "[&>div]:bg-destructive"
                         )}
                       />
 
@@ -293,7 +298,7 @@ export function RestockPanel() {
                         </div>
                         {status === "repor" && (
                           <span className="font-semibold text-destructive">
-                            Repor: {restockNeeded.toFixed(1)} {baseProduct.unit}
+                            Faltam: {restockNeeded.toFixed(1)} {baseProduct.unit}
                           </span>
                         )}
                         {stockPercentage !== null && (
@@ -305,9 +310,9 @@ export function RestockPanel() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          ))
+              </div>
+            );
+          })
         )}
       </CardContent>
     </Card>
