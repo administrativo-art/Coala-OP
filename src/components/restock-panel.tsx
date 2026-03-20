@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
@@ -135,6 +136,16 @@ export function RestockPanel() {
   }, [kiosks, user, isAdmin]);
 
   const [selectedKioskId, setSelectedKioskId] = useState<string>("all");
+
+  useEffect(() => {
+    if (loading) return;
+    if (isAdmin) {
+      const matriz = kiosks.find(k => k.name.toLowerCase().includes('matriz'));
+      setSelectedKioskId(matriz?.id ?? kiosks[0]?.id ?? "all");
+    } else {
+      setSelectedKioskId(availableKiosks[0]?.id ?? "all");
+    }
+  }, [loading, isAdmin, kiosks, availableKiosks]);
 
   // Quiosques a analisar
   const kioskIdsToAnalyze = useMemo(() => {
