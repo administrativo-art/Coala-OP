@@ -230,6 +230,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Relatórios de vendas
+    match /salesReports/{reportId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.analysis.consumption == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().stock.analysis.consumption == true);
+      allow delete: if isAdmin();
+    }
+
     // Sessões de compra
     match /purchaseSessions/{sessionId} {
       allow read: if isAuth() && (isAdmin() || getPerms().stock.purchasing.view == true);
