@@ -26,6 +26,7 @@ import { AuthorBoardDiaryProvider } from '@/components/author-board-diary-provid
 import { ClassificationsProvider } from '@/components/classifications-provider';
 import { CompetitorProvider } from '@/components/competitor-provider';
 import { ProfilesProvider } from '@/components/profiles-provider';
+import { SalesReportProvider } from '@/components/sales-report-provider';
 import { brand } from "@/config/brand";
 
 export const metadata: Metadata = {
@@ -64,25 +65,27 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                                       <MovementHistoryProvider>
                                         <PredefinedListsProvider>
                                             <ConsumptionAnalysisProvider>
-                                                <ReturnsProvider>
-                                                    <RepositionProvider>
-                                                        <StockAuditProvider>
-                                                            <AuthorBoardDiaryProvider>
-                                                                <PurchaseProvider>
-                                                                    <ProductSimulationCategoryProvider>
-                                                                        <ProductSimulationProvider>
-                                                                            <CompetitorProvider>
-                                                                                <AllTasksProvider>
-                                                                                    {children}
-                                                                                </AllTasksProvider>
-                                                                            </CompetitorProvider>
-                                                                        </ProductSimulationProvider>
-                                                                    </ProductSimulationCategoryProvider>
-                                                                </PurchaseProvider>
-                                                            </AuthorBoardDiaryProvider>
-                                                        </StockAuditProvider>
-                                                    </RepositionProvider>
-                                                </ReturnsProvider>
+                                                <SalesReportProvider>
+                                                    <ReturnsProvider>
+                                                        <RepositionProvider>
+                                                            <StockAuditProvider>
+                                                                <AuthorBoardDiaryProvider>
+                                                                    <PurchaseProvider>
+                                                                        <ProductSimulationCategoryProvider>
+                                                                            <ProductSimulationProvider>
+                                                                                <CompetitorProvider>
+                                                                                    <AllTasksProvider>
+                                                                                        {children}
+                                                                                    </AllTasksProvider>
+                                                                                </CompetitorProvider>
+                                                                            </ProductSimulationProvider>
+                                                                        </ProductSimulationCategoryProvider>
+                                                                    </PurchaseProvider>
+                                                                </AuthorBoardDiaryProvider>
+                                                            </StockAuditProvider>
+                                                        </RepositionProvider>
+                                                    </ReturnsProvider>
+                                                </SalesReportProvider>
                                             </ConsumptionAnalysisProvider>
                                         </PredefinedListsProvider>
                                       </MovementHistoryProvider>
