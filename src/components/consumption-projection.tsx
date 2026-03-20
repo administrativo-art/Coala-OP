@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -12,15 +13,15 @@ import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from './ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle, CheckCircle, Package, Inbox, ListFilter, ArrowUpDown, TrendingUp, LineChart, ShoppingCart, CalendarDays, BellRing, Search, Warehouse, ChevronsUpDown } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from './ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { type LotEntry, type BaseProduct, type Product } from '@/types';
-import { Input } from './ui/input';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { useAllTasks } from '@/hooks/use-all-tasks';
+import { Badge } from '@/components/ui/badge';
 
 interface ProjectionResult {
     lot: LotEntry;
@@ -154,7 +155,7 @@ export function ConsumptionProjection() {
             product.category
         );
         return packagesQty * perPackageInBase;
-    }, []);
+    }, [baseProducts]);
 
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
         if (loading || !selectedKioskId) return [];
@@ -419,15 +420,6 @@ export function ConsumptionProjection() {
         }
     };
 
-    const renderSortableHeader = (label: string, key: keyof ProjectionResult | 'productName') => (
-        <TableHead className="cursor-pointer" onClick={() => handleSort(key)}>
-            <div className="flex items-center gap-2">
-                {label}
-                {sortConfig.key === key && <ArrowUpDown className="h-3 w-3" />}
-            </div>
-        </TableHead>
-    );
-
     const getExpiryColorClass = (days: number | null) => {
         if (days === null) return '';
         if (days < 0) return 'bg-red-500/20';
@@ -479,7 +471,7 @@ export function ConsumptionProjection() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Filtrar Insumos</CardTitle>
-                        <Warehouse className="h-4 w-4 text-muted-foreground" />
+                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <DropdownMenu>
