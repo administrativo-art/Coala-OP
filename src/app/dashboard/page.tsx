@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
@@ -32,6 +31,7 @@ import { db } from "@/lib/firebase";
 import { PurchaseAlertCard } from "@/components/purchase-alert-card"
 import { TechnicalSheetDashboard } from "@/components/technical-sheet-dashboard"
 import { TaskManager } from "@/components/task-manager"
+import { RestockPanel } from "@/components/restock-panel"
 
 interface OnlineUser {
     id: string;
@@ -192,6 +192,10 @@ function OperationalDashboard() {
         </Link>
          <PurchaseAlertCard />
       </div>
+
+      <div className="mt-6">
+        <RestockPanel />
+      </div>
       
     </>
   )
@@ -265,7 +269,7 @@ function PricingReportDashboard() {
         s.categoryIds.forEach(catId => {
             const category = categories.find(c => c.id === catId);
             if (category && category.type === 'category') {
-                categoryCounts[category.name] = (categoryCounts[category.name] || 0) + 1;
+                categoryCounts[category.name] = (categoryCounts[category.name] || 0) + count as number;
             }
         });
         if (s.lineId) {
