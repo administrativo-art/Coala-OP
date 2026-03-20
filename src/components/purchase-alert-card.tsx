@@ -201,7 +201,7 @@ export function PurchaseAlertCard() {
                                         {item.currentStock.toFixed(1)} {item.baseProductUnit}
                                     </TableCell>
                                     <TableCell className="text-right">{isFinite(item.daysOfCoverage) ? `${item.daysOfCoverage} dias` : 'N/A'}</TableCell>
-                                    <TableCell className="text-center">
+                                    <TableCell className="text-center font-bold text-destructive">
                                         {item.orderDate ? format(item.orderDate, 'dd/MM/yy') : 'Imediato'}
                                     </TableCell>
                                     <TableCell className="text-right">{getStatusBadge(item)}</TableCell>

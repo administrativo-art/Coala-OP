@@ -1,16 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  transpilePackages: ['@react-pdf/renderer'],
   images: {
     remotePatterns: [
-      { protocol: 'https', hostname: 'images.openfoodfacts.org' },
-      { protocol: 'https', hostname: 'placehold.co' },
+      {
+        protocol: 'https',
+        hostname: 'images.openfoodfacts.org',
+      },
+      {
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+      },
     ],
   },
 };
