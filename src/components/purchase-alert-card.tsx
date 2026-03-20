@@ -1,25 +1,20 @@
 "use client";
 
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { convertValue } from '@/lib/conversion';
-import { format, addDays, differenceInDays, parseISO, getDaysInMonth } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { format, addDays, differenceInDays, getDaysInMonth } from 'date-fns';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from './ui/skeleton';
-import { ShoppingCart, AlertTriangle, CheckCircle, BellRing, Inbox, CalendarDays, Warehouse, TrendingUp } from 'lucide-react';
-import { type LotEntry, type BaseProduct, type Product } from '@/types';
+import { ShoppingCart, AlertTriangle, CheckCircle, Inbox } from 'lucide-react';
+import { type LotEntry, type BaseProduct } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
-
 
 interface GroupedProjectionResult {
     baseProductId: string;
@@ -35,15 +30,14 @@ interface GroupedProjectionResult {
 }
 
 export function PurchaseAlertCard() {
-    const { kiosks, loading: kiosksLoading } = useKiosks();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
     const { products, loading: productsLoading } = useProducts();
     const { reports: consumptionHistory, isLoading: consumptionLoading, baseProducts: validatedBaseProducts } = useValidatedConsumptionData();
     
-    const [selectedKioskId, setSelectedKioskId] = useState('matriz');
+    const selectedKioskId = 'matriz';
 
-    const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading || consumptionLoading;
+    const loading = lotsLoading || baseProductsLoading || productsLoading || consumptionLoading;
 
     const productsById = useMemo(() => {
         const m = new Map<string, typeof products[number]>();
@@ -63,7 +57,7 @@ export function PurchaseAlertCard() {
             product.category
         );
         return packagesQty * perPackageInBase;
-    }, []);
+    }, [baseProducts]);
     
     const projectionResults = useMemo((): GroupedProjectionResult[] => {
         if (loading || !selectedKioskId) return [];
@@ -121,27 +115,16 @@ export function PurchaseAlertCard() {
             let orderDate: Date | null = null;
             const ruptureDate = daysOfCoverage !== Infinity ? addDays(today, daysOfCoverage) : null;
             
-            if (selectedKioskId === 'matriz') {
-                const leadTime = kioskParams?.leadTime;
-                if (leadTime && leadTime > 0) {
-                    if (ruptureDate) {
-                        orderDate = addDays(ruptureDate, -leadTime);
-                        const daysToOrder = differenceInDays(orderDate, today);
-                        if (daysToOrder <= 7) orderStatus = 'urgent';
-                        else if (daysToOrder <= 15) orderStatus = 'soon';
-                    }
-                } else {
-                    orderStatus = 'sem_lead_time';
+            const leadTime = kioskParams?.leadTime;
+            if (leadTime && leadTime > 0) {
+                if (ruptureDate) {
+                    orderDate = addDays(ruptureDate, -leadTime);
+                    const daysToOrder = differenceInDays(orderDate, today);
+                    if (daysToOrder <= 7) orderStatus = 'urgent';
+                    else if (daysToOrder <= 15) orderStatus = 'soon';
                 }
-            } else { // Kiosk Logic
-                 if (ruptureDate) {
-                    const daysToRupture = differenceInDays(ruptureDate, today);
-                    if (daysToRupture <= 4) orderStatus = 'urgent';
-                    else if (daysToRupture <= 9) orderStatus = 'soon';
-                    else orderStatus = 'ok';
-                } else if (dailyAvg > 0) {
-                    orderStatus = 'urgent';
-                }
+            } else {
+                orderStatus = 'sem_lead_time';
             }
 
             return {
@@ -157,24 +140,12 @@ export function PurchaseAlertCard() {
                 orderStatus
             };
         }).filter(p => {
-            if (selectedKioskId === 'matriz') {
-                 const leadTime = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.['matriz']?.leadTime || 0;
-                 return leadTime > 0;
-            }
-            return p.orderStatus === 'urgent' || p.orderStatus === 'soon';
+            const leadTime = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.[selectedKioskId]?.leadTime || 0;
+            return leadTime > 0 && (p.orderStatus === 'urgent' || p.orderStatus === 'soon');
         })
           .sort((a, b) => (a.orderDate?.getTime() || a.ruptureDate?.getTime() || Infinity) - (b.orderDate?.getTime() || b.ruptureDate?.getTime() || Infinity));
 
     }, [loading, selectedKioskId, validatedBaseProducts, baseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
-
-
-    const sortedKiosks = useMemo(() => {
-        return [...kiosks].sort((a,b) => {
-            if (a.id === 'matriz') return -1;
-            if (b.id === 'matriz') return 1;
-            return a.name.localeCompare(b.name);
-        });
-    }, [kiosks]);
 
     const getStatusBadge = (item: GroupedProjectionResult) => {
         switch (item.orderStatus) {
@@ -185,44 +156,30 @@ export function PurchaseAlertCard() {
         }
     };
     
+    if (loading) {
+        return <Skeleton className="h-48 w-full col-span-full" />;
+    }
+
     const hasAlerts = projectionResults.length > 0;
-    const titleText = selectedKioskId === 'matriz' ? "Alerta de Compras (Matriz)" : `Alerta de Reposição (${kiosks.find(k => k.id === selectedKioskId)?.name})`;
-    const linkTarget = selectedKioskId === 'matriz' ? '/dashboard/stock/purchasing' : '/dashboard/stock/analysis/restock';
-    const notificationCount = useMemo(() => {
-        return projectionResults.filter(p => p.orderStatus === 'urgent' || p.orderStatus === 'soon').length;
-    }, [projectionResults]);
+    const notificationCount = projectionResults.length;
 
     return (
         <Card className="hover:bg-muted/50 transition-colors h-full col-span-full">
-            <CardHeader className="flex flex-row items-start justify-between">
-                <div>
-                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                        <ShoppingCart className="h-4 w-4" /> {titleText}
-                         {notificationCount > 0 && (
-                            <Badge variant="destructive" className="h-5">{notificationCount}</Badge>
-                         )}
-                    </CardTitle>
-                </div>
-                 <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {sortedKiosks.map(kiosk => (
-                             <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+            <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                    <ShoppingCart className="h-4 w-4" /> Alerta de Compras (Matriz)
+                    {notificationCount > 0 && (
+                        <Badge variant="destructive" className="h-5">{notificationCount}</Badge>
+                    )}
+                </CardTitle>
             </CardHeader>
             <CardContent>
-                <Link href={linkTarget}>
+                <Link href="/dashboard/stock/purchasing">
                 {!hasAlerts ? (
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground h-full py-4">
                         <CheckCircle className="h-8 w-8 text-green-500 mb-2"/>
-                        <p className="font-semibold">Nenhum alerta de reposição</p>
-                        <p className="text-xs">
-                             {selectedKioskId === 'matriz' ? 'Nenhum item com Lead Time requer compra.' : 'O estoque desta unidade está OK.'}
-                        </p>
+                        <p className="font-semibold">Nenhum alerta de compra</p>
+                        <p className="text-xs">O estoque central está dentro dos prazos de cobertura.</p>
                     </div>
                 ) : (
                     <ScrollArea className="h-[150px]">
@@ -230,9 +187,9 @@ export function PurchaseAlertCard() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Insumo</TableHead>
-                                    <TableHead className="text-right">Estoque / Mínimo</TableHead>
+                                    <TableHead className="text-right">Estoque Matriz</TableHead>
                                     <TableHead className="text-right">Cobertura</TableHead>
-                                    <TableHead className="text-center">{selectedKioskId === 'matriz' ? 'Data Pedido' : 'Data Ruptura'}</TableHead>
+                                    <TableHead className="text-center">Data Pedido</TableHead>
                                     <TableHead className="text-right">Status</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -241,15 +198,11 @@ export function PurchaseAlertCard() {
                                 <TableRow key={item.baseProductId}>
                                     <TableCell className="font-semibold truncate">{item.baseProductName}</TableCell>
                                     <TableCell className="text-right">
-                                        {item.currentStock.toFixed(1)}
-                                        <span className="text-muted-foreground">/{item.minimumStock} {item.baseProductUnit}</span>
+                                        {item.currentStock.toFixed(1)} {item.baseProductUnit}
                                     </TableCell>
                                     <TableCell className="text-right">{isFinite(item.daysOfCoverage) ? `${item.daysOfCoverage} dias` : 'N/A'}</TableCell>
                                     <TableCell className="text-center">
-                                        {(selectedKioskId === 'matriz' ? item.orderDate : item.ruptureDate) 
-                                            ? format((selectedKioskId === 'matriz' ? item.orderDate : item.ruptureDate)!, 'dd/MM/yy') 
-                                            : 'N/A'
-                                        }
+                                        {item.orderDate ? format(item.orderDate, 'dd/MM/yy') : 'Imediato'}
                                     </TableCell>
                                     <TableCell className="text-right">{getStatusBadge(item)}</TableCell>
                                 </TableRow>
