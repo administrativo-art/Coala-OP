@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -177,7 +176,7 @@ export function ConsumptionProjection() {
 
         const monthlyConsumptionByBaseId: Record<string, Record<string, number>> = {};
         relevantReports.forEach(report => {
-            const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
+            const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
             report.results.forEach(res => {
                 if (res.baseProductId) {
                     if (!monthlyConsumptionByBaseId[res.baseProductId]) monthlyConsumptionByBaseId[res.baseProductId] = {};
@@ -189,7 +188,7 @@ export function ConsumptionProjection() {
         const allNetworkMonths = new Set<string>();
         if (isMatrixView) {
             for (const report of relevantReports) {
-                const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
+                const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
                 const anyConsumption = Array.isArray(report.results) && report.results.some(r => (r?.consumedQuantity ?? 0) > 0);
                 if (anyConsumption) allNetworkMonths.add(key);
             }
@@ -463,193 +462,211 @@ export function ConsumptionProjection() {
     };
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Projeção de Consumo vs. Vencimento</CardTitle>
-                <CardDescription>
-                   Selecione um quiosque para verificar se os lotes em estoque serão consumidos antes de vencerem.
-                </CardDescription>
-                <div className="pt-2 flex flex-wrap items-center gap-2">
-                     <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
-                        <SelectTrigger className="w-full sm:w-[250px]">
-                           <SelectValue placeholder="Selecione um quiosque..."/>
-                        </SelectTrigger>
-                        <SelectContent>
-                            {kiosks.map(k => (
-                               <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                     </Select>
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="w-full sm:w-auto">
-                                <ListFilter className="mr-2 h-4 w-4" />
-                                Filtrar insumos ({selectedBaseProductIds.length})
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-64">
-                            <DropdownMenuItem onSelect={() => setShowOnlyAtRisk(prev => !prev)}>
-                                <DropdownMenuCheckboxItem checked={showOnlyAtRisk} onCheckedChange={() => {}} onSelect={e => e.preventDefault()} />
-                                Mostrar somente em risco
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuLabel>Exibir insumos base</DropdownMenuLabel>
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds(baseProducts.map(p => p.id)); }}>Selecionar todos</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSelectedBaseProductIds([]); }}>Limpar seleção</DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <ScrollArea className="h-60">
-                            {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(product => (
-                                <DropdownMenuCheckboxItem
-                                    key={product.id}
-                                    checked={selectedBaseProductIds.includes(product.id)}
-                                    onCheckedChange={(checked) => handleBaseProductSelection(product.id, !!checked)}
-                                    onSelect={(e) => e.preventDefault()}
-                                >
-                                    {product.name}
-                                </DropdownMenuCheckboxItem>
-                            ))}
-                            </ScrollArea>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                     <div className="relative w-full sm:w-auto flex-grow">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="text"
-                            placeholder="Buscar por insumo ou lote..."
-                            className="w-full pl-10"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    <div className="relative w-full sm:w-auto">
-                        <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="number"
-                            placeholder="Simular consumo (+/- %)"
-                            className="w-full sm:w-[200px] pl-10"
-                            value={simulationPercentage || ''}
-                            onChange={(e) => setSimulationPercentage(Number(e.target.value))}
-                        />
-                    </div>
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Projeção de Consumo</h1>
+                    <p className="text-muted-foreground">
+                        Simule quanto tempo seu estoque atual vai durar com base nas médias de consumo.
+                    </p>
                 </div>
-            </CardHeader>
-            <CardContent>
-                {selectedKioskId && <RuptureAlerts results={projectionResults} kioskId={selectedKioskId} />}
-                {loading ? (
-                    <Skeleton className="h-64 w-full" />
-                ) : finalFilteredAndSortedResults.length === 0 ? (
-                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                        <Inbox className="mx-auto h-12 w-12" />
-                        <p className="mt-4 font-semibold">
-                            {selectedKioskId ? "Nenhum lote encontrado para este quiosque e filtros." : "Selecione um quiosque para começar."}
-                        </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Unidade de Análise</CardTitle>
+                        <Warehouse className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {kiosks.map(k => (
+                                    <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Filtrar Insumos</CardTitle>
+                        <ListFilter className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="w-full justify-between">
+                                    {selectedBaseProductIds.length} selecionados
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-64">
+                                <DropdownMenuLabel>Insumos Base</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <ScrollArea className="h-64">
+                                    {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(bp => (
+                                        <DropdownMenuCheckboxItem
+                                            key={bp.id}
+                                            checked={selectedBaseProductIds.includes(bp.id)}
+                                            onCheckedChange={(checked) => handleBaseProductSelection(bp.id, checked)}
+                                            onSelect={e => e.preventDefault()}
+                                        >
+                                            {bp.name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </ScrollArea>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Simular Consumo</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-2">
+                            <Input
+                                type="number"
+                                value={simulationPercentage}
+                                onChange={e => setSimulationPercentage(Number(e.target.value))}
+                                className="w-20"
+                            />
+                            <span className="text-sm font-medium">%</span>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Alertas Ativos</CardTitle>
+                        <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {projectionResults.filter(r => r.orderStatus === 'urgent').length}
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {selectedKioskId && <RuptureAlerts results={projectionResults} kioskId={selectedKioskId} />}
+
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Search className="h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Pesquisar resultados..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="w-64"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowOnlyAtRisk(!showOnlyAtRisk)}
+                                className={cn(showOnlyAtRisk && "bg-primary/10 border-primary text-primary")}
+                            >
+                                Somente em Risco
+                            </Button>
+                        </div>
                     </div>
-                ) : (
-                    <div className="space-y-4">
-                        {finalFilteredAndSortedResults.map(group => {
-                            const baseProduct = baseProducts.find(bp => bp.id === group.baseProductId);
-                            return (
-                                <div key={group.baseProductId} className="rounded-md border">
-                                    <div className="p-4 bg-muted/50 rounded-t-md space-y-2">
-                                        <div className="flex justify-between items-center">
-                                          <div className="flex items-center gap-2">
-                                              <h3 className="text-lg font-semibold">{group.baseProductName}</h3>
-                                              {baseProduct && Object.values(baseProduct.stockLevels).some(sl => sl.leadTime && sl.leadTime > 0) && (
-                                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-600" onClick={() => setQuickProjectionProduct(baseProduct)}>
-                                                      <LineChart className="h-5 w-5" />
-                                                  </Button>
-                                              )}
-                                          </div>
-                                            <div className="flex items-center gap-2">
-                                              {group.orderDate && (
-                                                  <TooltipProvider>
-                                                      <Tooltip>
-                                                          <TooltipTrigger asChild>
-                                                              <div>
-                                                                  <Badge className="cursor-help"><BellRing className="mr-2 h-4 w-4" />Pedido até: {format(group.orderDate, 'dd/MM/yyyy')}</Badge>
-                                                              </div>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent>
-                                                              <p>Data limite para pedir reposição e evitar ruptura, com base no lead time.</p></TooltipContent>
-                                                      </Tooltip>
-                                                  </TooltipProvider>
-                                              )}
-                                              {getOrderStatusBadge(group.orderStatus)}
+                </CardHeader>
+                <CardContent>
+                    {loading ? (
+                        <div className="space-y-4">
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
+                        </div>
+                    ) : finalFilteredAndSortedResults.length > 0 ? (
+                        <div className="space-y-8">
+                            {finalFilteredAndSortedResults.map(group => (
+                                <div key={group.baseProductId} className="space-y-4">
+                                    <div className="flex items-center justify-between border-b pb-2">
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-lg font-bold">{group.baseProductName}</h3>
+                                            {getOrderStatusBadge(group.orderStatus)}
+                                        </div>
+                                        <div className="flex items-center gap-4 text-sm">
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-muted-foreground">Média mensal:</span>
+                                                <span className="font-semibold">{group.monthlyAvg.toFixed(1)} {group.lots[0]?.baseUnit}</span>
                                             </div>
+                                            {group.ruptureDate && (
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-muted-foreground">Ruptura:</span>
+                                                    <span className="font-semibold text-destructive">{format(group.ruptureDate, 'dd/MM/yyyy')}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="overflow-x-auto">
+                                    <div className="rounded-md border">
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    {renderSortableHeader('Insumo', 'productName')}
                                                     <TableHead>Lote</TableHead>
-                                                    <TableHead className="text-center">Qtd. (Base)</TableHead>
-                                                    <TableHead className="text-center">Média/mês</TableHead>
-                                                    <TableHead className="text-center">Taxa/dia</TableHead>
-                                                    {renderSortableHeader('Período de Consumo', 'projectedConsumptionDate')}
-                                                    {renderSortableHeader('Vencimento', 'expiryDate')}
-                                                    <TableHead className="text-center">Perda Estimada</TableHead>
-                                                    <TableHead className="text-center">Situação</TableHead>
+                                                    <TableHead className="text-right">Qtd (Base)</TableHead>
+                                                    <TableHead>Início Consumo</TableHead>
+                                                    <TableHead>Fim Consumo</TableHead>
+                                                    <TableHead>Vencimento</TableHead>
+                                                    <TableHead className="text-right">Perda Estimada</TableHead>
+                                                    <TableHead className="text-center">Status</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {group.lots.map(result => (
                                                     <TableRow key={result.lot.id}>
-                                                        <TableCell className="font-medium">{result.productName}</TableCell>
-                                                        <TableCell>{result.lot.lotNumber}</TableCell>
-                                                        <TableCell className="text-center">{result.lotQtyInBaseUnit.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
-                                                        <TableCell className="text-center font-semibold">{group.monthlyAvg.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
-                                                        <TableCell className="text-center">{result.dailyAvg.toLocaleString(undefined, {maximumFractionDigits:1})} {result.baseUnit}</TableCell>
-                                                        <TableCell className="text-center">
-                                                            {result.projectedConsumptionStartDate && result.projectedConsumptionDate ? (
-                                                                `${format(result.projectedConsumptionStartDate, 'dd/MM/yy')} → ${format(result.projectedConsumptionDate, 'dd/MM/yy')}`
-                                                            ) : 'N/A'}
+                                                        <TableCell className="font-medium">{result.lot.lotNumber}</TableCell>
+                                                        <TableCell className="text-right">{result.lotQtyInBaseUnit.toFixed(1)} {result.baseUnit}</TableCell>
+                                                        <TableCell>
+                                                            {result.projectedConsumptionStartDate ? format(result.projectedConsumptionStartDate, 'dd/MM/yyyy') : '-'}
                                                         </TableCell>
-                                                        <TableCell className={cn("text-center font-semibold rounded-md", getExpiryColorClass(result.daysRemaining))}>
+                                                        <TableCell>
+                                                            {result.projectedConsumptionDate ? format(result.projectedConsumptionDate, 'dd/MM/yyyy') : '-'}
+                                                        </TableCell>
+                                                        <TableCell className={cn("font-medium", getExpiryColorClass(result.daysRemaining))}>
                                                             {result.expiryDate ? (
-                                                                <div className="flex flex-col items-center">
+                                                                <div className="flex flex-col">
                                                                     <span>{format(result.expiryDate, 'dd/MM/yyyy')}</span>
-                                                                    <span className="text-xs text-muted-foreground">({result.daysRemaining} dias)</span>
+                                                                    <span className="text-[10px] text-muted-foreground">{result.daysRemaining} dias restantes</span>
                                                                 </div>
-                                                            ) : 'N/A'}
+                                                            ) : 'Indefinida'}
                                                         </TableCell>
-                                                        <TableCell className="text-center text-destructive font-bold">
-                                                            {result.status === 'at_risk' && result.projectedLoss > 0 ? (
-                                                                <TooltipProvider>
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <span className="flex items-center justify-center gap-1 cursor-help">
-                                                                                {result.projectedLossCost > 0 && `${result.projectedLossCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} `}
-                                                                                ({result.projectedLoss.toLocaleString(undefined, {maximumFractionDigits: 2})} {result.baseUnit})
-                                                                                <HelpCircle className="h-3 w-3" />
-                                                                            </span>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent><p>Estimativa de perda se o consumo se mantiver.</p></TooltipContent>
-                                                                    </Tooltip>
-                                                                </TooltipProvider>
-                                                                ) : '-'}
+                                                        <TableCell className="text-right font-bold text-destructive">
+                                                            {result.projectedLoss > 0 ? (
+                                                                <div className="flex flex-col">
+                                                                    <span>{result.projectedLoss.toFixed(1)} {result.baseUnit}</span>
+                                                                    <span className="text-[10px] font-normal">{formatCurrency(result.projectedLossCost)}</span>
+                                                                </div>
+                                                            ) : '-'}
                                                         </TableCell>
-                                                        <TableCell className="text-center">{getStatusBadge(result)}</TableCell>
+                                                        <TableCell className="text-center">
+                                                            {getStatusBadge(result)}
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                         </Table>
                                     </div>
                                 </div>
-                            )
-                        })}
-                    </div>
-                )}
-            </CardContent>
-             {quickProjectionProduct && (
-                <QuickProjectionModal 
-                    baseProduct={quickProjectionProduct}
-                    onOpenChange={() => setQuickProjectionProduct(null)}
-                />
-            )}
-        </Card>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                            <Inbox className="h-12 w-12 mb-4 opacity-20" />
+                            <p>Selecione um quiosque para visualizar as projeções.</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
     );
 }
-
-    

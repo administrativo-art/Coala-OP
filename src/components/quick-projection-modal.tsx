@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -56,7 +55,7 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
 
     const monthlyConsumption: Record<string, number> = {};
     networkConsumptionReports.forEach(report => {
-        const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
+        const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
         const totalForMonth = report.results
             .filter(res => res.baseProductId === baseProduct.id)
             .reduce((sum, res) => sum + res.consumedQuantity, 0);

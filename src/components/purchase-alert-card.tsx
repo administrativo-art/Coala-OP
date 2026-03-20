@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useCallback, useState } from 'react';
@@ -17,8 +16,8 @@ import { ShoppingCart, AlertTriangle, CheckCircle, BellRing, Inbox, CalendarDays
 import { type LotEntry, type BaseProduct, type Product } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from './ui/scroll-area';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
 
@@ -78,7 +77,7 @@ export function PurchaseAlertCard() {
 
             const monthlyConsumption: Record<string, number> = {};
             relevantReports.forEach(report => {
-                const key = `${'report.year'}-${String(report.month).padStart(2, '0')}`;
+                const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
                 const totalForMonth = report.results
                     .filter(res => res.baseProductId === baseProductId)
                     .reduce((sum, res) => sum + res.consumedQuantity, 0);
@@ -264,5 +263,3 @@ export function PurchaseAlertCard() {
         </Card>
     );
 }
-
-    
