@@ -7,7 +7,7 @@ import * as z from 'zod';
 import Papa from 'papaparse';
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { type BaseProduct, type ConsumptionReport, type Kiosk, type ProductSimulation, type ProductSimulationItem } from '@/types';
+import { type BaseProduct, type ConsumptionReport, type Kiosk, type ProductSimulation, type ProductSimulationItem, type SalesReport, type SalesReportItem } from '@/types';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { convertValue } from '@/lib/conversion';
 import { ToastAction } from '@/components/ui/toast';
+import { useSalesReports } from '@/components/sales-report-provider';
 
 
 const consumptionUploadSchema = z.object({
@@ -60,6 +61,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const { simulations, simulationItems } = useProductSimulation();
     const { baseProducts } = useBaseProducts();
+    const { addSalesReport } = useSalesReports();
 
 
     const uploadForm = useForm<ConsumptionUploadFormValues>({
@@ -93,6 +95,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                     if (!kiosk) throw new Error("Quiosque selecionado inválido.");
 
                     const consumptionByBaseProduct: { [baseProductId: string]: { name: string; quantity: number } } = {};
+                    const salesByProduct: SalesReportItem[] = [];
                     const unmatchedSkus = new Set<string>();
 
                     for (const row of rows) {
@@ -109,6 +112,14 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                             unmatchedSkus.add(sku);
                             continue;
                         }
+
+                        // Captura a venda bruta do produto (SKU)
+                        salesByProduct.push({
+                            sku,
+                            productName: simulation.name,
+                            simulationId: simulation.id,
+                            quantity: quantitySold,
+                        });
 
                         const itemsForSim = simulationItems.filter(i => i.simulationId === simulation.id);
 
@@ -159,7 +170,20 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                         results: finalResults,
                     };
                     
-                    await addReport(newReport);
+                    const consumptionReportId = await addReport(newReport);
+
+                    // Salva relatório de vendas brutas vinculado ao de consumo
+                    const salesReport: Omit<SalesReport, 'id'> = {
+                        reportName: file.name,
+                        month: values.month,
+                        year: values.year,
+                        kioskId: values.kioskId,
+                        kioskName: kiosk.name,
+                        createdAt: new Date().toISOString(),
+                        consumptionReportId: consumptionReportId || undefined,
+                        items: salesByProduct,
+                    };
+                    await addSalesReport(salesReport);
                     
                     if (unmatchedSkus.size > 0) {
                         const unmatchedSkuList = Array.from(unmatchedSkus).join(', ');
