@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -29,14 +28,14 @@ export default function ReportsPage() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-[850px] gap-0 p-0">
+      <DialogContent className="sm:max-w-[1000px] gap-0 p-0">
         <DialogHeader className="p-6 pb-4">
           <DialogTitle className="text-2xl">Análise estratégica</DialogTitle>
           <DialogDescription>
             Ferramentas estratégicas para seu estoque. Escolha uma opção para continuar.
           </DialogDescription>
         </DialogHeader>
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {permissions.stock.analysis.projection && (
                 <Card className="flex flex-col text-center items-center p-4 border-2 border-transparent hover:border-primary hover:shadow-lg transition-all duration-300">
                     <CardHeader className="p-0 items-center">
@@ -102,6 +101,24 @@ export default function ReportsPage() {
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/analysis/movement-analysis" className="w-full">
+                            <Button className="w-full">
+                                Acessar <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            )}
+            {permissions.stock.analysis.valuation && (
+                <Card className="flex flex-col text-center items-center p-4 border-2 border-transparent hover:border-primary hover:shadow-lg transition-all duration-300">
+                    <CardHeader className="p-0 items-center">
+                        <div className="p-3 bg-primary/10 rounded-full mb-4">
+                            <DollarSign className="h-8 w-8 text-primary" />
+                        </div>
+                        <CardTitle className="text-xl mb-2">Avaliação financeira</CardTitle>
+                        <CardDescription className="text-sm">Calcule o valor financeiro do seu estoque.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                        <Link href="/dashboard/stock/analysis/valuation" className="w-full">
                             <Button className="w-full">
                                 Acessar <ArrowRight className="ml-2 h-4 w-4" />
                             </Button>
