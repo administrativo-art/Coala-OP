@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, LineChart, DollarSign, ArrowRight, Truck } from 'lucide-react';
+import { TrendingUp, LineChart, DollarSign, ArrowRight, Truck, ShoppingBag } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
 export default function ReportsPage() {
@@ -72,6 +72,24 @@ export default function ReportsPage() {
                     </CardContent>
                 </Card>
             )}
+            {permissions.stock.analysis.consumption && (
+                <Card className="flex flex-col text-center items-center p-4 border-2 border-transparent hover:border-primary hover:shadow-lg transition-all duration-300">
+                    <CardHeader className="p-0 items-center">
+                        <div className="p-3 bg-primary/10 rounded-full mb-4">
+                            <ShoppingBag className="h-8 w-8 text-primary" />
+                        </div>
+                        <CardTitle className="text-xl mb-2">Análise de vendas</CardTitle>
+                        <CardDescription className="text-sm">Visualize o ranking e a evolução das vendas de produtos.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                        <Link href="/dashboard/stock/analysis/sales" className="w-full">
+                            <Button className="w-full">
+                                Acessar <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            )}
              {permissions.stock.inventoryControl.viewHistory && (
                 <Card className="flex flex-col text-center items-center p-4 border-2 border-transparent hover:border-primary hover:shadow-lg transition-all duration-300">
                     <CardHeader className="p-0 items-center">
@@ -83,24 +101,6 @@ export default function ReportsPage() {
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/analysis/movement-analysis" className="w-full">
-                            <Button className="w-full">
-                                Acessar <ArrowRight className="ml-2 h-4 w-4" />
-                            </Button>
-                        </Link>
-                    </CardContent>
-                </Card>
-            )}
-            {permissions.stock.analysis.valuation && (
-                <Card className="flex flex-col text-center items-center p-4 border-2 border-transparent hover:border-primary hover:shadow-lg transition-all duration-300">
-                    <CardHeader className="p-0 items-center">
-                        <div className="p-3 bg-primary/10 rounded-full mb-4">
-                            <DollarSign className="h-8 w-8 text-primary" />
-                        </div>
-                        <CardTitle className="text-xl mb-2">Avaliação financeira</CardTitle>
-                        <CardDescription className="text-sm">Calcule o valor financeiro do seu estoque.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
-                        <Link href="/dashboard/stock/analysis/valuation" className="w-full">
                             <Button className="w-full">
                                 Acessar <ArrowRight className="ml-2 h-4 w-4" />
                             </Button>
