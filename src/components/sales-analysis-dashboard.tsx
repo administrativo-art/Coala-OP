@@ -16,11 +16,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Package2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, LineChart, Line, ComposedChart } from 'recharts';
+import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Package2, AlertTriangle, CheckCircle, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -55,6 +56,12 @@ export function SalesAnalysisDashboard() {
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [rangeStart, setRangeStart] = useState<string>('1');
   const [rangeEnd, setRangeEnd] = useState<string>('12');
+  
+  // Sort and search states
+  const [rankingSearch, setRankingSearch] = useState<string>('');
+  const [rankingSortDir, setRankingSortDir] = useState<'asc' | 'desc'>('desc');
+  const [abcSearch, setAbcSearch] = useState<string>('');
+
   const [compareMonths, setCompareMonths] = useState<string[]>([
     String(new Date().getMonth() || 12),
     String(new Date().getMonth() + 1 > 12 ? 1 : new Date().getMonth() + 1),
@@ -98,6 +105,29 @@ export function SalesAnalysisDashboard() {
     }));
     return Object.values(totals).sort((a, b) => b.quantity - a.quantity);
   }, [filteredReports]);
+
+  // ── CARDS DE RESUMO ────────────────────────────────────────────────────────
+  const summaryCards = useMemo(() => {
+    const totalUnits = productRanking.reduce((s, p) => s + p.quantity, 0);
+    const topProduct = productRanking[0] || null;
+
+    // Período anterior para comparação (simplificado para mês anterior)
+    const prevMonthNum = includedMonths[0] - 1 <= 0 ? 12 : includedMonths[0] - 1;
+    const prevYear = includedMonths.includes(1) ? Number(selectedYear) - 1 : Number(selectedYear);
+
+    const prevReports = salesReports.filter(r => {
+      const kioskMatch = selectedKioskId === 'all' || r.kioskId === selectedKioskId;
+      const yearMatch = r.year === prevYear;
+      const monthMatch = r.month === prevMonthNum;
+      const userKioskMatch = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+      return kioskMatch && yearMatch && monthMatch && userKioskMatch;
+    });
+
+    const prevTotal = prevReports.reduce((s, r) => s + r.items.reduce((ss, i) => ss + i.quantity, 0), 0);
+    const variation = prevTotal > 0 ? ((totalUnits - prevTotal) / prevTotal) * 100 : null;
+
+    return { totalUnits, topProduct, variation, uniqueProducts: productRanking.length };
+  }, [productRanking, includedMonths, selectedYear, selectedKioskId, salesReports, isAdmin, user]);
 
   // ── CURVA ABC ─────────────────────────────────────────────────────────────
   const abcCurve = useMemo(() => {
@@ -152,8 +182,7 @@ export function SalesAnalysisDashboard() {
       const sumX2 = values.reduce((s, v) => s + v.x * v.x, 0);
       const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
 
-      const sumYVal = values.reduce((s, v) => s + v.y, 0);
-      const avgY = sumYVal / n;
+      const avgY = sumY / n;
       const firstHalf = values.slice(0, 3).reduce((s, v) => s + v.y, 0) / 3;
       const secondHalf = values.slice(3).reduce((s, v) => s + v.y, 0) / 3;
       const variation = firstHalf > 0 ? ((secondHalf - firstHalf) / firstHalf * 100) : 0;
@@ -223,11 +252,7 @@ export function SalesAnalysisDashboard() {
         const bp = baseProducts.find(b => b.id === simItem.baseProductId);
         if (!bp) return Infinity;
 
-        const kioskLots = lots.filter(l => {
-            if (l.kioskId !== kioskId) return false;
-            const p = products.find(prod => prod.id === l.productId);
-            return p?.baseProductId === bp.id;
-        });
+        const kioskLots = lots.filter(l => l.kioskId === kioskId && products.find(p => p.id === l.productId)?.baseProductId === bp.id);
 
         let totalStockInBase = 0;
         kioskLots.forEach(lot => {
@@ -239,8 +264,8 @@ export function SalesAnalysisDashboard() {
         });
 
         try {
-            const requiredInBase = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
-            return requiredInBase > 0 ? totalStockInBase / requiredInBase : Infinity;
+            const perUnit = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
+            return perUnit > 0 ? totalStockInBase / perUnit : Infinity;
         } catch {
             return Infinity;
         }
@@ -270,15 +295,18 @@ export function SalesAnalysisDashboard() {
   const monthlyEvolution = useMemo(() => {
     const top5 = productRanking.slice(0, 5).map(p => p.simulationId);
     if (filterMode === 'compare') {
-      return compareMonths.map(m => {
-        const mn = Number(m);
-        const entry: Record<string, any> = { month: MONTHS[mn - 1] };
-        filteredReports.filter(r => r.month === mn).forEach(r =>
-          r.items.forEach(item => {
-            if (!top5.includes(item.simulationId)) return;
-            entry[item.productName] = (entry[item.productName] || 0) + item.quantity;
-          })
-        );
+      return productRanking.slice(0, 5).map(prod => {
+        const entry: Record<string, any> = { product: prod.name };
+        compareMonths.forEach(m => {
+          const mn = Number(m);
+          const monthLabel = MONTHS[mn - 1];
+          filteredReports.filter(r => r.month === mn).forEach(r => {
+            r.items.forEach(item => {
+              if (item.simulationId !== prod.simulationId) return;
+              entry[monthLabel] = (entry[monthLabel] || 0) + item.quantity;
+            });
+          });
+        });
         return entry;
       });
     }
@@ -302,6 +330,18 @@ export function SalesAnalysisDashboard() {
     });
     return Object.entries(byKiosk).map(([kioskId, data]) => ({ kioskId, ...data })).sort((a, b) => b.total - a.total);
   }, [filteredReports, isAdmin, user]);
+
+  const filteredRanking = useMemo(() => {
+    let result = [...productRanking];
+    if (rankingSearch) result = result.filter(p => p.name.toLowerCase().includes(rankingSearch.toLowerCase()));
+    if (rankingSortDir === 'asc') result = result.reverse();
+    return result;
+  }, [productRanking, rankingSearch, rankingSortDir]);
+
+  const filteredAbc = useMemo(() => {
+    if (!abcSearch) return abcCurve;
+    return abcCurve.filter(p => p.name.toLowerCase().includes(abcSearch.toLowerCase()));
+  }, [abcCurve, abcSearch]);
 
   const top5Names = productRanking.slice(0, 5).map(p => p.name);
   const periodLabel = useMemo(() => {
@@ -399,8 +439,39 @@ export function SalesAnalysisDashboard() {
       <div className="flex items-center gap-2">
         <Badge variant="secondary">{selectedYear}</Badge>
         <Badge variant="outline">{periodLabel}</Badge>
-        {filteredReports.length > 0 && <span className="text-xs text-muted-foreground">{filteredReports.length} relatório(s)</span>}
+        {filteredReports.length > 0 && <span className="text-xs text-muted-foreground">{filteredReports.length} relatório(s) encontrado(s)</span>}
       </div>
+
+      {/* SUMMARY CARDS */}
+      {productRanking.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Total vendido</p>
+              <p className="text-2xl font-bold">{summaryCards.totalUnits.toLocaleString('pt-BR')}</p>
+              {summaryCards.variation !== null && (
+                <p className={cn("text-xs font-semibold mt-1", summaryCards.variation >= 0 ? "text-green-600" : "text-destructive")}>
+                  {summaryCards.variation >= 0 ? '▲' : '▼'} {Math.abs(summaryCards.variation).toFixed(1)}% vs anterior
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Produtos únicos</p>
+              <p className="text-2xl font-bold">{summaryCards.uniqueProducts}</p>
+              <p className="text-xs text-muted-foreground mt-1">no período</p>
+            </CardContent>
+          </Card>
+          <Card className="col-span-2">
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Produto mais vendido</p>
+              <p className="text-lg font-bold truncate">{summaryCards.topProduct?.name || '-'}</p>
+              <p className="text-xs text-muted-foreground mt-1">{summaryCards.topProduct?.quantity.toLocaleString('pt-BR')} unidades</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* ── ABAS ── */}
       <Tabs defaultValue="ranking">
@@ -416,17 +487,40 @@ export function SalesAnalysisDashboard() {
 
         <TabsContent value="ranking" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>Ranking de produtos mais vendidos</CardTitle><CardDescription>Total de unidades vendidas no período.</CardDescription></CardHeader>
+            <CardHeader>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <CardTitle>Ranking de produtos mais vendidos</CardTitle>
+                  <CardDescription>Total de unidades vendidas no período.</CardDescription>
+                </div>
+                <div className="relative w-[220px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Filtrar produto..." value={rankingSearch} onChange={e => setRankingSearch(e.target.value)} className="pl-9" />
+                </div>
+              </div>
+            </CardHeader>
             <CardContent>
-              {productRanking.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : (
+              {filteredRanking.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : (
                 <Table>
-                  <TableHeader><TableRow><TableHead className="w-10">#</TableHead><TableHead>Produto</TableHead><TableHead className="text-right">Qtd. vendida</TableHead><TableHead className="text-right">% do total</TableHead></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">#</TableHead>
+                      <TableHead>Produto</TableHead>
+                      <TableHead className="text-right cursor-pointer select-none" onClick={() => setRankingSortDir(d => d === 'desc' ? 'asc' : 'desc')}>
+                        <span className="flex items-center justify-end gap-1">
+                          Qtd. {rankingSortDir === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
+                        </span>
+                      </TableHead>
+                      <TableHead className="text-right">% do total</TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
-                    {productRanking.map((item, i) => {
+                    {filteredRanking.map((item, i) => {
                       const total = productRanking.reduce((s, p) => s + p.quantity, 0);
+                      const origPos = productRanking.findIndex(p => p.simulationId === item.simulationId);
                       return (
                         <TableRow key={item.simulationId}>
-                          <TableCell>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="text-muted-foreground">{i+1}</span>}</TableCell>
+                          <TableCell>{origPos === 0 ? '🥇' : origPos === 1 ? '🥈' : origPos === 2 ? '🥉' : <span className="text-muted-foreground">{origPos+1}</span>}</TableCell>
                           <TableCell className="font-medium">{item.name}</TableCell>
                           <TableCell className="text-right font-bold">{item.quantity.toLocaleString('pt-BR')}</TableCell>
                           <TableCell className="text-right text-muted-foreground">{total > 0 ? (item.quantity/total*100).toFixed(1) : 0}%</TableCell>
@@ -443,11 +537,19 @@ export function SalesAnalysisDashboard() {
         <TabsContent value="abc" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Curva ABC</CardTitle>
-              <CardDescription>A = top 80% das vendas · B = 80–95% · C = cauda longa</CardDescription>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <CardTitle>Curva ABC</CardTitle>
+                  <CardDescription>A = top 80% das vendas · B = 80–95% · C = cauda longa</CardDescription>
+                </div>
+                <div className="relative w-[220px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Filtrar produto..." value={abcSearch} onChange={e => setAbcSearch(e.target.value)} className="pl-9" />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              {abcCurve.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : (
+              {filteredAbc.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -459,7 +561,7 @@ export function SalesAnalysisDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {abcCurve.map(item => (
+                    {filteredAbc.map(item => (
                       <TableRow key={item.simulationId}>
                         <TableCell>
                           <Badge className={cn(
@@ -576,16 +678,40 @@ export function SalesAnalysisDashboard() {
           <Card>
             <CardHeader><CardTitle>{filterMode === 'compare' ? 'Comparativo mensal' : 'Evolução mensal'} — Top 5</CardTitle></CardHeader>
             <CardContent>
-              {monthlyEvolution.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : (
+              {monthlyEvolution.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : filterMode === 'compare' ? (
                 <ResponsiveContainer width="100%" height={320}>
                   <BarChart data={monthlyEvolution} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
+                    <XAxis dataKey="product" tick={{ fontSize: 11 }} />
                     <YAxis />
                     <Tooltip formatter={(v: number) => v.toLocaleString('pt-BR')} />
                     <Legend />
-                    {top5Names.map((name, i) => <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[4,4,0,0]} />)}
+                    {compareMonths.map((m, i) => (
+                      <Bar key={m} dataKey={MONTHS[Number(m)-1]} fill={COLORS[i % COLORS.length]} radius={[4,4,0,0]} />
+                    ))}
                   </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <ComposedChart data={monthlyEvolution} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={(v: number) => typeof v === 'number' ? v.toLocaleString('pt-BR') : v} />
+                    <Legend />
+                    {top5Names.map((name, i) => (
+                      <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[4,4,0,0]} />
+                    ))}
+                    <Line
+                      type="monotone"
+                      dataKey={(d) => top5Names.reduce((s, n) => s + (d[n] || 0), 0)}
+                      stroke="#1A1A2E"
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      name="Total"
+                      strokeDasharray="5 5"
+                    />
+                  </ComposedChart>
                 </ResponsiveContainer>
               )}
             </CardContent>
