@@ -6,11 +6,6 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
-import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { useBaseProducts } from '@/hooks/use-base-products';
-import { useProducts } from '@/hooks/use-products';
-import { convertValue } from '@/lib/conversion';
-import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart, Line } from 'recharts';
-import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Package2, AlertTriangle, CheckCircle, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -36,13 +31,9 @@ export function SalesAnalysisDashboard() {
   const { user, permissions } = useAuth();
   const { simulations } = useProductSimulation();
   const { categories } = useProductSimulationCategories();
-  const { lots, loading: lotsLoading } = useExpiryProducts();
-  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
-  const { products, loading: productsLoading } = useProducts();
 
   const isAdmin = permissions.settings.manageUsers;
-  const loading = reportsLoading || lotsLoading || baseProductsLoading || productsLoading;
-  const [stockKioskId, setStockKioskId] = useState<string>('');
+  const loading = reportsLoading;
 
   const availableKiosks = useMemo(() => {
     if (isAdmin) return kiosks;
@@ -211,93 +202,6 @@ export function SalesAnalysisDashboard() {
     return result;
   }, [filteredReports, simulationMap, categoryMap]);
 
-
-  // ── VENDAS VS ESTOQUE ──────────────────────────────────────────────────────
-  const stockVsSales = useMemo(() => {
-    const kioskId = stockKioskId || (availableKiosks[0]?.id ?? '');
-    if (!kioskId) return [];
-
-    const now = new Date();
-    const last3: { year: number; month: number }[] = [];
-    for (let i = 2; i >= 0; i--) {
-      let m = now.getMonth() + 1 - i;
-      let y = now.getFullYear();
-      if (m <= 0) { m += 12; y -= 1; }
-      last3.push({ year: y, month: m });
-    }
-
-    const dailyAvgBySimId: Record<string, { name: string; daily: number }> = {};
-    salesReports
-      .filter(r => r.kioskId === kioskId && last3.find(m => m.year === r.year && m.month === r.month))
-      .forEach(r => {
-        r.items.forEach(item => {
-          if (!dailyAvgBySimId[item.simulationId]) dailyAvgBySimId[item.simulationId] = { name: item.productName, daily: 0 };
-          dailyAvgBySimId[item.simulationId].daily += item.quantity;
-        });
-      });
-
-    const totalDays = last3.reduce((s, m) => {
-      const d = new Date(m.year, m.month, 0).getDate();
-      return s + d;
-    }, 0);
-
-    Object.keys(dailyAvgBySimId).forEach(k => {
-      dailyAvgBySimId[k].daily = dailyAvgBySimId[k].daily / totalDays;
-    });
-
-    return Object.entries(dailyAvgBySimId).map(([simId, data]) => {
-      const sim = simulationMap.get(simId);
-      if (!sim) return null;
-
-      // Lógica de Gargalo (Bottleneck)
-      let minCoverageUnits = Infinity;
-      let hasIngredients = false;
-
-      sim.items?.forEach((simItem: any) => {
-        const bp = baseProducts.find(b => b.id === simItem.baseProductId);
-        if (!bp) return;
-        hasIngredients = true;
-        
-        let ingredientStockInBase = 0;
-        const kioskLots = lots.filter(l => l.kioskId === kioskId && products.find(p => p.id === l.productId)?.baseProductId === bp.id);
-        kioskLots.forEach(lot => {
-          try {
-            const prod = products.find(p => p.id === lot.productId);
-            if (!prod) return;
-            const availableQty = lot.quantity - (lot.reservedQuantity || 0);
-            if (availableQty <= 0) return;
-            const inBase = convertValue(availableQty * prod.packageSize, prod.unit, bp.unit, bp.category);
-            ingredientStockInBase += inBase;
-          } catch {}
-        });
-
-        const perUnitInBase = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
-        if (perUnitInBase > 0) {
-          const possibleUnitsFromThisIngredient = ingredientStockInBase / perUnitInBase;
-          minCoverageUnits = Math.min(minCoverageUnits, possibleUnitsFromThisIngredient);
-        }
-      });
-
-      const currentStockUnits = hasIngredients && minCoverageUnits !== Infinity ? Math.floor(minCoverageUnits) : 0;
-      const daysOfCoverage = data.daily > 0 ? Math.floor(currentStockUnits / data.daily) : Infinity;
-      const status = daysOfCoverage === Infinity ? 'no_data' : daysOfCoverage < 7 ? 'critical' : daysOfCoverage < 15 ? 'warning' : 'ok';
-
-      return {
-        simulationId: simId,
-        name: data.name,
-        dailyAvg: data.daily,
-        currentStock: currentStockUnits,
-        daysOfCoverage,
-        status,
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      const order = { critical: 0, warning: 1, ok: 2, no_data: 3 };
-      return order[a!.status as keyof typeof order] - order[b!.status as keyof typeof order];
-    });
-  }, [stockKioskId, availableKiosks, salesReports, simulationMap, baseProducts, lots, products]);
-
   // ── EVOLUÇÃO MENSAL ────────────────────────────────────────────────────────
   const monthlyEvolution = useMemo(() => {
     const top5 = productRanking.slice(0, 5).map(p => p.simulationId);
@@ -462,14 +366,13 @@ export function SalesAnalysisDashboard() {
 
       {/* ── ABAS ── */}
       <Tabs defaultValue="ranking">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
           <TabsTrigger value="ranking"><Award className="mr-1 h-3 w-3" /> Ranking</TabsTrigger>
           <TabsTrigger value="abc"><BarChart2 className="mr-1 h-3 w-3" /> Curva ABC</TabsTrigger>
           <TabsTrigger value="declining"><TrendingDown className="mr-1 h-3 w-3" /> Em queda</TabsTrigger>
           <TabsTrigger value="mix"><PieIcon className="mr-1 h-3 w-3" /> Mix</TabsTrigger>
           <TabsTrigger value="evolution"><TrendingUp className="mr-1 h-3 w-3" /> Evolução</TabsTrigger>
           <TabsTrigger value="kiosks"><ShoppingBag className="mr-1 h-3 w-3" /> Quiosques</TabsTrigger>
-          <TabsTrigger value="stock"><Package2 className="mr-1 h-3 w-3" /> Vendas vs Estoque</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ranking" className="mt-4">
@@ -561,7 +464,12 @@ export function SalesAnalysisDashboard() {
             <CardHeader><CardTitle>Mix por Linha</CardTitle></CardHeader>
             <CardContent className="flex flex-col md:flex-row gap-6">
               <ResponsiveContainer width="100%" height={280}>
-                <PieChart><Pie data={mixByLine} dataKey="quantity" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({name, percent}) => `${name} ${(percent*100).toFixed(0)}%`}>{mixByLine.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /></PieChart>
+                <PieChart>
+                  <Pie data={mixByLine} dataKey="quantity" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({name, percent}) => `${name} ${(percent*100).toFixed(0)}%`}>
+                    {mixByLine.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
               </ResponsiveContainer>
               <Table>
                 <TableHeader><TableRow><TableHead>Linha</TableHead><TableHead className="text-right">Qtd.</TableHead></TableRow></TableHeader>
@@ -624,85 +532,6 @@ export function SalesAnalysisDashboard() {
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={kioskComparison} layout="vertical"><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" /><YAxis dataKey="kioskName" type="category" width={140} /><Tooltip /><Bar dataKey="total" fill="#E91E8C" radius={[0,4,4,0]} /></BarChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="stock" className="mt-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Package2 className="h-5 w-5" /> Vendas vs Estoque
-                  </CardTitle>
-                  <CardDescription>Cobertura de dias baseada na média diária dos últimos 3 meses.</CardDescription>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Quiosque</p>
-                  <Select value={stockKioskId || availableKiosks[0]?.id || ''} onValueChange={setStockKioskId}>
-                    <SelectTrigger className="w-[200px]"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                    <SelectContent>
-                      {availableKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {stockVsSales.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">Nenhum dado de vendas para este quiosque.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Produto</TableHead>
-                      <TableHead className="text-right">Estoque atual</TableHead>
-                      <TableHead className="text-right">Média/dia</TableHead>
-                      <TableHead className="text-right">Cobertura</TableHead>
-                      <TableHead className="w-40">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stockVsSales.map(item => item && (
-                      <TableRow key={item.simulationId}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell className="text-right">{item.currentStock.toLocaleString('pt-BR')} un</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{item.dailyAvg.toFixed(1)}/dia</TableCell>
-                        <TableCell className="text-right font-bold">
-                          <span className={cn(
-                            item.status === 'critical' && 'text-destructive',
-                            item.status === 'warning' && 'text-yellow-600',
-                            item.status === 'ok' && 'text-green-600',
-                            item.status === 'no_data' && 'text-muted-foreground',
-                          )}>
-                            {item.daysOfCoverage === Infinity ? 'N/A' : `${item.daysOfCoverage} dias`}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <Progress
-                              value={item.daysOfCoverage === Infinity ? 100 : Math.min((item.daysOfCoverage / 30) * 100, 100)}
-                              className={cn(
-                                'h-2',
-                                item.status === 'critical' && '[&>div]:bg-destructive',
-                                item.status === 'warning' && '[&>div]:bg-yellow-500',
-                                item.status === 'ok' && '[&>div]:bg-green-500',
-                              )}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              {item.status === 'critical' && '⚠️ Crítico'}
-                              {item.status === 'warning' && '⚡ Atenção'}
-                              {item.status === 'ok' && '✓ OK'}
-                              {item.status === 'no_data' && 'Sem dados'}
-                            </p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
             </CardContent>
           </Card>
         </TabsContent>
