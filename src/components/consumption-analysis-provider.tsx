@@ -1,9 +1,10 @@
-      "use client";
+
+"use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type ConsumptionReport } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, query } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, query, getDocs, where } from 'firebase/firestore';
 
 export interface ConsumptionAnalysisContextType {
   history: ConsumptionReport[];
@@ -44,9 +45,21 @@ export function ConsumptionAnalysisProvider({ children }: { children: React.Reac
 
   const deleteReport = useCallback(async (reportId: string) => {
     try {
+        // 1. Deleta o relatório de consumo
         await deleteDoc(doc(db, "consumptionReports", reportId));
+
+        // 2. Busca e deleta o salesReport vinculado, se existir
+        const salesQuery = query(
+          collection(db, "salesReports"),
+          where("consumptionReportId", "==", reportId)
+        );
+        const salesSnap = await getDocs(salesQuery);
+        
+        if (!salesSnap.empty) {
+            await Promise.all(salesSnap.docs.map(d => deleteDoc(d.ref)));
+        }
     } catch(error) {
-        console.error("Error deleting consumption report:", error);
+        console.error("Error deleting consumption report and linked sales report:", error);
         throw error;
     }
   }, []);
