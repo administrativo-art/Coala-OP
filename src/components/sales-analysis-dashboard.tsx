@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState } from 'react';
@@ -6,6 +7,11 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useBaseProducts } from '@/hooks/use-base-products';
+import { useProducts } from '@/hooks/use-products';
+import { convertValue } from '@/lib/conversion';
+import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -16,7 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, LineChart, Line, ComposedChart } from 'recharts';
-import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Package2, AlertTriangle, CheckCircle, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -29,17 +35,15 @@ export function SalesAnalysisDashboard() {
   const { salesReports, loading: reportsLoading } = useSalesReports();
   const { kiosks } = useKiosks();
   const { user, permissions } = useAuth();
-  const { simulations } = useProductSimulation();
+  const { simulations, simulationItems } = useProductSimulation();
   const { categories } = useProductSimulationCategories();
+  const { lots, loading: lotsLoading } = useExpiryProducts();
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+  const { products, loading: productsLoading } = useProducts();
 
   const isAdmin = permissions.settings.manageUsers;
-  const loading = reportsLoading;
-
-  const availableKiosks = useMemo(() => {
-    if (isAdmin) return kiosks;
-    return kiosks.filter(k => user?.assignedKioskIds?.includes(k.id));
-  }, [kiosks, user, isAdmin]);
-
+  const loading = reportsLoading || lotsLoading || baseProductsLoading || productsLoading;
+  
   // Filtros
   const [selectedKioskId, setSelectedKioskId] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
@@ -47,16 +51,23 @@ export function SalesAnalysisDashboard() {
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [rangeStart, setRangeStart] = useState<string>('1');
   const [rangeEnd, setRangeEnd] = useState<string>('12');
+  const [stockKioskId, setStockKioskId] = useState<string>('');
   
-  // Sort and search states
+  // Estados de UI
   const [rankingSearch, setRankingSearch] = useState<string>('');
   const [rankingSortDir, setRankingSortDir] = useState<'asc' | 'desc'>('desc');
   const [abcSearch, setAbcSearch] = useState<string>('');
+  const [hoveredProduct, setHoveredProduct] = useState<string | null>(null);
 
   const [compareMonths, setCompareMonths] = useState<string[]>([
     String(new Date().getMonth() || 12),
     String(new Date().getMonth() + 1 > 12 ? 1 : new Date().getMonth() + 1),
   ]);
+
+  const availableKiosks = useMemo(() => {
+    if (isAdmin) return kiosks;
+    return kiosks.filter(k => user?.assignedKioskIds?.includes(k.id));
+  }, [kiosks, user, isAdmin]);
 
   const availableYears = useMemo(() => {
     const years = new Set(salesReports.map(r => String(r.year)));
@@ -82,9 +93,7 @@ export function SalesAnalysisDashboard() {
     });
   }, [salesReports, selectedKioskId, selectedYear, includedMonths, isAdmin, user]);
 
-  // Map simulationId -> simulation
   const simulationMap = useMemo(() => new Map(simulations.map(s => [s.id, s])), [simulations]);
-  // Map categoryId -> category
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
   // ── RANKING ────────────────────────────────────────────────────────────────
@@ -102,7 +111,7 @@ export function SalesAnalysisDashboard() {
     const totalUnits = productRanking.reduce((s, p) => s + p.quantity, 0);
     const topProduct = productRanking[0] || null;
 
-    // Período anterior para comparação (simplificado para mês anterior)
+    // Período anterior para comparação (simplificado para o mesmo mês do ano anterior ou mês anterior)
     const prevMonthNum = includedMonths[0] - 1 <= 0 ? 12 : includedMonths[0] - 1;
     const prevYear = includedMonths.includes(1) ? Number(selectedYear) - 1 : Number(selectedYear);
 
@@ -244,6 +253,69 @@ export function SalesAnalysisDashboard() {
     return Object.entries(byKiosk).map(([kioskId, data]) => ({ kioskId, ...data })).sort((a, b) => b.total - a.total);
   }, [filteredReports, isAdmin, user]);
 
+  // ── VENDAS VS ESTOQUE (COBERTURA) ──────────────────────────────────────────
+  const stockVsSales = useMemo(() => {
+    const kioskId = stockKioskId || (availableKiosks[0]?.id ?? '');
+    if (!kioskId) return [];
+
+    const now = new Date();
+    const last3: { year: number; month: number }[] = [];
+    for (let i = 2; i >= 0; i--) {
+      let m = now.getMonth() + 1 - i;
+      let y = now.getFullYear();
+      if (m <= 0) { m += 12; y -= 1; }
+      last3.push({ year: y, month: m });
+    }
+
+    const dailyAvgBySimId: Record<string, { name: string; daily: number }> = {};
+    salesReports
+      .filter(r => r.kioskId === kioskId && last3.find(m => m.year === r.year && m.month === r.month))
+      .forEach(r => {
+        r.items.forEach(item => {
+          if (!dailyAvgBySimId[item.simulationId]) dailyAvgBySimId[item.simulationId] = { name: item.productName, daily: 0 };
+          dailyAvgBySimId[item.simulationId].daily += item.quantity;
+        });
+      });
+
+    const totalDays = last3.reduce((s, m) => s + new Date(m.year, m.month, 0).getDate(), 0);
+    Object.keys(dailyAvgBySimId).forEach(k => { dailyAvgBySimId[k].daily /= totalDays; });
+
+    return Object.entries(dailyAvgBySimId).map(([simId, data]) => {
+      const sim = simulationMap.get(simId);
+      if (!sim) return null;
+
+      // Cálculo do bottleneck (o ingrediente que limita a produção)
+      const portionsByIngredient: number[] = [];
+      const itemsForSim = simulationItems.filter(i => i.simulationId === sim.id);
+
+      itemsForSim.forEach(simItem => {
+        const bp = baseProducts.find(b => b.id === simItem.baseProductId);
+        if (!bp) return;
+        
+        let ingredientTotalInBase = 0;
+        lots.filter(l => l.kioskId === kioskId && products.find(p => p.id === l.productId)?.baseProductId === bp.id)
+            .forEach(lot => {
+                const prod = products.find(p => p.id === lot.productId);
+                if (prod) ingredientTotalInBase += convertValue(lot.quantity * prod.packageSize, prod.unit, bp.unit, bp.category);
+            });
+
+        const neededPerUnitInBase = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
+        if (neededPerUnitInBase > 0) portionsByIngredient.push(ingredientTotalInBase / neededPerUnitInBase);
+      });
+
+      const currentStockUnits = portionsByIngredient.length > 0 ? Math.min(...portionsByIngredient) : 0;
+      const daysOfCoverage = data.daily > 0 ? Math.floor(currentStockUnits / data.daily) : Infinity;
+      const status = daysOfCoverage === Infinity ? 'no_data' : daysOfCoverage < 7 ? 'critical' : daysOfCoverage < 15 ? 'warning' : 'ok';
+
+      return { simulationId: simId, name: data.name, dailyAvg: data.daily, currentStock: Math.floor(currentStockUnits), daysOfCoverage, status };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const order = { critical: 0, warning: 1, ok: 2, no_data: 3 };
+      return order[a!.status as keyof typeof order] - order[b!.status as keyof typeof order];
+    });
+  }, [stockKioskId, availableKiosks, salesReports, simulationMap, simulationItems, baseProducts, lots, products]);
+
   const filteredRanking = useMemo(() => {
     let result = [...productRanking];
     if (rankingSearch) result = result.filter(p => p.name.toLowerCase().includes(rankingSearch.toLowerCase()));
@@ -256,26 +328,10 @@ export function SalesAnalysisDashboard() {
     return abcCurve.filter(p => p.name.toLowerCase().includes(abcSearch.toLowerCase()));
   }, [abcCurve, abcSearch]);
 
-  const top5Names = productRanking.slice(0, 5).map(p => p.name);
-  const periodLabel = useMemo(() => {
-    if (filterMode === 'single') return selectedMonth === 'all' ? 'Ano todo' : MONTHS[Number(selectedMonth) - 1];
-    if (filterMode === 'range') return `${MONTHS[Number(rangeStart) - 1]} → ${MONTHS[Number(rangeEnd) - 1]}`;
-    return compareMonths.map(m => MONTHS[Number(m) - 1]).join(' vs ');
-  }, [filterMode, selectedMonth, rangeStart, rangeEnd, compareMonths]);
-
   if (loading) return <div className="space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-64 w-full" /></div>;
-
-  if (salesReports.length === 0) return (
-    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-      <Inbox className="h-12 w-12 mb-4" />
-      <p className="font-semibold text-lg">Nenhum dado de vendas</p>
-      <p className="text-sm">Importe um relatório de vendas para começar.</p>
-    </div>
-  );
 
   return (
     <div className="space-y-6">
-
       {/* ── FILTROS ── */}
       <div className="flex flex-wrap gap-3 items-end">
         <div>
@@ -304,47 +360,29 @@ export function SalesAnalysisDashboard() {
           </ToggleGroup>
         </div>
         {filterMode === 'single' && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Mês</p>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-[130px]"><SelectValue placeholder="Mês" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}
+            </SelectContent>
+          </Select>
         )}
         {filterMode === 'range' && (
           <div className="flex items-end gap-2">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">De</p>
-              <Select value={rangeStart} onValueChange={setRangeStart}>
-                <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
-                <SelectContent>{MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
+            <Select value={rangeStart} onValueChange={setRangeStart}><SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger><SelectContent>{MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}</SelectContent></Select>
             <span className="text-muted-foreground mb-2">→</span>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Até</p>
-              <Select value={rangeEnd} onValueChange={setRangeEnd}>
-                <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
-                <SelectContent>{MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
+            <Select value={rangeEnd} onValueChange={setRangeEnd}><SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger><SelectContent>{MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}</SelectContent></Select>
           </div>
         )}
         {filterMode === 'compare' && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Meses a comparar</p>
-            <div className="flex gap-1 flex-wrap">
-              {MONTH_NUMS.map(m => (
-                <Button key={m} size="sm" variant={compareMonths.includes(String(m)) ? 'default' : 'outline'} className="h-8 w-12 text-xs"
-                  onClick={() => setCompareMonths(prev => prev.includes(String(m)) ? prev.filter(x => x !== String(m)) : [...prev, String(m)])}>
-                  {MONTHS[m-1]}
-                </Button>
-              ))}
-            </div>
+          <div className="flex gap-1 flex-wrap">
+            {MONTH_NUMS.map(m => (
+              <Button key={m} size="sm" variant={compareMonths.includes(String(m)) ? 'default' : 'outline'} className="h-8 w-12 text-xs"
+                onClick={() => setCompareMonths(prev => prev.includes(String(m)) ? prev.filter(x => x !== String(m)) : [...prev, String(m)])}>
+                {MONTHS[m-1]}
+              </Button>
+            ))}
           </div>
         )}
       </div>
@@ -352,96 +390,57 @@ export function SalesAnalysisDashboard() {
       <div className="flex items-center gap-2">
         <Badge variant="secondary">{selectedYear}</Badge>
         <Badge variant="outline">{periodLabel}</Badge>
-        {filteredReports.length > 0 && <span className="text-xs text-muted-foreground">{filteredReports.length} relatório(s) encontrado(s)</span>}
+        {filteredReports.length > 0 && <span className="text-xs text-muted-foreground">{filteredReports.length} relatório(s)</span>}
       </div>
 
       {/* SUMMARY CARDS */}
       {productRanking.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Total vendido</p>
-              <p className="text-2xl font-bold">{summaryCards.totalUnits.toLocaleString('pt-BR')}</p>
-              {summaryCards.variation !== null && (
-                <p className={cn("text-xs font-semibold mt-1", summaryCards.variation >= 0 ? "text-green-600" : "text-destructive")}>
-                  {summaryCards.variation >= 0 ? '▲' : '▼'} {Math.abs(summaryCards.variation).toFixed(1)}% vs anterior
-                </p>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Produtos únicos</p>
-              <p className="text-2xl font-bold">{summaryCards.uniqueProducts}</p>
-              <p className="text-xs text-muted-foreground mt-1">no período</p>
-            </CardContent>
-          </Card>
-          <Card className="col-span-2">
-            <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Produto mais vendido</p>
-              <p className="text-lg font-bold truncate">{summaryCards.topProduct?.name || '-'}</p>
-              <p className="text-xs text-muted-foreground mt-1">{summaryCards.topProduct?.quantity.toLocaleString('pt-BR')} unidades</p>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total vendido</p><p className="text-2xl font-bold">{summaryCards.totalUnits.toLocaleString('pt-BR')}</p>
+            {summaryCards.variation !== null && <p className={cn("text-xs font-semibold mt-1", summaryCards.variation >= 0 ? "text-green-600" : "text-destructive")}>{summaryCards.variation >= 0 ? '▲' : '▼'} {Math.abs(summaryCards.variation).toFixed(1)}% vs anterior</p>}
+          </CardContent></Card>
+          <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Produtos únicos</p><p className="text-2xl font-bold">{summaryCards.uniqueProducts}</p></CardContent></Card>
+          <Card className="col-span-2"><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Top Produto</p><p className="text-lg font-bold truncate">{summaryCards.topProduct?.name || '-'}</p><p className="text-xs text-muted-foreground mt-1">{summaryCards.topProduct?.quantity.toLocaleString('pt-BR')} un</p></CardContent></Card>
         </div>
       )}
 
       {/* ── ABAS ── */}
       <Tabs defaultValue="ranking">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-7">
           <TabsTrigger value="ranking"><Award className="mr-1 h-3 w-3" /> Ranking</TabsTrigger>
           <TabsTrigger value="abc"><BarChart2 className="mr-1 h-3 w-3" /> Curva ABC</TabsTrigger>
           <TabsTrigger value="declining"><TrendingDown className="mr-1 h-3 w-3" /> Em queda</TabsTrigger>
-          <TabsTrigger value="mix"><PieIcon className="mr-1 h-3 w-3" /> Mix por linha</TabsTrigger>
+          <TabsTrigger value="mix"><PieIcon className="mr-1 h-3 w-3" /> Mix</TabsTrigger>
           <TabsTrigger value="evolution"><TrendingUp className="mr-1 h-3 w-3" /> Evolução</TabsTrigger>
-          <TabsTrigger value="kiosks"><ShoppingBag className="mr-1 h-3 w-3" /> Por quiosque</TabsTrigger>
+          <TabsTrigger value="kiosks"><ShoppingBag className="mr-1 h-3 w-3" /> Quiosques</TabsTrigger>
+          <TabsTrigger value="stock"><Package2 className="mr-1 h-3 w-3" /> Vendas vs Estoque</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ranking" className="mt-4">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <CardTitle>Ranking de produtos mais vendidos</CardTitle>
-                  <CardDescription>Total de unidades vendidas no período.</CardDescription>
-                </div>
+                <CardTitle>Ranking de Vendas</CardTitle>
                 <div className="relative w-[220px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Filtrar produto..." value={rankingSearch} onChange={e => setRankingSearch(e.target.value)} className="pl-9" />
+                  <Input placeholder="Filtrar..." value={rankingSearch} onChange={e => setRankingSearch(e.target.value)} className="pl-9" />
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              {filteredRanking.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10">#</TableHead>
-                      <TableHead>Produto</TableHead>
-                      <TableHead className="text-right cursor-pointer select-none" onClick={() => setRankingSortDir(d => d === 'desc' ? 'asc' : 'desc')}>
-                        <span className="flex items-center justify-end gap-1">
-                          Qtd. {rankingSortDir === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
-                        </span>
-                      </TableHead>
-                      <TableHead className="text-right">% do total</TableHead>
+              <Table>
+                <TableHeader><TableRow><TableHead className="w-10">#</TableHead><TableHead>Produto</TableHead><TableHead className="text-right cursor-pointer" onClick={() => setRankingSortDir(d => d === 'desc' ? 'asc' : 'desc')}>Qtd {rankingSortDir === 'desc' ? '↓' : '↑'}</TableHead><TableHead className="text-right">%</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {filteredRanking.map((item, i) => (
+                    <TableRow key={item.simulationId}>
+                      <TableCell>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</TableCell>
+                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell className="text-right font-bold">{item.quantity.toLocaleString('pt-BR')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{(item.quantity / summaryCards.totalUnits * 100).toFixed(1)}%</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredRanking.map((item, i) => {
-                      const total = productRanking.reduce((s, p) => s + p.quantity, 0);
-                      const origPos = productRanking.findIndex(p => p.simulationId === item.simulationId);
-                      return (
-                        <TableRow key={item.simulationId}>
-                          <TableCell>{origPos === 0 ? '🥇' : origPos === 1 ? '🥈' : origPos === 2 ? '🥉' : <span className="text-muted-foreground">{origPos+1}</span>}</TableCell>
-                          <TableCell className="font-medium">{item.name}</TableCell>
-                          <TableCell className="text-right font-bold">{item.quantity.toLocaleString('pt-BR')}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{total > 0 ? (item.quantity/total*100).toFixed(1) : 0}%</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -450,93 +449,46 @@ export function SalesAnalysisDashboard() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <CardTitle>Curva ABC</CardTitle>
-                  <CardDescription>A = top 80% das vendas · B = 80–95% · C = cauda longa</CardDescription>
-                </div>
+                <CardTitle>Análise Curva ABC</CardTitle>
                 <div className="relative w-[220px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Filtrar produto..." value={abcSearch} onChange={e => setAbcSearch(e.target.value)} className="pl-9" />
+                  <Input placeholder="Filtrar..." value={abcSearch} onChange={e => setAbcSearch(e.target.value)} className="pl-9" />
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              {filteredAbc.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Classe</TableHead>
-                      <TableHead>Produto</TableHead>
-                      <TableHead className="text-right">Qtd.</TableHead>
-                      <TableHead className="text-right">% individual</TableHead>
-                      <TableHead className="text-right">% acumulado</TableHead>
+              <Table>
+                <TableHeader><TableRow><TableHead>Classe</TableHead><TableHead>Produto</TableHead><TableHead className="text-right">Qtd.</TableHead><TableHead className="text-right">Acumulado %</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {filteredAbc.map(item => (
+                    <TableRow key={item.simulationId}>
+                      <TableCell><Badge className={cn(item.class === 'A' ? 'bg-green-500' : item.class === 'B' ? 'bg-yellow-500' : 'bg-gray-400', 'text-white')}>{item.class}</Badge></TableCell>
+                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell className="text-right">{item.quantity.toLocaleString('pt-BR')}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.accumulated}%</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredAbc.map(item => (
-                      <TableRow key={item.simulationId}>
-                        <TableCell>
-                          <Badge className={cn(
-                            item.class === 'A' && 'bg-green-500 text-white',
-                            item.class === 'B' && 'bg-yellow-500 text-white',
-                            item.class === 'C' && 'bg-gray-400 text-white',
-                          )}>{item.class}</Badge>
-                        </TableCell>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell className="text-right">{item.quantity.toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className="text-right">{item.pct}%</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{item.accumulated}%</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="declining" className="mt-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><TrendingDown className="h-5 w-5 text-destructive" /> Produtos em queda</CardTitle>
-              <CardDescription>Produtos com tendência de queda nos últimos 6 meses (todos quiosques).</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><TrendingDown className="text-destructive" /> Produtos em queda</CardTitle></CardHeader>
             <CardContent>
-              {decliningProducts.length === 0 ? (
-                <div className="flex flex-col items-center py-10 text-muted-foreground">
-                  <TrendingUp className="h-10 w-10 text-green-500 mb-3" />
-                  <p className="font-semibold">Nenhum produto em queda</p>
-                  <p className="text-sm">Todos os produtos estão estáveis ou em crescimento.</p>
-                </div>
-              ) : (
+              {decliningProducts.length === 0 ? <p className="text-center py-10 text-muted-foreground">Nenhum produto com tendência de queda detectada.</p> : (
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Produto</TableHead>
-                      <TableHead className="text-right">Média mensal</TableHead>
-                      <TableHead className="text-right">Variação (3m)</TableHead>
-                      <TableHead>Últimos 6 meses</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead className="text-right">Variação (3m)</TableHead><TableHead>Trend</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {decliningProducts.map(p => (
                       <TableRow key={p.simulationId}>
                         <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="text-right">{p.avgY.toFixed(0)}</TableCell>
-                        <TableCell className="text-right">
-                          <span className="text-destructive font-semibold">
-                            {p.variation > 0 ? '+' : ''}{p.variation.toFixed(1)}%
-                          </span>
-                        </TableCell>
+                        <TableCell className="text-right text-destructive font-bold">{p.variation.toFixed(1)}%</TableCell>
                         <TableCell>
                           <div className="flex items-end gap-0.5 h-8">
-                            {p.values.map((v, i) => {
-                              const max = Math.max(...p.values.map(x => x.y));
-                              const h = max > 0 ? (v.y / max) * 100 : 0;
-                              return (
-                                <div key={i} title={`${v.label}: ${v.y}`} className="flex-1 bg-destructive/70 rounded-sm transition-all" style={{ height: `${Math.max(h, 4)}%` }} />
-                              );
-                            })}
+                            {p.values.map((v, i) => <div key={i} className="flex-1 bg-destructive/60 rounded-sm" style={{ height: `${Math.max((v.y / Math.max(...p.values.map(x=>x.y)))*100, 5)}%` }} />)}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -550,118 +502,78 @@ export function SalesAnalysisDashboard() {
 
         <TabsContent value="mix" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>Mix de vendas por linha</CardTitle><CardDescription>Participação de cada linha no total de vendas do período.</CardDescription></CardHeader>
-            <CardContent>
-              {mixByLine.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <ResponsiveContainer width="100%" height={280}>
-                    <PieChart>
-                      <Pie data={mixByLine} dataKey="quantity" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent*100).toFixed(1)}%`}>
-                        {mixByLine.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip formatter={(v: number) => v.toLocaleString('pt-BR')} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Linha</TableHead><TableHead className="text-right">Qtd.</TableHead><TableHead className="text-right">%</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {mixByLine.map((line, i) => {
-                        const total = mixByLine.reduce((s, l) => s + l.quantity, 0);
-                        return (
-                          <TableRow key={line.name}>
-                            <TableCell className="flex items-center gap-2">
-                              <div className="h-3 w-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                              {line.name}
-                            </TableCell>
-                            <TableCell className="text-right font-bold">{line.quantity.toLocaleString('pt-BR')}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">{total > 0 ? (line.quantity/total*100).toFixed(1) : 0}%</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+            <CardHeader><CardTitle>Mix por Linha</CardTitle></CardHeader>
+            <CardContent className="flex flex-col md:flex-row gap-6">
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart><Pie data={mixByLine} dataKey="quantity" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({name, percent}) => `${name} ${(percent*100).toFixed(0)}%`}>{mixByLine.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /></PieChart>
+              </ResponsiveContainer>
+              <Table>
+                <TableHeader><TableRow><TableHead>Linha</TableHead><TableHead className="text-right">Qtd.</TableHead></TableRow></TableHeader>
+                <TableBody>{mixByLine.map((l, i) => <TableRow key={l.name}><TableCell><div className="flex items-center gap-2"><div className="h-3 w-3 rounded-full" style={{backgroundColor: COLORS[i%COLORS.length]}}/>{l.name}</div></TableCell><TableCell className="text-right font-bold">{l.quantity.toLocaleString('pt-BR')}</TableCell></TableRow>)}</TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="evolution" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>{filterMode === 'compare' ? 'Comparativo mensal' : 'Evolução mensal'} — Top 5</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Evolução Top 5</CardTitle></CardHeader>
             <CardContent>
-              {monthlyEvolution.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : filterMode === 'compare' ? (
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={monthlyEvolution} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="product" tick={{ fontSize: 11 }} />
-                    <YAxis />
-                    <Tooltip formatter={(v: number) => v.toLocaleString('pt-BR')} />
-                    <Legend />
-                    {compareMonths.map((m, i) => (
-                      <Bar key={m} dataKey={MONTHS[Number(m)-1]} fill={COLORS[i % COLORS.length]} radius={[4,4,0,0]} />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <ResponsiveContainer width="100%" height={320}>
-                  <ComposedChart data={monthlyEvolution} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip formatter={(v: number) => typeof v === 'number' ? v.toLocaleString('pt-BR') : v} />
-                    <Legend />
-                    {top5Names.map((name, i) => (
-                      <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[4,4,0,0]} />
-                    ))}
-                    <Line
-                      type="monotone"
-                      dataKey={(d) => top5Names.reduce((s, n) => s + (d[n] || 0), 0)}
-                      stroke="#1A1A2E"
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                      name="Total"
-                      strokeDasharray="5 5"
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              )}
+              <ResponsiveContainer width="100%" height={320}>
+                <ComposedChart data={monthlyEvolution}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey={filterMode === 'compare' ? 'product' : 'month'} />
+                  <YAxis /><Tooltip /><Legend />
+                  {filterMode === 'compare' ? compareMonths.map((m, i) => <Bar key={m} dataKey={MONTHS[Number(m)-1]} fill={COLORS[i % COLORS.length]} />) : 
+                    top5Names.map((name, i) => <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} opacity={hoveredProduct && hoveredProduct !== name ? 0.3 : 1} onMouseEnter={() => setHoveredProduct(name)} onMouseLeave={() => setHoveredProduct(null)} />)}
+                </ComposedChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="kiosks" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>Comparativo por quiosque</CardTitle><CardDescription>Total de itens vendidos por unidade no período.</CardDescription></CardHeader>
+            <CardHeader><CardTitle>Vendas por Quiosque</CardTitle></CardHeader>
             <CardContent>
-              {kioskComparison.length === 0 ? <p className="text-muted-foreground text-center py-8">Nenhum dado.</p> : (
-                <>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={kioskComparison} layout="vertical" margin={{ top: 0, right: 20, left: 20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="kioskName" type="category" width={140} />
-                      <Tooltip formatter={(v: number) => v.toLocaleString('pt-BR')} />
-                      <Bar dataKey="total" name="Total vendido" fill="#E91E8C" radius={[0,4,4,0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <Table className="mt-4">
-                    <TableHeader><TableRow><TableHead>Quiosque</TableHead><TableHead className="text-right">Total vendido</TableHead><TableHead className="text-right">%</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {kioskComparison.map(k => {
-                        const gt = kioskComparison.reduce((s, x) => s + x.total, 0);
-                        return (
-                          <TableRow key={k.kioskId}>
-                            <TableCell className="font-medium">{k.kioskName}</TableCell>
-                            <TableCell className="text-right font-bold">{k.total.toLocaleString('pt-BR')}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">{gt > 0 ? (k.total/gt*100).toFixed(1) : 0}%</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </>
-              )}
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={kioskComparison} layout="vertical"><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" /><YAxis dataKey="kioskName" type="category" width={140} /><Tooltip /><Bar dataKey="total" fill="#E91E8C" radius={[0,4,4,0]} /></BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="stock" className="mt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <CardTitle className="flex items-center gap-2"><Package2 /> Vendas vs Estoque</CardTitle>
+                <Select value={stockKioskId || availableKiosks[0]?.id || ''} onValueChange={setStockKioskId}>
+                  <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>{availableKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead className="text-right">Estoque</TableHead><TableHead className="text-right">Média/dia</TableHead><TableHead className="text-right">Cobertura</TableHead><TableHead className="w-40">Status</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {stockVsSales.map(item => item && (
+                    <TableRow key={item.simulationId}>
+                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell className="text-right">{item.currentStock} un</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{item.dailyAvg.toFixed(1)}</TableCell>
+                      <TableCell className={cn("text-right font-bold", item.status === 'critical' ? 'text-destructive' : item.status === 'warning' ? 'text-yellow-600' : 'text-green-600')}>{item.daysOfCoverage === Infinity ? 'N/A' : `${item.daysOfCoverage} dias`}</TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Progress value={item.daysOfCoverage === Infinity ? 100 : Math.min((item.daysOfCoverage / 30) * 100, 100)} className={cn('h-2', item.status === 'critical' ? '[&>div]:bg-destructive' : item.status === 'warning' ? '[&>div]:bg-yellow-500' : '[&>div]:bg-green-500')} />
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">{item.status === 'critical' ? '⚠️ Crítico' : item.status === 'warning' ? '⚡ Atenção' : '✓ OK'}</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
