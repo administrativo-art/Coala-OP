@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useRef } from 'react';
@@ -8,7 +7,7 @@ import * as z from 'zod';
 import Papa from 'papaparse';
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { type BaseProduct, type ConsumptionReport, type Kiosk, type ProductSimulation, type ProductSimulationItem, type SalesReport, type SalesReportItem } from '@/types';
+import { type ConsumptionReport, type Kiosk, type SalesReport, type SalesReportItem } from '@/types';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -39,10 +38,9 @@ const parseQuantity = (qtyString: string | number): number => {
     if (typeof qtyString !== 'string' || !qtyString.trim()) {
         return 0;
     }
-    // Handles numbers like "1.234,56"
     const cleanedString = String(qtyString)
-        .replace(/\./g, '')  // Remove thousands separators
-        .replace(',', '.'); // Replace decimal comma with dot
+        .replace(/\./g, '')
+        .replace(',', '.');
         
     const parsed = parseFloat(cleanedString);
     return isNaN(parsed) ? 0 : parsed;
@@ -114,7 +112,6 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                             continue;
                         }
 
-                        // Captura a venda bruta do produto (SKU)
                         salesByProduct.push({
                             sku,
                             productName: simulation.name,
@@ -154,9 +151,9 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
 
                     if (finalResults.length === 0) {
                         if (unmatchedSkus.size > 0) {
-                            throw new Error("Nenhum dos SKUs no relatório correspondeu a uma mercadoria cadastrada. Verifique a lista de SKUs não encontrados.");
+                            throw new Error("Nenhum dos SKUs no relatório correspondeu a uma mercadoria cadastrada.");
                         } else {
-                            throw new Error("Nenhum item do relatório foi processado. Verifique o formato do arquivo (colunas 'codigo' e 'quantidade').");
+                            throw new Error("Nenhum item do relatório foi processado.");
                         }
                     }
                      
@@ -173,7 +170,6 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                     
                     const consumptionReportId = await addReport(newReport);
 
-                    // Salva relatório de vendas brutas vinculado ao de consumo
                     const salesReport: Omit<SalesReport, 'id'> = {
                         reportName: file.name,
                         month: values.month,
@@ -190,10 +186,9 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                         const unmatchedSkuList = Array.from(unmatchedSkus).join(', ');
                         toast({
                             variant: 'default',
-                            className: 'border-amber-500 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200',
                             title: 'Relatório processado com avisos',
-                            description: `${finalResults.length} tipo(s) de insumo foram calculados, mas ${unmatchedSkus.size} SKU(s) foram ignorados: ${unmatchedSkuList}.`,
-                            duration: 30000,
+                            description: `${finalResults.length} tipo(s) de insumo calculados, mas ${unmatchedSkus.size} SKU(s) ignorados.`,
+                            duration: 10000,
                             action: (
                               <ToastAction altText="Copiar SKUs" onClick={() => navigator.clipboard.writeText(unmatchedSkuList)}>
                                 Copiar SKUs
@@ -201,13 +196,13 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                             ),
                         });
                     } else {
-                        toast({ title: 'Sucesso!', description: 'Relatório de vendas processado e consumo calculado.' });
+                        toast({ title: 'Sucesso!', description: 'Relatório processado com sucesso.' });
                     }
                     
                     onOpenChange(false);
 
                 } catch (error: any) {
-                    toast({ variant: 'destructive', title: 'Erro na análise', description: error.message || 'Não foi possível analisar o relatório.' });
+                    toast({ variant: 'destructive', title: 'Erro na análise', description: error.message });
                 } finally {
                     setIsAnalyzing(false);
                     uploadForm.reset({ ...uploadForm.getValues(), file: undefined });
@@ -223,7 +218,7 @@ export function ConsumptionImportModal({ open, onOpenChange, kiosks, addReport }
                 <DialogHeader>
                     <DialogTitle>Importar relatório de vendas</DialogTitle>
                     <DialogDescription>
-                        Faça o upload do seu relatório de vendas em formato CSV. O sistema usará as colunas "codigo" (SKU) e "quantidade" para calcular o consumo de insumos.
+                        Faça o upload do seu relatório de vendas (CSV) para calcular o consumo e atualizar as estatísticas.
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...uploadForm}>
