@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useState } from 'react';
@@ -21,8 +20,8 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, LineChart, Line, ComposedChart } from 'recharts';
-import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Package2, AlertTriangle, CheckCircle, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, Line, ComposedChart } from 'recharts';
+import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Package2, Search, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -35,7 +34,7 @@ export function SalesAnalysisDashboard() {
   const { salesReports, loading: reportsLoading } = useSalesReports();
   const { kiosks } = useKiosks();
   const { user, permissions } = useAuth();
-  const { simulations, simulationItems } = useProductSimulation();
+  const { simulations } = useProductSimulation();
   const { categories } = useProductSimulationCategories();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
@@ -43,7 +42,13 @@ export function SalesAnalysisDashboard() {
 
   const isAdmin = permissions.settings.manageUsers;
   const loading = reportsLoading || lotsLoading || baseProductsLoading || productsLoading;
-  
+  const [stockKioskId, setStockKioskId] = useState<string>('');
+
+  const availableKiosks = useMemo(() => {
+    if (isAdmin) return kiosks;
+    return kiosks.filter(k => user?.assignedKioskIds?.includes(k.id));
+  }, [kiosks, user, isAdmin]);
+
   // Filtros
   const [selectedKioskId, setSelectedKioskId] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
@@ -51,9 +56,8 @@ export function SalesAnalysisDashboard() {
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [rangeStart, setRangeStart] = useState<string>('1');
   const [rangeEnd, setRangeEnd] = useState<string>('12');
-  const [stockKioskId, setStockKioskId] = useState<string>('');
   
-  // Estados de UI
+  // Sort and search states
   const [rankingSearch, setRankingSearch] = useState<string>('');
   const [rankingSortDir, setRankingSortDir] = useState<'asc' | 'desc'>('desc');
   const [abcSearch, setAbcSearch] = useState<string>('');
@@ -63,11 +67,6 @@ export function SalesAnalysisDashboard() {
     String(new Date().getMonth() || 12),
     String(new Date().getMonth() + 1 > 12 ? 1 : new Date().getMonth() + 1),
   ]);
-
-  const availableKiosks = useMemo(() => {
-    if (isAdmin) return kiosks;
-    return kiosks.filter(k => user?.assignedKioskIds?.includes(k.id));
-  }, [kiosks, user, isAdmin]);
 
   const availableYears = useMemo(() => {
     const years = new Set(salesReports.map(r => String(r.year)));
@@ -111,7 +110,6 @@ export function SalesAnalysisDashboard() {
     const totalUnits = productRanking.reduce((s, p) => s + p.quantity, 0);
     const topProduct = productRanking[0] || null;
 
-    // Período anterior para comparação (simplificado para o mesmo mês do ano anterior ou mês anterior)
     const prevMonthNum = includedMonths[0] - 1 <= 0 ? 12 : includedMonths[0] - 1;
     const prevYear = includedMonths.includes(1) ? Number(selectedYear) - 1 : Number(selectedYear);
 
@@ -213,6 +211,78 @@ export function SalesAnalysisDashboard() {
     return result;
   }, [filteredReports, simulationMap, categoryMap]);
 
+  // ── VENDAS VS ESTOQUE ──────────────────────────────────────────────────────
+  const stockVsSales = useMemo(() => {
+    const kioskId = stockKioskId || (availableKiosks[0]?.id ?? '');
+    if (!kioskId) return [];
+
+    const now = new Date();
+    const last3: { year: number; month: number }[] = [];
+    for (let i = 2; i >= 0; i--) {
+      let m = now.getMonth() + 1 - i;
+      let y = now.getFullYear();
+      if (m <= 0) { m += 12; y -= 1; }
+      last3.push({ year: y, month: m });
+    }
+
+    const dailyAvgBySimId: Record<string, { name: string; daily: number }> = {};
+    salesReports
+      .filter(r => r.kioskId === kioskId && last3.find(m => m.year === r.year && m.month === r.month))
+      .forEach(r => {
+        r.items.forEach(item => {
+          if (!dailyAvgBySimId[item.simulationId]) dailyAvgBySimId[item.simulationId] = { name: item.productName, daily: 0 };
+          dailyAvgBySimId[item.simulationId].daily += item.quantity;
+        });
+      });
+
+    const totalDays = last3.reduce((s, m) => {
+      const d = new Date(m.year, m.month, 0).getDate();
+      return s + d;
+    }, 0);
+
+    Object.keys(dailyAvgBySimId).forEach(k => {
+      dailyAvgBySimId[k].daily = dailyAvgBySimId[k].daily / totalDays;
+    });
+
+    return Object.entries(dailyAvgBySimId).map(([simId, data]) => {
+      const sim = simulationMap.get(simId);
+      if (!sim) return null;
+
+      let currentStockUnits = 0;
+      sim.items?.forEach((simItem: any) => {
+        const bp = baseProducts.find(b => b.id === simItem.baseProductId);
+        if (!bp) return;
+        const kioskLots = lots.filter(l => l.kioskId === kioskId && products.find(p => p.id === l.productId)?.baseProductId === bp.id);
+        kioskLots.forEach(lot => {
+          try {
+            const prod = products.find(p => p.id === lot.productId);
+            if (!prod) return;
+            const inBase = convertValue(lot.quantity * prod.packageSize, prod.unit, bp.unit, bp.category);
+            const perUnit = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
+            if (perUnit > 0) currentStockUnits += inBase / perUnit;
+          } catch {}
+        });
+      });
+
+      const daysOfCoverage = data.daily > 0 ? Math.floor(currentStockUnits / data.daily) : Infinity;
+      const status = daysOfCoverage === Infinity ? 'no_data' : daysOfCoverage < 7 ? 'critical' : daysOfCoverage < 15 ? 'warning' : 'ok';
+
+      return {
+        simulationId: simId,
+        name: data.name,
+        dailyAvg: data.daily,
+        currentStock: Math.floor(currentStockUnits),
+        daysOfCoverage,
+        status,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const order = { critical: 0, warning: 1, ok: 2, no_data: 3 };
+      return order[a!.status as keyof typeof order] - order[b!.status as keyof typeof order];
+    });
+  }, [stockKioskId, availableKiosks, salesReports, simulationMap, baseProducts, lots, products]);
+
   // ── EVOLUÇÃO MENSAL ────────────────────────────────────────────────────────
   const monthlyEvolution = useMemo(() => {
     const top5 = productRanking.slice(0, 5).map(p => p.simulationId);
@@ -253,69 +323,6 @@ export function SalesAnalysisDashboard() {
     return Object.entries(byKiosk).map(([kioskId, data]) => ({ kioskId, ...data })).sort((a, b) => b.total - a.total);
   }, [filteredReports, isAdmin, user]);
 
-  // ── VENDAS VS ESTOQUE (COBERTURA) ──────────────────────────────────────────
-  const stockVsSales = useMemo(() => {
-    const kioskId = stockKioskId || (availableKiosks[0]?.id ?? '');
-    if (!kioskId) return [];
-
-    const now = new Date();
-    const last3: { year: number; month: number }[] = [];
-    for (let i = 2; i >= 0; i--) {
-      let m = now.getMonth() + 1 - i;
-      let y = now.getFullYear();
-      if (m <= 0) { m += 12; y -= 1; }
-      last3.push({ year: y, month: m });
-    }
-
-    const dailyAvgBySimId: Record<string, { name: string; daily: number }> = {};
-    salesReports
-      .filter(r => r.kioskId === kioskId && last3.find(m => m.year === r.year && m.month === r.month))
-      .forEach(r => {
-        r.items.forEach(item => {
-          if (!dailyAvgBySimId[item.simulationId]) dailyAvgBySimId[item.simulationId] = { name: item.productName, daily: 0 };
-          dailyAvgBySimId[item.simulationId].daily += item.quantity;
-        });
-      });
-
-    const totalDays = last3.reduce((s, m) => s + new Date(m.year, m.month, 0).getDate(), 0);
-    Object.keys(dailyAvgBySimId).forEach(k => { dailyAvgBySimId[k].daily /= totalDays; });
-
-    return Object.entries(dailyAvgBySimId).map(([simId, data]) => {
-      const sim = simulationMap.get(simId);
-      if (!sim) return null;
-
-      // Cálculo do bottleneck (o ingrediente que limita a produção)
-      const portionsByIngredient: number[] = [];
-      const itemsForSim = simulationItems.filter(i => i.simulationId === sim.id);
-
-      itemsForSim.forEach(simItem => {
-        const bp = baseProducts.find(b => b.id === simItem.baseProductId);
-        if (!bp) return;
-        
-        let ingredientTotalInBase = 0;
-        lots.filter(l => l.kioskId === kioskId && products.find(p => p.id === l.productId)?.baseProductId === bp.id)
-            .forEach(lot => {
-                const prod = products.find(p => p.id === lot.productId);
-                if (prod) ingredientTotalInBase += convertValue(lot.quantity * prod.packageSize, prod.unit, bp.unit, bp.category);
-            });
-
-        const neededPerUnitInBase = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
-        if (neededPerUnitInBase > 0) portionsByIngredient.push(ingredientTotalInBase / neededPerUnitInBase);
-      });
-
-      const currentStockUnits = portionsByIngredient.length > 0 ? Math.min(...portionsByIngredient) : 0;
-      const daysOfCoverage = data.daily > 0 ? Math.floor(currentStockUnits / data.daily) : Infinity;
-      const status = daysOfCoverage === Infinity ? 'no_data' : daysOfCoverage < 7 ? 'critical' : daysOfCoverage < 15 ? 'warning' : 'ok';
-
-      return { simulationId: simId, name: data.name, dailyAvg: data.daily, currentStock: Math.floor(currentStockUnits), daysOfCoverage, status };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      const order = { critical: 0, warning: 1, ok: 2, no_data: 3 };
-      return order[a!.status as keyof typeof order] - order[b!.status as keyof typeof order];
-    });
-  }, [stockKioskId, availableKiosks, salesReports, simulationMap, simulationItems, baseProducts, lots, products]);
-
   const filteredRanking = useMemo(() => {
     let result = [...productRanking];
     if (rankingSearch) result = result.filter(p => p.name.toLowerCase().includes(rankingSearch.toLowerCase()));
@@ -328,7 +335,23 @@ export function SalesAnalysisDashboard() {
     return abcCurve.filter(p => p.name.toLowerCase().includes(abcSearch.toLowerCase()));
   }, [abcCurve, abcSearch]);
 
+  const top5Names = useMemo(() => productRanking.slice(0, 5).map(p => p.name), [productRanking]);
+
+  const periodLabel = useMemo(() => {
+    if (filterMode === 'single') return selectedMonth === 'all' ? 'Ano todo' : MONTHS[Number(selectedMonth) - 1];
+    if (filterMode === 'range') return `${MONTHS[Number(rangeStart) - 1]} → ${MONTHS[Number(rangeEnd) - 1]}`;
+    return compareMonths.map(m => MONTHS[Number(m) - 1]).join(' vs ');
+  }, [filterMode, selectedMonth, rangeStart, rangeEnd, compareMonths]);
+
   if (loading) return <div className="space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-64 w-full" /></div>;
+
+  if (salesReports.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+      <Inbox className="h-12 w-12 mb-4" />
+      <p className="font-semibold text-lg">Nenhum dado de vendas</p>
+      <p className="text-sm">Importe um relatório de vendas para começar.</p>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -360,29 +383,47 @@ export function SalesAnalysisDashboard() {
           </ToggleGroup>
         </div>
         {filterMode === 'single' && (
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[130px]"><SelectValue placeholder="Mês" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              {MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Mês</p>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
         )}
         {filterMode === 'range' && (
           <div className="flex items-end gap-2">
-            <Select value={rangeStart} onValueChange={setRangeStart}><SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger><SelectContent>{MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}</SelectContent></Select>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">De</p>
+              <Select value={rangeStart} onValueChange={setRangeStart}>
+                <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+                <SelectContent>{MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
             <span className="text-muted-foreground mb-2">→</span>
-            <Select value={rangeEnd} onValueChange={setRangeEnd}><SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger><SelectContent>{MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}</SelectContent></Select>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Até</p>
+              <Select value={rangeEnd} onValueChange={setRangeEnd}>
+                <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+                <SelectContent>{MONTH_NUMS.map(m => <SelectItem key={m} value={String(m)}>{MONTHS[m-1]}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
           </div>
         )}
         {filterMode === 'compare' && (
-          <div className="flex gap-1 flex-wrap">
-            {MONTH_NUMS.map(m => (
-              <Button key={m} size="sm" variant={compareMonths.includes(String(m)) ? 'default' : 'outline'} className="h-8 w-12 text-xs"
-                onClick={() => setCompareMonths(prev => prev.includes(String(m)) ? prev.filter(x => x !== String(m)) : [...prev, String(m)])}>
-                {MONTHS[m-1]}
-              </Button>
-            ))}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Meses a comparar</p>
+            <div className="flex gap-1 flex-wrap">
+              {MONTH_NUMS.map(m => (
+                <Button key={m} size="sm" variant={compareMonths.includes(String(m)) ? 'default' : 'outline'} className="h-8 w-12 text-xs"
+                  onClick={() => setCompareMonths(prev => prev.includes(String(m)) ? prev.filter(x => x !== String(m)) : [...prev, String(m)])}>
+                  {MONTHS[m-1]}
+                </Button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -525,7 +566,17 @@ export function SalesAnalysisDashboard() {
                   <XAxis dataKey={filterMode === 'compare' ? 'product' : 'month'} />
                   <YAxis /><Tooltip /><Legend />
                   {filterMode === 'compare' ? compareMonths.map((m, i) => <Bar key={m} dataKey={MONTHS[Number(m)-1]} fill={COLORS[i % COLORS.length]} />) : 
-                    top5Names.map((name, i) => <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} opacity={hoveredProduct && hoveredProduct !== name ? 0.3 : 1} onMouseEnter={() => setHoveredProduct(name)} onMouseLeave={() => setHoveredProduct(null)} />)}
+                    top5Names.map((name, i) => (
+                      <Bar 
+                        key={name} 
+                        dataKey={name} 
+                        fill={COLORS[i % COLORS.length]} 
+                        opacity={hoveredProduct && hoveredProduct !== name ? 0.3 : 1} 
+                        onMouseEnter={() => setHoveredProduct(name)} 
+                        onMouseLeave={() => setHoveredProduct(null)} 
+                      />
+                    ))
+                  }
                 </ComposedChart>
               </ResponsiveContainer>
             </CardContent>
@@ -547,33 +598,77 @@ export function SalesAnalysisDashboard() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <CardTitle className="flex items-center gap-2"><Package2 /> Vendas vs Estoque</CardTitle>
-                <Select value={stockKioskId || availableKiosks[0]?.id || ''} onValueChange={setStockKioskId}>
-                  <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>{availableKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                </Select>
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package2 className="h-5 w-5" /> Vendas vs Estoque
+                  </CardTitle>
+                  <CardDescription>Cobertura de dias baseada na média diária dos últimos 3 meses.</CardDescription>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Quiosque</p>
+                  <Select value={stockKioskId || availableKiosks[0]?.id || ''} onValueChange={setStockKioskId}>
+                    <SelectTrigger className="w-[200px]"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      {availableKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead className="text-right">Estoque</TableHead><TableHead className="text-right">Média/dia</TableHead><TableHead className="text-right">Cobertura</TableHead><TableHead className="w-40">Status</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {stockVsSales.map(item => item && (
-                    <TableRow key={item.simulationId}>
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell className="text-right">{item.currentStock} un</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{item.dailyAvg.toFixed(1)}</TableCell>
-                      <TableCell className={cn("text-right font-bold", item.status === 'critical' ? 'text-destructive' : item.status === 'warning' ? 'text-yellow-600' : 'text-green-600')}>{item.daysOfCoverage === Infinity ? 'N/A' : `${item.daysOfCoverage} dias`}</TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <Progress value={item.daysOfCoverage === Infinity ? 100 : Math.min((item.daysOfCoverage / 30) * 100, 100)} className={cn('h-2', item.status === 'critical' ? '[&>div]:bg-destructive' : item.status === 'warning' ? '[&>div]:bg-yellow-500' : '[&>div]:bg-green-500')} />
-                          <p className="text-[10px] uppercase font-bold text-muted-foreground">{item.status === 'critical' ? '⚠️ Crítico' : item.status === 'warning' ? '⚡ Atenção' : '✓ OK'}</p>
-                        </div>
-                      </TableCell>
+              {stockVsSales.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">Nenhum dado de vendas para este quiosque.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto</TableHead>
+                      <TableHead className="text-right">Estoque atual</TableHead>
+                      <TableHead className="text-right">Média/dia</TableHead>
+                      <TableHead className="text-right">Cobertura</TableHead>
+                      <TableHead className="w-40">Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {stockVsSales.map(item => item && (
+                      <TableRow key={item.simulationId}>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell className="text-right">{item.currentStock.toLocaleString('pt-BR')} un</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{item.dailyAvg.toFixed(1)}/dia</TableCell>
+                        <TableCell className="text-right font-bold">
+                          <span className={cn(
+                            item.status === 'critical' && 'text-destructive',
+                            item.status === 'warning' && 'text-yellow-600',
+                            item.status === 'ok' && 'text-green-600',
+                            item.status === 'no_data' && 'text-muted-foreground',
+                          )}>
+                            {item.daysOfCoverage === Infinity ? 'N/A' : `${item.daysOfCoverage} dias`}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <Progress
+                              value={item.daysOfCoverage === Infinity ? 100 : Math.min((item.daysOfCoverage / 30) * 100, 100)}
+                              className={cn(
+                                'h-2',
+                                item.status === 'critical' && '[&>div]:bg-destructive',
+                                item.status === 'warning' && '[&>div]:bg-yellow-500',
+                                item.status === 'ok' && '[&>div]:bg-green-500',
+                              )}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {item.status === 'critical' && '⚠️ Crítico'}
+                              {item.status === 'warning' && '⚡ Atenção'}
+                              {item.status === 'ok' && '✓ OK'}
+                              {item.status === 'no_data' && 'Sem dados'}
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
