@@ -20,8 +20,8 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, Line, ComposedChart } from 'recharts';
-import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Package2, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart, Line } from 'recharts';
+import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Package2, AlertTriangle, CheckCircle, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -110,13 +110,13 @@ export function SalesAnalysisDashboard() {
     const totalUnits = productRanking.reduce((s, p) => s + p.quantity, 0);
     const topProduct = productRanking[0] || null;
 
-    const prevMonthNum = includedMonths[0] - 1 <= 0 ? 12 : includedMonths[0] - 1;
+    const prevMonths = includedMonths.map(m => m - 1 <= 0 ? 12 : m - 1);
     const prevYear = includedMonths.includes(1) ? Number(selectedYear) - 1 : Number(selectedYear);
 
     const prevReports = salesReports.filter(r => {
       const kioskMatch = selectedKioskId === 'all' || r.kioskId === selectedKioskId;
       const yearMatch = r.year === prevYear;
-      const monthMatch = r.month === prevMonthNum;
+      const monthMatch = prevMonths.includes(r.month);
       const userKioskMatch = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
       return kioskMatch && yearMatch && monthMatch && userKioskMatch;
     });
@@ -211,6 +211,7 @@ export function SalesAnalysisDashboard() {
     return result;
   }, [filteredReports, simulationMap, categoryMap]);
 
+
   // ── VENDAS VS ESTOQUE ──────────────────────────────────────────────────────
   const stockVsSales = useMemo(() => {
     const kioskId = stockKioskId || (availableKiosks[0]?.id ?? '');
@@ -248,22 +249,36 @@ export function SalesAnalysisDashboard() {
       const sim = simulationMap.get(simId);
       if (!sim) return null;
 
-      let currentStockUnits = 0;
+      // Lógica de Gargalo (Bottleneck)
+      let minCoverageUnits = Infinity;
+      let hasIngredients = false;
+
       sim.items?.forEach((simItem: any) => {
         const bp = baseProducts.find(b => b.id === simItem.baseProductId);
         if (!bp) return;
+        hasIngredients = true;
+        
+        let ingredientStockInBase = 0;
         const kioskLots = lots.filter(l => l.kioskId === kioskId && products.find(p => p.id === l.productId)?.baseProductId === bp.id);
         kioskLots.forEach(lot => {
           try {
             const prod = products.find(p => p.id === lot.productId);
             if (!prod) return;
-            const inBase = convertValue(lot.quantity * prod.packageSize, prod.unit, bp.unit, bp.category);
-            const perUnit = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
-            if (perUnit > 0) currentStockUnits += inBase / perUnit;
+            const availableQty = lot.quantity - (lot.reservedQuantity || 0);
+            if (availableQty <= 0) return;
+            const inBase = convertValue(availableQty * prod.packageSize, prod.unit, bp.unit, bp.category);
+            ingredientStockInBase += inBase;
           } catch {}
         });
+
+        const perUnitInBase = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
+        if (perUnitInBase > 0) {
+          const possibleUnitsFromThisIngredient = ingredientStockInBase / perUnitInBase;
+          minCoverageUnits = Math.min(minCoverageUnits, possibleUnitsFromThisIngredient);
+        }
       });
 
+      const currentStockUnits = hasIngredients && minCoverageUnits !== Infinity ? Math.floor(minCoverageUnits) : 0;
       const daysOfCoverage = data.daily > 0 ? Math.floor(currentStockUnits / data.daily) : Infinity;
       const status = daysOfCoverage === Infinity ? 'no_data' : daysOfCoverage < 7 ? 'critical' : daysOfCoverage < 15 ? 'warning' : 'ok';
 
@@ -271,7 +286,7 @@ export function SalesAnalysisDashboard() {
         simulationId: simId,
         name: data.name,
         dailyAvg: data.daily,
-        currentStock: Math.floor(currentStockUnits),
+        currentStock: currentStockUnits,
         daysOfCoverage,
         status,
       };
@@ -564,7 +579,26 @@ export function SalesAnalysisDashboard() {
                 <ComposedChart data={monthlyEvolution}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey={filterMode === 'compare' ? 'product' : 'month'} />
-                  <YAxis /><Tooltip /><Legend />
+                  <YAxis /><Tooltip
+                    content={({ active }) => {
+                      if (!active || !hoveredProduct) return null;
+                      const productData = monthlyEvolution
+                        .map(m => ({ month: m.month, value: (m as any)[hoveredProduct] || 0 }))
+                        .filter(m => m.value > 0);
+                      return (
+                        <div className="bg-background border rounded-lg shadow-lg p-3 text-sm">
+                          <p className="font-bold mb-2">{hoveredProduct}</p>
+                          {productData.map(d => (
+                            <div key={d.month} className="flex justify-between gap-6">
+                              <span className="text-muted-foreground">{d.month}</span>
+                              <span className="font-semibold">{d.value.toLocaleString('pt-BR')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }}
+                  />
+                  <Legend />
                   {filterMode === 'compare' ? compareMonths.map((m, i) => <Bar key={m} dataKey={MONTHS[Number(m)-1]} fill={COLORS[i % COLORS.length]} />) : 
                     top5Names.map((name, i) => (
                       <Bar 
