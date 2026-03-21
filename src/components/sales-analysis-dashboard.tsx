@@ -6,6 +6,11 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { useBaseProducts } from '@/hooks/use-base-products';
+import { useProducts } from '@/hooks/use-products';
+import { convertValue } from '@/lib/conversion';
+import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2 } from 'lucide-react';
+import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Package2, AlertTriangle, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -28,11 +33,15 @@ export function SalesAnalysisDashboard() {
   const { salesReports, loading: reportsLoading } = useSalesReports();
   const { kiosks } = useKiosks();
   const { user, permissions } = useAuth();
-  const { simulations } = useProductSimulation();
+  const { simulations, simulationItems } = useProductSimulation();
   const { categories } = useProductSimulationCategories();
+  const { lots, loading: lotsLoading } = useExpiryProducts();
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+  const { products, loading: productsLoading } = useProducts();
 
   const isAdmin = permissions.settings.manageUsers;
-  const loading = reportsLoading;
+  const loading = reportsLoading || lotsLoading || baseProductsLoading || productsLoading;
+  const [stockKioskId, setStockKioskId] = useState<string>('');
 
   const availableKiosks = useMemo(() => {
     if (isAdmin) return kiosks;
@@ -143,7 +152,8 @@ export function SalesAnalysisDashboard() {
       const sumX2 = values.reduce((s, v) => s + v.x * v.x, 0);
       const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
 
-      const avgY = sumY / n;
+      const sumYVal = values.reduce((s, v) => s + v.y, 0);
+      const avgY = sumYVal / n;
       const firstHalf = values.slice(0, 3).reduce((s, v) => s + v.y, 0) / 3;
       const secondHalf = values.slice(3).reduce((s, v) => s + v.y, 0) / 3;
       const variation = firstHalf > 0 ? ((secondHalf - firstHalf) / firstHalf * 100) : 0;
@@ -173,6 +183,88 @@ export function SalesAnalysisDashboard() {
     if (noLine > 0) result.push({ name: 'Sem linha', quantity: noLine });
     return result;
   }, [filteredReports, simulationMap, categoryMap]);
+
+
+  // ── VENDAS VS ESTOQUE ──────────────────────────────────────────────────────
+  const stockVsSales = useMemo(() => {
+    const kioskId = stockKioskId || (availableKiosks[0]?.id ?? '');
+    if (!kioskId) return [];
+
+    const now = new Date();
+    const last3: { year: number; month: number }[] = [];
+    for (let i = 2; i >= 0; i--) {
+      let m = now.getMonth() + 1 - i;
+      let y = now.getFullYear();
+      if (m <= 0) { m += 12; y -= 1; }
+      last3.push({ year: y, month: m });
+    }
+
+    const dailyAvgBySimId: Record<string, { name: string; daily: number }> = {};
+    salesReports
+      .filter(r => r.kioskId === kioskId && last3.find(m => m.year === r.year && m.month === r.month))
+      .forEach(r => {
+        r.items.forEach(item => {
+          if (!dailyAvgBySimId[item.simulationId]) dailyAvgBySimId[item.simulationId] = { name: item.productName, daily: 0 };
+          dailyAvgBySimId[item.simulationId].daily += item.quantity;
+        });
+      });
+
+    const totalDays = last3.reduce((s, m) => s + new Date(m.year, m.month, 0).getDate(), 0);
+    Object.keys(dailyAvgBySimId).forEach(k => { dailyAvgBySimId[k].daily /= totalDays; });
+
+    return Object.entries(dailyAvgBySimId).map(([simId, data]) => {
+      const sim = simulationMap.get(simId);
+      if (!sim) return null;
+
+      const itemsForThisSim = simulationItems.filter(i => i.simulationId === simId);
+      if (itemsForThisSim.length === 0) return null;
+
+      const potentialUnitsPerIngredient = itemsForThisSim.map(simItem => {
+        const bp = baseProducts.find(b => b.id === simItem.baseProductId);
+        if (!bp) return Infinity;
+
+        const kioskLots = lots.filter(l => {
+            if (l.kioskId !== kioskId) return false;
+            const p = products.find(prod => prod.id === l.productId);
+            return p?.baseProductId === bp.id;
+        });
+
+        let totalStockInBase = 0;
+        kioskLots.forEach(lot => {
+            const prod = products.find(p => p.id === lot.productId);
+            if (!prod) return;
+            try {
+                totalStockInBase += convertValue(lot.quantity * prod.packageSize, prod.unit, bp.unit, bp.category);
+            } catch {}
+        });
+
+        try {
+            const requiredInBase = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
+            return requiredInBase > 0 ? totalStockInBase / requiredInBase : Infinity;
+        } catch {
+            return Infinity;
+        }
+      });
+
+      const currentStockUnits = Math.min(...potentialUnitsPerIngredient);
+      const daysOfCoverage = data.daily > 0 ? Math.floor(currentStockUnits / data.daily) : Infinity;
+      const status = daysOfCoverage === Infinity ? 'no_data' : daysOfCoverage < 7 ? 'critical' : daysOfCoverage < 15 ? 'warning' : 'ok';
+
+      return {
+        simulationId: simId,
+        name: data.name,
+        dailyAvg: data.daily,
+        currentStock: currentStockUnits === Infinity ? 0 : Math.floor(currentStockUnits),
+        daysOfCoverage,
+        status,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => {
+      const order = { critical: 0, warning: 1, ok: 2, no_data: 3 };
+      return order[a.status as keyof typeof order] - order[b.status as keyof typeof order];
+    });
+  }, [stockKioskId, availableKiosks, salesReports, simulationMap, baseProducts, lots, products, simulationItems]);
 
   // ── EVOLUÇÃO MENSAL ────────────────────────────────────────────────────────
   const monthlyEvolution = useMemo(() => {
@@ -230,6 +322,8 @@ export function SalesAnalysisDashboard() {
 
   return (
     <div className="space-y-6">
+
+      {/* ── FILTROS ── */}
       <div className="flex flex-wrap gap-3 items-end">
         <div>
           <p className="text-xs text-muted-foreground mb-1">Quiosque</p>
@@ -308,14 +402,16 @@ export function SalesAnalysisDashboard() {
         {filteredReports.length > 0 && <span className="text-xs text-muted-foreground">{filteredReports.length} relatório(s)</span>}
       </div>
 
+      {/* ── ABAS ── */}
       <Tabs defaultValue="ranking">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-7">
           <TabsTrigger value="ranking"><Award className="mr-1 h-3 w-3" /> Ranking</TabsTrigger>
           <TabsTrigger value="abc"><BarChart2 className="mr-1 h-3 w-3" /> Curva ABC</TabsTrigger>
           <TabsTrigger value="declining"><TrendingDown className="mr-1 h-3 w-3" /> Em queda</TabsTrigger>
           <TabsTrigger value="mix"><PieIcon className="mr-1 h-3 w-3" /> Mix por linha</TabsTrigger>
           <TabsTrigger value="evolution"><TrendingUp className="mr-1 h-3 w-3" /> Evolução</TabsTrigger>
           <TabsTrigger value="kiosks"><ShoppingBag className="mr-1 h-3 w-3" /> Por quiosque</TabsTrigger>
+          <TabsTrigger value="stock"><Package2 className="mr-1 h-3 w-3" /> Vendas vs Estoque</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ranking" className="mt-4">
@@ -527,6 +623,85 @@ export function SalesAnalysisDashboard() {
                     </TableBody>
                   </Table>
                 </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="stock" className="mt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package2 className="h-5 w-5" /> Vendas vs Estoque
+                  </CardTitle>
+                  <CardDescription>Cobertura de dias baseada na média diária dos últimos 3 meses.</CardDescription>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Quiosque</p>
+                  <Select value={stockKioskId || availableKiosks[0]?.id || ''} onValueChange={setStockKioskId}>
+                    <SelectTrigger className="w-[200px]"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      {availableKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {stockVsSales.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">Nenhum dado de vendas para este quiosque.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto</TableHead>
+                      <TableHead className="text-right">Estoque atual</TableHead>
+                      <TableHead className="text-right">Média/dia</TableHead>
+                      <TableHead className="text-right">Cobertura</TableHead>
+                      <TableHead className="w-40">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stockVsSales.map(item => item && (
+                      <TableRow key={item.simulationId}>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell className="text-right">{item.currentStock.toLocaleString('pt-BR')} un</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{item.dailyAvg.toFixed(1)}/dia</TableCell>
+                        <TableCell className="text-right font-bold">
+                          <span className={cn(
+                            item.status === 'critical' && 'text-destructive',
+                            item.status === 'warning' && 'text-yellow-600',
+                            item.status === 'ok' && 'text-green-600',
+                            item.status === 'no_data' && 'text-muted-foreground',
+                          )}>
+                            {item.daysOfCoverage === Infinity ? 'N/A' : `${item.daysOfCoverage} dias`}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <Progress
+                              value={item.daysOfCoverage === Infinity ? 100 : Math.min((item.daysOfCoverage / 30) * 100, 100)}
+                              className={cn(
+                                'h-2',
+                                item.status === 'critical' && '[&>div]:bg-destructive',
+                                item.status === 'warning' && '[&>div]:bg-yellow-500',
+                                item.status === 'ok' && '[&>div]:bg-green-500',
+                              )}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {item.status === 'critical' && '⚠️ Crítico'}
+                              {item.status === 'warning' && '⚡ Atenção'}
+                              {item.status === 'ok' && '✓ OK'}
+                              {item.status === 'no_data' && 'Sem dados'}
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
