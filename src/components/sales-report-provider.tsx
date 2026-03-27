@@ -1,18 +1,10 @@
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { type SalesReport } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, query } from 'firebase/firestore';
-
-export interface SalesReportContextType {
-  salesReports: SalesReport[];
-  loading: boolean;
-  addSalesReport: (report: Omit<SalesReport, 'id'>) => Promise<string | null>;
-  deleteSalesReport: (id: string) => Promise<void>;
-}
-
-export const SalesReportContext = createContext<SalesReportContextType | undefined>(undefined);
+import { SalesReportContext } from '@/contexts/sales-report-context';
 
 export function SalesReportProvider({ children }: { children: React.ReactNode }) {
   const [salesReports, setSalesReports] = useState<SalesReport[]>([]);
@@ -67,9 +59,3 @@ export function SalesReportProvider({ children }: { children: React.ReactNode })
     </SalesReportContext.Provider>
   );
 }
-
-export const useSalesReports = (): SalesReportContextType => {
-  const context = useContext(SalesReportContext);
-  if (!context) throw new Error('useSalesReports must be used within a SalesReportProvider');
-  return context;
-};

@@ -19,7 +19,7 @@ import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { convertValue } from '@/lib/conversion';
 import { ToastAction } from '@/components/ui/toast';
-import { useSalesReports } from '@/components/sales-report-provider';
+import { useSalesReports } from '@/contexts/sales-report-context';
 
 
 const consumptionUploadSchema = z.object({
