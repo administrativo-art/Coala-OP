@@ -360,11 +360,10 @@ function SalesAnalysisDashboardInner() {
 
       {/* SUMMARY CARDS */}
       {productRanking.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total vendido</p><p className="text-2xl font-bold">{summaryCards.totalUnits.toLocaleString('pt-BR')}</p>
             {summaryCards.variation !== null && <p className={cn("text-xs font-semibold mt-1", summaryCards.variation >= 0 ? "text-green-600" : "text-destructive")}>{summaryCards.variation >= 0 ? '▲' : '▼'} {Math.abs(summaryCards.variation).toFixed(1)}% vs anterior</p>}
           </CardContent></Card>
-          <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Produtos únicos</p><p className="text-2xl font-bold">{summaryCards.uniqueProducts}</p></CardContent></Card>
           <Card className="col-span-2"><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Top Produto</p><p className="text-lg font-bold truncate">{summaryCards.topProduct?.name || '-'}</p><p className="text-xs text-muted-foreground mt-1">{summaryCards.topProduct?.quantity.toLocaleString('pt-BR')} un</p></CardContent></Card>
         </div>
       )}
