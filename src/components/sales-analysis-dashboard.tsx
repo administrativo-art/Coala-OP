@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useSalesReports } from '@/contexts/sales-report-context';
+import { SalesReportProvider } from '@/components/sales-report-provider';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
@@ -26,6 +27,10 @@ const COLORS = ['#E91E8C','#6366F1','#10B981','#F59E0B','#EF4444','#8B5CF6','#06
 type FilterMode = 'single' | 'range' | 'compare';
 
 export function SalesAnalysisDashboard() {
+  return <SalesReportProvider><SalesAnalysisDashboardInner /></SalesReportProvider>;
+}
+
+function SalesAnalysisDashboardInner() {
   const { salesReports, loading: reportsLoading } = useSalesReports();
   const { kiosks } = useKiosks();
   const { user, permissions } = useAuth();
