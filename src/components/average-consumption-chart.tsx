@@ -182,7 +182,8 @@ function PeriodRangePicker({
     const disabledMonthCheck = (date: YearMonth) => {
         const today = new Date();
         const currentYm = { year: today.getFullYear(), month: today.getMonth() + 1 };
-        return compareYearMonth(date, currentYm) >= 0;
+        // Desabilita apenas meses estritamente no futuro. Permite o mês atual.
+        return compareYearMonth(date, currentYm) > 0;
     }
 
 
@@ -310,15 +311,25 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIc
          <p className="text-xs text-muted-foreground">Variação no período</p>
          <p className={cn("text-xs font-semibold mt-1", historicalColor)}>{historicalText}</p>
 
-         <div className="h-[60px] mt-4 -mx-4">
+         <div className="h-[90px] mt-4 -mx-4">
            <ResponsiveContainer width="100%" height="100%">
-             <AreaChart data={data.series}>
+             <AreaChart data={data.series} margin={{ bottom: 15, left: 10, right: 10, top: 5 }}>
                <defs>
                  <linearGradient id={`fill-${data.id}`} x1="0" y1="0" x2="0" y2="1">
                    <stop offset="5%" stopColor={periodColorValue} stopOpacity={0.4} />
                    <stop offset="95%" stopColor={periodColorValue} stopOpacity={0} />
                  </linearGradient>
                </defs>
+               
+               {/* Eixo X com os rótulos curtos dos meses (Ex: "Jan/26") */}
+               <XAxis 
+                  dataKey="label" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} 
+                  dy={5} // Margem do texto
+               />
+
                <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '3 3' }} />
                <ReferenceLine y={data.histAvg} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeWidth={1.5} />
                <Area

@@ -151,6 +151,8 @@ export type SalesReportItem = {
   productName: string;
   simulationId: string;
   quantity: number;
+  timestamp?: string; // ISO String ou HH:mm
+  unitPrice?: number;
 };
  
 export type SalesReport = {
@@ -158,11 +160,14 @@ export type SalesReport = {
   reportName?: string;
   month: number;
   year: number;
+  day?: number; // Optional: for daily reports
   kioskId: string;
   kioskName?: string;
   createdAt: string;
   consumptionReportId?: string;
   items: SalesReportItem[];
+  hourlySales?: { [hour: string]: number };
+  productHourlySales?: { [simulationId: string]: { [hour: string]: number } };
 };
 
 export type Shift = {

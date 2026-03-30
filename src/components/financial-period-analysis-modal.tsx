@@ -66,14 +66,28 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
 
     const availableMonths = useMemo(() => {
         if (!period.year || !movementHistory || movementHistory.length === 0) return [];
+        
+        const today = new Date();
+        const currentYear = today.getFullYear().toString();
+        const currentMonth = today.getMonth(); // 0 a 11
+
         const months = new Set(movementHistory
             .filter(h => {
                 if (!h.timestamp || !isValid(parseISO(h.timestamp))) return false;
                 const date = parseISO(h.timestamp);
-                return isValid(date) && format(date, 'yyyy') === period.year;
+                
+                // Se o ano analisado for o ano atual, permitimos meses até o mês de hoje
+                if (format(date, 'yyyy') === period.year) {
+                    if (period.year === currentYear) {
+                        return getMonth(date) <= currentMonth;
+                    }
+                    return true;
+                }
+                return false;
             })
             .map(h => getMonth(parseISO(h.timestamp)))
         );
+        
         return Array.from(months)
             .sort((a, b) => a - b)
             .map(m => ({ value: (m + 1).toString(), label: format(new Date(parseInt(period.year), m), 'MMMM', { locale: ptBR }) }));
