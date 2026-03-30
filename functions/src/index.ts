@@ -4,6 +4,8 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { syncDayAdmin } from './pdv-sync';
 
 initializeApp();
 setGlobalOptions({ maxInstances: 10 });
@@ -11,12 +13,74 @@ setGlobalOptions({ maxInstances: 10 });
 const db = getFirestore('coala');
 const auth = getAuth();
 
+// --- Rotina Diária de Sincronização (PDV Legal -> Coala) ---
+export const dailyPdvSync = onSchedule({
+  schedule: "0 2 * * *", // Todo dia às 02:00 da manhã
+  timeZone: "America/Sao_Paulo",
+  retryCount: 3
+}, async (event: any) => {
+  console.log("Iniciando sincronização diária de vendas (PDV Legal)...");
+
+  try {
+    // Ajuste de fuso: às 02:00 BRT queremos garantir que pegamos o dia certo
+    const now = new Date();
+    now.setHours(now.getHours() - 3);
+
+    // Verificar os últimos 7 dias e reprocessar qualquer dia que esteja faltando
+    const LOOKBACK_DAYS = 7;
+    const daysToCheck: string[] = [];
+    for (let i = 1; i <= LOOKBACK_DAYS; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      daysToCheck.push(d.toISOString().split('T')[0]);
+    }
+
+    // 2. Buscar todos os quiosques cadastrados no banco de dados
+    const kiosksSnap = await db.collection('kiosks').get();
+
+    if (kiosksSnap.empty) {
+      console.log("Nenhum quiosque encontrado no sistema.");
+      return;
+    }
+
+    let successCount = 0;
+
+    // 3. Para cada quiosque, verificar quais dias estão faltando e sincronizá-los
+    for (const doc of kiosksSnap.docs) {
+      const kiosk = doc.data();
+      if (!kiosk.pdvFilialId) {
+        console.log(`Quiosque ${kiosk.name} ignorado (sem pdvFilialId).`);
+        continue;
+      }
+
+      for (const dateStr of daysToCheck) {
+        const reportId = `sales_sync_${doc.id}_${dateStr.replace(/-/g, '_')}`;
+        const existing = await db.collection('salesReports').doc(reportId).get();
+        if (existing.exists) continue; // Dia já sincronizado
+
+        console.log(`⚠️ Dia faltando: ${kiosk.name} (${dateStr}). Reprocessando...`);
+        try {
+          await syncDayAdmin(dateStr, doc.id, kiosk.pdvFilialId, db);
+          successCount++;
+          console.log(`✅ ${kiosk.name} (${dateStr}) sincronizado com sucesso.`);
+        } catch (err) {
+          console.error(`❌ Erro ao sincronizar ${kiosk.name} (${dateStr}):`, err);
+        }
+      }
+    }
+
+    console.log(`Sincronização diária concluída. ${successCount} dias preenchidos.`);
+  } catch (error) {
+    console.error("Erro fatal na rotina diária:", error);
+  }
+});
+
 // --- Criar usuário (Auth + Firestore) server-side ---
 export const createUser = onCall(
   { 
     cors: ["*"] 
   },
-  async (request) => {
+  async (request: any) => {
     // Apenas admins podem criar usuários
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Não autenticado.');
@@ -69,7 +133,7 @@ export const createUser = onCall(
 // --- Deletar usuário (Auth + Firestore) server-side ---
 export const deleteUser = onCall(
   { cors: ["*"] },
-  async (request) => {
+  async (request: any) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Não autenticado.');
     }
@@ -98,7 +162,7 @@ export const deleteUser = onCall(
 // --- Custom Claims Sync: quando o documento do usuário muda ---
 export const onUserProfileChange = onDocumentWritten(
   { document: 'users/{userId}', database: 'coala' },
-  async (event) => {
+  async (event: any) => {
     const userId = event.params.userId;
 
     if (!event.data?.after.exists) {
@@ -126,7 +190,7 @@ export const onUserProfileChange = onDocumentWritten(
 // --- Custom Claims Sync: quando o perfil muda (atualiza todos os usuários do perfil) ---
 export const onProfileChange = onDocumentWritten(
   { document: 'profiles/{profileId}', database: 'coala' },
-  async (event) => {
+  async (event: any) => {
     const profileId = event.params.profileId;
 
     const usersSnap = await db.collection('users')

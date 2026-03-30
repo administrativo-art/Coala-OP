@@ -65,6 +65,14 @@ async function fetchAllCouponsForDay(accessToken: string, date: string, filialId
   return coupons || [];
 }
 
+function extractBrazilHour(dateStr: string): string {
+  if (!dateStr) return '00';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '00';
+  const brt = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  return brt.getHours().toString().padStart(2, '0');
+}
+
 export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId: string) {
   const token = await getAccessToken();
   const coupons = await fetchAllCouponsForDay(token, dateStr, pdvFilialId);
@@ -106,8 +114,9 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
        continue;
     }
 
-    const hour = coupon.DataHora ? new Date(coupon.DataHora).getHours().toString().padStart(2, '0') : '00';
-    hourlySales[hour] = (hourlySales[hour] || 0) + 1; 
+    const couponTime = coupon.DataHora || rawItems.find((i: any) => i.DataHora)?.DataHora || '';
+    const hour = extractBrazilHour(couponTime);
+    hourlySales[hour] = (hourlySales[hour] || 0) + 1;
 
     for (const item of rawItems) {
       // IGNORA O ITEM APENAS SE ELE, INDIVIDUALMENTE, ESTIVER MARCADO COMO CANCELADO
@@ -139,7 +148,7 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
         const sku = sim.ppo?.sku?.toString().trim() || mainSku;
 
         const itTime = item.DataHora || coupon.DataHora;
-        const itemTimestamp = itTime ? new Date(itTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : `${hour}:00`;
+        const itemTimestamp = itTime ? new Date(itTime).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : `${hour}:00`;
         const unitPrice = item.PrecoVenda || 0;
 
         if (!productTotals[sim.id]) {

@@ -4,6 +4,14 @@ const USERNAME = process.env.PDVLEGAL_USERNAME || 'central@tabletcloud.com.br';
 const PASSWORD = process.env.PDVLEGAL_PASSWORD || 'dtat-2123-5110-5504@1707212';
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
+function extractBrazilHour(dateStr: string): string {
+  if (!dateStr) return '00';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '00';
+  const brt = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  return brt.getHours().toString().padStart(2, '0');
+}
+
 export async function getAccessToken() {
   const params = new URLSearchParams();
   params.append('grant_type', 'password');
@@ -52,8 +60,9 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     const isCupomCancelado = coupon.iscancelado || coupon.status === 'CANCELADO';
     const hasAnyItemExplicitlyCancelled = rawItems.some((item: any) => item.iscancelado === true);
     if (isCupomCancelado && !hasAnyItemExplicitlyCancelled) continue;
-    const hour = coupon.DataHora ? new Date(coupon.DataHora).getHours().toString().padStart(2, '0') : '00';
-    hourlySales[hour] = (hourlySales[hour] || 0) + 1; 
+    const couponTime = coupon.DataHora || rawItems.find((i: any) => i.DataHora)?.DataHora || '';
+    const hour = extractBrazilHour(couponTime);
+    hourlySales[hour] = (hourlySales[hour] || 0) + 1;
     const validMappedItemsForCombo: { name: string, qty: number }[] = [];
 
     for (const item of rawItems) {
