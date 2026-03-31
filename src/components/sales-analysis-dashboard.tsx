@@ -346,16 +346,31 @@ function SalesAnalysisDashboardInner() {
     }
 
     filteredReports.forEach(r => {
-      r.items.forEach(item => {
-        const hour = item.timestamp ? item.timestamp.split(':')[0] : '00';
-        if (hours[hour]) {
-          hours[hour].total += (item.quantity || 0);
-          if (!hours[hour].products[item.simulationId]) {
-            hours[hour].products[item.simulationId] = { simulationId: item.simulationId, name: item.productName, quantity: 0 };
+      if (r.productHourlySales) {
+        Object.entries(r.productHourlySales).forEach(([simulationId, hourlyData]) => {
+          const item = r.items.find(i => i.simulationId === simulationId);
+          if (!item) return;
+          Object.entries(hourlyData).forEach(([hour, qty]) => {
+            if (!hours[hour]) return;
+            hours[hour].total += qty;
+            if (!hours[hour].products[simulationId]) {
+              hours[hour].products[simulationId] = { simulationId, name: item.productName, quantity: 0 };
+            }
+            hours[hour].products[simulationId].quantity += qty;
+          });
+        });
+      } else {
+        r.items.forEach(item => {
+          const hour = item.timestamp ? item.timestamp.split(':')[0] : '00';
+          if (hours[hour]) {
+            hours[hour].total += (item.quantity || 0);
+            if (!hours[hour].products[item.simulationId]) {
+              hours[hour].products[item.simulationId] = { simulationId: item.simulationId, name: item.productName, quantity: 0 };
+            }
+            hours[hour].products[item.simulationId].quantity += (item.quantity || 0);
           }
-          hours[hour].products[item.simulationId].quantity += (item.quantity || 0);
-        }
-      });
+        });
+      }
     });
 
     return Object.entries(hours).map(([hour, data]) => ({ 
