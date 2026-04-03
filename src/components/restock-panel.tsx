@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, CheckCircle, PackageOpen, TrendingDown, Inbox, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -257,58 +258,51 @@ export function RestockPanel() {
                     {kiosk?.name}
                   </h3>
                 )}
-                <div className="space-y-3">
-                  {results.map(({ baseProduct, currentStock, minimumStock, restockNeeded, status, stockPercentage }) => (
-                    <div
-                      key={baseProduct.id}
-                      className={cn(
-                        "p-4 rounded-lg border transition-colors",
-                        status === "repor" && "border-destructive/40 bg-destructive/5 shadow-sm"
-                      )}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-sm">{baseProduct.name}</span>
-                        <StatusBadge status={status} />
-                      </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  {results.map(({ baseProduct, currentStock, minimumStock, restockNeeded, stockPercentage }) => {
+                    const pctAtual = stockPercentage ?? 0;
+                    const atual = `${currentStock.toFixed(1)} ${baseProduct.unit}`;
+                    const minimo = `${minimumStock.toFixed(1)} ${baseProduct.unit}`;
+                    const faltam = `${restockNeeded.toFixed(1)} ${baseProduct.unit}`;
 
-                      {/* Barra de progresso */}
-                      <Progress
-                        value={Math.min(stockPercentage ?? 0, 100)}
-                        className={cn(
-                          "h-2 mb-2",
-                          status === "repor" && "[&>div]:bg-destructive"
-                        )}
-                      />
+                    return (
+                      <div
+                        key={baseProduct.id}
+                        className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 p-3 flex flex-col gap-2"
+                      >
+                        {/* Linha 1: nome do insumo */}
+                        <p className="text-xs font-semibold text-foreground leading-tight line-clamp-2 min-h-[2rem]">
+                          {baseProduct.name}
+                        </p>
 
-                      {/* Dados numéricos */}
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <div className="flex gap-4">
-                          <span>
-                            Atual:{" "}
-                            <span className={cn("font-semibold", status === "repor" && "text-destructive")}>
-                              {currentStock.toFixed(1)} {baseProduct.unit}
-                            </span>
-                          </span>
-                          <span>
-                            Mínimo:{" "}
-                            <span className="font-semibold text-foreground">
-                              {minimumStock.toFixed(1)} {baseProduct.unit}
-                            </span>
-                          </span>
+                        {/* Linha 2: barra de progresso */}
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-red-500 rounded-full"
+                            style={{ width: `${Math.min(pctAtual, 100)}%` }}
+                          />
                         </div>
-                        {status === "repor" && (
-                          <span className="font-semibold text-destructive">
-                            Faltam: {restockNeeded.toFixed(1)} {baseProduct.unit}
-                          </span>
-                        )}
-                        {stockPercentage !== null && (
-                          <span className="text-muted-foreground">
-                            {Math.min(stockPercentage, 100).toFixed(0)}%
-                          </span>
-                        )}
+
+                        {/* Linha 3: atual vs mínimo */}
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>Atual <strong className="text-red-500">{atual}</strong></span>
+                          <span>Mín <strong className="text-foreground">{minimo}</strong></span>
+                        </div>
+
+                        {/* Linha 4: faltam + botão repor */}
+                        <div className="flex items-center justify-between gap-1 pt-1 border-t border-red-200 dark:border-red-900">
+                          <span className="text-[10px] text-red-600 font-medium">Faltam {faltam}</span>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-6 px-2 text-[10px]"
+                          >
+                            Repor
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
