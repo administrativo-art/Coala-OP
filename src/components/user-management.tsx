@@ -38,6 +38,7 @@ const userSchema = z.object({
   assignedKioskIds: z.array(z.string()),
   avatarUrl: z.string().optional(),
   operacional: z.boolean().optional(),
+  participatesInGoals: z.boolean().optional(),
 }).refine(data => {
     return !data.password || data.password.length >= 6;
 }, {
@@ -72,6 +73,7 @@ export function UserManagement() {
   const [showPassword, setShowPassword] = useState(false);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [pdvOperatorIds, setPdvOperatorIds] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<UserFormValues>({
@@ -84,6 +86,7 @@ export function UserManagement() {
         assignedKioskIds: [],
         avatarUrl: '',
         operacional: false,
+        participatesInGoals: false,
     }
   });
 
@@ -107,7 +110,9 @@ export function UserManagement() {
       assignedKioskIds: [],
       avatarUrl: '',
       operacional: false,
+      participatesInGoals: false,
     });
+    setPdvOperatorIds({});
     setShowForm(true);
   };
 
@@ -121,7 +126,11 @@ export function UserManagement() {
       assignedKioskIds: user.assignedKioskIds || [],
       avatarUrl: user.avatarUrl || '',
       operacional: user.operacional || false,
+      participatesInGoals: user.participatesInGoals || false,
     });
+    const existing: Record<string, string> = {};
+    Object.entries(user.pdvOperatorIds ?? {}).forEach(([k, v]) => { existing[k] = String(v); });
+    setPdvOperatorIds(existing);
     setShowForm(true);
   };
   
@@ -163,6 +172,9 @@ export function UserManagement() {
       const updatedData: Partial<User> = {
           ...values,
           avatarUrl,
+          pdvOperatorIds: Object.fromEntries(
+            Object.entries(pdvOperatorIds).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])
+          ),
       };
       delete (updatedData as any).password; 
       updateUser({ ...editingUser, ...updatedData });
@@ -171,12 +183,16 @@ export function UserManagement() {
              form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
              return;
         }
-      addUser({ 
-          username: values.username, 
+      addUser({
+          username: values.username,
           profileId: values.profileId,
           assignedKioskIds: values.assignedKioskIds,
           avatarUrl: avatarUrl,
           operacional: values.operacional,
+          participatesInGoals: values.participatesInGoals,
+          pdvOperatorIds: Object.fromEntries(
+            Object.entries(pdvOperatorIds).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])
+          ),
       }, values.email, values.password);
     }
     setShowForm(false);
@@ -354,6 +370,51 @@ export function UserManagement() {
                                     )}
                                 />
                              </div>
+                             <div className="col-span-full">
+                                 <FormField
+                                    control={form.control}
+                                    name="participatesInGoals"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                            <div className="space-y-0.5">
+                                                <FormLabel>Participa de Metas</FormLabel>
+                                                <FormDescription className="text-xs">
+                                                    Marque se este usuário deve ser incluído no acompanhamento de metas do quiosque.
+                                                </FormDescription>
+                                            </div>
+                                            <FormControl>
+                                                <Switch
+                                                    checked={field.value}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                             </div>
+                             {form.watch('assignedKioskIds')?.length > 0 && (
+                               <div className="col-span-full space-y-2">
+                                 <FormLabel>ID do Operador no PDV</FormLabel>
+                                 <FormDescription className="text-xs">
+                                   ID numérico do colaborador no PDV Legal, por quiosque. Usado para vincular faturamento às metas.
+                                 </FormDescription>
+                                 {form.watch('assignedKioskIds').map(kioskId => {
+                                   const kioskName = kiosks.find(k => k.id === kioskId)?.name ?? kioskId;
+                                   return (
+                                     <div key={kioskId} className="flex items-center gap-3">
+                                       <span className="text-sm text-muted-foreground w-32 shrink-0">{kioskName}</span>
+                                       <Input
+                                         type="number"
+                                         placeholder="Ex: 436145"
+                                         value={pdvOperatorIds[kioskId] ?? ''}
+                                         onChange={e => setPdvOperatorIds(prev => ({ ...prev, [kioskId]: e.target.value }))}
+                                         className="max-w-[180px]"
+                                       />
+                                     </div>
+                                   );
+                                 })}
+                               </div>
+                             )}
                         </div>
                     </div>
 

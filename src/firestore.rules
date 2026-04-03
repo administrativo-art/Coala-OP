@@ -391,6 +391,22 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // --- METAS ---
+    match /goalTemplates/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true);
+      allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true);
+    }
+
+    match /goalPeriods/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true);
+      allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true);
+    }
+
+    match /employeeGoals/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true);
+      allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true);
+    }
+
     // --- CATCH-ALL: bloqueia tudo não mapeado ---
     match /{document=**} {
       allow read, write: if false;

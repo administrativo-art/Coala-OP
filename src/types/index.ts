@@ -1,4 +1,5 @@
 "use client"
+import { type Timestamp } from 'firebase/firestore';
 export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
 export const packageTypes = ['Unidade', 'Caixa', 'Pacote', 'Lata', 'Garrafa', 'Frasco', 'Sachê', 'Pote', 'Balde', 'Galão', 'Bag'] as const;
 
@@ -335,6 +336,7 @@ export type PermissionSet = {
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
   tasks: { view: boolean; manage: boolean; };
+  goals: { view: boolean; manage: boolean; };
   help: { view: true };
   reposition: { cancel: boolean; };
   // itemRequests is now managed under stock.stockCount
@@ -356,6 +358,8 @@ export type User = {
     assignedKioskIds: string[];
     avatarUrl?: string;
     operacional?: boolean;
+    participatesInGoals?: boolean;
+    pdvOperatorIds?: { [kioskId: string]: number };
 };
 
 export type Product = {
@@ -669,6 +673,7 @@ export const defaultGuestPermissions: PermissionSet = {
     pricing: { view: false, simulate: false, manageParameters: false },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
     tasks: { view: false, manage: false },
+    goals: { view: false, manage: false },
     help: { view: true },
     reposition: { cancel: false },
     // itemRequests is now managed under stock.stockCount
@@ -683,6 +688,7 @@ export const defaultAdminPermissions: PermissionSet = {
     pricing: { view: true, simulate: true, manageParameters: true },
     settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
     tasks: { view: true, manage: true },
+    goals: { view: true, manage: true },
     reposition: { cancel: true },
     help: { view: true },
     itemRequests: { add: true, approve: true },
@@ -807,4 +813,62 @@ export interface RepositionContextType {
   cancelRepositionActivity: (activityId: string) => Promise<void>;
   finalizeRepositionActivity: (activity: RepositionActivity, resolution?: 'trust_receipt' | 'trust_dispatch') => Promise<void>;
   revertRepositionActivity: (activityId: string) => Promise<void>;
+}
+
+// ── METAS ──────────────────────────────────────────────────────────────────
+export type GoalType = 'revenue' | 'ticket' | 'product_line' | 'product_specific'
+export type GoalPeriod = 'daily' | 'weekly' | 'monthly'
+export type GoalStatus = 'active' | 'closed' | 'cancelled'
+
+export interface GoalShift {
+  id: string
+  label: string
+  fraction: number
+}
+
+export interface GoalTemplate {
+  id: string
+  kioskId: string
+  type: GoalType
+  period: GoalPeriod
+  targetValue: number
+  upValue: number
+  productRef?: string      // product_specific: ProductSimulation.id or name
+  productLineRef?: string  // product_line: SimulationCategory.id
+  productLineName?: string // product_line: display label
+  productName?: string     // product_specific: display label
+  createdAt: Timestamp
+}
+
+export interface GoalPeriodDoc {
+  id: string
+  templateId: string
+  kioskId: string
+  startDate: Timestamp
+  endDate: Timestamp
+  targetValue: number
+  upValue: number
+  currentValue: number
+  dailyProgress?: { [date: string]: number }
+  shifts?: GoalShift[]
+  status: GoalStatus
+  closedAt?: Timestamp
+  closedBy?: string
+  closureNote?: string
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+export interface EmployeeGoal {
+  id: string
+  periodId: string
+  employeeId: string
+  kioskId: string
+  shiftId?: string
+  fraction: number
+  targetValue: number
+  currentValue: number
+  dailyProgress?: { [date: string]: number }
+  updatedAt: Timestamp
+  createdAt: Timestamp
 }

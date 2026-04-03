@@ -10,6 +10,14 @@ const PASSWORD = process.env.NEXT_PUBLIC_PDVLEGAL_PASSWORD || 'dtat-2123-5110-55
 
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
+function extractBrazilHour(dateStr: string): string {
+  if (!dateStr) return '00';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '00';
+  const brt = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  return brt.getHours().toString().padStart(2, '0');
+}
+
 async function getAccessToken() {
   const params = new URLSearchParams();
   params.append('grant_type', 'password');
@@ -111,7 +119,7 @@ export async function syncDayClient(dateStr: string, kioskId: string, pdvFilialI
        continue;
     }
 
-    const hour = coupon.DataHora ? new Date(coupon.DataHora).getHours().toString().padStart(2, '0') : '00';
+    const hour = extractBrazilHour(coupon.dtrecebimento || coupon.dtabertura || '');
     hourlySales[hour] = (hourlySales[hour] || 0) + 1; 
 
     const validMappedItemsForCombo: { name: string, qty: number }[] = [];
@@ -144,9 +152,9 @@ export async function syncDayClient(dateStr: string, kioskId: string, pdvFilialI
         validMappedItemsForCombo.push({ name: sim.name, qty });
       }
 
-      const itTime = item.DataHora || item.dtmovimento || coupon.DataHora || coupon.dtmovimento;
-      const itemHour = itTime ? new Date(itTime).getHours().toString().padStart(2, '0') : hour;
-      const itemTimestamp = itTime ? new Date(itTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : `${itemHour}:00`;
+      const itTime = coupon.dtrecebimento || coupon.dtabertura || item.dtmovimento;
+      const itemHour = extractBrazilHour(itTime || '');
+      const itemTimestamp = itTime ? new Date(itTime).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : `${itemHour}:00`;
       const unitPrice = item.valorUnitario || item.valorvenda || item.PrecoVenda || 0;
 
       if (!productTotals[sim.id]) {

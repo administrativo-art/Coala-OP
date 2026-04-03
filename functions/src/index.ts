@@ -75,6 +75,59 @@ export const dailyPdvSync = onSchedule({
   }
 });
 
+// --- Sincronizar metas para um intervalo de datas (trigger manual) ---
+export const syncGoalsForRange = onCall(
+  { cors: true, timeoutSeconds: 540, memory: '512MiB' },
+  async (request: any) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+
+    // Verifica permissão: admin customClaim OU settings.manageUsers no perfil
+    const token = request.auth.token;
+    if (!token.isDefaultAdmin) {
+      const profileId = token.profileId;
+      if (!profileId) throw new HttpsError('permission-denied', 'Apenas administradores.');
+      const profileDoc = await db.collection('profiles').doc(profileId).get();
+      const perms = profileDoc.data()?.permissions;
+      if (!perms?.settings?.manageUsers && !perms?.goals?.manage) {
+        throw new HttpsError('permission-denied', 'Apenas administradores.');
+      }
+    }
+
+    const { kioskId, startDate, endDate, pdvFilialId: pdvFilialIdParam } = request.data as {
+      kioskId: string; startDate: string; endDate: string; pdvFilialId?: string;
+    };
+    if (!kioskId || !startDate || !endDate) throw new HttpsError('invalid-argument', 'kioskId, startDate e endDate são obrigatórios.');
+
+    const kioskDoc = await db.collection('kiosks').doc(kioskId).get();
+    if (!kioskDoc.exists) throw new HttpsError('not-found', 'Quiosque não encontrado.');
+
+    const FALLBACK_MAP: Record<string, string> = {
+      'tirirical': '17343',
+      'joao-paulo': '17344',
+    };
+    const pdvFilialId = pdvFilialIdParam || kioskDoc.data()?.pdvFilialId || FALLBACK_MAP[kioskId];
+    if (!pdvFilialId) throw new HttpsError('failed-precondition', 'Quiosque sem pdvFilialId configurado. Informe o ID da filial no PDV Legal.');
+
+    const results: { date: string; revenue?: number; error?: string }[] = [];
+    const current = new Date(startDate + 'T12:00:00Z');
+    const end = new Date(endDate + 'T12:00:00Z');
+
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      try {
+        const result = await syncDayAdmin(dateStr, kioskId, pdvFilialId, db) as any;
+        results.push({ date: dateStr, revenue: result.dailyRevenue });
+      } catch (e: any) {
+        console.error(`[syncGoalsForRange] Erro em ${dateStr}:`, e);
+        results.push({ date: dateStr, error: e.message });
+      }
+      current.setDate(current.getDate() + 1);
+    }
+
+    return { results };
+  }
+);
+
 // --- Criar usuário (Auth + Firestore) server-side ---
 export const createUser = onCall(
   { 

@@ -20,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@radix-ui/react-accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -275,6 +275,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const registrationViewWatch = form.watch('permissions.registration.view' as any);
   const pricingViewWatch = form.watch('permissions.pricing.view' as any);
   const tasksViewWatch = form.watch('permissions.tasks.view' as any);
+  const goalsViewWatch = form.watch('permissions.goals.view' as any);
   const settingsViewWatch = form.watch('permissions.settings.view' as any);
 
   return (
@@ -454,6 +455,17 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderModuleToggle("permissions.tasks.view" as any, "Visualizar Tarefas", "Permite visualizar todas as tarefas do sistema.")}
                                     {renderPermissionSwitch("permissions.tasks.manage" as any, "Gerenciar Tarefas", "Permite criar, atribuir, editar e excluir tarefas.", !tasksViewWatch)}
                                 </AccordionContent>
+                            </AccordionItem>
+
+                            {/* ── METAS ── */}
+                            <AccordionItem value="goals">
+                              <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b">
+                                <div className="flex items-center"><Target className="mr-2 h-5 w-5" /> Metas</div>
+                              </AccordionTrigger>
+                              <AccordionContent className="space-y-2 pt-4 p-1">
+                                {renderModuleToggle("permissions.goals.view" as any, "Visualizar Metas", "Permite acessar o módulo de metas.")}
+                                {renderPermissionSwitch("permissions.goals.manage" as any, "Gerenciar Metas", "Permite criar templates, instanciar períodos e encerrar metas.", !goalsViewWatch)}
+                              </AccordionContent>
                             </AccordionItem>
 
                             {/* ── AJUDA ── */}

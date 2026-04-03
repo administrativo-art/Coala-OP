@@ -114,7 +114,7 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
        continue;
     }
 
-    const couponTime = coupon.DataHora || rawItems.find((i: any) => i.DataHora)?.DataHora || '';
+    const couponTime = coupon.dtrecebimento || coupon.dtabertura || rawItems.find((i: any) => i.dtmovimento)?.dtmovimento || '';
     const hour = extractBrazilHour(couponTime);
     hourlySales[hour] = (hourlySales[hour] || 0) + 1;
 
@@ -147,7 +147,7 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
 
         const sku = sim.ppo?.sku?.toString().trim() || mainSku;
 
-        const itTime = item.DataHora || coupon.DataHora;
+        const itTime = coupon.dtrecebimento || coupon.dtabertura || item.dtmovimento;
         const itemTimestamp = itTime ? new Date(itTime).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : `${hour}:00`;
         const unitPrice = item.PrecoVenda || 0;
 

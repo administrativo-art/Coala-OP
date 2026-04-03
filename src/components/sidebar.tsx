@@ -12,7 +12,7 @@ import { useAllTasks } from "@/hooks/use-all-tasks";
 import {
   X, LayoutDashboard, Package, ClipboardList, BarChart2,
   ShoppingCart, Settings, HelpCircle, LogOut, ShieldAlert,
-  ListChecks, DollarSign, ListTodo
+  ListChecks, DollarSign, ListTodo, Target
 } from "lucide-react";
 
 interface GlassSidebarProps {
@@ -52,6 +52,7 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
   const navItems = useMemo(() => [
     { label: "Dashboard",    href: "/dashboard",                  icon: LayoutDashboard, show: permissions.dashboard.view },
     { label: "Tarefas",      href: "/dashboard/tasks",            icon: ListTodo,        show: permissions.tasks.view, count: legacyTasks.length },
+    { label: "Metas",        href: "/dashboard/goals",            icon: Target,          show: permissions.goals?.view },
     { label: "Gestão de Estoque", href: "/dashboard/stock",       icon: Package,         show: permissions.stock.view },
     { label: "Custo e Preço",href: "/dashboard/pricing",          icon: DollarSign,      show: permissions.pricing.view },
     { label: "Cadastros",    href: "/dashboard/registration",     icon: ListChecks,      show: permissions.registration.view },
