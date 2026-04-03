@@ -26,7 +26,6 @@ import { ClassificationsProvider } from '@/components/classifications-provider';
 import { CompetitorProvider } from '@/components/competitor-provider';
 import { ProfilesProvider } from '@/components/profiles-provider';
 import { SalesReportProvider } from '@/components/sales-report-provider';
-import { GoalsProvider } from '@/components/goals-provider';
 import { Toaster } from "@/components/ui/toaster";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
@@ -35,7 +34,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       <ProfilesProvider>
         <AuthProvider>
             <KiosksProvider>
-              <GoalsProvider>
               <LocationsProvider>
                 <CompanySettingsProvider>
                   <EntitiesProvider>
@@ -81,7 +79,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                   </EntitiesProvider>
                 </CompanySettingsProvider>
               </LocationsProvider>
-              </GoalsProvider>
             </KiosksProvider>
         </AuthProvider>
       </ProfilesProvider>
