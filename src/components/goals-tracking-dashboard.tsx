@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
 import { useGoals } from '@/contexts/goals-context';
@@ -25,12 +26,18 @@ import { EditGoalPeriodModal } from '@/components/edit-goal-period-modal';
 import { GoalTemplateFormModal } from '@/components/goal-template-form-modal';
 import { AddEmployeeGoalModal } from '@/components/add-employee-goal-modal';
 import { type GoalPeriodDoc, type EmployeeGoal } from '@/types';
-import { Target, Plus, RefreshCw, ChevronDown, Menu, BarChart2 } from 'lucide-react';
+import { 
+  Target, Plus, RefreshCw, ChevronDown, ChevronRight, Menu, BarChart2, Sparkles, Calendar as CalendarIcon, Pencil, CheckCircle, Trash2
+} from 'lucide-react';
 import {
   format, startOfWeek, endOfWeek, endOfMonth, eachDayOfInterval,
-  getDaysInMonth, getDate, startOfMonth,
+  getDaysInMonth, getDate, startOfMonth, isSameDay, startOfYear
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { GoalsAiAnalysisModal } from '@/components/goals-ai-analysis-modal';
+import { z } from 'zod';
+
+const PdfDownloadButton = dynamic(() => import('@/components/goal-report-pdf'), { ssr: false });
 
 // ── Formatação ────────────────────────────────────────────────────────────────
 
@@ -105,29 +112,38 @@ function getPeriodContext(period: GoalPeriodDoc) {
 
 function calcMonthlyStats(period: GoalPeriodDoc) {
   const up = period.upValue ?? period.targetValue * 1.2;
-  return { value: period.currentValue, alvo: period.targetValue, up };
-}
+  const now = new Date();
+  const start = period.startDate?.toDate?.() ?? now;
+  const end = period.endDate?.toDate?.() ?? now;
+  
+  const totalDays = Math.max(eachDayOfInterval({ start, end }).length, 1);
+  const elapsedDays = eachDayOfInterval({ 
+    start, 
+    end: now < end ? (now < start ? start : now) : end 
+  }).length;
+  const remainingDays = Math.max(totalDays - elapsedDays, 0);
 
-function calcDailyStats(period: GoalPeriodDoc, refDate: Date) {
-  const dp = period.dailyProgress ?? {};
-  const refKey = dateKey(refDate);
-  const daysInMonth = getDaysInMonth(refDate);
-  const dayOfMonth = getDate(refDate);
-  let salesBeforeRef = 0;
-  for (let d = 1; d < dayOfMonth; d++) {
-    const key = `${refDate.getFullYear()}-${String(refDate.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    salesBeforeRef += dp[key] ?? 0;
-  }
-  const remainingDays = daysInMonth - dayOfMonth + 1;
-  const up = period.upValue ?? period.targetValue * 1.2;
-  const alvo = remainingDays > 0 ? Math.max(period.targetValue - salesBeforeRef, 0) / remainingDays : 0;
-  const upDay = remainingDays > 0 ? Math.max(up - salesBeforeRef, 0) / remainingDays : 0;
-  return { value: dp[refKey] ?? 0, alvo, up: upDay, hasDailyData: Object.keys(dp).length > 0 };
+  const linearMarker = (elapsedDays / totalDays) * 100;
+  const currentPace = elapsedDays > 0 ? period.currentValue / elapsedDays : 0;
+  const projection = currentPace * totalDays;
+  const neededDaily = remainingDays > 0 ? Math.max(period.targetValue - period.currentValue, 0) / remainingDays : 0;
+
+  return { 
+    value: period.currentValue, 
+    alvo: period.targetValue, 
+    up,
+    elapsedDays,
+    totalDays,
+    remainingDays,
+    linearMarker,
+    currentPace,
+    projection,
+    neededDaily
+  };
 }
 
 function calcWeeklyStats(period: GoalPeriodDoc, refDate: Date, periodEnd: Date) {
   const dp = period.dailyProgress ?? {};
-  const up = period.upValue ?? period.targetValue * 1.2;
   const weekStart = startOfWeek(refDate, { weekStartsOn: 1 });
   const weekEndRaw = endOfWeek(refDate, { weekStartsOn: 1 });
   const monthEnd = endOfMonth(refDate);
@@ -137,39 +153,27 @@ function calcWeeklyStats(period: GoalPeriodDoc, refDate: Date, periodEnd: Date) 
   const weekDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
   const value = weekDays.reduce((s, d) => s + (dp[dateKey(d)] ?? 0), 0);
 
-  // Alvo calculado a partir do 1º dia da semana: (meta - acumulado antes da semana) / dias restantes no mês desde a semana
-  const daysInMonth = getDaysInMonth(refDate);
-  const dayOfWeekStart = getDate(effectiveStart);
-  let salesBeforeWeekStart = 0;
-  for (let d = 1; d < dayOfWeekStart; d++) {
-    const key = `${effectiveStart.getFullYear()}-${String(effectiveStart.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    salesBeforeWeekStart += dp[key] ?? 0;
-  }
-  const remainingFromWeekStart = daysInMonth - dayOfWeekStart + 1;
-  const dailyAlvo = remainingFromWeekStart > 0 ? Math.max(period.targetValue - salesBeforeWeekStart, 0) / remainingFromWeekStart : 0;
-  const dailyUp = remainingFromWeekStart > 0 ? Math.max(up - salesBeforeWeekStart, 0) / remainingFromWeekStart : 0;
+  // Consideramos o alvo proporcional da meta mensal para a semana
+  const stats = calcMonthlyStats(period);
+  const dailyAlvo = stats.alvo / stats.totalDays;
+  const dailyUp = stats.up / stats.totalDays;
 
   const weekLabel = effectiveStart.getTime() === effectiveEnd.getTime()
     ? format(effectiveStart, 'dd/MM', { locale: ptBR })
     : `${format(effectiveStart, 'dd/MM', { locale: ptBR })} – ${format(effectiveEnd, 'dd/MM', { locale: ptBR })}`;
-  return { value, alvo: dailyAlvo * weekDays.length, up: dailyUp * weekDays.length, weekLabel };
+  
+  return { 
+    value, 
+    alvo: dailyAlvo * weekDays.length, 
+    up: dailyUp * weekDays.length, 
+    weekLabel 
+  };
 }
 
-function calcEgDaily(eg: EmployeeGoal, refDate: Date) {
-  const dp = eg.dailyProgress ?? {};
-  const refKey = dateKey(refDate);
-  const daysInMonth = getDaysInMonth(refDate);
-  const dayOfMonth = getDate(refDate);
-  let salesBeforeRef = 0;
-  for (let d = 1; d < dayOfMonth; d++) {
-    const key = `${refDate.getFullYear()}-${String(refDate.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    salesBeforeRef += dp[key] ?? 0;
-  }
-  const remainingDays = daysInMonth - dayOfMonth + 1;
+function calcEgMonthly(eg: EmployeeGoal, refDate: Date) {
   const up = eg.targetValue * 1.2;
-  const alvo = remainingDays > 0 ? Math.max(eg.targetValue - salesBeforeRef, 0) / remainingDays : 0;
-  const upDay = remainingDays > 0 ? Math.max(up - salesBeforeRef, 0) / remainingDays : 0;
-  return { value: dp[refKey] ?? 0, alvo, up: upDay, hasDailyData: Object.keys(dp).length > 0 };
+  const p = pct(eg.currentValue, eg.targetValue);
+  return { value: eg.currentValue, alvo: eg.targetValue, up, p };
 }
 
 function calcEgWeekly(eg: EmployeeGoal, refDate: Date, periodEnd: Date) {
@@ -182,42 +186,81 @@ function calcEgWeekly(eg: EmployeeGoal, refDate: Date, periodEnd: Date) {
   const effectiveStart = weekStart < startOfMonth(refDate) ? startOfMonth(refDate) : weekStart;
   const weekDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
   const value = weekDays.reduce((s, d) => s + (dp[dateKey(d)] ?? 0), 0);
-  const daysInMonth = getDaysInMonth(refDate);
-  const dayOfWeekStart = getDate(effectiveStart);
-  let salesBeforeWeekStart = 0;
-  for (let d = 1; d < dayOfWeekStart; d++) {
-    const key = `${effectiveStart.getFullYear()}-${String(effectiveStart.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    salesBeforeWeekStart += dp[key] ?? 0;
-  }
-  const remainingFromWeekStart = daysInMonth - dayOfWeekStart + 1;
-  const up = eg.targetValue * 1.2;
-  const dailyAlvo = remainingFromWeekStart > 0 ? Math.max(eg.targetValue - salesBeforeWeekStart, 0) / remainingFromWeekStart : 0;
-  const dailyUp = remainingFromWeekStart > 0 ? Math.max(up - salesBeforeWeekStart, 0) / remainingFromWeekStart : 0;
-  const weekLabel = effectiveStart.getTime() === effectiveEnd.getTime()
-    ? format(effectiveStart, 'dd/MM', { locale: ptBR })
-    : `${format(effectiveStart, 'dd/MM', { locale: ptBR })} – ${format(effectiveEnd, 'dd/MM', { locale: ptBR })}`;
-  return { value, alvo: dailyAlvo * weekDays.length, up: dailyUp * weekDays.length, weekLabel };
+  
+  // Alvo semanal proporcional
+  const dailyAlvo = eg.targetValue / getDaysInMonth(refDate);
+  const alvo = dailyAlvo * weekDays.length;
+  const p = pct(value, alvo);
+  
+  return { value, alvo, p };
 }
 
 // ── Linha de indicador ────────────────────────────────────────────────────────
 
-function MetricRow({ label, value, alvo, up, sub }: { label: string; value: number; alvo: number; up: number; sub?: string }) {
-  const { text } = getStatusColor(pct(value, alvo));
+function StatItem({ title, value, subLabel, trend, trendColor }: { 
+  title: string; value: string; subLabel: string; trend?: string; trendColor?: string 
+}) {
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-sm font-semibold">{label}</span>
-          {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-2xl font-bold tabular-nums">R$ {value}</span>
+      </div>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">{subLabel}</span>
+        {trend && (
+          <span className={`text-xs font-bold ${trendColor || 'text-green-500'}`}>
+            {trend}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MainGoalProgress({ value, alvo, up, linearMarker }: { 
+  value: number; alvo: number; up: number; linearMarker: number 
+}) {
+  const p = pct(value, alvo);
+  const { bar: color } = getStatusColor(p);
+  const markerAlvo = 100; // Representa a barra inteira em relação à meta base
+  const markerUp = (up / alvo) * 100;
+  const filled = (value / alvo) * 100;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm font-semibold">Meta do mês</span>
+        <span className="text-xl font-bold text-amber-500">{p.toFixed(1)}%</span>
+      </div>
+      
+      <div className="relative h-2 bg-muted/40 rounded-full overflow-visible">
+        {/* Barra preenchida */}
+        <div className={`absolute left-0 top-0 h-2 rounded-full transition-all duration-700 ${color}`} 
+             style={{ width: `${Math.min(filled, 100)}%` }} />
+        
+        {/* Marcador linear (onde deveria estar hoje) */}
+        <div className="absolute top-[-4px] bottom-[-4px] w-[2px] bg-muted-foreground/60 z-10" 
+             style={{ left: `${linearMarker}%` }} />
+        
+        <span className="absolute -bottom-5 text-[10px] text-muted-foreground font-medium" style={{ left: `calc(${linearMarker}% - 30px)` }}>
+          hoje ({linearMarker.toFixed(1)}%)
+        </span>
+      </div>
+
+      {/* Barra de Super Meta (se houver) */}
+      {up > alvo && (
+        <div className="pt-4 space-y-1.5">
+          <div className="relative h-1.5 bg-muted/20 rounded-full overflow-visible">
+            <div className="absolute left-0 top-0 h-1.5 rounded-full bg-blue-500/70" 
+                 style={{ width: `${Math.min((value / up) * 100, 100)}%` }} />
+          </div>
+          <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+             <span>R$ 0</span>
+             <span>Super meta R$ {fmt(up)}</span>
+          </div>
         </div>
-        <StatusBadge value={value} alvo={alvo} up={up} />
-      </div>
-      <div className="flex items-baseline gap-2">
-        <span className={`text-base font-bold ${text}`}>R$ {fmt(value)}</span>
-        <span className="text-xs text-muted-foreground">meta R$ {fmt(alvo)}</span>
-        {up > alvo && <span className="text-xs text-muted-foreground">· UP R$ {fmt(up)}</span>}
-      </div>
-      <GoalBar value={value} alvo={alvo} up={up} />
+      )}
     </div>
   );
 }
@@ -270,182 +313,526 @@ function getInitials(name: string): string {
   return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
 }
 
-// ── Coluna de métrica compacta (usada no grid 3-col de CollaboratorCard) ──────
+// ── Dialog de análise diária (Mensal) ─────────────────────────────────────────
 
-function MiniCol({ label, value, alvo, up, onAnalyze }: {
-  label: string; value: number; alvo: number; up: number; onAnalyze?: () => void;
-}) {
-  const p = pct(value, alvo);
-  const { text } = getStatusColor(p);
-  return (
-    <div className="flex flex-col gap-1 min-w-0">
-      <div className="flex items-center gap-0.5 min-w-0">
-        <span className="text-[10px] text-muted-foreground truncate flex-1 leading-none">{label}</span>
-        {onAnalyze && (
-          <button type="button" onClick={onAnalyze}
-            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-            title="Análise por dia">
-            <BarChart2 className="h-2.5 w-2.5" />
-          </button>
-        )}
-      </div>
-      <GoalBar value={value} alvo={alvo} up={up} compact />
-      <span className={`text-[11px] font-bold tabular-nums ${text}`}>{p.toFixed(1)}%</span>
-      <span className="text-[10px] text-muted-foreground tabular-nums leading-none">R$ {fmt(value)}</span>
-    </div>
-  );
-}
-
-// ── Cálculo diário para o dialog de análise ──────────────────────────────────
-
-function computeDayRow(eg: EmployeeGoal, day: Date) {
-  const dp = eg.dailyProgress ?? {};
-  const key = dateKey(day);
-  const daysInMonth = getDaysInMonth(day);
-  const dayOfMonth = getDate(day);
-  let salesBefore = 0;
-  for (let d = 1; d < dayOfMonth; d++) {
-    const k = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    salesBefore += dp[k] ?? 0;
-  }
-  const remaining = daysInMonth - dayOfMonth + 1;
-  const alvo = remaining > 0 ? Math.max(eg.targetValue - salesBefore, 0) / remaining : 0;
-  const value = dp[key] ?? 0;
-  return { day, key, alvo, value, hit: value >= alvo && alvo > 0, hasData: key in dp };
-}
-
-// ── Dialog de análise diária ─────────────────────────────────────────────────
-
-function EgDayAnalysisDialog({ open, onOpenChange, eg, userName, nameColor, title, days }: {
+function DailyAnalysisModal({ open, onOpenChange, period, title }: {
   open: boolean; onOpenChange: (v: boolean) => void;
-  eg: EmployeeGoal; userName: string; nameColor: string; title: string; days: Date[];
+  period: GoalPeriodDoc | null; title: string;
 }) {
-  const today = new Date();
-  const rows = days
-    .map(d => computeDayRow(eg, d))
-    .filter(r => r.hasData || r.day <= today);
+  if (!period) return null;
+  const now = new Date();
+  const start = period.startDate?.toDate?.() ?? now;
+  const end = period.endDate?.toDate?.() ?? now;
+  const days = eachDayOfInterval({ start, end });
+  const dp = period.dailyProgress ?? {};
+
+  // Cálculo da meta diária necessária recalculada para cada dia
+  let cumulativeSales = 0;
+  const totalTarget = period.targetValue;
+  const daysInMonth = days.length;
+
+  const rows = days.map((day, idx) => {
+    const key = dateKey(day);
+    const remainingDays = daysInMonth - idx;
+    const currentNeed = remainingDays > 0 ? Math.max(totalTarget - cumulativeSales, 0) / remainingDays : 0;
+    const value = dp[key] ?? 0;
+    cumulativeSales += value;
+    const hit = value >= currentNeed;
+
+    return { day, key, currentNeed, value, hit, isPast: day <= now };
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            <span className={nameColor}>{userName}</span>
-            <span className="font-normal text-muted-foreground"> — {title}</span>
-          </DialogTitle>
-          <DialogDescription>Meta diária por dia do período</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>Detalhamento de metas diárias para o período</DialogDescription>
         </DialogHeader>
 
-        {rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">Nenhum dado disponível para este período.</p>
-        ) : (
-          <ScrollArea className="max-h-[60vh]">
-            <div className="pr-3">
-              {/* Cabeçalho */}
-              <div className="grid grid-cols-[3rem_1fr_1fr_2rem] gap-x-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wide pb-1 border-b mb-1">
-                <span>Dia</span>
-                <span className="text-right">Alvo</span>
-                <span className="text-right">Realizado</span>
-                <span />
-              </div>
-              {rows.map(r => (
-                <div key={r.key} className="grid grid-cols-[3rem_1fr_1fr_2rem] gap-x-2 items-center text-[11px] py-1 border-b border-border/40 last:border-0">
-                  <span className="font-mono tabular-nums text-muted-foreground">
-                    {format(r.day, 'dd/MM', { locale: ptBR })}
-                  </span>
-                  <span className="text-right text-muted-foreground">R$ {fmt(r.alvo)}</span>
-                  <span className={`text-right font-medium ${r.hit ? 'text-green-600' : 'text-foreground'}`}>
-                    R$ {fmt(r.value)}
-                  </span>
-                  <span className="flex justify-end">
-                    {!r.hasData || r.alvo <= 0
-                      ? <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">—</Badge>
-                      : r.hit
-                      ? <Badge className="bg-green-500 text-white text-[9px] px-1 py-0 h-4">OK</Badge>
-                      : <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">Miss</Badge>
-                    }
-                  </span>
-                </div>
-              ))}
+        <ScrollArea className="h-[400px] pr-4">
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_2fr_2fr_1fr] gap-2 text-[10px] uppercase font-bold text-muted-foreground pb-2 border-b">
+              <span>Dia</span>
+              <span className="text-right">Alvo Diário</span>
+              <span className="text-right">Realizado</span>
+              <span className="text-center">Status</span>
             </div>
-          </ScrollArea>
-        )}
+            {rows.map(r => (
+              <div key={r.key} className={`grid grid-cols-[1fr_2fr_2fr_1fr] gap-2 py-2 items-center border-b border-border/40 text-xs ${!r.isPast ? 'opacity-50' : ''}`}>
+                <span className="font-medium">{format(r.day, 'dd/MM', { locale: ptBR })}</span>
+                <span className="text-right text-muted-foreground">R$ {fmt(r.currentNeed)}</span>
+                <span className="text-right font-semibold">R$ {fmt(r.value)}</span>
+                <span className="flex justify-center">
+                  {r.value > 0 ? (
+                    r.hit ? <Badge className="bg-green-500 h-4 text-[9px]">OK</Badge> : <Badge variant="secondary" className="h-4 text-[9px]">MISS</Badge>
+                  ) : r.isPast ? (
+                    <Badge variant="outline" className="h-4 text-[9px]">ZERO</Badge>
+                  ) : null}
+                </span>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Fechar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function CollaboratorCard({ eg, shiftLabel, userName, isMe, refDate, periodEnd, periodStart, isCurrent, periodMonthLabel }: {
-  eg: EmployeeGoal; shiftLabel?: string; userName: string; isMe: boolean;
-  refDate: Date; periodEnd: Date; periodStart: Date; isCurrent: boolean; periodMonthLabel: string;
+function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd }: {
+  eg: EmployeeGoal; shiftLabel?: string; userName: string;
+  refDate: Date; periodEnd: Date;
 }) {
-  const up = eg.targetValue * 1.2;
-  const daily = calcEgDaily(eg, refDate);
-  const weekly = calcEgWeekly(eg, refDate, periodEnd);
-  const nameColor = collaboratorColor(eg.employeeId);
+  const initials = getInitials(userName);
   const avatarClass = collaboratorAvatarClass(eg.employeeId);
+  const mPct = pct(eg.currentValue, eg.targetValue);
+  const weekly = calcWeeklyStats(eg as any, refDate, periodEnd);
+  
+  // Detalhamento da semana atual
+  const weekStart = startOfWeek(refDate, { weekStartsOn: 1 });
+  const weekDays = eachDayOfInterval({ start: weekStart, end: endOfWeek(refDate, { weekStartsOn: 1 }) });
+  const dailyTarget = eg.targetValue / getDaysInMonth(refDate);
 
-  const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [analysisDays, setAnalysisDays] = useState<Date[]>([]);
-  const [analysisTitle, setAnalysisTitle] = useState('');
-
-  const dayLabel = isCurrent
-    ? `Hoje ${format(refDate, 'dd/MM', { locale: ptBR })}`
-    : format(refDate, "dd 'de' MMMM", { locale: ptBR });
-
-  const monthShort = periodMonthLabel.split(' ')[0].replace(/^\w/, c => c.toUpperCase());
-
-  function handleWeekAnalyze() {
-    setAnalysisDays(eachDayOfInterval({ start: periodStart, end: refDate }));
-    setAnalysisTitle(`Semana ${weekly.weekLabel}`);
-    setAnalysisOpen(true);
-  }
-
-  function handleDayAnalyze() {
-    setAnalysisDays(eachDayOfInterval({ start: periodStart, end: refDate }));
-    setAnalysisTitle(dayLabel);
-    setAnalysisOpen(true);
-  }
+  // Score de batida de meta no mês
+  const monthDays = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
+  const hitCount = monthDays.filter(d => (eg.dailyProgress?.[dateKey(d)] ?? 0) >= dailyTarget).length;
+  const totalDays = monthDays.length;
 
   return (
-    <div className={`rounded-md border px-3 py-2.5 ${isMe ? 'border-primary/40 bg-primary/5' : 'border-border/60'}`}>
-      {/* Header: avatar + nome + badges */}
-      <div className="flex items-center gap-2 pb-2 mb-2 border-b border-border/40">
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${avatarClass}`}>
-          {getInitials(userName)}
+    <div className="group py-5 border-b border-border/10 last:border-0 hover:bg-accent/5 transition-colors px-2 rounded-lg">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shadow-sm ${avatarClass}`}>
+            {initials}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-bold leading-none mb-1">{userName}</span>
+            <div className="flex items-center gap-2">
+              {shiftLabel && <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-bold h-4 uppercase">{shiftLabel}</Badge>}
+              <span className="text-[10px] text-muted-foreground font-medium">Meta Diária: R$ {fmt(dailyTarget)}</span>
+            </div>
+          </div>
         </div>
-        <span className={`text-xs font-semibold flex-1 truncate ${nameColor}`}>{userName}</span>
-        <div className="flex items-center gap-1 shrink-0">
-          {isMe && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">Você</Badge>}
-          {shiftLabel && <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{shiftLabel}</Badge>}
+        <div className="text-right">
+          <p className="text-sm font-bold tabular-nums">R$ {fmt(eg.currentValue)}</p>
+          <div className="flex items-center justify-end gap-1">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold">{hitCount}/{totalDays}</span>
+            <span className="text-[9px] text-muted-foreground uppercase font-medium tracking-tighter">dias batidos</span>
+          </div>
         </div>
       </div>
-      {/* Grid 3 colunas: Mês | Semana | Hoje */}
-      <div className="grid grid-cols-3 gap-3">
-        <MiniCol label={monthShort} value={eg.currentValue} alvo={eg.targetValue} up={up} />
-        <MiniCol label={`Sem ${weekly.weekLabel}`} value={weekly.value} alvo={weekly.alvo} up={weekly.up} onAnalyze={handleWeekAnalyze} />
-        <MiniCol label={dayLabel} value={daily.value} alvo={daily.alvo} up={daily.up} onAnalyze={handleDayAnalyze} />
+
+      <div className="space-y-4">
+        {/* Progress Mês */}
+        <div className="space-y-1.5 text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
+          <div className="flex justify-between">
+            <span>Progresso Mês</span>
+            <span className={mPct >= 100 ? 'text-green-500' : ''}>{mPct.toFixed(1)}%</span>
+          </div>
+          <div className="h-1 bg-muted/30 rounded-full overflow-hidden">
+            <div className={`h-full transition-all duration-500 ${getStatusColor(mPct).bar}`} style={{ width: `${Math.min(mPct, 100)}%` }} />
+          </div>
+        </div>
+
+        {/* Progress Semana */}
+        <div className="space-y-1.5 text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
+          <div className="flex justify-between">
+            <span>Performance Semanal</span>
+            <span className={pct(weekly.value, weekly.alvo) >= 100 ? 'text-green-500' : ''}>{pct(weekly.value, weekly.alvo).toFixed(1)}%</span>
+          </div>
+          <div className="h-1 bg-blue-100 dark:bg-blue-900/20 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.min(pct(weekly.value, weekly.alvo), 100)}%` }} />
+          </div>
+        </div>
+
+        {/* Detalhamento Diário da Semana */}
+        <div className="grid grid-cols-7 gap-1 pt-2">
+          {weekDays.map(d => {
+            const key = dateKey(d);
+            const val = eg.dailyProgress?.[key] ?? 0;
+            const isHit = val >= dailyTarget;
+            const isToday = isSameDay(d, refDate);
+            return (
+              <div key={key} className="flex flex-col items-center gap-1">
+                <span className={`text-[8px] uppercase font-bold ${isToday ? 'text-primary' : 'text-muted-foreground/60'}`}>
+                  {format(d, 'eee', { locale: ptBR }).substring(0, 1)}
+                </span>
+                <div 
+                  className={`w-full h-1.5 rounded-sm transition-all ${val > 0 ? (isHit ? 'bg-green-500' : 'bg-amber-400') : 'bg-muted/30'}`}
+                  title={`${format(d, 'dd/MM')}: R$ ${fmt(val)}`}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <EgDayAnalysisDialog
-        open={analysisOpen} onOpenChange={setAnalysisOpen}
-        eg={eg} userName={userName} nameColor={nameColor}
-        title={analysisTitle} days={analysisDays}
-      />
     </div>
   );
 }
 
-// ── Estilo por tipo de meta ───────────────────────────────────────────────────
+
+function getInitialsShort(name: string) {
+  return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
+}
+
+function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserName, kioskName }: {
+  open: boolean; onOpenChange: (v: boolean) => void; group: any;
+  employeeGoals: EmployeeGoal[]; getUserName: (id: string) => string; kioskName: string;
+}) {
+  if (!group) return null;
+  const mainPeriod = group.periods.find((p: any) => p.type === 'revenue' || !p.type) ?? group.periods[0];
+  if (!mainPeriod) return null;
+
+  const now = new Date();
+  const periodStart = mainPeriod.startDate.toDate();
+  const periodEnd = mainPeriod.endDate.toDate();
+  const monthDays = eachDayOfInterval({ start: startOfMonth(periodStart), end: endOfMonth(periodStart) });
+  const elapsedDays = monthDays.filter(d => d <= now).length;
+  const remainingDays = monthDays.length - elapsedDays;
+  const dailyAlvo = mainPeriod.targetValue / monthDays.length;
+  const dailyUp = (mainPeriod.upValue ?? mainPeriod.targetValue * 1.2) / monthDays.length;
+  const stats = calcMonthlyStats(mainPeriod);
+
+  // Percentual esperado até hoje
+  const expectedPct = (elapsedDays / monthDays.length) * 100;
+  const actualPct = pct(stats.value, stats.alvo);
+  const diff = actualPct - expectedPct;
+
+  // Dias com venda do quiosque
+  const kioskDaysWithSale = monthDays.filter(d => (mainPeriod.dailyProgress?.[dateKey(d)] ?? 0) > 0).length;
+
+  // Pace necessário para bater a meta
+  const paceNeeded = remainingDays > 0 ? Math.max(stats.alvo - stats.value, 0) / remainingDays : 0;
+  const paceActual = elapsedDays > 0 ? stats.value / elapsedDays : 0;
+
+  // Colaboradores com dados
+  const empRows = employeeGoals
+    .filter(eg => eg.periodId === mainPeriod.id)
+    .map(eg => {
+      const name = getUserName(eg.employeeId);
+      const dp = eg.dailyProgress ?? {};
+      const empDailyAlvo = eg.targetValue / monthDays.length;
+      const daysWithSale = monthDays.filter(d => (dp[dateKey(d)] ?? 0) > 0).length;
+      const daysHit = monthDays.filter(d => (dp[dateKey(d)] ?? 0) >= empDailyAlvo).length;
+      const empPace = elapsedDays > 0 ? eg.currentValue / elapsedDays : 0;
+      const empPaceNeeded = remainingDays > 0 ? Math.max(eg.targetValue - eg.currentValue, 0) / remainingDays : 0;
+      const empPct = pct(eg.currentValue, eg.targetValue);
+      return { eg, name, dp, empDailyAlvo, daysWithSale, daysHit, empPace, empPaceNeeded, empPct };
+    });
+
+  // Alertas / badges
+  const alerts: { label: string; color: string }[] = [];
+  if (paceActual < dailyAlvo) alerts.push({ label: 'Pace insuficiente', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' });
+  empRows.forEach(e => {
+    if (e.daysWithSale === 0) alerts.push({ label: `${e.name.split(' ')[0]} sem vendas`, color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' });
+  });
+  if (remainingDays > 0) alerts.push({ label: `${remainingDays} dias restantes`, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' });
+  alerts.push({ label: `Projeção: ${actualPct.toFixed(1)}% da meta`, color: actualPct >= 100 ? 'bg-green-100 text-green-700 dark:bg-green-900/30' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' });
+
+  const pdfData = {
+    kioskName,
+    monthLabel: group.monthLabel,
+    totalValue: stats.value,
+    totalPct: actualPct,
+    expectedPct,
+    diff,
+    target: stats.alvo,
+    upTarget: stats.up,
+    upPct: pct(stats.value, stats.up),
+    projection: stats.projection,
+    paceActual,
+    paceNeeded,
+    dailyAlvo,
+    elapsedDays,
+    remainingDays,
+    kioskDaysWithSale,
+    totalMonthDays: monthDays.length,
+    alerts: alerts.map(a => a.label),
+    monthDays: monthDays.map(d => ({
+      label: format(d, 'dd'),
+      dateKey: dateKey(d),
+      kioskValue: mainPeriod.dailyProgress?.[dateKey(d)] ?? 0,
+    })),
+    employees: empRows.map(e => ({
+      name: e.name,
+      value: e.eg.currentValue,
+      target: e.eg.targetValue,
+      pct: e.empPct,
+      pace: e.empPace,
+      paceNeeded: e.empPaceNeeded,
+      daysWithSale: e.daysWithSale,
+      daysHit: e.daysHit,
+      totalDays: monthDays.length,
+      dailyProgress: monthDays.map(d => e.dp[dateKey(d)] ?? 0),
+    })),
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="!max-w-[95vw] w-[95vw] h-[95vh] p-0 overflow-hidden flex flex-col">
+        {/* ── Cabeçalho ── */}
+        <div className="px-6 pt-5 pb-4 border-b border-border/40 flex items-start justify-between gap-4 shrink-0">
+          <div>
+            <DialogTitle className="text-xl font-bold tracking-tight">Situação Geral — {group.monthLabel}</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              {kioskName} · Meta: R$ {fmt(stats.alvo)} · Meta/dia: R$ {fmt(dailyAlvo)}
+            </p>
+          </div>
+          <PdfDownloadButton data={pdfData} fileName={`relatorio-${group.groupKey}.pdf`} />
+        </div>
+
+        <ScrollArea className="flex-1 overflow-auto">
+          <div className="px-6 py-5 space-y-6">
+
+            {/* ── KPI Cards ── */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="p-3 rounded-xl border border-border/40 bg-card/60">
+                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Acumulado</p>
+                <p className="text-xl font-black tabular-nums">R$ {fmt(stats.value)}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">de R$ {fmt(stats.alvo)}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-border/40 bg-card/60">
+                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">% da Meta</p>
+                <p className={`text-xl font-black tabular-nums ${actualPct >= 100 ? 'text-green-500' : 'text-amber-500'}`}>{actualPct.toFixed(1)}%</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Esperado hoje: {expectedPct.toFixed(1)}%</p>
+                <p className={`text-[10px] font-bold mt-0.5 ${diff >= 0 ? 'text-green-600' : 'text-rose-500'}`}>
+                  {diff >= 0 ? '▲' : '▼'} {Math.abs(diff).toFixed(1)} pp {diff >= 0 ? 'à frente' : 'atrás'}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl border border-border/40 bg-card/60">
+                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Projeção</p>
+                <p className={`text-xl font-black tabular-nums ${stats.projection >= stats.alvo ? 'text-green-500' : 'text-rose-500'}`}>R$ {fmt(stats.projection)}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {stats.projection < stats.alvo ? `Falta R$ ${fmt(stats.alvo - stats.projection)}` : `Excede R$ ${fmt(stats.projection - stats.alvo)}`}
+                </p>
+                <p className={`text-[10px] font-bold mt-0.5 ${stats.projection >= stats.alvo ? 'text-green-600' : 'text-rose-500'}`}>
+                  {pct(stats.projection, stats.alvo).toFixed(1)}% da meta
+                </p>
+              </div>
+              <div className="p-3 rounded-xl border border-border/40 bg-card/60">
+                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Pace Necessário</p>
+                <p className={`text-xl font-black tabular-nums ${paceActual >= paceNeeded ? 'text-green-500' : 'text-rose-500'}`}>R$ {fmt(paceNeeded)}/dia</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Atual: R$ {fmt(paceActual)}/dia</p>
+                <p className={`text-[10px] font-bold mt-0.5 ${paceActual >= paceNeeded ? 'text-green-600' : 'text-rose-500'}`}>
+                  {paceActual >= paceNeeded ? '▲' : '▼'} R$ {fmt(Math.abs(paceActual - paceNeeded))}/dia
+                </p>
+              </div>
+              <div className="p-3 rounded-xl border border-border/40 bg-card/60">
+                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Consistência</p>
+                <p className="text-xl font-black tabular-nums text-blue-500">{kioskDaysWithSale}/{monthDays.length} dias</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Dias com venda</p>
+                {empRows.map(e => (
+                  <p key={e.eg.id} className={`text-[10px] font-bold mt-0.5 ${e.daysWithSale === 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>
+                    {e.name.split(' ')[0]}: {e.daysWithSale} dias
+                  </p>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Barras de Progresso ── */}
+            <div className="space-y-3 p-4 rounded-xl border border-border/40 bg-card/30">
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[10px] text-muted-foreground font-bold uppercase">
+                  <span>Meta base</span>
+                  <span className={actualPct >= 100 ? 'text-green-500' : 'text-amber-500'}>{actualPct.toFixed(1)}%</span>
+                </div>
+                <div className="relative h-2.5 bg-muted/40 rounded-full overflow-visible">
+                  <div className={`h-full rounded-full transition-all ${actualPct >= 100 ? 'bg-green-500' : 'bg-primary'}`} style={{ width: `${Math.min(actualPct, 100)}%` }} />
+                  <div className="absolute top-[-3px] bottom-[-3px] w-0.5 bg-muted-foreground/50" style={{ left: `${expectedPct}%` }} title={`Ritmo esperado: ${expectedPct.toFixed(1)}%`} />
+                </div>
+                <div className="flex justify-between text-[9px] text-muted-foreground">
+                  <span>R$ 0</span>
+                  <span className="text-muted-foreground/60">▲ ritmo esperado no dia {elapsedDays}</span>
+                  <span>R$ {fmt(stats.alvo)}</span>
+                </div>
+              </div>
+              {stats.up > stats.alvo && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] text-muted-foreground font-bold uppercase">
+                    <span>Super meta</span>
+                    <span className="text-blue-500">{pct(stats.value, stats.up).toFixed(1)}%</span>
+                  </div>
+                  <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-500/70 transition-all" style={{ width: `${Math.min(pct(stats.value, stats.up), 100)}%` }} />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-muted-foreground">
+                    <span>R$ 0</span><span>R$ {fmt(stats.up)}</span>
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {alerts.map((a, i) => (
+                  <span key={i} className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${a.color}`}>{a.label}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Tabela Diária ── */}
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">
+                Progresso Diário — Valor Vendido vs. Meta do Dia
+              </p>
+              <div className="rounded-xl border border-border/40 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[10px] border-collapse">
+                    <thead>
+                      <tr className="bg-muted/40 border-b border-border/40">
+                        <th className="p-2 text-left sticky left-0 bg-muted/40 min-w-[130px] font-bold">Colaborador</th>
+                        <th className="p-2 text-center border-x border-border/30 min-w-[50px] font-bold">% meta</th>
+                        <th className="p-2 text-center border-r border-border/30 min-w-[70px] font-bold">Total</th>
+                        {monthDays.map(d => {
+                          const isToday = isSameDay(d, now);
+                          return (
+                            <th key={d.toISOString()} className={`px-1 py-1.5 text-center border-r border-border/20 w-8 font-bold ${isToday ? 'bg-primary/10 text-primary' : ''}`}>
+                              {format(d, 'dd')}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Linha Total Quiosque */}
+                      <tr className="border-b border-border/30 bg-blue-50/20 dark:bg-blue-950/20 font-bold">
+                        <td className="p-2 sticky left-0 bg-blue-50/40 dark:bg-blue-950/30 border-r border-border/20">
+                          <div className="flex items-center gap-2">
+                            <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-black text-primary">TQ</div>
+                            <span>Total Quiosque</span>
+                          </div>
+                        </td>
+                        <td className="p-2 text-center border-x border-border/20 text-primary font-black">
+                          {actualPct.toFixed(0)}%
+                        </td>
+                        <td className="p-2 text-center border-r border-border/20 font-black">R$ {fmt(stats.value)}</td>
+                        {monthDays.map(d => {
+                          const val = mainPeriod.dailyProgress?.[dateKey(d)] ?? 0;
+                          const hit = val >= dailyAlvo;
+                          const isFuture = d > now;
+                          const isToday = isSameDay(d, now);
+                          const label = val > 0 ? (val >= 1000 ? (val/1000).toFixed(1)+'k' : val.toFixed(0)) : '—';
+                          return (
+                            <td
+                              key={d.toISOString()}
+                              title={val > 0 ? `Dia ${format(d,'dd')}: R$ ${fmt(val)} | Meta: R$ ${fmt(dailyAlvo)}` : `Dia ${format(d,'dd')}: sem venda`}
+                              className={`px-1 py-1.5 text-center border-r border-border/20 font-mono text-[10px] w-8 ${isToday ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''} ${isFuture ? 'opacity-20' : val > 0 ? (hit ? 'text-green-600' : 'text-amber-600') : 'text-muted-foreground/30'}`}
+                            >
+                              {label}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      {/* Linhas dos Colaboradores */}
+                      {empRows.map((e, i) => (
+                        <tr key={i} className="border-b border-border/20 last:border-0 hover:bg-accent/5">
+                          <td className="p-2 sticky left-0 bg-background border-r border-border/20">
+                            <div className="flex items-center gap-2">
+                              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[8px] font-black ${collaboratorAvatarClass(e.eg.employeeId)}`}>
+                                {getInitialsShort(e.name)}
+                              </div>
+                              <span className="font-medium">{e.name}</span>
+                            </div>
+                          </td>
+                          <td className={`p-2 text-center border-x border-border/20 font-black ${e.empPct >= 100 ? 'text-green-500' : e.empPct >= 70 ? 'text-amber-500' : 'text-rose-500'}`}>
+                            {e.empPct.toFixed(0)}%
+                          </td>
+                          <td className="p-2 text-center border-r border-border/20 font-bold">R$ {fmt(e.eg.currentValue)}</td>
+                          {monthDays.map(d => {
+                            const val = e.dp[dateKey(d)] ?? 0;
+                            const hit = val >= e.empDailyAlvo;
+                            const isFuture = d > now;
+                            const isToday = isSameDay(d, now);
+                            const label = val > 0 ? (val >= 1000 ? (val/1000).toFixed(1)+'k' : val.toFixed(0)) : '—';
+                            return (
+                              <td
+                                key={d.toISOString()}
+                                title={val > 0 ? `Dia ${format(d,'dd')}: R$ ${fmt(val)} | Meta: R$ ${fmt(e.empDailyAlvo)}` : `Dia ${format(d,'dd')}: sem venda`}
+                                className={`px-1 py-1.5 text-center border-r border-border/20 font-mono text-[10px] w-8 ${isToday ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''} ${isFuture ? 'opacity-20' : val > 0 ? (hit ? 'text-green-600' : 'text-amber-600') : 'text-muted-foreground/30'}`}
+                              >
+                                {label}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Diagnóstico Individual ── */}
+            {empRows.length > 0 && (
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">Diagnóstico Individual</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {empRows.map((e, i) => {
+                    const fraction = e.eg.fraction ?? 1;
+                    const statusOk = e.empPace >= e.empPaceNeeded;
+                    return (
+                      <div key={i} className={`p-4 rounded-xl border-2 bg-card/60 space-y-3 ${e.empPct >= 100 ? 'border-green-500/40' : e.daysWithSale === 0 ? 'border-rose-500/40' : 'border-border/40'}`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-black ${collaboratorAvatarClass(e.eg.employeeId)}`}>
+                            {getInitialsShort(e.name)}
+                          </div>
+                          <div>
+                            <p className="font-black text-sm leading-tight">{e.name}</p>
+                            <p className="text-[9px] text-muted-foreground">
+                              Fração {(fraction * 100).toFixed(0)}% · Meta R$ {fmt(e.eg.targetValue)} · R$ {fmt(e.empDailyAlvo)}/dia
+                            </p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <p className="text-muted-foreground text-[9px] uppercase font-bold">Vendido</p>
+                            <p className="font-black text-base">R$ {fmt(e.eg.currentValue)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-[9px] uppercase font-bold">% meta</p>
+                            <p className={`font-black text-base ${e.empPct >= 100 ? 'text-green-500' : e.empPct >= 70 ? 'text-amber-500' : 'text-rose-500'}`}>{e.empPct.toFixed(1)}%</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-[9px] uppercase font-bold">Dias ativos</p>
+                            <p className="font-bold">{e.daysWithSale} / {monthDays.length}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-[9px] uppercase font-bold">Pace atual</p>
+                            <p className={`font-bold ${statusOk ? 'text-green-600' : 'text-rose-500'}`}>R$ {fmt(e.empPace)}/dia</p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-muted-foreground uppercase font-bold mb-1">Progresso na meta individual</p>
+                          <div className="h-1.5 bg-muted/40 rounded-full overflow-hidden">
+                            <div className={`h-full transition-all ${e.empPct >= 100 ? 'bg-green-500' : e.empPct >= 70 ? 'bg-amber-400' : 'bg-rose-500'}`} style={{ width: `${Math.min(e.empPct, 100)}%` }} />
+                          </div>
+                        </div>
+                        <div className={`text-[10px] font-bold px-2 py-1 rounded-md ${statusOk ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' : e.daysWithSale === 0 ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'}`}>
+                          {e.daysWithSale === 0
+                            ? '⚠ Nenhum dia com venda registrada'
+                            : statusOk
+                              ? '✓ Pace acima do necessário nos dias trabalhados'
+                              : `Pace abaixo do necessário (R$ ${fmt(e.empPaceNeeded)}/dia)`}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const GOAL_TYPE_STYLE: Record<string, { border: string; text: string; dot: string; label: string }> = {
-  revenue:          { border: 'border-l-blue-400',    text: 'text-blue-600 dark:text-blue-400',     dot: 'bg-blue-400',    label: 'Faturamento' },
-  ticket:           { border: 'border-l-violet-400',  text: 'text-violet-600 dark:text-violet-400',  dot: 'bg-violet-400',  label: 'Ticket Médio' },
-  product_line:     { border: 'border-l-emerald-400', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-400', label: 'Linha de Produto' },
-  product_specific: { border: 'border-l-orange-400',  text: 'text-orange-600 dark:text-orange-400',   dot: 'bg-orange-400',  label: 'Produto Específico' },
+  revenue:          { border: 'border-l-primary',    text: 'text-primary',        dot: 'bg-primary',        label: 'Faturamento'    },
+  ticket:           { border: 'border-l-amber-500',  text: 'text-amber-600',      dot: 'bg-amber-500',      label: 'Ticket Médio'   },
+  product_line:     { border: 'border-l-blue-500',   text: 'text-blue-600',       dot: 'bg-blue-500',       label: 'Linha Produto'  },
+  product_specific: { border: 'border-l-violet-500', text: 'text-violet-600',     dot: 'bg-violet-500',     label: 'Produto'        },
 };
 
 function getTypeStyle(type?: string) {
@@ -467,6 +854,9 @@ export function GoalsTrackingDashboard() {
   const userKioskIds = user?.assignedKioskIds ?? [];
   const availableKiosks = isAdmin ? kiosks : kiosks.filter(k => userKioskIds.includes(k.id));
 
+  const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name ?? id;
+  const getUserName = (id: string) => users.find(u => u.id === id)?.username ?? id;
+
   // Modais
   const [newMetaOpen, setNewMetaOpen] = useState(false);
   const [closeGoalOpen, setCloseGoalOpen] = useState(false);
@@ -479,31 +869,78 @@ export function GoalsTrackingDashboard() {
   const [employeeGoalOpen, setEmployeeGoalOpen] = useState(false);
   const [employeeGoalPeriod, setEmployeeGoalPeriod] = useState<GoalPeriodDoc | null>(null);
 
-  // Sync manual
-  const [syncOpen, setSyncOpen] = useState(false);
-  const [syncKioskId, setSyncKioskId] = useState('');
-  const [syncFilialId, setSyncFilialId] = useState('');
-  const [syncStart, setSyncStart] = useState('');
-  const [syncEnd, setSyncEnd] = useState('');
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [syncResults, setSyncResults] = useState<{ date: string; revenue?: number; error?: string }[] | null>(null);
+  // Detalhamento diário
+  const [dailyModalOpen, setDailyModalOpen] = useState(false);
+  const [dailyModalPeriod, setDailyModalPeriod] = useState<GoalPeriodDoc | null>(null);
 
-  async function handleSyncGoals() {
-    if (!syncKioskId || !syncStart || !syncEnd) return;
-    setSyncLoading(true);
-    setSyncResults(null);
+  // IA Analysis
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<z.infer<typeof GoalsAnalysisOutputSchema> | null>(null);
+  const [aiParams, setAiParams] = useState<{ kioskName: string; period: string; goalType: string } | null>(null);
+
+  // Situação Geral e PDF
+  const [kioskSummaryOpen, setKioskSummaryOpen] = useState(false);
+  const [summaryGroup, setSummaryGroup] = useState<any>(null);
+
+  async function handleAnalyzeWithAi(period: GoalPeriodDoc) {
+    const template = templates.find(t => t.id === period.templateId);
+    const kioskName = getKioskName(period.kioskId);
+    const monthLabel = format(period.startDate.toDate(), 'MMMM yyyy', { locale: ptBR });
+    
+    setAiParams({
+      kioskName,
+      period: monthLabel,
+      goalType: template?.type || 'revenue'
+    });
+    setAiModalOpen(true);
+    setIsAiLoading(true);
+    setAiResult(null);
+
     try {
-      const fn = httpsCallable(functions, 'syncGoalsForRange');
-      const payload: Record<string, string> = { kioskId: syncKioskId, startDate: syncStart, endDate: syncEnd };
-      if (syncFilialId.trim()) payload.pdvFilialId = syncFilialId.trim();
-      const result = await fn(payload) as any;
-      setSyncResults(result.data.results);
-      toast({ title: 'Sync concluído', description: `${result.data.results.length} dias processados.` });
+      const data = {
+        kioskName,
+        periodMonth: monthLabel,
+        goalType: template?.type || 'revenue',
+        targetValue: period.targetValue,
+        upValue: period.upValue,
+        currentValue: period.currentValue,
+        startDate: period.startDate.toDate().toISOString(),
+        endDate: period.endDate.toDate().toISOString(),
+        today: new Date().toISOString(),
+        dailyProgress: period.dailyProgress,
+        employees: employeeGoals
+          .filter(eg => eg.periodId === period.id)
+          .map(eg => ({
+            name: getUserName(eg.employeeId),
+            targetValue: eg.targetValue,
+            currentValue: eg.currentValue,
+            fraction: eg.fraction,
+            dailyProgress: eg.dailyProgress
+          }))
+      };
+
+      const response = await fetch('/api/ai/analyze-goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro na resposta da AI');
+      }
+
+      const result = await response.json();
+      setAiResult(result);
     } catch (e: any) {
-      toast({ title: 'Erro no sync', description: e.message, variant: 'destructive' });
+      toast({ title: 'Erro na análise IA', description: e.message, variant: 'destructive' });
+      setAiModalOpen(false);
+    } finally {
+      setIsAiLoading(false);
     }
-    setSyncLoading(false);
   }
+
 
   async function handleDeletePeriod() {
     if (!deletingPeriod) return;
@@ -556,268 +993,301 @@ export function GoalsTrackingDashboard() {
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const isCardOpen = (id: string) => openCards[id] !== false; // default: open
 
-  const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name ?? id;
-  const getUserName = (id: string) => users.find(u => u.id === id)?.username ?? id;
-
   if (loading) return <Skeleton className="h-64 w-full" />;
 
   return (
-    <div className="space-y-6">
-      {/* ── Barra de ações (managers) ── */}
-      {isManager && (
-        <div className="flex items-center gap-3 flex-wrap justify-between">
-          <div className="flex items-center gap-2">
-            {isAdmin && (
-              <Button variant="outline" size="sm" onClick={() => { setSyncOpen(true); setSyncResults(null); }}>
-                <RefreshCw className="mr-2 h-4 w-4" /> Sincronizar
-              </Button>
-            )}
-          </div>
-          <Button onClick={() => setNewMetaOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" /> Nova Meta
-          </Button>
+    <div className="flex flex-col gap-8 pb-10 max-w-5xl mx-auto">
+      {/* Header Centralizado */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Metas de Faturamento</h1>
+          <p className="text-muted-foreground text-sm">Acompanhamento em tempo real de performance e projeções.</p>
         </div>
+        <div className="flex items-center gap-2">
+          {isManager && (
+            <Button size="sm" onClick={() => setNewMetaOpen(true)} className="bg-primary hover:bg-primary/90">
+              <Plus className="mr-2 h-4 w-4" /> Nova Meta
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {!loading && periodGroups.length === 0 && (
+         <Card className="p-20 text-center bg-card/50 border-dashed border-2">
+           <div className="flex flex-col items-center gap-3">
+             <Target className="h-12 w-12 text-muted-foreground opacity-20" />
+             <p className="text-lg font-medium text-muted-foreground">Nenhuma meta ativa encontrada.</p>
+           </div>
+         </Card>
       )}
 
-      {periodGroups.length === 0 ? (
-        <Card>
-          <CardContent className="py-16 flex flex-col items-center gap-2 text-muted-foreground">
-            <Target className="h-10 w-10 opacity-30" />
-            <p>Nenhuma meta ativa.</p>
-            {isManager && (
-              <Button variant="outline" size="sm" className="mt-2" onClick={() => setNewMetaOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" /> Criar meta
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          {/* ── Legenda de tipos ── */}
-          {(() => {
-            const allTypes = [...new Set(periodGroups.flatMap(g =>
-              g.periods.map(p => templates.find(t => t.id === p.templateId)?.type ?? '')
-            ))].filter(Boolean);
-            if (allTypes.length <= 1) return null;
-            return (
-              <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
-                <span className="font-medium">Legenda:</span>
-                {allTypes.map(type => {
-                  const style = getTypeStyle(type);
-                  return (
-                    <span key={type} className="flex items-center gap-1">
-                      <span className={`inline-block w-2 h-2 rounded-full ${style.dot}`} />
-                      <span>{style.label}</span>
-                    </span>
-                  );
-                })}
-              </div>
-            );
-          })()}
-          {periodGroups.map(group => {
-          const open = isCardOpen(group.groupKey);
-          const groupTypes = group.periods.map(p => templates.find(t => t.id === p.templateId)?.type ?? '');
+      {periodGroups.map((group) => {
+        const kioskName = getKioskName(group.kioskId);
+        const revenuePeriods = group.periods.filter(p => templates.find(t => t.id === p.templateId)?.type === 'revenue');
+        const mainPeriod = revenuePeriods[0];
+        const pctPrincipal = mainPeriod ? pct(mainPeriod.currentValue, mainPeriod.targetValue) : 0;
+        const isOpen = isCardOpen(group.groupKey);
 
-          return (
-            <Card key={group.groupKey}>
-              <Collapsible
-                open={open}
-                onOpenChange={v => setOpenCards(prev => ({ ...prev, [group.groupKey]: v }))}
-              >
-                {/* ── Cabeçalho do grupo ── */}
-                <div className="flex items-center justify-between gap-2 px-5 py-4">
-                  <CollapsibleTrigger asChild>
-                    <button className="flex items-center gap-2 flex-1 min-w-0 text-left">
-                      <Target className="h-5 w-5 text-muted-foreground shrink-0" />
-                      <span className="text-base font-semibold truncate">{getKioskName(group.kioskId)}</span>
-                      <Badge variant="outline" className="text-xs capitalize shrink-0">{group.monthLabel}</Badge>
-                      {/* Indicadores coloridos de tipo */}
-                      <span className="flex items-center gap-1 shrink-0">
-                        {groupTypes.map((type, i) => {
-                          const style = getTypeStyle(type);
+        return (
+          <Collapsible
+            key={group.groupKey}
+            open={isOpen}
+            onOpenChange={(v) => setOpenCards(prev => ({ ...prev, [group.groupKey]: v }))}
+            className="space-y-4"
+          >
+            <Card className="border-border/60 overflow-hidden bg-card/40 backdrop-blur-sm shadow-sm hover:shadow-md transition-shadow">
+              <CollapsibleTrigger asChild>
+                <div className="flex items-center justify-between p-5 cursor-pointer hover:bg-accent/10 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-primary/10 rounded-xl">
+                      <Target className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold tracking-tight">{kioskName}</h2>
+                      <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">{group.monthLabel}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-8">
+                    <div className="text-right">
+                       <span className={`text-lg font-black ${pctPrincipal >= 100 ? 'text-green-500' : 'text-amber-500'}`}>
+                         {pctPrincipal.toFixed(1)}%
+                       </span>
+                       <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">da meta faturamento</p>
+                    </div>
+                    <div className={`p-1.5 rounded-full bg-muted/50 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+                      <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  </div>
+                </div>
+              </CollapsibleTrigger>
+              
+              <CollapsibleContent>
+                <div className="p-6 pt-2 border-t border-border/40 space-y-10 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="flex justify-between items-center bg-muted/20 -mx-6 px-6 py-3 border-b border-border/10 mb-6">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={(e) => { e.stopPropagation(); setSummaryGroup(group); setKioskSummaryOpen(true); }}
+                      className="h-9 px-4 text-xs font-bold border-blue-500/30 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-900/20"
+                    >
+                      <BarChart2 className="mr-2 h-4 w-4" /> Situação Geral & PDF
+                    </Button>
+
+                    {isManager && mainPeriod && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-accent"><Menu className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                           <DropdownMenuItem onClick={() => { setEmployeeGoalPeriod(mainPeriod); setEmployeeGoalOpen(true); }}>
+                             <Plus className="mr-2 h-4 w-4" /> Vincular Colaborador
+                           </DropdownMenuItem>
+                           <DropdownMenuSeparator />
+                           <DropdownMenuItem onClick={() => { setEditPeriod(mainPeriod); setEditOpen(true); }}>
+                             <Pencil className="mr-2 h-4 w-4" /> Editar Meta
+                           </DropdownMenuItem>
+                           <DropdownMenuItem onClick={() => { setClosingPeriod(mainPeriod); setCloseGoalOpen(true); }}>
+                             <CheckCircle className="mr-2 h-4 w-4" /> Encerrar Meta
+                           </DropdownMenuItem>
+                           <DropdownMenuSeparator />
+                           <DropdownMenuItem
+                             className="text-destructive focus:text-destructive"
+                             onClick={() => { setDeletingPeriod(mainPeriod); setDeleteOpen(true); }}
+                           >
+                             <Trash2 className="mr-2 h-4 w-4" /> Excluir Meta
+                           </DropdownMenuItem>
+                           <DropdownMenuSeparator />
+                           {process.env.NODE_ENV === 'development' && group.periods.map(p => {
+                             const template = templates.find(t => t.id === p.templateId);
+                             return (
+                               <DropdownMenuItem key={p.id} onClick={() => handleAnalyzeWithAi(p)} className="text-primary font-medium">
+                                 <Sparkles className="mr-2 h-4 w-4" /> Analisar {getTypeStyle(template?.type).label} com IA
+                               </DropdownMenuItem>
+                             );
+                           })}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+
+                  {/* ── Resumo do Período ── */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-black text-muted-foreground uppercase tracking-[0.2em] px-1 italic">Métricas de Saúde</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                       {revenuePeriods.map(period => {
+                         const stats = calcMonthlyStats(period);
+                         const diff = pct(stats.projection, stats.up) - 100;
+                         return (
+                           <React.Fragment key={period.id}>
+                             <StatItem 
+                               title="Acumulado"
+                               value={fmt(stats.value)}
+                               subLabel={`Meta base: R$ ${fmt(stats.alvo)}`}
+                               trend={`${pct(stats.value, stats.alvo).toFixed(1)}%`}
+                               trendColor={stats.value >= stats.alvo ? 'text-green-500' : 'text-muted-foreground'}
+                             />
+                             <StatItem 
+                               title="Pace Atual"
+                               value={fmt(stats.currentPace)}
+                               subLabel={`Necessário: R$ ${fmt(stats.neededDaily)}`}
+                               trend={stats.currentPace >= stats.neededDaily ? `+${pct(stats.currentPace - stats.neededDaily, stats.neededDaily).toFixed(0)}%` : `-${pct(stats.neededDaily - stats.currentPace, stats.neededDaily).toFixed(0)}%`}
+                               trendColor={stats.currentPace >= stats.neededDaily ? 'text-green-500' : 'text-rose-500'}
+                             />
+                             <StatItem 
+                               title="Projeção"
+                               value={fmt(stats.projection)}
+                               subLabel={`Super meta: R$ ${fmt(stats.up)}`}
+                               trend={diff >= 0 ? `+${diff.toFixed(0)}%` : `${diff.toFixed(0)}%`}
+                               trendColor={diff >= 0 ? 'text-green-500' : 'text-rose-500'}
+                             />
+                           </React.Fragment>
+                         );
+                       })}
+                    </div>
+                  </div>
+
+                  {/* ── Card de Meta do Mês ── */}
+                  {revenuePeriods.map(period => {
+                    const stats = calcMonthlyStats(period);
+                    const { isCurrent, refDate, periodEnd } = getPeriodContext(period);
+                    const weekly = calcWeeklyStats(period, refDate, periodEnd);
+                    const weekPct = pct(weekly.value, weekly.alvo);
+
+                    return (
+                      <div key={period.id} className="space-y-8">
+                        <Card className="p-7 border-border/40 bg-card/60 shadow-xl ring-1 ring-border/20 overflow-hidden relative">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
+                          <MainGoalProgress value={stats.value} alvo={stats.alvo} up={stats.up} linearMarker={stats.linearMarker} />
+                          
+                          <div 
+                            className="mt-12 pt-5 border-t border-border/20 flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer hover:bg-accent/5 transition-all p-3 rounded-xl group/week"
+                            onClick={() => { setDailyModalPeriod(period); setDailyModalOpen(true); }}
+                          >
+                             <div className="flex items-center gap-4">
+                               <div className="p-2.5 bg-amber-500/10 rounded-lg group-hover/week:scale-110 transition-transform">
+                                 <CalendarIcon className="h-5 w-5 text-amber-500" />
+                               </div>
+                               <div>
+                                 <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Performance da Semana</p>
+                                 <span className="text-base font-bold">R$ {fmt(weekly.value)} <span className="text-muted-foreground font-normal text-xs">/ {fmt(weekly.alvo)}</span></span>
+                               </div>
+                             </div>
+                             <div className="flex items-center gap-3">
+                               <Badge className={`px-3 py-1 font-bold ${weekPct >= 100 ? 'bg-green-500 text-white' : 'bg-primary/80'}`}>
+                                 {weekPct.toFixed(1)}% atingido
+                               </Badge>
+                               <ChevronRight className="h-4 w-4 text-muted-foreground group-hover/week:translate-x-1 transition-transform" />
+                             </div>
+                          </div>
+                        </Card>
+
+                        {/* ── Por Colaborador ── */}
+                        <div className="space-y-5">
+                          <div className="flex items-center justify-between">
+                             <h3 className="text-xs font-black text-muted-foreground uppercase tracking-[0.2em] px-1 italic">Ranking & Consistência</h3>
+                          </div>
+                          <Card className="bg-card/40 border-border/40 backdrop-blur-md p-2">
+                             <div className="divide-y divide-border/10">
+                               {employeeGoals
+                                 .filter(eg => eg.periodId === period.id)
+                                 .sort((a, b) => b.currentValue - a.currentValue)
+                                 .map(eg => {
+                                   const shift = eg.shiftId ? period.shifts?.find(s => s.id === eg.shiftId) : null;
+                                   return (
+                                     <CollaboratorCard 
+                                       key={eg.id}
+                                       eg={eg}
+                                       userName={getUserName(eg.employeeId)}
+                                       shiftLabel={shift?.label}
+                                       refDate={refDate}
+                                       periodEnd={periodEnd}
+                                     />
+                                   );
+                                 })
+                               }
+                             </div>
+                          </Card>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* ── Metas Adicionais ── */}
+                  {group.periods.filter(p => templates.find(t => t.id === p.templateId)?.type !== 'revenue').length > 0 && (
+                    <div className="space-y-5 pt-4">
+                      <h3 className="text-xs font-black text-muted-foreground uppercase tracking-[0.2em] px-1 italic">Linhas de Apoio</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {group.periods.filter(p => templates.find(t => t.id === p.templateId)?.type !== 'revenue').map(period => {
+                          const template = templates.find(t => t.id === period.templateId);
+                          const typeStyle = getTypeStyle(template?.type ?? 'revenue');
+                          const { value, alvo } = calcMonthlyStats(period);
+                          const pPct = pct(value, alvo);
                           return (
-                            <span key={i} title={style.label} className={`inline-block w-2 h-2 rounded-full ${style.dot}`} />
+                            <Card key={period.id} className="p-5 border-border/40 bg-card/30 hover:bg-card/50 transition-colors shadow-sm">
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                  <div className={`h-2 w-2 rounded-full ${typeStyle.dot} animate-pulse`} />
+                                  <span className={`text-[10px] font-black uppercase tracking-widest ${typeStyle.text}`}>
+                                    {template?.productLineName || template?.productName || typeStyle.label}
+                                  </span>
+                                </div>
+                                <Badge variant="outline" className="text-[10px] font-bold h-5">{pPct.toFixed(1)}%</Badge>
+                              </div>
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-end">
+                                  <span className="text-lg font-bold tracking-tight">R$ {fmt(value)}</span>
+                                  <span className="text-muted-foreground text-[10px] uppercase font-bold">Meta {fmt(alvo)}</span>
+                                </div>
+                                <div className="h-1.5 bg-muted/40 rounded-full overflow-hidden">
+                                  <div className={`h-full transition-all duration-1000 ${getStatusColor(pPct).bar}`} style={{ width: `${Math.min(pPct, 100)}%` }} />
+                                </div>
+                              </div>
+                            </Card>
                           );
                         })}
-                      </span>
-                      <ChevronDown
-                        className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-                      />
-                    </button>
-                  </CollapsibleTrigger>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* ── Subcards por tipo de meta ── */}
-                <CollapsibleContent>
-                  <CardContent className="pt-0 space-y-3 pb-5">
-                    {/* ── Geral do quiosque (resumo do faturamento) ── */}
-                    {(() => {
-                      const revPeriod = group.periods.find(p => templates.find(t => t.id === p.templateId)?.type === 'revenue');
-                      if (!revPeriod || group.periods.length <= 1) return null;
-                      const up = revPeriod.upValue ?? revPeriod.targetValue * 1.2;
-                      return (
-                        <div className="rounded-lg bg-muted/40 px-4 py-3 space-y-1.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-medium text-muted-foreground">Geral do quiosque</span>
-                            <StatusBadge value={revPeriod.currentValue} alvo={revPeriod.targetValue} up={up} />
-                          </div>
-                          <GoalBar value={revPeriod.currentValue} alvo={revPeriod.targetValue} up={up} />
-                          <div className="flex items-baseline gap-1.5">
-                            <span className={`text-sm font-bold ${getStatusColor(pct(revPeriod.currentValue, revPeriod.targetValue)).text}`}>
-                              R$ {fmt(revPeriod.currentValue)}
-                            </span>
-                            <span className="text-xs text-muted-foreground">de R$ {fmt(revPeriod.targetValue)}</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    {group.periods.map(period => {
-                      const template = templates.find(t => t.id === period.templateId);
-                      const goalType = template?.type ?? 'revenue';
-                      const typeStyle = getTypeStyle(goalType);
-                      const { isCurrent, refDate, periodEnd, periodStart } = getPeriodContext(period);
-                      const monthly = calcMonthlyStats(period);
-                      const weekly = calcWeeklyStats(period, refDate, periodEnd);
-                      const daily = calcDailyStats(period, refDate);
-                      const periodMonthLabel = group.monthLabel;
-
-                      // Título do subcard: para produtos mostra o nome específico
-                      const subTitle = goalType === 'product_line'
-                        ? `${typeStyle.label}${template?.productLineName ? ` — ${template.productLineName}` : ''}`
-                        : goalType === 'product_specific'
-                        ? `${typeStyle.label}${template?.productName ? ` — ${template.productName}` : ''}`
-                        : typeStyle.label;
-
-                      const periodGoals = goalType === 'revenue'
-                        ? employeeGoals
-                            .filter(eg => eg.periodId === period.id)
-                            .sort((a, b) => pct(b.currentValue, b.targetValue) - pct(a.currentValue, a.targetValue))
-                        : [];
-
-                      return (
-                        <div
-                          key={period.id}
-                          className={`rounded-lg border border-border/60 border-l-4 ${typeStyle.border} p-4 space-y-4`}
-                        >
-                          {/* ── Cabeçalho do subcard ── */}
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 flex-wrap min-w-0">
-                              <span className={`text-sm font-semibold ${typeStyle.text}`}>{subTitle}</span>
-                              {!isCurrent && (
-                                <Badge variant="secondary" className="text-xs shrink-0">Encerrado</Badge>
-                              )}
-                            </div>
-                            {isManager && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0">
-                                    <Menu className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-44">
-                                  <DropdownMenuItem onClick={() => { setEditPeriod(period); setEditOpen(true); }}>
-                                    Editar meta
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => { setClosingPeriod(period); setCloseGoalOpen(true); }}>
-                                    Encerrar meta
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() => { setDeletingPeriod(period); setDeleteOpen(true); }}
-                                  >
-                                    Excluir meta
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
-
-                          {/* ── Métricas ── */}
-                          <div className="space-y-4">
-                            <MetricRow
-                              label={periodMonthLabel.replace(/^\w/, c => c.toUpperCase())}
-                              value={monthly.value} alvo={monthly.alvo} up={monthly.up}
-                            />
-                            <MetricRow
-                              label="Semana" sub={weekly.weekLabel}
-                              value={weekly.value} alvo={weekly.alvo} up={weekly.up}
-                            />
-                            <MetricRow
-                              label={isCurrent ? 'Hoje' : 'Último dia'} sub={format(refDate, "dd 'de' MMMM", { locale: ptBR })}
-                              value={daily.value} alvo={daily.alvo} up={daily.up}
-                            />
-                          </div>
-
-                          {/* ── Colaboradores (apenas faturamento) ── */}
-                          {goalType === 'revenue' && (
-                            <>
-                              <Separator />
-                              <div className="space-y-3">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Por Colaborador</p>
-                                  {periodGoals.length > 0 && (
-                                    <span className="text-xs text-muted-foreground">({periodGoals.length})</span>
-                                  )}
-                                </div>
-                                {periodGoals.length === 0 ? (
-                                  <div className="flex items-center gap-2 py-1">
-                                    <p className="text-sm text-muted-foreground">Nenhum colaborador vinculado</p>
-                                    {isManager && (
-                                      <Button variant="ghost" size="sm" className="h-6 text-xs px-2 text-muted-foreground hover:text-foreground"
-                                        onClick={() => { setEmployeeGoalPeriod(period); setEmployeeGoalOpen(true); }}>
-                                        · Adicionar
-                                      </Button>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {periodGoals.map(eg => {
-                                      const shift = eg.shiftId ? period.shifts?.find(s => s.id === eg.shiftId) : null;
-                                      return (
-                                        <CollaboratorCard
-                                          key={eg.id}
-                                          eg={eg}
-                                          shiftLabel={shift?.label}
-                                          userName={getUserName(eg.employeeId)}
-                                          isMe={eg.employeeId === user?.id}
-                                          refDate={refDate}
-                                          periodEnd={periodEnd}
-                                          periodStart={periodStart}
-                                          isCurrent={isCurrent}
-                                          periodMonthLabel={periodMonthLabel}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </>
-                          )}
-
-                          {/* ── Nota: ticket médio sem colaboradores ── */}
-                          {goalType === 'ticket' && (
-                            <p className="text-xs text-muted-foreground">Meta global do quiosque — faturamento ÷ cupons.</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
+              </CollapsibleContent>
             </Card>
-          );
-        })}
-        </>
-      )}
+          </Collapsible>
+        );
+      })}
+
+      <KioskSummaryModal 
+        open={kioskSummaryOpen} 
+        onOpenChange={setKioskSummaryOpen} 
+        group={summaryGroup} 
+        employeeGoals={employeeGoals}
+        getUserName={getUserName}
+        kioskName={summaryGroup ? getKioskName(summaryGroup.kioskId) : ''}
+      />
 
       {/* ── Modais ── */}
       <GoalTemplateFormModal open={newMetaOpen} onOpenChange={setNewMetaOpen} />
       <EditGoalPeriodModal open={editOpen} onOpenChange={setEditOpen} period={editPeriod} />
       <CloseGoalModal open={closeGoalOpen} onOpenChange={setCloseGoalOpen} period={closingPeriod} />
-      <AddEmployeeGoalModal open={employeeGoalOpen} onOpenChange={setEmployeeGoalOpen} period={employeeGoalPeriod} />
+      <AddEmployeeGoalModal 
+        open={employeeGoalOpen} 
+        onOpenChange={setEmployeeGoalOpen} 
+        period={employeeGoalPeriod} 
+      />
+      <DailyAnalysisModal 
+        open={dailyModalOpen} 
+        onOpenChange={setDailyModalOpen} 
+        period={dailyModalPeriod} 
+        title="Detalhamento Diário"
+      />
+      
+      <GoalsAiAnalysisModal
+        open={aiModalOpen}
+        onOpenChange={setAiModalOpen}
+        isLoading={isAiLoading}
+        analysisResult={aiResult}
+        analysisParams={aiParams}
+      />
 
-      {/* ── Confirmar exclusão ── */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -839,56 +1309,7 @@ export function GoalsTrackingDashboard() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Dialog sync ── */}
-      <Dialog open={syncOpen} onOpenChange={setSyncOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Sincronizar Metas</DialogTitle>
-            <DialogDescription>Busca faturamento do PDV Legal e atualiza as metas ativas no intervalo informado.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Quiosque</Label>
-              <Select value={syncKioskId} onValueChange={setSyncKioskId}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{availableKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>ID Filial PDV Legal</Label>
-              <Input className="mt-1" placeholder="Opcional se já configurado" value={syncFilialId} onChange={e => setSyncFilialId(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Data início</Label>
-                <Input type="date" className="mt-1" value={syncStart} onChange={e => setSyncStart(e.target.value)} />
-              </div>
-              <div>
-                <Label>Data fim</Label>
-                <Input type="date" className="mt-1" value={syncEnd} onChange={e => setSyncEnd(e.target.value)} />
-              </div>
-            </div>
-            {syncResults && (
-              <div className="rounded-md border p-3 max-h-48 overflow-y-auto space-y-1">
-                {syncResults.map(r => (
-                  <div key={r.date} className="flex justify-between text-xs">
-                    <span className="font-mono">{r.date}</span>
-                    {r.error
-                      ? <span className="text-destructive">{r.error}</span>
-                      : <span className="text-muted-foreground">R$ {(r.revenue ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncOpen(false)}>Fechar</Button>
-            <Button onClick={handleSyncGoals} disabled={!syncKioskId || !syncStart || !syncEnd || syncLoading}>
-              {syncLoading ? 'Sincronizando...' : 'Executar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Removido Dialog de sincronização manual */}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { useKiosks } from "@/hooks/use-kiosks"
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { GlassCard } from "@/components/ui/glass-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -28,7 +29,7 @@ import { useProductSimulationCategories } from "@/hooks/use-product-simulation-c
 import { useProducts } from "@/hooks/use-products"
 import { collection, onSnapshot, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { PurchaseAlertCard } from "@/components/purchase-alert-card"
+import { PurchaseAlertCard, PurchaseAlertSummary } from "@/components/purchase-alert-card"
 import { TechnicalSheetDashboard } from "@/components/technical-sheet-dashboard"
 import { TaskManager } from "@/components/task-manager"
 import { RestockPanel } from "@/components/restock-panel"
@@ -166,36 +167,41 @@ function OperationalDashboard() {
 
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Link href="/dashboard/stock/inventory-control">
-        <GlassCard className="transition-all duration-300 hover:border-white/50 hover:bg-white/50 hover:-translate-y-px">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vencendo em 7 dias</CardTitle>
-            <AlertTriangle className="h-6 w-6 text-yellow-500" />
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+        <Link href="/dashboard/stock/inventory-control" className="group">
+        <GlassCard className="transition-all duration-300 hover:bg-muted/50 group-hover:-translate-y-px h-full border border-rose-500/50 bg-card rounded-xl">
+          <CardHeader className="flex flex-col items-start justify-between space-y-0 p-5">
+            <div className="text-3xl font-bold text-rose-500">{expiringSoonCount}</div>
+            <CardTitle className="text-muted-foreground mt-2 text-sm font-medium">Vencendo em 7 dias</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold text-yellow-500">{expiringSoonCount}</div>
-          </CardContent>
         </GlassCard>
         </Link>
-        <Link href="/dashboard/stock/inventory-control">
-        <GlassCard className="transition-all duration-300 hover:border-white/50 hover:bg-white/50 hover:-translate-y-px">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Produtos vencidos</CardTitle>
-            <AlertTriangle className="h-6 w-6 text-destructive" />
+        <Link href="/dashboard/stock/inventory-control" className="group">
+        <GlassCard className="transition-all duration-300 hover:bg-muted/50 group-hover:-translate-y-px h-full border border-amber-500/50 bg-card rounded-xl">
+          <CardHeader className="flex flex-col items-start justify-between space-y-0 p-5">
+            <div className="text-3xl font-bold text-amber-500">{expiredCount}</div>
+            <CardTitle className="text-muted-foreground mt-2 text-sm font-medium">Produtos vencidos</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold text-destructive">{expiredCount}</div>
-          </CardContent>
         </GlassCard>
         </Link>
+        <PurchaseAlertSummary />
+      </div>
+
+      <div className="space-y-4 mb-8">
+         <div className="flex items-center gap-3">
+             <h2 className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Compras Urgentes</h2>
+             <Badge variant="outline" className="text-[10px] font-bold border-rose-500/50 text-rose-600 bg-rose-500/10 hover:bg-rose-500/20">Atenção</Badge>
+         </div>
          <PurchaseAlertCard />
       </div>
 
-      <div className="mt-6">
+      <div className="space-y-4 mt-6">
+        <div className="flex items-center gap-3">
+             <h2 className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Painel de Reposição</h2>
+             <Badge variant="outline" className="text-[10px] font-bold border-amber-500/50 text-amber-600 bg-amber-500/10 hover:bg-amber-500/20">Desatualizado</Badge>
+         </div>
         <RestockPanel />
       </div>
-      
     </>
   )
 }
