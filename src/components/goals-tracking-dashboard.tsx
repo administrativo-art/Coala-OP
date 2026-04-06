@@ -35,6 +35,7 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { GoalsAiAnalysisModal } from '@/components/goals-ai-analysis-modal';
+import { GoalsAnalysisOutputSchema } from '@/ai/flows/goals-schemas';
 import { z } from 'zod';
 
 const PdfDownloadButton = dynamic(() => import('@/components/goal-report-pdf'), { ssr: false });
