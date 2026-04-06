@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { DateRange } from 'react-day-picker';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -29,16 +29,16 @@ import { Card, CardContent } from './ui/card';
 const MOVEMENT_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
     'ENTRADA': { label: 'Entrada', color: 'bg-green-100 text-green-800' },
     'SAIDA_CONSUMO': { label: 'Venda/Consumo', color: 'bg-red-100 text-red-800' },
-    'SAIDA_DESCARTE_VENCIMENTO': { label: 'Descarte por vencimento', color: 'bg-red-100 text-red-800' },
+    'SAIDA_DESCARTE_VENCIMENTO': { label: 'Descarte por Vencimento', color: 'bg-red-100 text-red-800' },
     'SAIDA_DESCARTE_AVARIA': { label: 'Descarte por Avaria', color: 'bg-red-100 text-red-800' },
-    'SAIDA_DESCARTE_PERDA': { label: 'Extravio de mercadoria', color: 'bg-red-100 text-red-800' },
+    'SAIDA_DESCARTE_PERDA': { label: 'Extravio de Mercadoria', color: 'bg-red-100 text-red-800' },
     'SAIDA_DESCARTE_OUTROS': { label: 'Descarte Outros', color: 'bg-red-100 text-red-800' },
     'SAIDA_CORRECAO': { label: 'Divergência (decréscimo)', color: 'bg-red-100 text-red-800' },
     'ENTRADA_CORRECAO': { label: 'Divergência (acréscimo)', color: 'bg-green-100 text-green-800' },
-    'TRANSFERENCIA_SAIDA': { label: 'Transferência', color: 'bg-blue-100 text-blue-800' },
-    'TRANSFERENCIA_ENTRADA': { label: 'Transferência', color: 'bg-blue-100 text-blue-800' },
-    'ENTRADA_ESTORNO': { label: 'Estorno (Entrada)', color: 'bg-green-100 text-green-800' },
-    'SAIDA_ESTORNO': { label: 'Estorno (Saída)', color: 'bg-red-100 text-red-800' },
+    'TRANSFERENCIA_SAIDA': { label: 'Transferência (Saída)', color: 'bg-blue-100 text-blue-800' },
+    'TRANSFERENCIA_ENTRADA': { label: 'Transferência (Entrada)', color: 'bg-blue-100 text-blue-800' },
+    'ENTRADA_ESTORNO': { label: 'Estorno (Entrada)', color: 'bg-red-100 text-red-800' },
+    'SAIDA_ESTORNO': { label: 'Estorno (Saída)', color: 'bg-green-100 text-green-800' },
 };
 
 const ITEMS_PER_PAGE = 50;
@@ -49,21 +49,51 @@ type SortDirection = 'asc' | 'desc';
 interface MovementHistoryModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialBaseProductId?: string;
+  initialType?: string;
+  initialKioskId?: string;
+  initialDateRange?: { from: Date; to: Date };
 }
 
-export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModalProps) {
+export function MovementHistoryModal({ 
+  open, 
+  onOpenChange, 
+  initialBaseProductId, 
+  initialType, 
+  initialKioskId, 
+  initialDateRange 
+}: MovementHistoryModalProps) {
   const { history, loading: loadingHistory } = useMovementHistory();
   const { products, getProductFullName, loading: loadingProducts } = useProducts();
   const { kiosks, loading: loadingKiosks } = useKiosks();
   const { users } = useAuth();
   
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [kioskFilter, setKioskFilter] = useState('all');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(initialDateRange);
+  const [typeFilter, setTypeFilter] = useState(initialType || 'all');
+  const [kioskFilter, setKioskFilter] = useState(initialKioskId || 'all');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('timestamp');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Sync state when props change (specifically when opening from dashboard)
+  useEffect(() => {
+    if (open) {
+      if (initialDateRange) setDateRange(initialDateRange);
+      if (initialType) setTypeFilter(initialType);
+      if (initialKioskId) setKioskFilter(initialKioskId);
+      if (initialBaseProductId) {
+          // If we have a base product ID, we search for products that belong to it
+          const bpProducts = products.filter(p => p.baseProductId === initialBaseProductId);
+          if (bpProducts.length > 0) {
+              setSearchTerm(bpProducts[0].baseName || '');
+          }
+      } else {
+          setSearchTerm('');
+      }
+      setCurrentPage(1);
+    }
+  }, [open, initialDateRange, initialType, initialKioskId, initialBaseProductId, products]);
   
   const loading = loadingHistory || loadingProducts || loadingKiosks;
 
@@ -89,6 +119,14 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
   const filteredAndSortedHistory = useMemo(() => {
     let filtered = enrichedHistory;
 
+    // Direct Base Product Filter (from drill-down)
+    if (initialBaseProductId) {
+        filtered = filtered.filter(item => {
+            const product = products.find(p => p.id === item.productId);
+            return product?.baseProductId === initialBaseProductId;
+        });
+    }
+
     if (dateRange?.from) {
       filtered = filtered.filter(item => {
         if (!item.timestamp) return false;
@@ -106,12 +144,32 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
       });
     }
     if (typeFilter !== 'all') {
-      filtered = filtered.filter(item => item.type === typeFilter);
+      filtered = filtered.filter(item => {
+        const isTransfer = item.type?.includes('TRANSFERENCIA');
+        
+        if (typeFilter === 'ENTRADA') {
+            if (item.type === 'ENTRADA') return true;
+            if (isTransfer) {
+                return kioskFilter !== 'all' ? item.toKioskId === kioskFilter : item.type === 'TRANSFERENCIA_ENTRADA';
+            }
+            return false;
+        } else if (typeFilter === 'SAIDA') {
+            const isExit = item.type?.startsWith('SAIDA_') || item.type === 'ENTRADA_ESTORNO';
+            if (isExit) return true;
+            if (isTransfer) {
+                return kioskFilter !== 'all' ? item.fromKioskId === kioskFilter : item.type === 'TRANSFERENCIA_SAIDA';
+            }
+            return false;
+        } else if (typeFilter === 'AJUSTE') {
+            return (item.type?.includes('CORRECAO') || item.type?.includes('Divergência'));
+        }
+        return item.type === typeFilter;
+      });
     }
     if (kioskFilter !== 'all') {
         filtered = filtered.filter(item => item.fromKioskId === kioskFilter || item.toKioskId === kioskFilter);
     }
-    if (searchTerm) {
+    if (searchTerm && !initialBaseProductId) {
         const lowerCaseSearch = searchTerm.toLowerCase();
         filtered = filtered.filter(item => 
             (item.productName || '').toLowerCase().includes(lowerCaseSearch) ||
@@ -134,7 +192,7 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
 
       return sortDirection === 'asc' ? compareResult : -compareResult;
     });
-  }, [enrichedHistory, dateRange, typeFilter, kioskFilter, searchTerm, sortKey, sortDirection]);
+  }, [enrichedHistory, dateRange, typeFilter, kioskFilter, searchTerm, sortKey, sortDirection, initialBaseProductId, products]);
 
   const paginatedHistory = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -152,19 +210,43 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
     }
   };
 
-  const { totalEntradas, totalSaidas, totalTransferencias } = useMemo(() => {
+  const { totalEntradas, totalSaidas, totalAjustes, totalTransferencias } = useMemo(() => {
     return filteredAndSortedHistory.reduce((acc, item) => {
-        const qty = typeof item.quantityChange === 'number' && !isNaN(item.quantityChange) ? item.quantityChange : 0;
-        if (item.type?.includes('ENTRADA')) {
-            acc.totalEntradas += qty;
-        } else if (item.type?.includes('SAIDA')) {
-            acc.totalSaidas += qty;
-        } else if (item.type?.includes('TRANSFERENCIA_SAIDA')) { // Only count one side of transfer
-            acc.totalTransferencias += qty;
+        const qty = typeof item.quantityChange === 'number' && !isNaN(item.quantityChange) ? Math.abs(item.quantityChange) : 0;
+        const isTransfer = item.type?.includes('TRANSFERENCIA');
+        const isAdjustment = item.type?.includes('CORRECAO') || item.type?.includes('Divergência');
+
+        if (kioskFilter !== 'all') {
+            const isToThisKiosk = item.toKioskId === kioskFilter;
+            const isFromThisKiosk = item.fromKioskId === kioskFilter;
+
+            if (isAdjustment && (isToThisKiosk || isFromThisKiosk)) {
+                acc.totalAjustes += (item.quantityChange || 0);
+            } else if (isTransfer) {
+                if (isToThisKiosk) acc.totalEntradas += qty;
+                else if (isFromThisKiosk) acc.totalSaidas += qty;
+                if (isToThisKiosk || isFromThisKiosk) acc.totalTransferencias += qty;
+            } else if (item.type === 'ENTRADA') {
+                if (isToThisKiosk) acc.totalEntradas += qty;
+            } else if (item.type?.startsWith('SAIDA_') || item.type === 'ENTRADA_ESTORNO') {
+                if (isFromThisKiosk) acc.totalSaidas += qty;
+            }
+        } else {
+            // Global view logic
+            if (isAdjustment) {
+                acc.totalAjustes += (item.quantityChange || 0);
+            } else if (isTransfer) {
+                acc.totalTransferencias += qty;
+                // We don't add transfers to global entry/exit totals to avoid duplication
+            } else if (item.type === 'ENTRADA' || item.type === 'SAIDA_ESTORNO') {
+                acc.totalEntradas += qty;
+            } else if (item.type?.startsWith('SAIDA_') || item.type === 'ENTRADA_ESTORNO') {
+                acc.totalSaidas += qty;
+            }
         }
         return acc;
-    }, { totalEntradas: 0, totalSaidas: 0, totalTransferencias: 0 });
-  }, [filteredAndSortedHistory]);
+    }, { totalEntradas: 0, totalSaidas: 0, totalTransferencias: 0, totalAjustes: 0 });
+  }, [filteredAndSortedHistory, kioskFilter]);
 
 
   return (
@@ -257,11 +339,26 @@ export function MovementHistoryModal({ open, onOpenChange }: MovementHistoryModa
                                   </TableCell>
                                   <TableCell>{item.lotNumber}</TableCell>
                                   <TableCell>
-                                      {item.type && MOVEMENT_TYPE_CONFIG[item.type] ? (
-                                          <Badge className={cn("text-xs", MOVEMENT_TYPE_CONFIG[item.type].color)}>
-                                              {MOVEMENT_TYPE_CONFIG[item.type].label}
-                                          </Badge>
-                                      ) : (
+                                      {item.type && MOVEMENT_TYPE_CONFIG[item.type] ? (() => {
+                                          let label = MOVEMENT_TYPE_CONFIG[item.type].label;
+                                          let color = MOVEMENT_TYPE_CONFIG[item.type].color;
+
+                                          if (item.type.includes('TRANSFERENCIA') && kioskFilter !== 'all') {
+                                              if (item.toKioskId === kioskFilter) {
+                                                  label = 'Transferência (Entrada)';
+                                                  color = 'bg-blue-100 text-blue-800';
+                                              } else if (item.fromKioskId === kioskFilter) {
+                                                  label = 'Transferência (Saída)';
+                                                  color = 'bg-blue-100 text-blue-800';
+                                              }
+                                          }
+
+                                          return (
+                                              <Badge className={cn("text-xs", color)}>
+                                                  {label}
+                                              </Badge>
+                                          );
+                                      })() : (
                                           <Badge variant="secondary">{item.type || 'N/A'}</Badge>
                                       )}
                                   </TableCell>

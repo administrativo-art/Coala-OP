@@ -14,19 +14,44 @@ const db = getFirestore('coala');
 const auth = getAuth();
 
 // --- Rotina Diária de Sincronização (PDV Legal -> Coala) ---
-export const dailyPdvSync = onSchedule({
+// --- Rotina Horária de Sincronização (PDV Legal -> Coala) ---
+// Mantém as metas atualizadas durante o dia de funcionamento
+export const hourlyPdvSync = onSchedule({
+  schedule: "0 8-23 * * *", // Cada hora das 08:00 às 23:00
+  timeZone: "America/Sao_Paulo",
+  retryCount: 2
+}, async () => {
+  console.log("Iniciando sincronização horária (hoje)...");
+  try {
+    const now = new Date();
+    now.setHours(now.getHours() - 3); // BRT
+    const dateStr = now.toISOString().split('T')[0];
+    const kiosksSnap = await db.collection('kiosks').get();
+    
+    for (const doc of kiosksSnap.docs) {
+      const kiosk = doc.data();
+      if (!kiosk.pdvFilialId) continue;
+      
+      console.log(`Sincronizando hoje (${dateStr}) para ${kiosk.name}...`);
+      await syncDayAdmin(dateStr, doc.id, kiosk.pdvFilialId, db);
+    }
+  } catch (e) {
+    console.error("Erro na rotina horária:", e);
+  }
+});
+
+// --- Rotina Diária de Sincronização Profunda (Fins de Conferência) ---
+export const dailyDeepSync = onSchedule({
   schedule: "0 2 * * *", // Todo dia às 02:00 da manhã
   timeZone: "America/Sao_Paulo",
   retryCount: 3
 }, async (event: any) => {
-  console.log("Iniciando sincronização diária de vendas (PDV Legal)...");
+  console.log("Iniciando sincronização diária profunda (últimos 7 dias)...");
 
   try {
-    // Ajuste de fuso: às 02:00 BRT queremos garantir que pegamos o dia certo
     const now = new Date();
     now.setHours(now.getHours() - 3);
 
-    // Verificar os últimos 7 dias e reprocessar qualquer dia que esteja faltando
     const LOOKBACK_DAYS = 7;
     const daysToCheck: string[] = [];
     for (let i = 1; i <= LOOKBACK_DAYS; i++) {
@@ -35,43 +60,36 @@ export const dailyPdvSync = onSchedule({
       daysToCheck.push(d.toISOString().split('T')[0]);
     }
 
-    // 2. Buscar todos os quiosques cadastrados no banco de dados
     const kiosksSnap = await db.collection('kiosks').get();
+    if (kiosksSnap.empty) return;
 
-    if (kiosksSnap.empty) {
-      console.log("Nenhum quiosque encontrado no sistema.");
-      return;
-    }
-
-    let successCount = 0;
-
-    // 3. Para cada quiosque, verificar quais dias estão faltando e sincronizá-los
     for (const doc of kiosksSnap.docs) {
       const kiosk = doc.data();
-      if (!kiosk.pdvFilialId) {
-        console.log(`Quiosque ${kiosk.name} ignorado (sem pdvFilialId).`);
-        continue;
-      }
+      if (!kiosk.pdvFilialId) continue;
 
       for (const dateStr of daysToCheck) {
-        const reportId = `sales_sync_${doc.id}_${dateStr.replace(/-/g, '_')}`;
-        const existing = await db.collection('salesReports').doc(reportId).get();
-        if (existing.exists) continue; // Dia já sincronizado
+        // No Deep Sync, só rodamos se o relatório NÃO existir ou se for 'ontem' (i=1)
+        // para garantir que pegamos vendas de fechamento.
+        const d = new Date(now);
+        d.setDate(d.getDate() - 1);
+        const yesterdayStr = d.toISOString().split('T')[0];
 
-        console.log(`⚠️ Dia faltando: ${kiosk.name} (${dateStr}). Reprocessando...`);
+        if (dateStr !== yesterdayStr) {
+          const reportId = `sales_sync_${doc.id}_${dateStr.replace(/-/g, '_')}`;
+          const existing = await db.collection('salesReports').doc(reportId).get();
+          if (existing.exists) continue;
+        }
+
+        console.log(`Reprocessando dia: ${kiosk.name} (${dateStr})`);
         try {
           await syncDayAdmin(dateStr, doc.id, kiosk.pdvFilialId, db);
-          successCount++;
-          console.log(`✅ ${kiosk.name} (${dateStr}) sincronizado com sucesso.`);
         } catch (err) {
-          console.error(`❌ Erro ao sincronizar ${kiosk.name} (${dateStr}):`, err);
+          console.error(`Erro em ${kiosk.name} (${dateStr}):`, err);
         }
       }
     }
-
-    console.log(`Sincronização diária concluída. ${successCount} dias preenchidos.`);
   } catch (error) {
-    console.error("Erro fatal na rotina diária:", error);
+    console.error("Erro fatal na rotina diária profunda:", error);
   }
 });
 

@@ -1,8 +1,7 @@
-
 "use client";
 
 import React, { useMemo, useState, useEffect, useCallback } from "react"
-import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth, subMonths, startOfYear, isValid } from "date-fns"
+import { format, startOfMonth, addMonths, isWithinInterval, parseISO, endOfMonth, subMonths, startOfYear, isValid, subDays, isSameDay, startOfDay, endOfDay } from "date-fns"
 import { ptBR } from 'date-fns/locale'
 
 // Hooks
@@ -10,14 +9,21 @@ import { useMovementHistory } from "@/hooks/use-movement-history";
 import { useProducts } from "@/hooks/use-products";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useBaseProducts } from "@/hooks/use-base-products";
+import { useValidatedConsumptionData } from "@/hooks/use-validated-consumption-data";
 import { convertValue } from '@/lib/conversion';
+import { MovementHistoryModal } from "./movement-history-modal";
+import { ConsumptionDetailsModal } from "./consumption-details-modal";
+import { type BaseProduct, type MovementRecord, type ConsumptionReport } from "@/types";
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Skeleton } from "./ui/skeleton"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
+import { Input } from "./ui/input"
+import { MultiSelect } from "./ui/multi-select"
 import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, ChevronLeft, ChevronRight, Package, Wrench, ArrowLeftRight, Filter } from "lucide-react";
-import { LineChart, Line, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type Product } from "@/types";
@@ -27,7 +33,6 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
-import { MultiSelect } from "./ui/multi-select";
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
@@ -75,16 +80,16 @@ function TransferCard({ data }: { data: TransferCardModel }) {
           historicalColor = "text-destructive";
           break;
       case 'abaixo':
-           historicalText = `${Math.abs(data.historicalChangePct).toFixed(0)}% abaixo da média`;
-           historicalColor = "text-green-600";
-           break;
+          historicalText = `${Math.abs(data.historicalChangePct).toFixed(0)}% abaixo da média`;
+          historicalColor = "text-green-600";
+          break;
       case 'normal':
-           historicalText = "Dentro do padrão histórico";
-           historicalColor = "text-muted-foreground";
-           break;
+          historicalText = "Dentro do padrão histórico";
+          historicalColor = "text-muted-foreground";
+          break;
       default:
-           historicalText = "Histórico de transferências insuficiente";
-           historicalColor = "text-muted-foreground";
+          historicalText = "Histórico de transferências insuficiente";
+          historicalColor = "text-muted-foreground";
   }
   
   const formatDisplayQuantity = (baseQuantity: number): string => {
@@ -127,7 +132,7 @@ function TransferCard({ data }: { data: TransferCardModel }) {
          <div className="h-[60px] mt-4 -mx-4">
             <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data.series}>
-                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
+                    <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
                     <ReferenceLine y={data.histAvg} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeWidth={1} />
                     <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} />
                 </LineChart>
@@ -170,7 +175,7 @@ const formatNumber = (value: number) => {
     return value.toLocaleString('pt-BR', options);
 };
 
-function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; }) {
+function BalanceAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; systemStartDate?: string; }) {
   const { history, loading: historyLoading } = useMovementHistory();
   const { products, loading: productsLoading } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
@@ -188,17 +193,21 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
       const baseProduct = baseProductMap.get(selectedBaseId);
       if (!baseProduct) return null;
 
-      const startDate = startOfMonth(parseISO(`${startPeriod}-01`));
-      const endDate = endOfMonth(parseISO(`${endPeriod}-01`));
+      const startDate = startOfDay(parseISO(startPeriod));
+      const endDate = endOfDay(parseISO(endPeriod));
 
       const movements = history.filter(movement => {
         const product = productMap.get(movement.productId);
         if (!product || product.baseProductId !== selectedBaseId) return false;
         
         const movementDate = parseISO(movement.timestamp);
+        const cutoff = systemStartDate ? startOfDay(parseISO(systemStartDate)) : null;
+
         if (!isValid(movementDate) || !isWithinInterval(movementDate, { start: startDate, end: endDate })) {
             return false;
         }
+
+        if (cutoff && movementDate < cutoff) return false;
 
         if (kioskId !== 'all') {
             if (movement.fromKioskId !== kioskId && movement.toKioskId !== kioskId) {
@@ -221,11 +230,20 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
           let qtyInBase = 0;
           try {
             // A quantidade da movimentação é em pacotes. Precisamos converter para a unidade base.
-            const valueOfOnePackage = convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
-            qtyInBase = movement.quantityChange * valueOfOnePackage;
+            // Se a unidade for 'un' ou similar, e o insumo base for volume/massa, usamos o packageSize como fator.
+            const fromUnit = (product.unit || 'un').toLowerCase();
+            const toUnit = (baseProduct.unit || '').toLowerCase();
+            
+            if (fromUnit === 'un' || fromUnit === 'unidade' || fromUnit === 'bag' || fromUnit === 'pacote' || fromUnit === 'caixa') {
+                 // Fallback: se é uma unidade genérica, tratamos o packageSize como o valor absoluto na unidade base
+                 qtyInBase = movement.quantityChange * (product.packageSize || 1);
+            } else {
+                 const valueOfOnePackage = convertValue(product.packageSize || 1, product.unit, baseProduct.unit, product.category);
+                 qtyInBase = movement.quantityChange * valueOfOnePackage;
+            }
           } catch(e) {
-            console.error(`Could not convert units for product ${product.id}`, e);
-            return; // Pula esta movimentação se a conversão falhar
+            // Último recurso: usar apenas o packageSize se a conversão falhar por categoria
+            qtyInBase = movement.quantityChange * (product.packageSize || 1);
           }
 
           const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
@@ -262,7 +280,7 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
         unit: baseProduct.unit
       };
     }).filter((item): item is NonNullable<typeof item> => item !== null);
-  }, [selectedBaseIds, startPeriod, endPeriod, history, products, baseProducts, loading, productMap, baseProductMap, kioskId]);
+  }, [selectedBaseIds, startPeriod, endPeriod, history, products, baseProducts, loading, productMap, baseProductMap, kioskId, systemStartDate]);
   
   const productOptions = useMemo(() => 
     baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(p => ({ value: p.id, label: p.name })),
@@ -368,155 +386,374 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod }: { kioskId: str
   );
 }
 
-type YearMonth = { year: number, month: number }; // 1-based month
+function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; systemStartDate?: string; }) {
+  const { history, loading: historyLoading } = useMovementHistory();
+  const { products, loading: productsLoading } = useProducts();
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+  const { reports, isLoading: reportsLoading } = useValidatedConsumptionData();
+  const [selectedBaseIds, setSelectedBaseIds] = useState<string[]>([]);
 
-const compareYearMonth = (a: YearMonth, b: YearMonth) => {
-    if (a.year !== b.year) return a.year - b.year;
-    return a.month - b.month;
-};
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [consumptionModalOpen, setConsumptionModalOpen] = useState(false);
+  const [activeBaseProduct, setActiveBaseProduct] = useState<BaseProduct | null>(null);
+  const [modalFilters, setModalFilters] = useState<{
+    type?: string;
+    dateRange?: { from: Date; to: Date };
+    kioskId?: string;
+  }>({});
 
-const formatYearMonth = (ym: YearMonth) => {
-    return format(new Date(ym.year, ym.month - 1), 'MMM/yy', { locale: ptBR });
-}
+  const openHistory = (bpId: string, type?: string) => {
+    const bp = baseProductMap.get(bpId);
+    if (!bp) return;
+    setActiveBaseProduct(bp);
+    setModalFilters({
+      type,
+      kioskId: kioskId === 'all' ? undefined : kioskId,
+      dateRange: startPeriod && endPeriod ? { from: parseISO(startPeriod), to: parseISO(endPeriod) } : undefined
+    });
+    setHistoryModalOpen(true);
+  };
 
-function MonthPicker({
-    value,
-    onChange,
-    disabledMonths,
-}: {
-    value: YearMonth;
-    onChange: (newValue: YearMonth) => void;
-    disabledMonths?: (date: YearMonth) => boolean;
-}) {
-    const [viewYear, setViewYear] = useState(value.year);
-    const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const openConsumption = (bpId: string) => {
+    const bp = baseProductMap.get(bpId);
+    if (!bp) return;
+    setActiveBaseProduct(bp);
+    setConsumptionModalOpen(true);
+  };
 
-    return (
-        <div className="space-y-2">
-            <div className="flex items-center justify-between">
-                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setViewYear(y => y - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-                <span className="font-semibold">{viewYear}</span>
-                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setViewYear(y => y + 1)} disabled={viewYear >= new Date().getFullYear()}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-            <div className="grid grid-cols-3 gap-1">
-                {months.map(month => {
-                    const monthDate = { year: viewYear, month };
-                    const isDisabled = disabledMonths ? disabledMonths(monthDate) : false;
-                    const isSelected = value.year === viewYear && value.month === month;
-                    return (
-                        <Button
-                            key={month}
-                            variant={isSelected ? 'default' : 'ghost'}
-                            size="sm"
-                            className="h-8"
-                            disabled={isDisabled}
-                            onClick={() => onChange(monthDate)}
-                        >
-                            {format(new Date(viewYear, month - 1), 'MMM', { locale: ptBR })}
-                        </Button>
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
+  const loading = historyLoading || productsLoading || baseProductsLoading || reportsLoading;
 
-function PeriodRangePicker({
-    value,
-    onChange,
-    availablePeriods
-}: {
-    value: { from: YearMonth, to: YearMonth };
-    onChange: (newValue: { from: YearMonth, to: YearMonth }) => void;
-    availablePeriods: YearMonth[];
-}) {
-    const [open, setOpen] = useState(false);
-    const [activePicker, setActivePicker] = useState<'from' | 'to'>('from');
+  const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const baseProductMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
 
-    const handleMonthSelect = (ym: YearMonth) => {
-        let newPeriod = { ...value };
-        if (activePicker === 'from') {
-            newPeriod.from = ym;
-            if (compareYearMonth(ym, newPeriod.to) > 0) {
-                newPeriod.to = ym; // Auto-swap
+  const comparisonData = useMemo(() => {
+    if (!startPeriod || !endPeriod || loading) return [];
+
+    const baseList = selectedBaseIds.length > 0 
+      ? baseProducts.filter(bp => selectedBaseIds.includes(bp.id))
+      : baseProducts;
+
+    const startDate = startOfDay(parseISO(startPeriod));
+    const endDate = endOfDay(parseISO(endPeriod));
+
+    return baseList.map(baseProduct => {
+      // 1. Calcular Estoque Inicial (Saldo Anterior acumulado de todo o histórico)
+      let estoqueInicial = 0;
+      history.forEach(movement => {
+        const product = productMap.get(movement.productId);
+        if (!product || product.baseProductId !== baseProduct.id) return;
+        
+        const movementDate = parseISO(movement.timestamp);
+        const cutoffDate = systemStartDate ? startOfDay(parseISO(systemStartDate)) : null;
+        if (!isValid(movementDate) || movementDate >= startDate || (cutoffDate && movementDate < cutoffDate)) return;
+
+        if (kioskId !== 'all') {
+            if (movement.fromKioskId !== kioskId && movement.toKioskId !== kioskId) {
+                return;
             }
-            setActivePicker('to'); // Move to next picker
+        }
+
+        let qtyInBase = 0;
+        try {
+          const fromUnit = (product.unit || 'un').toLowerCase();
+          if (fromUnit === 'un' || fromUnit === 'unidade' || fromUnit === 'bag' || fromUnit === 'pacote' || fromUnit === 'caixa') {
+              qtyInBase = (movement.quantityChange || 0) * (product.packageSize || 1);
+          } else {
+              const valueOfOnePackage = convertValue(product.packageSize || 0, product.unit, baseProduct.unit, product.category);
+              qtyInBase = (movement.quantityChange || 0) * valueOfOnePackage;
+          }
+        } catch(e) {
+          qtyInBase = (movement.quantityChange || 0) * (product.packageSize || 1);
+        }
+
+        const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
+        const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
+        
+        if (kioskId === 'all' && movement.type.includes('TRANSFERENCIA')) return;
+
+        if (movement.type.startsWith('ENTRADA') || movement.type === 'TRANSFERENCIA_ENTRADA') {
+            if (isToKiosk) estoqueInicial += qtyInBase;
+        } else if (movement.type.startsWith('SAIDA') || movement.type === 'TRANSFERENCIA_SAIDA' || movement.type.includes('Divergência')) {
+            if (isFromKiosk) estoqueInicial -= qtyInBase;
+        }
+      });
+
+      // 2. Calcular Vendas Teóricas (API)
+      let theoreticalConsumption = 0;
+      reports.forEach(report => {
+        // Lógica de Data similar ao dashboard de vendas
+        let dateMatch = false;
+        const reportYear = report.year;
+        const reportMonth = report.month;
+        
+        // Se o relatório tiver o campo 'day' (nem todos têm), usamos precisão diária
+        // Caso contrário, usamos o mês inteiro
+        if ((report as any).day) {
+            const reportDate = new Date(reportYear, reportMonth - 1, (report as any).day);
+            dateMatch = isWithinInterval(reportDate, { start: startDate, end: endDate }) || 
+                        isSameDay(reportDate, startDate) || 
+                        isSameDay(reportDate, endDate);
         } else {
-            newPeriod.to = ym;
-            if (compareYearMonth(newPeriod.from, ym) > 0) {
-                newPeriod.from = ym; // Auto-swap
+            const reportMonthStart = new Date(reportYear, reportMonth - 1, 1);
+            const reportMonthEnd = endOfMonth(reportMonthStart);
+            // Verifica se há sobreposição entre o mês do relatório e o filtro do usuário
+            dateMatch = (reportMonthStart <= endDate && reportMonthEnd >= startDate);
+        }
+
+        if (dateMatch) {
+            if (kioskId === 'all' || report.kioskId === kioskId) {
+                report.results.forEach(item => {
+                    if (item.baseProductId === baseProduct.id) {
+                        theoreticalConsumption += item.consumedQuantity;
+                    }
+                });
             }
-            setOpen(false); // Close on second selection
         }
-        onChange(newPeriod);
-    };
-    
-    const handlePreset = (preset: '3m' | '6m' | '12m' | 'ytd') => {
-        const today = new Date();
-        const lastFullMonth = subMonths(today, 1);
-        let fromDate: Date;
+      });
 
-        switch(preset) {
-            case '3m': fromDate = subMonths(lastFullMonth, 2); break;
-            case '6m': fromDate = subMonths(lastFullMonth, 5); break;
-            case '12m': fromDate = subMonths(lastFullMonth, 11); break;
-            case 'ytd': fromDate = startOfYear(today); break;
+      // 3. Calcular Movimentações Reais no Período
+      const movementsInPeriod = history.filter(movement => {
+        const product = productMap.get(movement.productId);
+        if (!product || product.baseProductId !== baseProduct.id) return false;
+        
+        const movementDate = parseISO(movement.timestamp);
+        const cutoff = systemStartDate ? startOfDay(parseISO(systemStartDate)) : null;
+
+        if (!isValid(movementDate) || !isWithinInterval(movementDate, { start: startDate, end: endDate })) {
+            return false;
         }
 
-        const newPeriod = {
-            from: { year: fromDate.getFullYear(), month: fromDate.getMonth() + 1 },
-            to: { year: lastFullMonth.getFullYear(), month: lastFullMonth.getMonth() + 1 }
-        };
-        onChange(newPeriod);
-        setOpen(false);
-    }
-    
-    const disabledMonthCheck = (date: YearMonth) => {
-        const today = new Date();
-        const currentYm = { year: today.getFullYear(), month: today.getMonth() + 1 };
-        return compareYearMonth(date, currentYm) >= 0;
-    }
+        if (cutoff && movementDate < cutoff) return false;
 
+        if (kioskId !== 'all') {
+            if (movement.fromKioskId !== kioskId && movement.toKioskId !== kioskId) {
+                return false;
+            }
+        }
+        return true;
+      });
 
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button variant="outline" className="h-10 w-full md:w-[250px] justify-start text-left font-normal gap-2">
-                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                    <span>{formatYearMonth(value.from)}</span>
-                    <span className="text-muted-foreground">-</span>
-                    <span>{formatYearMonth(value.to)}</span>
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 flex" align="start">
-                 <div className="p-2 border-r">
-                    <div className="flex flex-col gap-1">
-                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('3m')}>Últimos 3 meses</Button>
-                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('6m')}>Últimos 6 meses</Button>
-                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('12m')}>Últimos 12 meses</Button>
-                        <Button variant="ghost" className="justify-start" onClick={() => handlePreset('ytd')}>Este ano</Button>
-                    </div>
-                </div>
-                <div className="p-3 grid grid-cols-2 gap-3">
-                    <div>
-                        <div className="text-center text-sm font-semibold mb-2 py-1.5 border-b-2" style={{ borderColor: activePicker === 'from' ? 'hsl(var(--primary))' : 'transparent' }}>De</div>
-                        <MonthPicker value={value.from} onChange={handleMonthSelect} disabledMonths={disabledMonthCheck} />
-                    </div>
-                     <div>
-                        <div className="text-center text-sm font-semibold mb-2 py-1.5 border-b-2" style={{ borderColor: activePicker === 'to' ? 'hsl(var(--primary))' : 'transparent' }}>Até</div>
-                        <MonthPicker value={value.to} onChange={handleMonthSelect} disabledMonths={disabledMonthCheck} />
-                    </div>
-                </div>
-            </PopoverContent>
-        </Popover>
-    );
+      const totals = {
+          entradas: 0,
+          saidas: 0,
+          ajustes: 0, 
+      };
+
+      movementsInPeriod.forEach(movement => {
+          const product = productMap.get(movement.productId);
+          if (!product || product.baseProductId !== baseProduct.id) return;
+
+          let qtyInBase = 0;
+          try {
+            const fromUnit = (product.unit || 'un').toLowerCase();
+            if (fromUnit === 'un' || fromUnit === 'unidade' || fromUnit === 'bag' || fromUnit === 'pacote' || fromUnit === 'caixa') {
+                qtyInBase = movement.quantityChange * (product.packageSize || 1);
+            } else {
+                const valueOfOnePackage = convertValue(product.packageSize || 1, product.unit, baseProduct.unit, product.category);
+                qtyInBase = movement.quantityChange * valueOfOnePackage;
+            }
+          } catch(e) {
+            qtyInBase = movement.quantityChange * (product.packageSize || 1);
+          }
+
+          const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
+          const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
+          
+          if (kioskId === 'all' && movement.type.includes('TRANSFERENCIA')) {
+              return;
+          }
+
+          const type = movement.type;
+          
+          // Entradas: Compras e Transferências de Entrada
+          const isSupply = type === 'ENTRADA' || type === 'TRANSFERENCIA_ENTRADA';
+          
+          // Saídas: Consumo, Perdas, Descartes, Transferências de Saída, Estornos de Entrada
+          const isRealExit = type.startsWith('SAIDA_CONSUMO') || 
+                            type.startsWith('SAIDA_DESCARTE') || 
+                            type === 'TRANSFERENCIA_SAIDA' || 
+                            type === 'ENTRADA_ESTORNO';
+
+          // Ajustes: Correções de Inventário e Divergências de Contagem
+          const isAdjustment = type.includes('CORRECAO') || type.includes('Divergência');
+
+          if (isAdjustment) {
+              if (isToKiosk || isFromKiosk) totals.ajustes += qtyInBase;
+          } else if (isSupply) {
+              if (isToKiosk) totals.entradas += qtyInBase;
+          } else if (isRealExit) {
+              // We use Math.abs here for easier dashboard display of "Saidas" if needed, 
+              // but for balance math we just sum signed qty.
+              if (isFromKiosk) totals.saidas += Math.abs(qtyInBase);
+          }
+      });
+
+      const divergence = theoreticalConsumption - totals.saidas;
+      const estoqueFinal = (isNaN(estoqueInicial) ? 0 : estoqueInicial) + totals.entradas - totals.saidas;
+
+      return {
+        baseProductId: baseProduct.id,
+        baseProductName: baseProduct.name,
+        unit: baseProduct.unit,
+        estoqueInicial,
+        entradas: totals.entradas,
+        saidasReais: totals.saidas,
+        ajustes: totals.ajustes,
+        vendasTeoricas: theoreticalConsumption,
+        divergence: divergence,
+        estoqueFinal
+      };
+    }).filter(d => d.entradas > 0 || d.saidasReais > 0 || d.vendasTeoricas > 0 || Math.abs(d.estoqueInicial) > 0)
+      .sort((a, b) => Math.abs(b.divergence) - Math.abs(a.divergence));
+  }, [selectedBaseIds, startPeriod, endPeriod, history, products, baseProducts, reports, loading, productMap, kioskId, systemStartDate]);
+
+  const productOptions = useMemo(() => 
+    baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(p => ({ value: p.id, label: p.name })),
+  [baseProducts]);
+
+  if (loading) return <Skeleton className="h-64 w-full" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-4">
+        <span className="text-sm font-medium">Filtrar por insumo(s):</span>
+        <MultiSelect
+            options={productOptions}
+            selected={selectedBaseIds}
+            onChange={setSelectedBaseIds}
+            placeholder="Todos os insumos..."
+            className="w-full md:w-2/3"
+        />
+      </div>
+
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead>Insumo Base</TableHead>
+              <TableHead className="text-right">Estoque Inicial</TableHead>
+              <TableHead className="text-right">Entradas</TableHead>
+              <TableHead className="text-right">Saídas (Sistema)</TableHead>
+              <TableHead className="text-right">Vendas (API)</TableHead>
+              <TableHead className="text-right">Divergência</TableHead>
+              <TableHead className="text-right">Estoque Final</TableHead>
+              <TableHead className="text-center">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {comparisonData.length === 0 ? (
+                <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        Nenhum dado encontrado para o período/unidade selecionado.
+                    </TableCell>
+                </TableRow>
+            ) : (
+                comparisonData.map(row => (
+                    <TableRow key={row.baseProductId}>
+                        <TableCell className="font-medium">{row.baseProductName}</TableCell>
+                        <TableCell className="text-right text-muted-foreground whitespace-nowrap">
+                            {isNaN(row.estoqueInicial) ? (
+                                <span className="text-[10px] text-orange-400 italic">Sem histórico</span>
+                            ) : row.estoqueInicial === 0 ? (
+                                <span className="text-[10px] text-muted-foreground italic">Sem dados anteriores</span>
+                            ) : (
+                                <button 
+                                    onClick={() => openHistory(row.baseProductId)}
+                                    className={cn("hover:underline text-right w-full", row.estoqueInicial < 0 && "text-red-500 font-semibold")}
+                                >
+                                    {formatNumber(row.estoqueInicial)}
+                                </button>
+                            )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                            <button 
+                                onClick={() => openHistory(row.baseProductId, 'ENTRADA')}
+                                className="text-green-600 hover:underline w-full text-right"
+                            >
+                                +{formatNumber(row.entradas)}
+                            </button>
+                        </TableCell>
+                        <TableCell className="text-right">
+                             <button 
+                                onClick={() => openHistory(row.baseProductId, 'SAIDA')}
+                                className="text-red-600 hover:underline w-full text-right"
+                            >
+                                -{formatNumber(row.saidasReais)}
+                            </button>
+                        </TableCell>
+                        <TableCell className="text-right">
+                            <button 
+                                onClick={() => openConsumption(row.baseProductId)}
+                                className="text-blue-600 hover:underline font-medium w-full text-right"
+                            >
+                                {formatNumber(row.vendasTeoricas)}
+                            </button>
+                        </TableCell>
+                        <TableCell className={cn(
+                            "text-right font-bold",
+                            row.divergence < 0 ? "text-destructive" : row.divergence > 0 ? "text-green-600" : ""
+                        )}>
+                            {row.divergence > 0 ? '+' : ''}{formatNumber(row.divergence)}
+                        </TableCell>
+                        <TableCell className="text-right font-bold border-l">
+                             <button 
+                                onClick={() => openHistory(row.baseProductId)}
+                                className="hover:underline w-full text-right"
+                            >
+                                {formatNumber(row.estoqueFinal)} {row.unit}
+                            </button>
+                        </TableCell>
+                        <TableCell className="text-center">
+                            {row.divergence === 0 ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    Ok
+                                </span>
+                            ) : (
+                                <span className={cn(
+                                    "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border",
+                                    row.divergence < 0 ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"
+                                )}>
+                                    {row.divergence > 0 ? 'Sobra' : 'Falta'}
+                                </span>
+                            )}
+                        </TableCell>
+                    </TableRow>
+                ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <MovementHistoryModal 
+        open={historyModalOpen} 
+        onOpenChange={setHistoryModalOpen}
+        initialBaseProductId={activeBaseProduct?.id}
+        initialType={modalFilters.type}
+        initialKioskId={modalFilters.kioskId}
+        initialDateRange={modalFilters.dateRange}
+      />
+
+      <ConsumptionDetailsModal
+        open={consumptionModalOpen}
+        onOpenChange={setConsumptionModalOpen}
+        baseProduct={activeBaseProduct}
+        reports={reports}
+      />
+    </div>
+  );
 }
+
 
 export function MovementAnalysis() {
-    const [period, setPeriod] = useState<{ from: YearMonth, to: YearMonth } | null>(null);
+    const [dateRange, setDateRange] = useState<{ start: string, end: string }>({
+        start: '2026-03-01',
+        end: format(new Date(), 'yyyy-MM-dd')
+    });
+    const [activePreset, setActivePreset] = useState<string>('custom');
+    const systemStartDate = '2026-03-01';
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [kioskId, setKioskId] = useState<string>('all');
-    const [view, setView] = useState<'cards' | 'saldo'>('cards');
+    const [view, setView] = useState<'cards' | 'saldo' | 'comparison'>('comparison');
     
     const { history, loading: historyLoading } = useMovementHistory();
     const { products, loading: productsLoading } = useProducts();
@@ -526,37 +763,43 @@ export function MovementAnalysis() {
     const loading = historyLoading || productsLoading || baseProductsLoading || kiosksLoading;
     const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
 
-    const availablePeriods = useMemo(() => {
-        if (loading) return [];
-        const periods = new Set<string>();
-        history.forEach(record => {
-            if (record.timestamp) {
-                periods.add(format(parseISO(record.timestamp), 'yyyy-MM'));
-            }
-        });
-        return Array.from(periods)
-            .map(p => {
-                const [year, month] = p.split('-').map(Number);
-                return { year, month };
-            })
-            .sort((a,b) => (b.year - a.year) || (b.month - a.month));
-    }, [history, loading]);
+    const applyPreset = (preset: string) => {
+        const today = new Date();
+        let start = today;
+        let end = today;
 
-     useEffect(() => {
-        if (!loading && availablePeriods.length > 0 && !period) {
-            const to = availablePeriods[0];
-            const from = availablePeriods[Math.min(2, availablePeriods.length - 1)];
-            setPeriod({ from, to });
+        switch (preset) {
+            case 'today':
+                start = end = today;
+                break;
+            case 'yesterday':
+                start = end = subDays(today, 1);
+                break;
+            case '7d':
+                start = subDays(today, 7);
+                break;
+            case '30d':
+                start = subDays(today, 30);
+                break;
+            case 'thisMonth':
+                start = startOfMonth(today);
+                break;
+            case 'lastMonth':
+                const lastMonth = subMonths(today, 1);
+                start = startOfMonth(lastMonth);
+                end = endOfMonth(lastMonth);
+                break;
         }
-    }, [availablePeriods, loading, period]);
 
-    const { startPeriod, endPeriod } = useMemo(() => {
-        if (!period) return { startPeriod: null, endPeriod: null };
-        return {
-            startPeriod: `${period.from.year}-${String(period.from.month).padStart(2, '0')}`,
-            endPeriod: `${period.to.year}-${String(period.to.month).padStart(2, '0')}`
-        };
-    }, [period]);
+        setDateRange({
+            start: format(start, 'yyyy-MM-dd'),
+            end: format(end, 'yyyy-MM-dd')
+        });
+        setActivePreset(preset);
+    };
+
+    const startPeriod = dateRange.start;
+    const endPeriod = dateRange.end;
 
     const productOptions = useMemo(() => 
         baseProducts.map(p => ({ value: p.id, label: p.name })),
@@ -567,7 +810,7 @@ export function MovementAnalysis() {
 
         const transferMovements = history.filter(h => h.type === 'TRANSFERENCIA_ENTRADA' && (kioskId === 'all' || h.toKioskId === kioskId));
         
-        const monthlyTransfers = new Map<string, Map<string, number>>(); // Map<baseProductId, Map<monthStr, quantity>>
+        const monthlyTransfers = new Map<string, Map<string, number>>();
         const historicalTotals = new Map<string, number>();
         const monthsWithTransfers = new Map<string, Set<string>>();
 
@@ -610,18 +853,15 @@ export function MovementAnalysis() {
 
         const baseList = selectedBaseProducts.length > 0 ? baseProducts.filter(bp => selectedBaseProducts.includes(bp.id)) : baseProducts;
 
-        const [startYear, startMonth] = startPeriod.split('-').map(Number);
-        const [endYear, endMonth] = endPeriod.split('-').map(Number);
-        
-        const start = startOfMonth(new Date(startYear, startMonth - 1, 1));
-        const end = endOfMonth(new Date(endYear, endMonth - 1, 1));
+        const start = startOfDay(parseISO(startPeriod));
+        const end = endOfDay(parseISO(endPeriod));
         
         return baseList.map(bp => {
             const histAvg = historicalAverages.get(bp.id) || 0;
             const transfersInPeriod = Array.from((monthlyTransfers.get(bp.id) || new Map<string, number>()).entries())
                 .filter(([monthStr,]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
-                    return isWithinInterval(monthDate, {start, end});
+                    return isWithinInterval(monthDate, {start, end}) || isSameDay(monthDate, start) || isSameDay(monthDate, end);
                 })
                 .map(([label, value]): {label: string, value: number} => ({ label: format(parseISO(`${label}-01`), 'MMM/yy'), value }));
             
@@ -651,7 +891,7 @@ export function MovementAnalysis() {
             const deviation = stdDev(allMonthlyValues);
             let volatility: TransferCardModel['volatility'] = 'N/A';
             if (histAvg > 0) {
-                const cv = deviation / histAvg; // Coefficient of Variation
+                const cv = deviation / histAvg;
                 if (cv > 0.5) volatility = 'Alta';
                 else if (cv > 0.2) volatility = 'Média';
                 else volatility = 'Baixa';
@@ -666,10 +906,10 @@ export function MovementAnalysis() {
                 volatility,
                 representativeProduct,
             };
-        }).filter(d => d.periodAvg > 0 || d.histAvg > 0) // Only show cards with some data
+        }).filter(d => d.periodAvg > 0 || d.histAvg > 0)
           .sort((a,b) => (b.periodAvg * Math.abs(b.periodChangePct)) - (a.periodAvg * Math.abs(a.periodChangePct)));
 
-    }, [loading, startPeriod, endPeriod, kioskId, selectedBaseProducts, history, products, baseProducts, productMap]);
+    }, [loading, startPeriod, endPeriod, kioskId, selectedBaseProducts, history, products, baseProducts, productMap, systemStartDate]);
 
 
     if (loading) {
@@ -694,21 +934,38 @@ export function MovementAnalysis() {
                                   </SelectContent>
                               </Select>
                           </div>
-                          <div className="flex flex-col gap-1.5">
+                          <div className="flex flex-col gap-1.5 min-w-[300px]">
                               <Label>Período</Label>
-                              {period && (
-                              <PeriodRangePicker
-                                  value={period}
-                                  onChange={setPeriod}
-                                  availablePeriods={availablePeriods.map(p => ({ year: p.year, month: p.month }))}
-                              />
-                              )}
+                              <div className="flex flex-wrap items-center gap-2">
+                                  <ToggleGroup type="single" value={activePreset} onValueChange={v => v && applyPreset(v)} className="bg-muted p-1 rounded-lg border h-10">
+                                      <ToggleGroupItem value="today" className="px-3 text-xs">Hoje</ToggleGroupItem>
+                                      <ToggleGroupItem value="yesterday" className="px-3 text-xs">Ontem</ToggleGroupItem>
+                                      <ToggleGroupItem value="7d" className="px-3 text-xs">7D</ToggleGroupItem>
+                                      <ToggleGroupItem value="30d" className="px-3 text-xs">30D</ToggleGroupItem>
+                                      <ToggleGroupItem value="thisMonth" className="px-3 text-xs">Mês</ToggleGroupItem>
+                                      <ToggleGroupItem value="custom" className="px-3 text-xs">Personalizado</ToggleGroupItem>
+                                  </ToggleGroup>
+                                  {activePreset === 'custom' && (
+                                      <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 transition-all">
+                                          <Input type="date" value={dateRange.start} onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))} className="h-10 text-sm w-36" />
+                                          <span className="text-muted-foreground text-xs font-bold">ATÉ</span>
+                                          <Input type="date" value={dateRange.end} onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))} className="h-10 text-sm w-36" />
+                                      </div>
+                                  )}
+                              </div>
                           </div>
+                           <div className="flex flex-col gap-1.5 border-l pl-4 justify-center">
+                               <div className="bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-md">
+                                   <p className="text-[10px] text-orange-600 font-bold uppercase tracking-wider">Marco Zero da Auditoria</p>
+                                   <p className="text-sm font-bold text-orange-700">01/03/2026</p>
+                               </div>
+                           </div>
                       </div>
                       <div className="flex-shrink-0">
                           <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
-                              <ToggleGroupItem value="cards">Análise por Insumo</ToggleGroupItem>
-                              <ToggleGroupItem value="saldo">Saldo</ToggleGroupItem>
+                              <ToggleGroupItem value="comparison" className="text-xs">Vendas vs Estoque</ToggleGroupItem>
+                              <ToggleGroupItem value="saldo" className="text-xs">Saldo Movimentado</ToggleGroupItem>
+                              <ToggleGroupItem value="cards" className="text-xs">Análise de Tendência</ToggleGroupItem>
                           </ToggleGroup>
                       </div>
                   </div>
@@ -744,14 +1001,15 @@ export function MovementAnalysis() {
                 )}
                  {view === 'saldo' && (
                     <div className="mt-6">
-                        <BalanceAnalysisView kioskId={kioskId} startPeriod={startPeriod} endPeriod={endPeriod} />
+                        <BalanceAnalysisView kioskId={kioskId} startPeriod={startPeriod} endPeriod={endPeriod} systemStartDate={systemStartDate} />
+                    </div>
+                 )}
+                 {view === 'comparison' && (
+                    <div className="mt-6">
+                        <ComparisonAnalysisView kioskId={kioskId} startPeriod={startPeriod} endPeriod={endPeriod} systemStartDate={systemStartDate} />
                     </div>
                  )}
             </CardContent>
         </Card>
     );
 }
-
-    
-
-    

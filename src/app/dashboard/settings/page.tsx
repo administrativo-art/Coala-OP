@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { PermissionGuard } from "@/components/permission-guard";
+import { PdvSyncManagement } from '@/components/pdv-sync-management';
 
 export default function SettingsPage() {
     const { permissions } = useAuth();
@@ -29,7 +30,10 @@ export default function SettingsPage() {
                     </div>
                 </div>
                 
-                <UserManagement />
+                <div className="grid grid-cols-1 gap-6">
+                    <PdvSyncManagement />
+                    <UserManagement />
+                </div>
             </div>
         </PermissionGuard>
     )

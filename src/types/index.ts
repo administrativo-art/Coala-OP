@@ -12,6 +12,7 @@ export type AbsenceReason = (typeof absenceReasons)[number];
 export type Kiosk = {
   id: string;
   name: string;
+  pdvFilialId?: string;
 };
 
 export type Location = {
