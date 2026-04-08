@@ -54,7 +54,7 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
     { label: "Tarefas",      href: "/dashboard/tasks",            icon: ListTodo,        show: permissions.tasks.view, count: legacyTasks.length },
     { label: "Metas",        href: "/dashboard/goals",            icon: Target,          show: permissions.goals?.view },
     { label: "Gestão de Estoque", href: "/dashboard/stock",       icon: Package,         show: permissions.stock.view },
-    { label: "Custo e Preço",href: "/dashboard/pricing",          icon: DollarSign,      show: permissions.pricing.view },
+    { label: "Gestão de Preços",href: "/dashboard/pricing",        icon: DollarSign,      show: permissions.pricing.view },
     { label: "Cadastros",    href: "/dashboard/registration",     icon: ListChecks,      show: permissions.registration.view },
     { label: "Configurações",href: "/dashboard/settings",         icon: Settings,        show: permissions.settings.view },
     { label: "Ajuda",        href: "/dashboard/help",             icon: HelpCircle,      show: permissions.help.view },

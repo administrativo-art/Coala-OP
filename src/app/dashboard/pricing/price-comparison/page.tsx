@@ -36,13 +36,13 @@ export default function PriceComparisonPage() {
                 onClick={() => router.push('/dashboard/pricing')}
                 variant="ghost"
                 className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                aria-label="Voltar para custo e preço"
+                aria-label="Voltar para gestão de preços e margens"
             >
                 <ArrowLeft className="w-6 h-6" />
             </Button>
             <div>
                 <h1 className="text-3xl font-bold">Estudo de preço</h1>
-                <p className="text-sm text-muted-foreground">Voltar para custo e preço</p>
+                <p className="text-sm text-muted-foreground">Voltar para gestão de preços e margens</p>
             </div>
             </div>
         <Card>

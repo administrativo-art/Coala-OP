@@ -44,7 +44,7 @@ interface PricingParametersModalProps {
 }
 
 export function PricingParametersModal({ open, onOpenChange }: PricingParametersModalProps) {
-  const { pricingParameters, updatePricingParameters } = useCompanySettings();
+  const { pricingParameters, updatePricingParameters, loading: settingsLoading } = useCompanySettings();
   
   const form = useForm<ParametersFormValues>({
     resolver: zodResolver(parametersSchema),
@@ -58,9 +58,11 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
 
   const { fields: profitRangeFields, append: appendProfitRange, remove: removeProfitRange } = useFieldArray({ control: form.control, name: 'profitRanges' });
 
-  // Reset form only when the modal is opened
+  // Reset form when the modal opens AND settings have finished loading.
+  // Depends on both `open` and `settingsLoading` so that if the modal is opened
+  // before Firestore returns data, the form still populates once loading finishes.
   useEffect(() => {
-    if (open && pricingParameters) {
+    if (open && pricingParameters && !settingsLoading) {
       form.reset({
         averageTaxPercentage: pricingParameters.averageTaxPercentage ?? 0,
         averageCardFeePercentage: pricingParameters.averageCardFeePercentage ?? 0,
@@ -68,10 +70,8 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
         profitRanges: pricingParameters.profitRanges || [],
       });
     }
-    // We intentionally only run this when 'open' changes to avoid overwriting 
-    // user edits if the background data updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, settingsLoading]);
 
   const onSubmit = (values: ParametersFormValues) => {
     const sortedGoals = [...values.profitGoals].sort((a,b) => a - b);

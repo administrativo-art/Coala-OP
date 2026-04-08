@@ -17,7 +17,6 @@ import { Checkbox } from './ui/checkbox';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { PlusCircle, Edit, Trash2, Archive, Box, Search, MoreHorizontal, Inbox } from 'lucide-react';
-import { ArchivedProductsModal } from './archived-products-modal';
 import { AddEditProductModal } from './add-edit-product-modal';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
@@ -38,8 +37,7 @@ export function ItemManagement() {
   const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+const [searchTerm, setSearchTerm] = useState('');
   
   const loading = productsLoading || listsLoading || lotsLoading || baseProductsLoading;
 
@@ -47,19 +45,20 @@ export function ItemManagement() {
     return new Map(baseProducts.map(bp => [bp.id, bp]));
   }, [baseProducts]);
 
-  const activeProducts = useMemo(() => products.filter(p => !p.isArchived), [products]);
-
-  const filteredProducts = useMemo(() => {
+  const { activeFiltered, archivedFiltered } = useMemo(() => {
     const searchLower = searchTerm.toLowerCase();
-    if (!searchLower) return activeProducts;
-
-    return activeProducts.filter(p => {
-        const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.name.toLowerCase() : '';
-        return getProductFullName(p).toLowerCase().includes(searchLower) ||
-               (p.barcode && p.barcode.includes(searchLower)) ||
-               (baseProductName && baseProductName.includes(searchLower));
-    });
-  }, [activeProducts, searchTerm, getProductFullName, baseProductMap]);
+    const matches = (p: Product) => {
+      if (!searchLower) return true;
+      const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.name.toLowerCase() : '';
+      return getProductFullName(p).toLowerCase().includes(searchLower) ||
+             (p.barcode && p.barcode.includes(searchLower)) ||
+             (baseProductName && baseProductName.includes(searchLower));
+    };
+    return {
+      activeFiltered: products.filter(p => !p.isArchived && matches(p)),
+      archivedFiltered: products.filter(p => p.isArchived && matches(p)),
+    };
+  }, [products, searchTerm, getProductFullName, baseProductMap]);
 
 
   const handleEdit = (product: Product) => {
@@ -101,7 +100,7 @@ export function ItemManagement() {
   };
 
   const handleSelectAllChange = (isSelected: boolean) => {
-      setSelectedProducts(isSelected ? new Set(filteredProducts.map(p => p.id)) : new Set());
+      setSelectedProducts(isSelected ? new Set(activeFiltered.map(p => p.id)) : new Set());
   };
 
   const handleDeleteSelectedClick = () => {
@@ -121,7 +120,7 @@ export function ItemManagement() {
       }
   };
 
-  const allFilteredProductsSelected = filteredProducts.length > 0 && selectedProducts.size === filteredProducts.length;
+  const allActiveSelected = activeFiltered.length > 0 && activeFiltered.every(p => selectedProducts.has(p.id));
 
   return (
     <>
@@ -145,19 +144,13 @@ export function ItemManagement() {
                     />
                 </div>
             </div>
-             <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setIsArchiveModalOpen(true)}>
-                    <Archive className="mr-2 h-4 w-4" /> Ver arquivados
-                </Button>
-            </div>
-            
             <div className="rounded-md border">
                 <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-10">
-                                <Checkbox 
-                                    checked={allFilteredProductsSelected} 
+                                <Checkbox
+                                    checked={allActiveSelected}
                                     onCheckedChange={(checked) => handleSelectAllChange(!!checked)}
                                     aria-label="Selecionar todos"
                                 />
@@ -178,91 +171,75 @@ export function ItemManagement() {
                                     <TableCell colSpan={8}><Skeleton className="h-10 w-full" /></TableCell>
                                 </TableRow>
                             ))
-                        ) : filteredProducts.length > 0 ? (
-                            filteredProducts.map(product => {
+                        ) : activeFiltered.length > 0 ? (
+                            activeFiltered.map(product => {
                                 const countingUnitOption = product.defaultCountingUnit || 'package';
                                 let countingUnitText = 'Unidade do Lote';
-                                if (countingUnitOption === 'base') {
-                                    countingUnitText = 'Unidade do Produto Base';
-                                } else if (countingUnitOption === 'content') {
-                                    countingUnitText = 'Unidade do Conteúdo';
-                                }
+                                if (countingUnitOption === 'base') countingUnitText = 'Unidade do Produto Base';
+                                else if (countingUnitOption === 'content') countingUnitText = 'Unidade do Conteúdo';
 
                                 let displayedCountingUnit = '';
-                                if (countingUnitOption === 'package') {
-                                    displayedCountingUnit = product.packageType || product.unit;
-                                } else if (countingUnitOption === 'base') {
-                                    const baseProduct = product.baseProductId ? baseProductMap.get(product.baseProductId) : null;
-                                    displayedCountingUnit = baseProduct?.unit || '-';
-                                } else if (countingUnitOption === 'content') {
-                                    displayedCountingUnit = product.unit || '-';
-                                }
+                                if (countingUnitOption === 'package') displayedCountingUnit = product.packageType || product.unit;
+                                else if (countingUnitOption === 'base') displayedCountingUnit = (product.baseProductId ? baseProductMap.get(product.baseProductId)?.unit : null) || '-';
+                                else if (countingUnitOption === 'content') displayedCountingUnit = product.unit || '-';
 
                                 return (
-                                <TableRow key={product.id}>
-                                    <TableCell>
-                                        <Checkbox
-                                            checked={selectedProducts.has(product.id)}
-                                            onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-3">
-                                            {product.imageUrl ? (
-                                                <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />
+                                    <TableRow key={product.id}>
+                                        <TableCell>
+                                            <Checkbox
+                                                checked={selectedProducts.has(product.id)}
+                                                onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-3">
+                                                {product.imageUrl ? (
+                                                    <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />
+                                                ) : (
+                                                    <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                                        <Box className="h-5 w-5 text-muted-foreground" />
+                                                    </div>
+                                                )}
+                                                <span className="font-semibold">{getProductFullName(product)}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {product.baseProductId ? (
+                                                <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
                                             ) : (
-                                                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
-                                                    <Box className="h-5 w-5 text-muted-foreground" />
-                                                </div>
+                                                <span className="text-muted-foreground">-</span>
                                             )}
-                                            <span className="font-semibold">{getProductFullName(product)}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        {product.baseProductId ? (
-                                            <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
-                                        ) : (
-                                            <span className="text-muted-foreground">-</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        {product.packageSize}
-                                        {product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}
-                                        {product.unit}
-                                    </TableCell>
-                                     <TableCell>
-                                        <Badge variant="outline">{countingUnitText}</Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="default">{displayedCountingUnit}</Badge>
-                                    </TableCell>
-                                    <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
-                                    <TableCell className="text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
-                                                <DropdownMenuItem onSelect={() => handleArchiveClick(product)}><Archive className="mr-2 h-4 w-4" /> Arquivar</DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
-                                                    <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </TableCell>
-                                </TableRow>
-                                )
+                                        </TableCell>
+                                        <TableCell>{product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</TableCell>
+                                        <TableCell><Badge variant="outline">{countingUnitText}</Badge></TableCell>
+                                        <TableCell><Badge variant="default">{displayedCountingUnit}</Badge></TableCell>
+                                        <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
+                                        <TableCell className="text-right">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
+                                                    <DropdownMenuItem onSelect={() => handleArchiveClick(product)}><Archive className="mr-2 h-4 w-4" /> Arquivar</DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
+                                                        <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                );
                             })
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                                     <div className="flex flex-col items-center gap-2">
-                                        <Inbox className="h-10 w-10" />
-                                        <span>Nenhum insumo encontrado.</span>
+                                        <Inbox className="h-8 w-8" />
+                                        <span>Nenhum insumo ativo encontrado.</span>
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -270,6 +247,88 @@ export function ItemManagement() {
                     </TableBody>
                 </Table>
             </div>
+
+            {archivedFiltered.length > 0 && (
+                <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground px-1">Inativos ({archivedFiltered.length})</p>
+                    <div className="rounded-md border border-dashed opacity-70">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-10" />
+                                    <TableHead className="w-[30%]">Insumo</TableHead>
+                                    <TableHead>Produto Base</TableHead>
+                                    <TableHead>Embalagem</TableHead>
+                                    <TableHead>Forma da contagem de estoque</TableHead>
+                                    <TableHead>Unidade da contagem de estoque</TableHead>
+                                    <TableHead>Cód. Barras</TableHead>
+                                    <TableHead className="w-16 text-right">Ações</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {archivedFiltered.map(product => {
+                                    const countingUnitOption = product.defaultCountingUnit || 'package';
+                                    let countingUnitText = 'Unidade do Lote';
+                                    if (countingUnitOption === 'base') countingUnitText = 'Unidade do Produto Base';
+                                    else if (countingUnitOption === 'content') countingUnitText = 'Unidade do Conteúdo';
+
+                                    let displayedCountingUnit = '';
+                                    if (countingUnitOption === 'package') displayedCountingUnit = product.packageType || product.unit;
+                                    else if (countingUnitOption === 'base') displayedCountingUnit = (product.baseProductId ? baseProductMap.get(product.baseProductId)?.unit : null) || '-';
+                                    else if (countingUnitOption === 'content') displayedCountingUnit = product.unit || '-';
+
+                                    return (
+                                        <TableRow key={product.id}>
+                                            <TableCell />
+                                            <TableCell>
+                                                <div className="flex items-center gap-3">
+                                                    {product.imageUrl ? (
+                                                        <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />
+                                                    ) : (
+                                                        <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                                            <Box className="h-5 w-5 text-muted-foreground" />
+                                                        </div>
+                                                    )}
+                                                    <span className="font-semibold">{getProductFullName(product)}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {product.baseProductId ? (
+                                                    <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
+                                                ) : (
+                                                    <span className="text-muted-foreground">-</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>{product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</TableCell>
+                                            <TableCell><Badge variant="outline">{countingUnitText}</Badge></TableCell>
+                                            <TableCell><Badge variant="default">{displayedCountingUnit}</Badge></TableCell>
+                                            <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
+                                            <TableCell className="text-right">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onSelect={() => updateProduct({ ...product, isArchived: false })}>
+                                                            <Archive className="mr-2 h-4 w-4" /> Restaurar
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
+                                                            <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </div>
+            )}
             {selectedProducts.size > 0 && (
                  <div className="pt-2">
                     <Button variant="destructive" onClick={handleDeleteSelectedClick}>
@@ -290,9 +349,7 @@ export function ItemManagement() {
         }}
       />
       
-      <ArchivedProductsModal open={isArchiveModalOpen} onOpenChange={setIsArchiveModalOpen} />
-      
-      {productsToDelete.length > 0 && 
+{productsToDelete.length > 0 && 
         <DeleteConfirmationDialog 
             open={productsToDelete.length > 0} 
             isDeleting={isDeleting} 

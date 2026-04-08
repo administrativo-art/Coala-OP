@@ -10,7 +10,7 @@ export default function PricingPage() {
   return (
     <div className="space-y-6">
         <div className="text-center mb-10">
-            <h1 className="text-4xl font-bold tracking-tight">Custo e preço</h1>
+            <h1 className="text-4xl font-bold tracking-tight">Gestão de preços e margens</h1>
             <p className="text-lg text-muted-foreground mt-2">Analise a lucratividade das suas mercadorias e compare seus preços com os da concorrência.</p>
         </div>
 
@@ -20,7 +20,7 @@ export default function PricingPage() {
                     <div className="p-4 bg-primary/10 rounded-full mb-4">
                         <DollarSign className="h-10 w-10 text-primary" />
                     </div>
-                    <CardTitle className="text-2xl mb-2">Análise de mercadoria</CardTitle>
+                    <CardTitle className="text-2xl mb-2">Ficha de custo e margem</CardTitle>
                     <CardDescription>Crie composições, analise o CMV e simule preços de venda para entender a lucratividade.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">

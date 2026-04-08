@@ -261,6 +261,9 @@ export function LotCard({
             <div className="flex-grow">
                 <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-lg">{getProductFullName(product)}</h3>
+                    {product.isArchived && (
+                      <Badge variant="secondary" className="text-xs text-muted-foreground">Desativado</Badge>
+                    )}
                      <Popover>
                         <PopoverTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">

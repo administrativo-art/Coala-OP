@@ -50,7 +50,7 @@ export function PurchaseSuggestionList() {
     const suggestions: Suggestion[] = useMemo(() => {
         if (loading) return [];
 
-        const productMap = new Map(products.map(p => [p.id, p]));
+        const productMap = new Map(products.filter(p => !p.isArchived).map(p => [p.id, p]));
         const matrizLots = lots.filter(lot => lot.kioskId === 'matriz');
         const networkReports = reports.filter(r => r.kioskId !== 'matriz');
         

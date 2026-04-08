@@ -308,11 +308,11 @@ export function RestockAnalysis() {
   const analysisResults = useMemo((): AnalysisResult[] => {
     if (!kioskId || loading) return [];
     
-    const productMap = new Map(products.map(p => [p.id, p]));
+    const productMap = new Map(products.filter(p => !p.isArchived).map(p => [p.id, p]));
     const lotsInKiosk = lots.filter(lot => lot.kioskId === kioskId);
     const lotsInMatriz = lots.filter(lot => lot.kioskId === 'matriz');
 
-    return baseProducts.map(baseProduct => {
+    return baseProducts.filter(bp => !bp.isArchived).map(baseProduct => {
       const minimumStock = baseProduct.stockLevels?.[kioskId]?.min;
       
       let currentStock = 0;

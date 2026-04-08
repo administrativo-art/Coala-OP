@@ -34,7 +34,7 @@ function calcRestockResults(
   baseProducts: BaseProduct[],
   products: Product[]
 ): RestockResult[] {
-  return baseProducts.map((baseProduct) => {
+  return baseProducts.filter((bp) => !bp.isArchived).map((baseProduct) => {
     const minimumStock = baseProduct.stockLevels?.[kioskId]?.min;
 
     let currentStock = 0;

@@ -406,6 +406,7 @@ export type BaseProduct = {
   stockLevels: { [kioskId: string]: BaseProductStockLevel };
   consumptionMonths?: number;
   lastEffectivePrice?: PriceHistoryEntry;
+  isArchived?: boolean;
 };
 
 export type PredefinedConversionItem = {

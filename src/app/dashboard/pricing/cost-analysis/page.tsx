@@ -20,20 +20,20 @@ export default function CostAnalysisPage() {
                 onClick={() => router.push('/dashboard/pricing')}
                 variant="ghost"
                 className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                aria-label="Voltar para custo e preço"
+                aria-label="Voltar para gestão de preços e margens"
             >
                 <ArrowLeft className="w-6 h-6" />
             </Button>
             <div>
-                <h1 className="text-3xl font-bold">Análise de mercadoria</h1>
-                <p className="text-sm text-muted-foreground">Voltar para custo e preço</p>
+                <h1 className="text-3xl font-bold">Ficha de custo e margem</h1>
+                <p className="text-sm text-muted-foreground">Voltar para gestão de preços e margens</p>
             </div>
             </div>
         <Card>
             <CardHeader>
             <CardTitle className="flex items-center gap-2">
                 <DollarSign />
-                Análise de mercadoria
+                Ficha de custo e margem
             </CardTitle>
             <CardDescription>
                 Crie composições, analise o CMV e simule preços de venda para entender a lucratividade. Use a tabela abaixo para uma visão detalhada e ações.

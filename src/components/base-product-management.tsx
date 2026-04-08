@@ -5,6 +5,8 @@
 import React, { useState, useMemo } from 'react';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
+import { useExpiryProducts } from '@/hooks/use-expiry-products';
+import { Switch } from './ui/switch';
 import { usePurchase } from '@/hooks/use-purchase';
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@/components/ui/table";
@@ -79,8 +81,9 @@ const formatCurrency = (value: number) => {
 }
 
 export function BaseProductManagement() {
-  const { baseProducts, loading: loadingBase, updateMultipleBaseProducts, deleteMultipleBaseProducts } = useBaseProducts();
-  const { products } = useProducts();
+  const { baseProducts, loading: loadingBase, updateBaseProduct, updateMultipleBaseProducts, deleteMultipleBaseProducts } = useBaseProducts();
+  const { products, updateMultipleProducts } = useProducts();
+  const { lots } = useExpiryProducts();
   const { classifications } = useClassifications();
   const { priceHistory, loading: loadingHistory } = usePurchase();
   const loading = loadingBase || loadingHistory;
@@ -107,6 +110,22 @@ export function BaseProductManagement() {
     setProductsToDelete([product]);
   };
   
+  const handleToggleActive = async (bp: BaseProduct, activate: boolean) => {
+    if (!activate) {
+      const derivedIds = new Set(products.filter(p => p.baseProductId === bp.id).map(p => p.id));
+      const hasStock = lots.some(l => derivedIds.has(l.productId) && l.quantity > 0);
+      if (hasStock) {
+        alert(`Não é possível desativar "${bp.name}": há lotes com estoque vinculados. Zere o estoque antes de desativar.`);
+        return;
+      }
+    }
+    await updateBaseProduct({ ...bp, isArchived: !activate });
+    const derived = products.filter(p => p.baseProductId === bp.id);
+    if (derived.length > 0) {
+      await updateMultipleProducts(derived.map(p => ({ id: p.id, isArchived: !activate })));
+    }
+  };
+
   const handleDeleteSelectedClick = () => {
       const toDelete = baseProducts.filter(p => selectedProducts.has(p.id));
       setProductsToDelete(toDelete);
@@ -153,14 +172,18 @@ export function BaseProductManagement() {
     setIsModalOpen(true);
   };
 
-  const filteredProducts = useMemo(() => {
+  const { activeFiltered, archivedFiltered } = useMemo(() => {
     const searchLower = searchTerm.toLowerCase();
-    return baseProducts.filter(p => 
+    const all = baseProducts.filter(p =>
         p.name.toLowerCase().includes(searchLower) ||
         (classificationMap.get(p.classification || '') || '').toLowerCase().includes(searchLower)
     );
+    return {
+      activeFiltered: all.filter(p => !p.isArchived),
+      archivedFiltered: all.filter(p => p.isArchived),
+    };
   }, [baseProducts, searchTerm, classificationMap]);
-  
+
   const handleProductSelectionChange = (id: string, isSelected: boolean) => {
     setSelectedProducts(prev => {
         const newSet = new Set(prev);
@@ -171,10 +194,10 @@ export function BaseProductManagement() {
   };
 
   const handleSelectAllChange = (isSelected: boolean) => {
-      setSelectedProducts(isSelected ? new Set(filteredProducts.map(p => p.id)) : new Set());
+      setSelectedProducts(isSelected ? new Set(activeFiltered.map(p => p.id)) : new Set());
   };
 
-  const allFilteredProductsSelected = filteredProducts.length > 0 && selectedProducts.size === filteredProducts.length;
+  const allActiveSelected = activeFiltered.length > 0 && activeFiltered.every(p => selectedProducts.has(p.id));
 
   return (
     <>
@@ -202,21 +225,23 @@ export function BaseProductManagement() {
               </div>
            </div>
            
+            {/* Tabela de Ativos */}
             <div className="rounded-md border">
                 <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-10">
-                                <Checkbox 
-                                    checked={allFilteredProductsSelected} 
+                                <Checkbox
+                                    checked={allActiveSelected}
                                     onCheckedChange={(checked) => handleSelectAllChange(!!checked)}
-                                    aria-label="Selecionar todos"
+                                    aria-label="Selecionar todos os ativos"
                                 />
                             </TableHead>
                             <TableHead>Produto Base</TableHead>
                             <TableHead>Classificação</TableHead>
                             <TableHead>Unidade Padrão</TableHead>
                             <TableHead>Valor</TableHead>
+                            <TableHead className="w-20 text-center">Ativo</TableHead>
                             <TableHead className="w-16 text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -224,11 +249,11 @@ export function BaseProductManagement() {
                         {loading ? (
                             [...Array(5)].map((_, i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
+                                    <TableCell colSpan={7}><Skeleton className="h-10 w-full" /></TableCell>
                                 </TableRow>
                             ))
-                        ) : filteredProducts.length > 0 ? (
-                            filteredProducts.map(product => {
+                        ) : activeFiltered.length > 0 ? (
+                            activeFiltered.map(product => {
                                 const effectivePrice = product.lastEffectivePrice?.pricePerUnit ?? product.initialCostPerUnit ?? 0;
                                 return (
                                     <TableRow key={product.id}>
@@ -242,6 +267,13 @@ export function BaseProductManagement() {
                                         <TableCell>{product.classification ? (classificationMap.get(product.classification) || '-') : '-'}</TableCell>
                                         <TableCell>{product.unit}</TableCell>
                                         <TableCell className="font-mono text-sm">{formatCurrency(effectivePrice)}</TableCell>
+                                        <TableCell className="text-center">
+                                            <Switch
+                                                checked={true}
+                                                onCheckedChange={(checked) => handleToggleActive(product, checked)}
+                                                aria-label="Desativar insumo base"
+                                            />
+                                        </TableCell>
                                         <TableCell className="text-right">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
@@ -259,14 +291,14 @@ export function BaseProductManagement() {
                                             </DropdownMenu>
                                         </TableCell>
                                     </TableRow>
-                                )
+                                );
                             })
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                     <div className="flex flex-col items-center gap-2">
-                                        <Inbox className="h-10 w-10" />
-                                        <span>Nenhum produto base encontrado.</span>
+                                        <Inbox className="h-8 w-8" />
+                                        <span>Nenhum produto base ativo.</span>
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -274,6 +306,65 @@ export function BaseProductManagement() {
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Tabela de Inativos */}
+            {archivedFiltered.length > 0 && (
+                <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground px-1">Inativos ({archivedFiltered.length})</p>
+                    <div className="rounded-md border border-dashed opacity-70">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-10" />
+                                    <TableHead>Produto Base</TableHead>
+                                    <TableHead>Classificação</TableHead>
+                                    <TableHead>Unidade Padrão</TableHead>
+                                    <TableHead>Valor</TableHead>
+                                    <TableHead className="w-20 text-center">Ativo</TableHead>
+                                    <TableHead className="w-16 text-right">Ações</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {archivedFiltered.map(product => {
+                                    const effectivePrice = product.lastEffectivePrice?.pricePerUnit ?? product.initialCostPerUnit ?? 0;
+                                    return (
+                                        <TableRow key={product.id}>
+                                            <TableCell />
+                                            <TableCell className="font-semibold">{product.name}</TableCell>
+                                            <TableCell>{product.classification ? (classificationMap.get(product.classification) || '-') : '-'}</TableCell>
+                                            <TableCell>{product.unit}</TableCell>
+                                            <TableCell className="font-mono text-sm">{formatCurrency(effectivePrice)}</TableCell>
+                                            <TableCell className="text-center">
+                                                <Switch
+                                                    checked={false}
+                                                    onCheckedChange={(checked) => handleToggleActive(product, checked)}
+                                                    aria-label="Ativar insumo base"
+                                                />
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
+                                                            <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </div>
+            )}
             {selectedProducts.size > 0 && (
                  <div className="pt-2 flex gap-2">
                     <Button variant="outline" onClick={() => setIsBulkEditModalOpen(true)}>

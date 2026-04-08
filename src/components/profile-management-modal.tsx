@@ -314,7 +314,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderModuleToggle("permissions.dashboard.view" as any, "Visualizar Dashboard Principal", "Permite que o usuário veja a página inicial do dashboard.")}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Operacional</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
-                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Custo e Preço</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
+                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Gestão de Preços</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                         <FormField control={form.control} name="permissions.dashboard.technicalSheets" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Fichas Técnicas</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                         <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Auditoria</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                     </div>
@@ -428,10 +428,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
                             {/* ── CUSTO E PREÇO ── */}
                             <AccordionItem value="pricing">
-                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><DollarSign className="mr-2 h-5 w-5" /> Custo e Preço</div></AccordionTrigger>
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><DollarSign className="mr-2 h-5 w-5" /> Gestão de Preços e Margens</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.pricing.view" as any, "Ver Módulo de Custo e Preço")}
-                                    {renderPermissionSwitch("permissions.pricing.simulate" as any, "Simular Custo e Preço", "Permite criar/editar fichas técnicas e simulações.", !pricingViewWatch)}
+                                    {renderModuleToggle("permissions.pricing.view" as any, "Ver Módulo de Gestão de Preços e Margens")}
+                                    {renderPermissionSwitch("permissions.pricing.simulate" as any, "Simular Ficha de Custo e Margem", "Permite criar/editar fichas técnicas e simulações.", !pricingViewWatch)}
                                     {renderPermissionSwitch("permissions.pricing.manageParameters" as any, "Gerenciar Parâmetros de Preço", "Permite editar o % operacional e faixas de lucro.", !pricingViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>

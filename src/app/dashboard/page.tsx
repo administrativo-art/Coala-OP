@@ -370,7 +370,7 @@ export default function DashboardPage() {
             <Tabs defaultValue={getDefaultTab()} className="w-full">
                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
                     {permissions.dashboard.operational && <TabsTrigger value="operational"><LayoutDashboard className="mr-2" /> Operacional</TabsTrigger>}
-                    {permissions.dashboard.pricing && <TabsTrigger value="pricing"><DollarSign className="mr-2" /> Custo e Preço</TabsTrigger>}
+                    {permissions.dashboard.pricing && <TabsTrigger value="pricing"><DollarSign className="mr-2" /> Gestão de Preços</TabsTrigger>}
                     {permissions.dashboard.technicalSheets && <TabsTrigger value="technical-sheets"><FileText className="mr-2" /> Fichas Técnicas</TabsTrigger>}
                     {permissions.dashboard.audit && <TabsTrigger value="audit"><ShieldCheck className="mr-2" /> Contagem</TabsTrigger>}
                     {permissions.tasks.view && <TabsTrigger value="tasks"><ListTodo className="mr-2 h-4 w-4" /> Tarefas</TabsTrigger>}

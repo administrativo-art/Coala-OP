@@ -226,7 +226,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                             <Select onValueChange={handleBaseProductChange} value={selectedBaseProductId || ''}>
                                 <SelectTrigger><SelectValue placeholder="Selecione o insumo base..."/></SelectTrigger>
                                 <SelectContent>
-                                    {baseProducts.map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}
+                                    {baseProducts.filter(bp => !bp.isArchived).map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
 
