@@ -170,6 +170,7 @@ export type SalesReport = {
   items: SalesReportItem[];
   hourlySales?: { [hour: string]: number };
   productHourlySales?: { [simulationId: string]: { [hour: string]: number } };
+  productQtyByOperator?: { [pdvOperatorId: string]: { [simulationId: string]: number } };
 };
 
 export type Shift = {

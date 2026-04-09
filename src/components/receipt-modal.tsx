@@ -68,7 +68,7 @@ export function ReceiptModal({ activity, onOpenChange }: ReceiptModalProps) {
         <Dialog open={true} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>Confirmar Recebimento</DialogTitle>
+                    <DialogTitle>Confirmar recebimento</DialogTitle>
                     <DialogDescription>
                         Confirme o recebimento dos itens de {activity.kioskOriginName}.
                     </DialogDescription>
@@ -138,7 +138,7 @@ export function ReceiptModal({ activity, onOpenChange }: ReceiptModalProps) {
                     </Button>
                     <Button type="submit" form="receipt-form" disabled={isLoading}>
                         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
-                        {isLoading ? "Confirmando..." : "Confirmar Recebimento"}
+                        {isLoading ? "Confirmando..." : "Confirmar recebimento"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

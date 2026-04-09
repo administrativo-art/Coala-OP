@@ -55,20 +55,30 @@ export function PdvSyncManagement() {
     }
   };
 
+  const FALLBACK_PDV_IDS: Record<string, string> = {
+    'tirirical': '17343',
+    'joao-paulo': '17344',
+  };
+
+  const resolvedKiosks = kiosks.map(k => ({
+    ...k,
+    pdvFilialId: k.pdvFilialId || FALLBACK_PDV_IDS[k.id] || undefined,
+  }));
+
   async function startSync() {
     if (!startDate || !endDate) return;
-    
+
     const start = new Date(startDate + 'T12:00:00Z');
     const end = new Date(endDate + 'T12:00:00Z');
-    
+
     if (start > end) {
       toast({ title: 'Erro', description: 'Data de início não pode ser maior que o fim.', variant: 'destructive' });
       return;
     }
 
-    const targetKiosks = selectedKioskId === 'all' 
-      ? kiosks.filter(k => !!k.pdvFilialId)
-      : kiosks.filter(k => k.id === selectedKioskId);
+    const targetKiosks = selectedKioskId === 'all'
+      ? resolvedKiosks.filter(k => !!k.pdvFilialId)
+      : resolvedKiosks.filter(k => k.id === selectedKioskId && !!k.pdvFilialId);
 
     if (targetKiosks.length === 0) {
       toast({ title: 'Atenção', description: 'Nenhum quiosque configurado com ID PDV Legal.' });
@@ -179,7 +189,7 @@ export function PdvSyncManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os Quiosques</SelectItem>
-                  {kiosks.filter(k => !!k.pdvFilialId).map(k => (
+                  {resolvedKiosks.filter(k => !!k.pdvFilialId).map(k => (
                     <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -221,7 +231,7 @@ export function PdvSyncManagement() {
               ) : (
                 <>
                   <PlayCircle className="mr-2 h-4 w-4" />
-                  Iniciar Sincronização Total
+                  Iniciar sincronização
                 </>
               )}
             </Button>
@@ -231,7 +241,7 @@ export function PdvSyncManagement() {
         {isSyncing || logs.length > 0 ? (
           <div className="space-y-3 pt-4 border-t border-border/40">
             <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-              <span>Progresso Total</span>
+              <span>Progresso total</span>
               <span>{progress}%</span>
             </div>
             <Progress value={progress} className="h-2" />

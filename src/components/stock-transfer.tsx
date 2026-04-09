@@ -147,7 +147,7 @@ export function StockTransfer() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Acesso Negado</CardTitle>
+                <CardTitle>Acesso negado</CardTitle>
                 <CardDescription>Você não tem permissão para realizar transferências de estoque.</CardDescription>
             </CardHeader>
         </Card>
@@ -187,7 +187,7 @@ export function StockTransfer() {
             <div className="space-y-4">
                 <div className="flex items-end gap-2">
                     <div className="flex-grow">
-                        <label className="text-sm font-medium">Adicionar Insumo</label>
+                        <label className="text-sm font-medium">Adicionar insumo</label>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" className="w-full justify-between font-normal">

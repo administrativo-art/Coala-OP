@@ -99,6 +99,7 @@ export async function syncDayClient(dateStr: string, kioskId: string, pdvFilialI
   const productTotals: Record<string, any> = {};
   const hourlySales: Record<string, number> = {};
   const productHourlySales: Record<string, Record<string, number>> = {};
+  const productQtyByOperator: Record<string, Record<string, number>> = {};
   const consumptionByBaseProduct: Record<string, any> = {};
   const unmappedSKUs = new Map<string, string>();
   const comboCounts: Record<string, number> = {};
@@ -108,11 +109,11 @@ export async function syncDayClient(dateStr: string, kioskId: string, pdvFilialI
     if (!rawItems || !Array.isArray(rawItems)) continue;
 
     const isCupomCancelado = coupon.iscancelado || coupon.status === 'CANCELADO';
-    
+
     // Verifica se é um "Cancelamento Total Preguiçoso" da API:
     // O cupom está cancelado, mas a API esqueceu de marcar os itens dentro dele como cancelados.
     const hasAnyItemExplicitlyCancelled = rawItems.some(item => item.iscancelado === true);
-    
+
     if (isCupomCancelado && !hasAnyItemExplicitlyCancelled) {
        // Se o cupom está cancelado E NENHUM item dentro dele diz que foi cancelado,
        // assumimos que foi um cancelamento total da venda e ignoramos o cupom inteiro.
@@ -120,8 +121,9 @@ export async function syncDayClient(dateStr: string, kioskId: string, pdvFilialI
     }
 
     const hour = extractBrazilHour(coupon.dtrecebimento || coupon.dtabertura || '');
-    hourlySales[hour] = (hourlySales[hour] || 0) + 1; 
+    hourlySales[hour] = (hourlySales[hour] || 0) + 1;
 
+    const couponOperatorId = coupon.usuariorecebimento_id ?? null;
     const validMappedItemsForCombo: { name: string, qty: number }[] = [];
 
     for (const item of rawItems) {
@@ -158,10 +160,10 @@ export async function syncDayClient(dateStr: string, kioskId: string, pdvFilialI
       const unitPrice = item.valorUnitario || item.valorvenda || item.PrecoVenda || 0;
 
       if (!productTotals[sim.id]) {
-        productTotals[sim.id] = { 
-          sku, 
-          productName: sim.name, 
-          quantity: 0, 
+        productTotals[sim.id] = {
+          sku,
+          productName: sim.name,
+          quantity: 0,
           simulationId: sim.id,
           timestamp: itemTimestamp,
           unitPrice
@@ -171,6 +173,13 @@ export async function syncDayClient(dateStr: string, kioskId: string, pdvFilialI
 
       if (!productHourlySales[sim.id]) productHourlySales[sim.id] = {};
       productHourlySales[sim.id][itemHour] = (productHourlySales[sim.id][itemHour] || 0) + qty;
+
+      const operatorId = item.usuariooperador_id ?? couponOperatorId;
+      if (operatorId != null) {
+        const opKey = String(operatorId);
+        if (!productQtyByOperator[opKey]) productQtyByOperator[opKey] = {};
+        productQtyByOperator[opKey][sim.id] = (productQtyByOperator[opKey][sim.id] || 0) + qty;
+      }
 
       const itemsForSim = allSimItems.filter(i => i.simulationId === sim.id);
       for (const simItem of itemsForSim) {
@@ -211,6 +220,7 @@ export async function syncDayClient(dateStr: string, kioskId: string, pdvFilialI
     items: Object.values(productTotals),
     hourlySales,
     productHourlySales,
+    productQtyByOperator,
     unmappedCount: unmappedSKUs.size,
     unmappedList: Array.from(unmappedSKUs.entries()).map(([sku, name]) => ({ sku, name })),
     combos: Object.entries(comboCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)

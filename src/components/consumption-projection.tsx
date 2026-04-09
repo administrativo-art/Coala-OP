@@ -470,7 +470,7 @@ export function ConsumptionProjection() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Filtrar Insumos</CardTitle>
+                        <CardTitle className="text-sm font-medium">Filtrar insumos</CardTitle>
                         <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -482,7 +482,7 @@ export function ConsumptionProjection() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="w-64">
-                                <DropdownMenuLabel>Insumos Base</DropdownMenuLabel>
+                                <DropdownMenuLabel>Insumos base</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 <ScrollArea className="h-64">
                                     {baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(bp => (
@@ -502,7 +502,7 @@ export function ConsumptionProjection() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Simular Consumo</CardTitle>
+                        <CardTitle className="text-sm font-medium">Simular consumo</CardTitle>
                         <TrendingUp className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -519,7 +519,7 @@ export function ConsumptionProjection() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Alertas Ativos</CardTitle>
+                        <CardTitle className="text-sm font-medium">Alertas ativos</CardTitle>
                         <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -591,10 +591,10 @@ export function ConsumptionProjection() {
                                                 <TableRow>
                                                     <TableHead>Lote</TableHead>
                                                     <TableHead className="text-right">Qtd (Base)</TableHead>
-                                                    <TableHead>Início Consumo</TableHead>
-                                                    <TableHead>Fim Consumo</TableHead>
+                                                    <TableHead>Início consumo</TableHead>
+                                                    <TableHead>Fim consumo</TableHead>
                                                     <TableHead>Vencimento</TableHead>
-                                                    <TableHead className="text-right">Perda Estimada</TableHead>
+                                                    <TableHead className="text-right">Perda estimada</TableHead>
                                                     <TableHead className="text-center">Status</TableHead>
                                                 </TableRow>
                                             </TableHeader>

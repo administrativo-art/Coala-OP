@@ -227,8 +227,8 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       return;
     }
     if (currentStep === 'revenue_config') {
-      if (revenueConfig.targetValue <= 0) { setRevenueConfigError('Meta Alvo deve ser maior que zero'); return; }
-      if (revenueConfig.upValue <= revenueConfig.targetValue) { setRevenueConfigError('Meta UP deve ser maior que a Meta Alvo'); return; }
+      if (revenueConfig.targetValue <= 0) { setRevenueConfigError('Meta alvo deve ser maior que zero'); return; }
+      if (revenueConfig.upValue <= revenueConfig.targetValue) { setRevenueConfigError('Meta UP deve ser maior que a Meta alvo'); return; }
       setRevenueConfigError('');
       setStepIdx(i => i + 1);
       return;
@@ -253,16 +253,16 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     }
     if (currentStep === 'product_line_config') {
       if (!productLineConfig.lineId) { setProductLineError('Selecione uma linha de produto'); return; }
-      if (!productLineConfig.targetValue || productLineConfig.targetValue <= 0) { setProductLineError('Meta Alvo deve ser maior que zero'); return; }
-      if (!productLineConfig.upValue || productLineConfig.upValue <= (productLineConfig.targetValue ?? 0)) { setProductLineError('Meta UP deve ser maior que a Meta Alvo'); return; }
+      if (!productLineConfig.targetValue || productLineConfig.targetValue <= 0) { setProductLineError('Meta alvo deve ser maior que zero'); return; }
+      if (!productLineConfig.upValue || productLineConfig.upValue <= (productLineConfig.targetValue ?? 0)) { setProductLineError('Meta UP deve ser maior que a Meta alvo'); return; }
       setProductLineError('');
       setStepIdx(i => i + 1);
       return;
     }
     if (currentStep === 'product_specific_config') {
       if (!productSpecificConfig.productId) { setProductSpecificError('Selecione um produto'); return; }
-      if (!productSpecificConfig.targetValue || productSpecificConfig.targetValue <= 0) { setProductSpecificError('Meta Alvo deve ser maior que zero'); return; }
-      if (!productSpecificConfig.upValue || productSpecificConfig.upValue <= (productSpecificConfig.targetValue ?? 0)) { setProductSpecificError('Meta UP deve ser maior que a Meta Alvo'); return; }
+      if (!productSpecificConfig.targetValue || productSpecificConfig.targetValue <= 0) { setProductSpecificError('Meta alvo deve ser maior que zero'); return; }
+      if (!productSpecificConfig.upValue || productSpecificConfig.upValue <= (productSpecificConfig.targetValue ?? 0)) { setProductSpecificError('Meta UP deve ser maior que a Meta alvo'); return; }
       setProductSpecificError('');
       setStepIdx(i => i + 1);
     }
@@ -556,7 +556,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Nova Meta</DialogTitle>
+          <DialogTitle>Nova meta</DialogTitle>
           <DialogDescription asChild>
             <span className="flex flex-wrap gap-1 mt-1">
               {visibleStepLabels.map((label, i) => (
@@ -629,7 +629,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Meta Alvo</Label>
+                <Label>Meta alvo</Label>
                 <CurrencyInput
                   value={revenueConfig.targetValue}
                   onChange={v => setRevenueConfig(prev => ({ ...prev, targetValue: v }))}
@@ -910,7 +910,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Meta Alvo (R$)</Label>
+                <Label>Meta alvo (R$)</Label>
                 <CurrencyInput
                   value={productLineConfig.targetValue ?? 0}
                   onChange={v => setProductLineConfig(prev => ({ ...prev, targetValue: v }))}
@@ -963,7 +963,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Meta Alvo (R$)</Label>
+                <Label>Meta alvo (R$)</Label>
                 <CurrencyInput
                   value={productSpecificConfig.targetValue ?? 0}
                   onChange={v => setProductSpecificConfig(prev => ({ ...prev, targetValue: v }))}

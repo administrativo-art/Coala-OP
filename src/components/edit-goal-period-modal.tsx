@@ -139,7 +139,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Editar Meta</DialogTitle>
+          <DialogTitle>Editar meta</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-1">
@@ -148,7 +148,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Valores</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Meta Alvo</Label>
+                <Label>Meta alvo</Label>
                 <CurrencyInput value={targetValue} onChange={setTargetValue} />
               </div>
               <div className="space-y-1.5">

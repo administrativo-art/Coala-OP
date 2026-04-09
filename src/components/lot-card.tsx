@@ -271,7 +271,7 @@ export function LotCard({
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80">
-                            <h4 className="font-medium text-center mb-2">Próximos Lotes</h4>
+                            <h4 className="font-medium text-center mb-2">Próximos lotes</h4>
                             <ScrollArea className="h-48">
                                 <div className="space-y-2">
                                     {productGroup.lots.slice(0, 4).map(lot => (

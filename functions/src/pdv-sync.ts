@@ -83,6 +83,8 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
   // Revenue tracking for goals
   let dailyRevenue = 0;
   const revenueByOperator: Record<string, number> = {};
+  // Quantity per operator per product (simulationId)
+  const productQtyByOperator: Record<string, Record<string, number>> = {};
 
   for (const coupon of coupons) {
     const rawItems = coupon.Itens || coupon.itens;
@@ -119,6 +121,13 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
         return simSku && possibleSkus.includes(simSku);
       });
       if (!sim) continue;
+
+      // Track quantity per operator per product
+      if (operatorId != null) {
+        const opKey = String(operatorId);
+        if (!productQtyByOperator[opKey]) productQtyByOperator[opKey] = {};
+        productQtyByOperator[opKey][sim.id] = (productQtyByOperator[opKey][sim.id] || 0) + qty;
+      }
       const sku = sim.ppo?.sku?.toString().trim() || possibleSkus[0];
       const existingComboItem = validMappedItemsForCombo.find(i => i.name === sim.name);
       if (existingComboItem) existingComboItem.qty += qty;
@@ -145,7 +154,8 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     reportName: `Sincronização Automática ${dateStr}`,
     month: date.getMonth() + 1, year: date.getFullYear(), day: date.getDate(), kioskId, createdAt: new Date().toISOString(),
     items: Object.values(productTotals), hourlySales, productHourlySales,
-    combos: Object.entries(comboCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
+    combos: Object.entries(comboCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
+    productQtyByOperator,
   });
 
   // ── Update active goal periods ────────────────────────────────────────────

@@ -174,7 +174,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Markup Médio</CardTitle>
+                        <CardTitle className="text-sm font-medium">Markup médio</CardTitle>
                         <Gauge className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -184,7 +184,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Aumento Médio</CardTitle>
+                        <CardTitle className="text-sm font-medium">Aumento médio</CardTitle>
                         <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -194,7 +194,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Maior Margem</CardTitle>
+                        <CardTitle className="text-sm font-medium">Maior margem</CardTitle>
                         <TrendingUp className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -204,7 +204,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Menor Margem</CardTitle>
+                        <CardTitle className="text-sm font-medium">Menor margem</CardTitle>
                         <TrendingDown className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>

@@ -87,7 +87,7 @@ export function ScannedItemActionsModal({ product, onOpenChange }: ScannedItemAc
                 </Button>
                 <Button variant="outline" className="h-20 flex-col gap-1" onClick={handleAddLot} disabled={!canAddLot}>
                   <PackagePlus className="h-6 w-6" />
-                  <span>Adicionar Lote</span>
+                  <span>Adicionar lote</span>
                 </Button>
                 <Button variant="outline" className="h-20 flex-col gap-1" onClick={handleConsume} disabled={!canConsumeLot}>
                   <MinusCircle className="h-6 w-6" />

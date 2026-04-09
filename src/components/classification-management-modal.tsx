@@ -132,7 +132,7 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Gerenciar Classificações</DialogTitle>
+                        <DialogTitle>Gerenciar classificações</DialogTitle>
                         <DialogDescription>
                             Adicione, edite ou exclua as classificações dos produtos base.
                         </DialogDescription>
@@ -220,7 +220,7 @@ export function ClassificationManagementModal({ open, onOpenChange }: Classifica
                             <p className="mt-2 text-sm text-muted-foreground">Esta ação irá remover a classificação de <strong>{usageCount.get(itemToDelete.id) || 0}</strong> produto(s) base.</p>
                             <Alert variant="destructive" className="mt-4">
                                 <AlertTriangle className="h-4 w-4" />
-                                <AlertTitle>Ação Irreversível</AlertTitle>
+                                <AlertTitle>Ação irreversível</AlertTitle>
                                 <AlertDescription>
                                 Esta ação não pode ser desfeita.
                                 </AlertDescription>

@@ -37,7 +37,7 @@ export function CloseGoalModal({ open, onOpenChange, period }: CloseGoalModalPro
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Encerrar Meta</DialogTitle>
+          <DialogTitle>Encerrar meta</DialogTitle>
           <DialogDescription>Informe o motivo antes de encerrar ou cancelar esta meta.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">

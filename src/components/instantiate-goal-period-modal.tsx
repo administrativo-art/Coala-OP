@@ -29,7 +29,7 @@ const step1Schema = z.object({
   targetValue: z.number().min(0.01, 'Valor deve ser maior que zero'),
   upValue: z.number().min(0.01, 'Valor deve ser maior que zero'),
 }).refine(d => d.upValue > d.targetValue, {
-  message: 'Meta UP deve ser maior que a Meta Alvo',
+  message: 'Meta UP deve ser maior que a Meta alvo',
   path: ['upValue'],
 });
 
@@ -273,7 +273,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Instanciar Período</DialogTitle>
+          <DialogTitle>Instanciar período</DialogTitle>
           <DialogDescription>
             <span className="flex gap-1 mt-1">
               {stepLabels.map((label, i) => (
@@ -311,7 +311,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={form.control} name="targetValue" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Meta Alvo</FormLabel>
+                    <FormLabel>Meta alvo</FormLabel>
                     <FormControl>
                       <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0,00" />
                     </FormControl>

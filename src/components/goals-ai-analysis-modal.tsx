@@ -177,7 +177,7 @@ export function GoalsAiAnalysisModal({ open, onOpenChange, isLoading, analysisRe
         </div>
 
         <DialogFooter className="p-6 border-t bg-muted/5">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar Diagnóstico</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar diagnóstico</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

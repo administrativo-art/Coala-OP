@@ -490,7 +490,7 @@ export function UserManagement() {
       ) : (
         <Card>
             <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Building2 /> Empresas</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Building2 /> Configurações</CardTitle>
             <CardDescription>Adicione ou edite usuários e atribua perfis de permissão.</CardDescription>
             </CardHeader>
             <CardContent>

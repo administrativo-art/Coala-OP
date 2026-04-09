@@ -19,7 +19,7 @@ export function RegistrationManagement() {
                         <div className="p-4 bg-primary/10 rounded-full mb-4">
                             <Package className="h-10 w-10 text-primary" />
                         </div>
-                        <CardTitle className="text-2xl mb-2">Gerenciar Insumos</CardTitle>
+                        <CardTitle className="text-2xl mb-2">Gerenciar insumos</CardTitle>
                         <CardDescription>Cadastre os produtos físicos que compõem seu estoque, como Ovomaltine, Leite, etc.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">

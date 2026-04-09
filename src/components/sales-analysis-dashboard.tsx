@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useEffect } from 'react';
-import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths, isSameDay, differenceInCalendarDays } from 'date-fns';
+import { useMemo, useState, useEffect, Fragment } from 'react';
+import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths, isSameDay, differenceInCalendarDays, startOfWeek } from 'date-fns';
 import { useSalesReports } from '@/contexts/sales-report-context';
 import { SalesReportProvider } from '@/components/sales-report-provider';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -17,26 +17,59 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart, Line } from 'recharts';
-import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, TrendingDown, PieChart as PieIcon, BarChart2, Search, ArrowUpDown, ArrowUp, ArrowDown, Clock, RefreshCw, Layers, AlertTriangle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart, Line, LabelList } from 'recharts';
+import { TrendingUp, Award, Inbox, ShoppingBag, Calendar, CalendarRange, GitCompare, PieChart as PieIcon, BarChart2, Search, ArrowUpDown, ArrowUp, ArrowDown, Clock, RefreshCw, Layers, AlertTriangle, DollarSign, Users2, LayoutDashboard, Check, ChevronsUpDown } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { syncDayClient } from '@/lib/integrations/pdv-legal-client';
+import { GoalsProvider } from '@/components/goals-provider';
+import { useGoals } from '@/contexts/goals-context';
+import { type SalesReport } from '@/types';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MONTH_NUMS = [1,2,3,4,5,6,7,8,9,10,11,12];
 const COLORS = ['#E91E8C','#6366F1','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#84CC16','#F97316','#EC4899'];
 
+const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function getReportsByPreset(
+  reports: SalesReport[], kioskId: string, isAdmin: boolean, user: any, preset: string
+): SalesReport[] {
+  const today = new Date();
+  let start: Date, end: Date;
+  switch (preset) {
+    case 'yesterday': start = end = subDays(today, 1); break;
+    case 'today': start = end = today; break;
+    case 'thisMonth': start = startOfMonth(today); end = today; break;
+    case 'lastMonth': { const lm = subMonths(today, 1); start = startOfMonth(lm); end = endOfMonth(lm); break; }
+    default: start = end = today;
+  }
+  return reports.filter(r => {
+    const km = kioskId === 'all' || r.kioskId === kioskId;
+    const um = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+    if (!r.day) {
+      if (preset === 'yesterday' || preset === 'today') return false;
+      const ms = new Date(r.year, r.month - 1, 1);
+      return km && um && ms <= end && endOfMonth(ms) >= start;
+    }
+    const d = new Date(r.year, r.month - 1, r.day);
+    return km && um && (isWithinInterval(d, { start, end }) || isSameDay(d, start) || isSameDay(d, end));
+  });
+}
+
 type FilterMode = 'overview' | 'compare';
 
 export function SalesAnalysisDashboard() {
-  return <SalesReportProvider><SalesAnalysisDashboardInner /></SalesReportProvider>;
+  return <SalesReportProvider><GoalsProvider><SalesAnalysisDashboardInner /></GoalsProvider></SalesReportProvider>;
 }
 
 function SalesAnalysisDashboardInner() {
   const { salesReports, loading: reportsLoading } = useSalesReports();
   const { kiosks } = useKiosks();
-  const { user, permissions } = useAuth();
+  const { user, permissions, users } = useAuth();
+  const { periods, employeeGoals, templates } = useGoals();
   const { simulations } = useProductSimulation();
   const { categories } = useProductSimulationCategories();
   const { toast } = useToast();
@@ -71,6 +104,20 @@ function SalesAnalysisDashboardInner() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
   const [selectedHour, setSelectedHour] = useState<string | null>(null);
+
+  // Painel Principal sub-section filters
+  const [panelMixPreset, setPanelMixPreset] = useState('thisMonth');
+  const [panelHourlyPreset, setPanelHourlyPreset] = useState('yesterday');
+  const [panelEvolutionMonths, setPanelEvolutionMonths] = useState<string[]>([
+    String(new Date().getMonth() || 12),
+    String(new Date().getMonth() + 1 > 12 ? 1 : new Date().getMonth() + 1),
+  ]);
+  const [panelHourlySelectedProduct, setPanelHourlySelectedProduct] = useState('all');
+  const [panelSelectedHour, setPanelSelectedHour] = useState<{ kioskId: string; hourStr: string } | null>(null);
+  const [panelProductFilter, setPanelProductFilter] = useState<string[]>([]);
+  const [panelColabProductOpen, setPanelColabProductOpen] = useState(false);
+  const [panelProductSearch, setPanelProductSearch] = useState('');
+  const [expandedProductRows, setExpandedProductRows] = useState<Set<string>>(new Set());
 
   const applyPreset = (preset: string) => {
     if (preset === 'custom') {
@@ -200,58 +247,6 @@ function SalesAnalysisDashboardInner() {
       return { ...p, pct: (p.quantity / total * 100).toFixed(1), accumulated: pct.toFixed(1), class: cls };
     });
   }, [productRanking]);
-
-  // ── PRODUTOS EM QUEDA (últimos 6 meses) ────────────────────────────────────
-  const decliningProducts = useMemo(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-
-    const last6: { year: number; month: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      let m = currentMonth - i;
-      let y = currentYear;
-      if (m <= 0) { m += 12; y -= 1; }
-      last6.push({ year: y, month: m });
-    }
-
-    const byProduct: Record<string, { name: string; byMonth: Record<string, number> }> = {};
-    salesReports
-      .filter(r => isAdmin || user?.assignedKioskIds?.includes(r.kioskId))
-      .forEach(r => {
-        const key = `${r.year}-${r.month}`;
-        if (!last6.find(m => m.year === r.year && m.month === r.month)) return;
-        r.items.forEach(item => {
-          if (!byProduct[item.simulationId]) byProduct[item.simulationId] = { name: item.productName, byMonth: {} };
-          byProduct[item.simulationId].byMonth[key] = (byProduct[item.simulationId].byMonth[key] || 0) + item.quantity;
-        });
-      });
-
-    return Object.entries(byProduct).map(([simId, data]) => {
-      const values = last6.map((m, i) => ({
-        x: i,
-        y: data.byMonth[`${m.year}-${m.month}`] || 0,
-        label: MONTHS[m.month - 1],
-      }));
-
-      const n = values.length;
-      const sumX = values.reduce((s, v) => s + v.x, 0);
-      const sumY = values.reduce((s, v) => s + v.y, 0);
-      const sumXY = values.reduce((s, v) => s + v.x * v.y, 0);
-      const sumX2 = values.reduce((s, v) => s + v.x * v.x, 0);
-      const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-
-      const avgY = sumY / n;
-      const firstHalf = values.slice(0, 3).reduce((s, v) => s + v.y, 0) / 3;
-      const secondHalf = values.slice(3).reduce((s, v) => s + v.y, 0) / 3;
-      const variation = firstHalf > 0 ? ((secondHalf - firstHalf) / firstHalf * 100) : 0;
-
-      return { simulationId: simId, name: data.name, slope, values, avgY, variation };
-    })
-    .filter(p => p.slope < 0 && p.avgY > 0)
-    .sort((a, b) => a.slope - b.slope)
-    .slice(0, 15);
-  }, [salesReports, isAdmin, user]);
 
   // ── MIX POR LINHA ──────────────────────────────────────────────────────────
   const mixByLine = useMemo(() => {
@@ -397,6 +392,320 @@ function SalesAnalysisDashboardInner() {
     });
   }, [hourlySalesData, hourlySelectedProduct]);
 
+  // ── PAINEL PRINCIPAL: filtered reports por sub-seção ──────────────────────
+  const panelMixReports = useMemo(() => getReportsByPreset(salesReports, selectedKioskId, isAdmin, user, panelMixPreset), [salesReports, selectedKioskId, isAdmin, user, panelMixPreset]);
+  const panelHourlyReports = useMemo(() => getReportsByPreset(salesReports, selectedKioskId, isAdmin, user, panelHourlyPreset), [salesReports, selectedKioskId, isAdmin, user, panelHourlyPreset]);
+  // ── PAINEL: MIX ───────────────────────────────────────────────────────────
+  const panelMixByLine = useMemo(() => {
+    const lines: Record<string, { name: string; quantity: number }> = {};
+    let noLine = 0;
+    panelMixReports.forEach(r => r.items.forEach(item => {
+      const sim = simulationMap.get(item.simulationId);
+      if (!sim?.lineId) { noLine += item.quantity; return; }
+      const line = categoryMap.get(sim.lineId);
+      if (!line) { noLine += item.quantity; return; }
+      if (!lines[line.id]) lines[line.id] = { name: line.name, quantity: 0 };
+      lines[line.id].quantity += item.quantity;
+    }));
+    const result = Object.values(lines).sort((a, b) => b.quantity - a.quantity);
+    if (noLine > 0) result.push({ name: 'Sem linha', quantity: noLine });
+    return result;
+  }, [panelMixReports, simulationMap, categoryMap]);
+
+  // ── PAINEL: QUIOSQUES — histórico (3 meses anteriores + mesmo mês ano passado) ──
+  const panelKioskHistoryData = useMemo(() => {
+    const now = new Date();
+    const curMonth = now.getMonth() + 1;
+    const curYear = now.getFullYear();
+    const periods: Array<{ label: string; month: number; year: number; isLastYear: boolean }> = [];
+    for (let i = 3; i >= 1; i--) {
+      const d = subMonths(now, i);
+      periods.push({ label: MONTHS[d.getMonth()], month: d.getMonth() + 1, year: d.getFullYear(), isLastYear: false });
+    }
+    periods.push({ label: `${MONTHS[curMonth - 1]} ${curYear - 1}`, month: curMonth, year: curYear - 1, isLastYear: true });
+
+    return availableKiosks
+      .filter(k => isAdmin || user?.assignedKioskIds?.includes(k.id))
+      .map(kiosk => ({
+        kioskId: kiosk.id,
+        kioskName: kiosk.name,
+        chartData: periods.map(p => ({
+          label: p.label,
+          qty: salesReports
+            .filter(r => r.kioskId === kiosk.id && r.month === p.month && r.year === p.year)
+            .reduce((s, r) => s + r.items.reduce((ss, i) => ss + i.quantity, 0), 0),
+          isLastYear: p.isLastYear,
+        })),
+      }));
+  }, [salesReports, availableKiosks, isAdmin, user]);
+
+  // ── PAINEL: HORÁRIOS — por quiosque ─────────────────────────────────────
+  const buildHourlyData = (reports: typeof panelHourlyReports) => {
+    const hours: Record<string, { total: number; products: Record<string, { simulationId: string; name: string; quantity: number }> }> = {};
+    for (let i = 0; i < 24; i++) hours[i.toString().padStart(2, '0')] = { total: 0, products: {} };
+    reports.forEach(r => {
+      if (r.productHourlySales) {
+        Object.entries(r.productHourlySales).forEach(([simId, hourlyData]) => {
+          const item = r.items.find(i => i.simulationId === simId);
+          if (!item) return;
+          Object.entries(hourlyData).forEach(([hour, qty]) => {
+            if (!hours[hour]) return;
+            hours[hour].total += qty;
+            if (!hours[hour].products[simId]) hours[hour].products[simId] = { simulationId: simId, name: item.productName, quantity: 0 };
+            hours[hour].products[simId].quantity += qty;
+          });
+        });
+      } else {
+        r.items.forEach(item => {
+          const hour = item.timestamp ? item.timestamp.split(':')[0] : '00';
+          if (hours[hour]) {
+            hours[hour].total += (item.quantity || 0);
+            if (!hours[hour].products[item.simulationId]) hours[hour].products[item.simulationId] = { simulationId: item.simulationId, name: item.productName, quantity: 0 };
+            hours[hour].products[item.simulationId].quantity += (item.quantity || 0);
+          }
+        });
+      }
+    });
+    return Object.entries(hours).map(([hour, data]) => ({
+      hourStr: hour, hour: `${hour}h`, total: data.total,
+      products: Object.values(data.products).sort((a, b) => b.quantity - a.quantity),
+    }));
+  };
+
+  const panelHourlyByKiosk = useMemo(() => {
+    return availableKiosks
+      .filter(k => isAdmin || user?.assignedKioskIds?.includes(k.id))
+      .map(kiosk => ({
+        kioskId: kiosk.id,
+        kioskName: kiosk.name,
+        data: buildHourlyData(panelHourlyReports.filter(r => r.kioskId === kiosk.id)),
+      }));
+  }, [panelHourlyReports, availableKiosks, isAdmin, user]);
+
+  const panelHourlyRanking = useMemo(() => {
+    const totals: Record<string, { name: string; quantity: number; simulationId: string }> = {};
+    panelHourlyReports.forEach(r => r.items.forEach(item => {
+      if (!totals[item.simulationId]) totals[item.simulationId] = { name: item.productName, quantity: 0, simulationId: item.simulationId };
+      totals[item.simulationId].quantity += item.quantity;
+    }));
+    return Object.values(totals).sort((a, b) => b.quantity - a.quantity);
+  }, [panelHourlyReports]);
+
+  // ── PAINEL: EVOLUÇÃO ─────────────────────────────────────────────────────
+  const panelEvolution = useMemo(() => {
+    const monthNums = panelEvolutionMonths.map(Number);
+    const relevant = salesReports.filter(r => {
+      const km = selectedKioskId === 'all' || r.kioskId === selectedKioskId;
+      const um = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+      return km && um && monthNums.includes(r.month);
+    });
+    const totals: Record<string, { name: string; quantity: number; simulationId: string }> = {};
+    relevant.forEach(r => r.items.forEach(item => {
+      if (!totals[item.simulationId]) totals[item.simulationId] = { name: item.productName, quantity: 0, simulationId: item.simulationId };
+      totals[item.simulationId].quantity += item.quantity;
+    }));
+    const top5 = Object.values(totals).sort((a, b) => b.quantity - a.quantity).slice(0, 5);
+    return top5.map(prod => {
+      const entry: Record<string, any> = { product: prod.name };
+      monthNums.forEach(m => {
+        relevant.filter(r => r.month === m).forEach(r => {
+          r.items.forEach(item => {
+            if (item.simulationId !== prod.simulationId) return;
+            entry[MONTHS[m - 1]] = (entry[MONTHS[m - 1]] || 0) + item.quantity;
+          });
+        });
+      });
+      return entry;
+    });
+  }, [salesReports, selectedKioskId, isAdmin, user, panelEvolutionMonths]);
+
+  // ── PDV operator ID → username map ───────────────────────────────────────
+  const pdvOperatorMap = useMemo(() => {
+    const map = new Map<string, string>(); // pdvOperatorId (string) → username
+    for (const u of users as { id: string; username: string; pdvOperatorIds?: Record<string, number> }[]) {
+      if (!u.pdvOperatorIds) continue;
+      for (const opId of Object.values(u.pdvOperatorIds)) {
+        map.set(String(opId), u.username);
+      }
+    }
+    return map;
+  }, [users]);
+
+  // ── PAINEL: QTDE PRODUTO POR QUIOSQUE (mês corrente) ─────────────────────
+  const panelProductQtyByKiosk = useMemo(() => {
+    if (panelProductFilter.length === 0) return new Map<string, {
+      total: Record<string, number>;
+      byOperator: Record<string, Record<string, number>>; // simulationId → { username → qty }
+    }>();
+    const today = new Date();
+    const monthStart = format(startOfMonth(today), 'yyyy-MM-dd');
+    const todayStr = format(today, 'yyyy-MM-dd');
+
+    const result = new Map<string, {
+      total: Record<string, number>;
+      byOperator: Record<string, Record<string, number>>;
+    }>();
+
+    salesReports.filter(r => {
+      const km = selectedKioskId === 'all' || r.kioskId === selectedKioskId;
+      const um = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+      if (!r.day) return false;
+      const d = format(new Date(r.year, r.month - 1, r.day), 'yyyy-MM-dd');
+      return km && um && d >= monthStart && d <= todayStr;
+    }).forEach(r => {
+      if (!result.has(r.kioskId)) result.set(r.kioskId, { total: {}, byOperator: {} });
+      const entry = result.get(r.kioskId)!;
+
+      // Total per product
+      r.items.forEach(item => {
+        if (!panelProductFilter.includes(item.simulationId)) return;
+        entry.total[item.simulationId] = (entry.total[item.simulationId] || 0) + item.quantity;
+      });
+
+      // Per operator per product (from productQtyByOperator field)
+      const opData = (r as any).productQtyByOperator as Record<string, Record<string, number>> | undefined;
+      if (opData) {
+        for (const [pdvOpId, simQtys] of Object.entries(opData)) {
+          const userName = pdvOperatorMap.get(pdvOpId) ?? pdvOpId;
+          for (const [simId, qty] of Object.entries(simQtys)) {
+            if (!panelProductFilter.includes(simId)) continue;
+            if (!entry.byOperator[simId]) entry.byOperator[simId] = {};
+            entry.byOperator[simId][userName] = (entry.byOperator[simId][userName] || 0) + qty;
+          }
+        }
+      }
+    });
+
+    return result;
+  }, [salesReports, selectedKioskId, isAdmin, user, panelProductFilter, pdvOperatorMap]);
+
+  // ── PAINEL: FATURAMENTO (via goalPeriods.dailyProgress) ───────────────────
+  const faturamento = useMemo(() => {
+    const today = new Date();
+    const todayStr = format(today, 'yyyy-MM-dd');
+    const monthStart = format(startOfMonth(today), 'yyyy-MM-dd');
+    const weekStart = format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    const prevMonthSameDay = format(subMonths(today, 1), 'yyyy-MM-dd');
+    const prevMonthStart = format(startOfMonth(subMonths(today, 1)), 'yyyy-MM-dd');
+    const prevWeekStart = format(startOfWeek(subMonths(today, 1), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    const prevWeekEnd = format(subMonths(today, 1), 'yyyy-MM-dd');
+
+    // Deduplicate revenue: for each kiosk, only count one value per date
+    const kioskDateRev: Record<string, Record<string, number>> = {};
+    for (const p of periods) {
+      if (selectedKioskId !== 'all' && p.kioskId !== selectedKioskId) continue;
+      if (!p.dailyProgress) continue;
+      if (!kioskDateRev[p.kioskId]) kioskDateRev[p.kioskId] = {};
+      for (const [date, amount] of Object.entries(p.dailyProgress)) {
+        if (kioskDateRev[p.kioskId][date] === undefined) kioskDateRev[p.kioskId][date] = amount;
+      }
+    }
+
+    const sumRange = (from: string, to: string) => {
+      let total = 0;
+      for (const dateMap of Object.values(kioskDateRev))
+        for (const [date, amount] of Object.entries(dateMap))
+          if (date >= from && date <= to) total += amount;
+      return total;
+    };
+
+    const sumKioskRange = (dateMap: Record<string, number>, from: string, to: string) =>
+      Object.entries(dateMap).filter(([d]) => d >= from && d <= to).reduce((s, [, v]) => s + v, 0);
+
+    // Revenue-type template ids
+    const revTemplateIds = new Set(templates.filter(t => (t as any).type === 'revenue' || !(t as any).type).map(t => t.id));
+
+    const byKiosk = Object.entries(kioskDateRev).map(([kioskId, dateMap]) => {
+      const kioskObj = kiosks.find(k => k.id === kioskId);
+
+      // Pick the revenue periods for this kiosk that are active in the current month
+      const kioskRevPeriods = periods.filter(p =>
+        p.kioskId === kioskId &&
+        p.dailyProgress &&
+        Object.keys(p.dailyProgress).some(d => d >= monthStart && d <= todayStr) &&
+        (revTemplateIds.size === 0 || revTemplateIds.has(p.templateId))
+      );
+      // Deduplicate: take one period per unique targetValue to avoid double-counting
+      // (multiple periods of same kiosk get the same daily revenue written to all)
+      // Strategy: use the period with highest targetValue as the "main" goal
+      const mainPeriod = kioskRevPeriods.sort((a, b) => (b.targetValue || 0) - (a.targetValue || 0))[0];
+
+      return {
+        kioskId,
+        name: kioskObj?.name || kioskId,
+        month: sumKioskRange(dateMap, monthStart, todayStr),
+        prevMonth: sumKioskRange(dateMap, prevMonthStart, prevMonthSameDay),
+        week: sumKioskRange(dateMap, weekStart, todayStr),
+        prevWeek: sumKioskRange(dateMap, prevWeekStart, prevWeekEnd),
+        day: sumKioskRange(dateMap, todayStr, todayStr),
+        prevDay: sumKioskRange(dateMap, prevMonthSameDay, prevMonthSameDay),
+        targetValue: mainPeriod?.targetValue ?? 0,
+        upValue: mainPeriod?.upValue ?? 0,
+      };
+    }).filter(k => k.month > 0 || k.week > 0 || k.day > 0).sort((a, b) => b.month - a.month);
+
+    return {
+      month: sumRange(monthStart, todayStr),
+      prevMonth: sumRange(prevMonthStart, prevMonthSameDay),
+      week: sumRange(weekStart, todayStr),
+      prevWeek: sumRange(prevWeekStart, prevWeekEnd),
+      day: sumRange(todayStr, todayStr),
+      prevDay: sumRange(prevMonthSameDay, prevMonthSameDay),
+      byKiosk,
+      hasData: periods.length > 0,
+    };
+  }, [periods, templates, selectedKioskId, kiosks]);
+
+  // ── PAINEL: COLABORADORES (faturamento mês corrente) ─────────────────────
+  const colaboradoresFaturamento = useMemo(() => {
+    const today = new Date();
+    const monthStart = format(startOfMonth(today), 'yyyy-MM-dd');
+    const todayStr = format(today, 'yyyy-MM-dd');
+
+    // Map: `empId|||kioskId` → accumulated daily revenue (dedup by date)
+    const byEmpKiosk = new Map<string, {
+      employeeId: string; kioskId: string;
+      dailyRev: Record<string, number>;
+      targetValue: number; upValue: number;
+    }>();
+
+    for (const eg of employeeGoals) {
+      if (selectedKioskId !== 'all' && eg.kioskId !== selectedKioskId) continue;
+      if (!eg.dailyProgress) continue;
+
+      // Compute UP proportional: period.upValue * (eg.targetValue / period.targetValue)
+      const period = periods.find(p => p.id === eg.periodId);
+      const upValue = period && period.targetValue > 0
+        ? period.upValue * (eg.targetValue / period.targetValue)
+        : 0;
+
+      const key = `${eg.employeeId}|||${eg.kioskId}`;
+      if (!byEmpKiosk.has(key)) {
+        byEmpKiosk.set(key, { employeeId: eg.employeeId, kioskId: eg.kioskId, dailyRev: {}, targetValue: eg.targetValue, upValue });
+      } else {
+        // Accumulate targets across multiple active periods for same employee+kiosk
+        const entry = byEmpKiosk.get(key)!;
+        entry.targetValue += eg.targetValue;
+        entry.upValue += upValue;
+      }
+      const entry = byEmpKiosk.get(key)!;
+      for (const [date, amount] of Object.entries(eg.dailyProgress)) {
+        if (date >= monthStart && date <= todayStr && entry.dailyRev[date] === undefined)
+          entry.dailyRev[date] = amount;
+      }
+    }
+
+    return Array.from(byEmpKiosk.values())
+      .map(({ employeeId, kioskId, dailyRev, targetValue, upValue }) => {
+        const monthRevenue = Object.values(dailyRev).reduce((s, v) => s + v, 0);
+        const u = (users as { id: string; username: string }[]).find(u => u.id === employeeId);
+        const kiosk = kiosks.find(k => k.id === kioskId);
+        return { employeeId, userName: u?.username ?? employeeId, kioskId, kioskName: kiosk?.name || kioskId, monthRevenue, targetValue, upValue };
+      })
+      .filter(c => c.monthRevenue > 0)
+      .sort((a, b) => b.monthRevenue - a.monthRevenue);
+  }, [employeeGoals, periods, selectedKioskId, users, kiosks]);
+
   const handleSyncPDVLegal = async (retroactive = false) => {
     setIsSyncing(true);
     setSyncProgress(retroactive ? 'Iniciando sincronização retroativa (Janeiro → Hoje)...' : 'Sincronizando dados de ontem...');
@@ -465,7 +774,7 @@ function SalesAnalysisDashboardInner() {
     } catch (e: any) {
       console.error('[Fatal Sync Error]', e);
       toast({
-        title: 'Erro Fatal na Sincronização',
+        title: 'Erro fatal na sincronização',
         description: e.message || 'Houve um erro crítico ao sincronizar.',
         variant: 'destructive',
       });
@@ -545,7 +854,7 @@ function SalesAnalysisDashboardInner() {
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Período Prático</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Período prático</p>
           <ToggleGroup type="single" value={activePreset} onValueChange={v => v && applyPreset(v)} className="bg-muted/50 p-1 rounded-lg border">
             <ToggleGroupItem value="yesterday" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Ontem</ToggleGroupItem>
             <ToggleGroupItem value="today" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Hoje</ToggleGroupItem>
@@ -578,7 +887,7 @@ function SalesAnalysisDashboardInner() {
 
         {filterMode === 'compare' && (
           <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Meses para Comparar</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Meses para comparar</p>
             <div className="flex gap-1 bg-muted/30 p-1 rounded-lg border">
               {[1, 2, 3, 10, 11, 12].map(m => (
                 <Button key={m} size="sm" variant={compareMonths.includes(String(m)) ? 'default' : 'ghost'} className="h-7 w-10 text-[10px] px-0"
@@ -590,20 +899,6 @@ function SalesAnalysisDashboardInner() {
           </div>
         )}
 
-        <div className="ml-auto flex gap-2">
-          {isAdmin && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => handleSyncPDVLegal(false)} disabled={isSyncing} className="h-9 gap-2 shadow-sm">
-                <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
-                {isSyncing ? 'Sincronizando...' : 'Sincronizar Ontem'}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => handleSyncPDVLegal(true)} disabled={isSyncing} className="h-9 gap-2 shadow-sm border">
-                <Clock className="h-4 w-4" />
-                Sincronizar 2026
-              </Button>
-            </>
-          )}
-        </div>
       </div>
 
       <div className="flex items-center gap-2">
@@ -665,16 +960,12 @@ function SalesAnalysisDashboardInner() {
         </div>
       )}
 
-      <Tabs defaultValue="ranking">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 h-auto">
+      <Tabs defaultValue="painel">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">
+          <TabsTrigger value="painel"><LayoutDashboard className="mr-1 h-3 w-3" /> Painel</TabsTrigger>
           <TabsTrigger value="ranking"><Award className="mr-1 h-3 w-3" /> Ranking</TabsTrigger>
           <TabsTrigger value="combos"><Layers className="mr-1 h-3 w-3" /> Combos</TabsTrigger>
           <TabsTrigger value="abc"><BarChart2 className="mr-1 h-3 w-3" /> Curva ABC</TabsTrigger>
-          <TabsTrigger value="declining"><TrendingDown className="mr-1 h-3 w-3" /> Em queda</TabsTrigger>
-          <TabsTrigger value="mix"><PieIcon className="mr-1 h-3 w-3" /> Mix</TabsTrigger>
-          <TabsTrigger value="evolution"><TrendingUp className="mr-1 h-3 w-3" /> Evolução</TabsTrigger>
-          <TabsTrigger value="hourly"><Clock className="mr-1 h-3 w-3" /> Horários</TabsTrigger>
-          <TabsTrigger value="kiosks"><ShoppingBag className="mr-1 h-3 w-3" /> Quiosques</TabsTrigger>
         </TabsList>
 
         <TabsContent value="combos" className="mt-4">
@@ -702,8 +993,8 @@ function SalesAnalysisDashboardInner() {
                     <thead className="bg-muted text-muted-foreground uppercase text-[10px] font-bold">
                       <tr>
                         <th className="px-4 py-3 w-16">#</th>
-                        <th className="px-4 py-3">Itens no mesmo Cupom</th>
-                        <th className="px-4 py-3 text-right">Qtd. de Cupons</th>
+                        <th className="px-4 py-3">Itens no mesmo cupom</th>
+                        <th className="px-4 py-3 text-right">Qtd. de cupons</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -822,194 +1113,578 @@ function SalesAnalysisDashboardInner() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="declining" className="mt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {decliningProducts.map((p) => (
-              <Card key={p.simulationId}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm truncate">{p.name}</CardTitle>
-                  <CardDescription className="flex justify-between">
-                    <span>Tendência de queda</span>
-                    <span className="text-destructive font-bold">{p.variation.toFixed(1)}%</span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="h-[120px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={p.values}>
-                      <Bar dataKey="y" fill="#EF4444" radius={[2, 2, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
+        {/* ── PAINEL PRINCIPAL ─────────────────────────────────────────── */}
+        <TabsContent value="painel" className="mt-4 space-y-10">
 
-        <TabsContent value="mix" className="mt-4">
-          <Card>
-            <CardHeader><CardTitle>Mix por Linha de Produto</CardTitle></CardHeader>
-            <CardContent className="grid md:grid-cols-2 gap-8 items-center">
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={mixByLine} dataKey="quantity" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                      {mixByLine.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <Table>
-                <TableHeader><TableRow><TableHead>Linha</TableHead><TableHead className="text-right">Qtd</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {mixByLine.map((line, i) => (
-                    <TableRow key={i}><TableCell className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i % COLORS.length]}} />{line.name}</TableCell><TableCell className="text-right">{line.quantity.toLocaleString('pt-BR')}</TableCell></TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+          {/* FATURAMENTO */}
+          <section>
+            <div className="flex items-center gap-2 border-b pb-2 mb-4">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Faturamento do mês</h3>
+              {!faturamento.hasData && (
+                <Badge variant="outline" className="ml-2 text-[10px]">Configure metas para ver faturamento</Badge>
+              )}
+            </div>
 
-        <TabsContent value="evolution" className="mt-4">
-          <Card>
-            <CardHeader><CardTitle>Evolução de Vendas (Top 5)</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <ComposedChart data={monthlyEvolution}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey={filterMode === 'compare' ? 'product' : 'month'} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  {filterMode === 'compare' ? (
-                    compareMonths.map((m, i) => <Bar key={m} dataKey={MONTHS[Number(m)-1]} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />)
-                  ) : (
-                    top5Names.map((name, i) => <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />)
-                  )}
-                </ComposedChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            {/* Helper inline para renderizar um bloco Mês/Semana/Dia */}
+            {(() => {
+              const Var = ({ pct }: { pct: number | null }) => pct === null ? null : (
+                <span className={cn("text-[10px] font-semibold", pct >= 0 ? "text-green-500" : "text-destructive")}>
+                  {pct >= 0 ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
+                </span>
+              );
 
-        <TabsContent value="kiosks" className="mt-4">
-          <Card>
-            <CardHeader><CardTitle>Vendas por Quiosque</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={kioskComparison} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="kioskName" type="category" width={140} />
-                  <Tooltip cursor={{fill: 'transparent'}} />
-                  <Bar dataKey="total" fill="#E91E8C" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="hourly" className="mt-4">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <CardTitle>Fluxo de Vendas por Horário</CardTitle>
-                  <CardDescription>
-                    {hourlySelectedProduct === 'all' 
-                      ? 'Clique em uma barra para ver o detalhamento dos produtos vendidos naquela hora.'
-                      : `Visualizando fluxo apenas para: ${productRanking.find(p => p.simulationId === hourlySelectedProduct)?.name}`}
-                  </CardDescription>
-                </div>
-                <Select value={hourlySelectedProduct} onValueChange={setHourlySelectedProduct}>
-                  <SelectTrigger className="w-full md:w-[280px]">
-                    <SelectValue placeholder="Todos os produtos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os produtos (Geral)</SelectItem>
-                    {productRanking.map(p => (
-                      <SelectItem key={p.simulationId} value={p.simulationId}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[320px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart 
-                    data={filteredHourlyData}
-                    onClick={(data) => {
-                      if (data && data.activePayload && data.activePayload.length > 0) {
-                        setSelectedHour(data.activePayload[0].payload.hourStr);
-                      }
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="hour" axisLine={false} tickLine={false} fontSize={12} />
-                    <YAxis axisLine={false} tickLine={false} fontSize={12} />
-                    <Tooltip 
-                      cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          return (
-                            <div className="bg-popover border p-3 rounded-lg shadow-xl">
-                              <p className="font-bold text-sm mb-1">{payload[0].payload.hour}</p>
-                              <p className="text-pink-600 font-bold">
-                                {payload[0].value} un {hourlySelectedProduct === 'all' ? 'vendidos no total' : 'vendidas deste produto'}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground mt-1 underline">Clique para detalhar</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Bar dataKey="displayValue" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} className="cursor-pointer" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {selectedHour && (() => {
-                const hourData = filteredHourlyData.find(d => d.hourStr === selectedHour);
-                if (!hourData || hourData.products.length === 0) return (
-                  <div className="mt-8 text-center py-10 text-muted-foreground border-t">
-                    Nenhuma venda registrada para as {selectedHour}h no período.
-                  </div>
-                );
+              const FatBlock = ({ label, month, prevMonth, week, prevWeek, day, prevDay, targetValue, upValue }: {
+                label: string;
+                month: number; prevMonth: number;
+                week: number; prevWeek: number;
+                day: number; prevDay: number;
+                targetValue?: number; upValue?: number;
+              }) => {
+                const pctMonth = prevMonth > 0 ? ((month - prevMonth) / prevMonth) * 100 : null;
+                const pctWeek  = prevWeek  > 0 ? ((week  - prevWeek)  / prevWeek)  * 100 : null;
+                const pctDay   = prevDay   > 0 ? ((day   - prevDay)   / prevDay)   * 100 : null;
+                const pctAlvo  = targetValue && targetValue > 0 ? (month / targetValue) * 100 : null;
+                const pctUp    = upValue    && upValue    > 0 ? (month / upValue)    * 100 : null;
                 return (
-                  <div className="mt-8 space-y-4 animate-in fade-in slide-in-from-top-4 duration-500 border-t pt-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold text-lg">Produtos Vendidos: {selectedHour}h</h4>
-                        <p className="text-sm text-muted-foreground">Total de {hourData.total} unidades</p>
+                  <Card>
+                    <CardContent className="pt-4">
+                      <p className="text-xs font-semibold text-muted-foreground mb-3">{label}</p>
+                      <div className="grid grid-cols-3 gap-3 divide-x divide-border mb-3">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Mês corrente</p>
+                          <p className="text-base font-bold leading-tight">R$ {fmt(month)}</p>
+                          {pctMonth === null && prevMonth === 0 && month > 0
+                            ? <p className="text-[10px] text-muted-foreground">sem dado ant.</p>
+                            : <Var pct={pctMonth} />}
+                        </div>
+                        <div className="pl-3">
+                          <p className="text-[10px] text-muted-foreground">Semana</p>
+                          <p className="text-base font-bold leading-tight">R$ {fmt(week)}</p>
+                          <Var pct={pctWeek} />
+                        </div>
+                        <div className="pl-3">
+                          <p className="text-[10px] text-muted-foreground">Hoje</p>
+                          <p className="text-base font-bold leading-tight">R$ {fmt(day)}</p>
+                          <Var pct={pctDay} />
+                        </div>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => setSelectedHour(null)}>Fechar detalhamento</Button>
-                    </div>
+                      {(targetValue || upValue) ? (
+                        <div className="grid grid-cols-2 gap-3 pt-3 border-t divide-x divide-border">
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">Meta alvo</p>
+                            <p className="text-sm font-semibold leading-tight">R$ {fmt(targetValue ?? 0)}</p>
+                            {pctAlvo !== null && (
+                              <span className={cn("text-[10px] font-bold", pctAlvo >= 100 ? "text-green-500" : pctAlvo >= 70 ? "text-yellow-500" : "text-destructive")}>
+                                {pctAlvo.toFixed(1)}% atingido
+                              </span>
+                            )}
+                          </div>
+                          <div className="pl-3">
+                            <p className="text-[10px] text-muted-foreground">Meta UP</p>
+                            <p className="text-sm font-semibold leading-tight">R$ {fmt(upValue ?? 0)}</p>
+                            {pctUp !== null && (
+                              <span className={cn("text-[10px] font-bold", pctUp >= 100 ? "text-green-500" : pctUp >= 70 ? "text-yellow-500" : "text-destructive")}>
+                                {pctUp.toFixed(1)}% atingido
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                );
+              };
+
+              return (
+                <div className="space-y-3">
+                  {/* Geral */}
+                  <FatBlock
+                    label="Geral"
+                    month={faturamento.month} prevMonth={faturamento.prevMonth}
+                    week={faturamento.week}   prevWeek={faturamento.prevWeek}
+                    day={faturamento.day}     prevDay={faturamento.prevDay}
+                  />
+                  {/* Por quiosque */}
+                  {faturamento.byKiosk.map(k => (
+                    <FatBlock key={k.kioskId}
+                      label={k.name}
+                      month={k.month}         prevMonth={k.prevMonth}
+                      week={k.week}           prevWeek={k.prevWeek}
+                      day={k.day}             prevDay={k.prevDay}
+                      targetValue={k.targetValue}
+                      upValue={k.upValue}
+                    />
+                  ))}
+                </div>
+              );
+            })()}
+          </section>
+
+          {/* COLABORADORES */}
+          <section>
+            <div className="flex items-center gap-2 border-b pb-2 mb-4">
+              <Users2 className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Faturamento do mês por colaborador</h3>
+            </div>
+            {colaboradoresFaturamento.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">Nenhum dado de colaborador disponível para o período.</p>
+            ) : (
+              <div className="space-y-6">
+                {Object.entries(
+                  colaboradoresFaturamento.reduce((acc, c) => {
+                    if (!acc[c.kioskId]) acc[c.kioskId] = { kioskName: c.kioskName, collaborators: [] as typeof colaboradoresFaturamento };
+                    acc[c.kioskId].collaborators.push(c);
+                    return acc;
+                  }, {} as Record<string, { kioskName: string; collaborators: typeof colaboradoresFaturamento }>)
+                ).map(([kioskId, { kioskName, collaborators }]) => (
+                  <div key={kioskId} className="space-y-2">
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">{kioskName}</p>
                     <div className="overflow-x-auto border rounded-xl">
                       <table className="w-full text-sm text-left border-collapse">
                         <thead className="bg-muted text-muted-foreground uppercase text-[10px] font-bold">
                           <tr>
-                            <th className="px-4 py-3">Produto</th>
-                            <th className="px-4 py-3 text-right">Qtd</th>
+                            <th className="px-4 py-2.5">Colaborador</th>
+                            <th className="px-4 py-2.5 text-right">Faturamento (mês)</th>
+                            <th className="px-4 py-2.5 text-right">Meta alvo</th>
+                            <th className="px-4 py-2.5 text-right">% Alvo</th>
+                            <th className="px-4 py-2.5 text-right">Meta UP</th>
+                            <th className="px-4 py-2.5 text-right">% UP</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {hourData.products.map((p, idx) => (
-                            <tr key={idx} className={cn("border-t hover:bg-muted/50 transition-colors", hourlySelectedProduct === p.simulationId ? "bg-primary/10 font-semibold" : "")}>
-                              <td className="px-4 py-3 font-medium">{p.name}</td>
-                              <td className="px-4 py-3 text-right text-foreground">{p.quantity} un</td>
-                            </tr>
-                          ))}
+                          {collaborators.map((c, i) => {
+                            const pctAlvo = c.targetValue > 0 ? (c.monthRevenue / c.targetValue) * 100 : null;
+                            const pctUp   = c.upValue    > 0 ? (c.monthRevenue / c.upValue)    * 100 : null;
+                            const colorAlvo = pctAlvo === null ? '' : pctAlvo >= 100 ? 'text-green-600' : pctAlvo >= 70 ? 'text-yellow-600' : 'text-destructive';
+                            const colorUp   = pctUp   === null ? '' : pctUp   >= 100 ? 'text-green-600' : pctUp   >= 70 ? 'text-yellow-600' : 'text-destructive';
+                            return (
+                              <tr key={i} className="border-t hover:bg-muted/50 transition-colors">
+                                <td className="px-4 py-2.5 font-medium">{c.userName}</td>
+                                <td className="px-4 py-2.5 text-right font-bold tabular-nums">R$ {fmt(c.monthRevenue)}</td>
+                                <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                                  {c.targetValue > 0 ? `R$ ${fmt(c.targetValue)}` : '—'}
+                                </td>
+                                <td className="px-4 py-2.5 text-right tabular-nums">
+                                  {pctAlvo !== null
+                                    ? <span className={cn('font-bold', colorAlvo)}>{pctAlvo.toFixed(1)}%</span>
+                                    : '—'}
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                                  {c.upValue > 0 ? `R$ ${fmt(c.upValue)}` : '—'}
+                                </td>
+                                <td className="px-4 py-2.5 text-right tabular-nums">
+                                  {pctUp !== null
+                                    ? <span className={cn('font-bold', colorUp)}>{pctUp.toFixed(1)}%</span>
+                                    : '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* PRODUTOS POR QUIOSQUE */}
+          <section>
+            <div className="flex items-center justify-between border-b pb-2 mb-4 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <BarChart2 className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Qtde por Produto por mês - Quiosque</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {panelProductFilter.length > 0 && (
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground px-2"
+                    onClick={() => setPanelProductFilter([])}>
+                    Limpar ({panelProductFilter.length})
+                  </Button>
+                )}
+                <Popover open={panelColabProductOpen} onOpenChange={open => { setPanelColabProductOpen(open); if (!open) setPanelProductSearch(''); }}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                      <Search className="h-3 w-3" />
+                      {panelProductFilter.length === 0
+                        ? 'Selecionar produtos'
+                        : `${panelProductFilter.length} produto${panelProductFilter.length > 1 ? 's' : ''} selecionado${panelProductFilter.length > 1 ? 's' : ''}`}
+                      <ChevronsUpDown className="h-3 w-3 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-2" align="end">
+                    <Input
+                      placeholder="Buscar produto..."
+                      value={panelProductSearch}
+                      onChange={e => setPanelProductSearch(e.target.value)}
+                      className="h-8 text-xs mb-2"
+                      autoFocus
+                    />
+                    {panelProductFilter.length >= 10 && (
+                      <p className="text-[10px] text-muted-foreground px-1 mb-1">Limite de 10 produtos atingido</p>
+                    )}
+                    <div className="max-h-[260px] overflow-y-auto space-y-0.5">
+                      {productRanking
+                        .filter(p => !panelProductSearch || p.name.toLowerCase().includes(panelProductSearch.toLowerCase()))
+                        .map(p => {
+                          const selected = panelProductFilter.includes(p.simulationId);
+                          const atMax = panelProductFilter.length >= 10 && !selected;
+                          return (
+                            <button key={p.simulationId} type="button"
+                              disabled={atMax}
+                              className={cn(
+                                'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-left transition-colors',
+                                selected ? 'bg-primary/10' : 'hover:bg-muted',
+                                atMax && 'opacity-40 cursor-not-allowed'
+                              )}
+                              onClick={() => {
+                                setPanelProductFilter(prev =>
+                                  selected ? prev.filter(id => id !== p.simulationId) : [...prev, p.simulationId]
+                                );
+                              }}>
+                              <div className={cn(
+                                'h-4 w-4 shrink-0 rounded border flex items-center justify-center',
+                                selected ? 'bg-primary border-primary' : 'border-input'
+                              )}>
+                                {selected && <Check className="h-3 w-3 text-primary-foreground" />}
+                              </div>
+                              <span className="flex-1 truncate">{p.name}</span>
+                              <span className="text-[10px] text-muted-foreground tabular-nums">{p.quantity.toLocaleString('pt-BR')}</span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            {panelProductFilter.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">Selecione até 10 produtos para ver a quantidade vendida por quiosque no mês corrente.</p>
+            ) : (
+              <div className="space-y-4">
+                {Array.from(panelProductQtyByKiosk.entries()).map(([kioskId, { total, byOperator }]) => {
+                  const kioskObj = kiosks.find(k => k.id === kioskId);
+                  const rows = panelProductFilter.map(simId => ({
+                    simId,
+                    name: productRanking.find(p => p.simulationId === simId)?.name || simId,
+                    qty: total[simId] || 0,
+                    operators: Object.entries(byOperator[simId] || {}).sort((a, b) => b[1] - a[1]),
+                  }));
+                  return (
+                    <div key={kioskId} className="space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">
+                        {kioskObj?.name || kioskId}
+                      </p>
+                      <div className="border rounded-xl overflow-hidden">
+                        <table className="w-full text-sm text-left border-collapse">
+                          <thead className="bg-muted text-muted-foreground uppercase text-[10px] font-bold">
+                            <tr>
+                              <th className="px-4 py-2.5 w-6" />
+                              <th className="px-4 py-2.5">Produto</th>
+                              <th className="px-4 py-2.5 text-right">Qtde vendida — mês corrente</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(({ simId, name, qty, operators }) => {
+                              const rowKey = `${kioskId}|||${simId}`;
+                              const isExpanded = expandedProductRows.has(rowKey);
+                              const hasOperatorData = operators.length > 0;
+                              return (
+                                <Fragment key={simId}>
+                                  <tr
+                                    className={cn('border-t transition-colors', hasOperatorData ? 'cursor-pointer hover:bg-muted/50' : '')}
+                                    onClick={() => {
+                                      if (!hasOperatorData) return;
+                                      setExpandedProductRows(prev => {
+                                        const next = new Set(prev);
+                                        next.has(rowKey) ? next.delete(rowKey) : next.add(rowKey);
+                                        return next;
+                                      });
+                                    }}>
+                                    <td className="px-4 py-2.5 text-muted-foreground">
+                                      {hasOperatorData && (
+                                        <span className="text-xs">{isExpanded ? '▾' : '▸'}</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2.5 font-medium">{name}</td>
+                                    <td className="px-4 py-2.5 text-right font-bold tabular-nums">
+                                      {qty > 0
+                                        ? `${qty.toLocaleString('pt-BR')} un`
+                                        : <span className="text-muted-foreground font-normal">—</span>}
+                                    </td>
+                                  </tr>
+                                  {isExpanded && operators.map(([opName, opQty]) => (
+                                    <tr key={`${simId}-${opName}`} className="border-t bg-muted/30">
+                                      <td className="px-4 py-1.5" />
+                                      <td className="px-4 py-1.5 text-xs text-muted-foreground pl-8">↳ {opName}</td>
+                                      <td className="px-4 py-1.5 text-right text-xs font-semibold tabular-nums text-muted-foreground">
+                                        {opQty.toLocaleString('pt-BR')} un
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* MIX POR LINHA */}
+          <section>
+            <div className="flex items-center justify-between border-b pb-2 mb-4">
+              <div className="flex items-center gap-2">
+                <PieIcon className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Mix por Linha de Produto</h3>
+              </div>
+              <ToggleGroup type="single" value={panelMixPreset} onValueChange={v => v && setPanelMixPreset(v)} className="bg-muted/50 p-0.5 rounded-lg border">
+                <ToggleGroupItem value="yesterday" className="h-6 px-2 text-[10px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Ontem</ToggleGroupItem>
+                <ToggleGroupItem value="today" className="h-6 px-2 text-[10px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Hoje</ToggleGroupItem>
+                <ToggleGroupItem value="thisMonth" className="h-6 px-2 text-[10px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Mês Atual</ToggleGroupItem>
+                <ToggleGroupItem value="lastMonth" className="h-6 px-2 text-[10px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Mês Ant.</ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+            <Card>
+              <CardContent className="pt-4 grid md:grid-cols-2 gap-8 items-center">
+                <div className="h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={panelMixByLine} dataKey="quantity" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                        {panelMixByLine.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <Table>
+                  <TableHeader><TableRow><TableHead>Linha</TableHead><TableHead className="text-right">Qtd</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {panelMixByLine.map((line, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i % COLORS.length]}} />{line.name}
+                        </TableCell>
+                        <TableCell className="text-right">{line.quantity.toLocaleString('pt-BR')}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* EVOLUÇÃO DE VENDAS */}
+          <section>
+            <div className="flex items-center justify-between border-b pb-2 mb-4 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Evolução de vendas — Top 5</h3>
+              </div>
+              <div className="flex gap-1 bg-muted/30 p-0.5 rounded-lg border">
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                  <Button key={m} size="sm" variant={panelEvolutionMonths.includes(String(m)) ? 'default' : 'ghost'}
+                    className="h-6 w-9 text-[10px] px-0"
+                    onClick={() => setPanelEvolutionMonths(prev => prev.includes(String(m)) ? prev.filter(x => x !== String(m)) : [...prev, String(m)])}>
+                    {MONTHS[m-1]}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <Card>
+              <CardContent className="pt-4">
+                {panelEvolution.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-8 text-center">Selecione ao menos um mês e aguarde dados disponíveis.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <ComposedChart data={panelEvolution}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="product" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Legend />
+                      {panelEvolutionMonths.map((m, i) => (
+                        <Bar key={m} dataKey={MONTHS[Number(m)-1]} fill={COLORS[i % COLORS.length]} radius={[4,4,0,0]} />
+                      ))}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* FLUXO POR HORÁRIO */}
+          <section>
+            <div className="flex items-center justify-between border-b pb-2 mb-4 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Fluxo por Horário</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={panelHourlySelectedProduct} onValueChange={v => { setPanelHourlySelectedProduct(v); setPanelSelectedHour(null); }}>
+                  <SelectTrigger className="h-7 w-[200px] text-xs"><SelectValue placeholder="Todos os produtos" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os produtos</SelectItem>
+                    {panelHourlyRanking.map(p => (
+                      <SelectItem key={p.simulationId} value={p.simulationId}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <ToggleGroup type="single" value={panelHourlyPreset} onValueChange={v => v && (setPanelHourlyPreset(v), setPanelSelectedHour(null))} className="bg-muted/50 p-0.5 rounded-lg border">
+                  <ToggleGroupItem value="yesterday" className="h-6 px-2 text-[10px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Ontem</ToggleGroupItem>
+                  <ToggleGroupItem value="today" className="h-6 px-2 text-[10px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Hoje</ToggleGroupItem>
+                  <ToggleGroupItem value="thisMonth" className="h-6 px-2 text-[10px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Mês Atual</ToggleGroupItem>
+                  <ToggleGroupItem value="lastMonth" className="h-6 px-2 text-[10px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Mês Ant.</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+            </div>
+            <div className="space-y-4">
+              {panelHourlyByKiosk.map(({ kioskId, kioskName, data }) => {
+                const filteredData = data.map(d => ({
+                  ...d,
+                  displayValue: panelHourlySelectedProduct === 'all' ? d.total : (d.products.find(p => p.simulationId === panelHourlySelectedProduct)?.quantity || 0),
+                }));
+                const selectedHourData = panelSelectedHour?.kioskId === kioskId
+                  ? filteredData.find(d => d.hourStr === panelSelectedHour.hourStr) ?? null
+                  : null;
+                return (
+                  <Card key={kioskId}>
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold">{kioskName}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4">
+                      <div className="h-[220px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={filteredData}
+                            onClick={d => {
+                              if (d?.activePayload?.length) {
+                                const hourStr = d.activePayload[0].payload.hourStr as string;
+                                setPanelSelectedHour(prev =>
+                                  prev?.kioskId === kioskId && prev.hourStr === hourStr ? null : { kioskId, hourStr }
+                                );
+                              }
+                            }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="hour" axisLine={false} tickLine={false} fontSize={11} />
+                            <YAxis axisLine={false} tickLine={false} fontSize={11} />
+                            <Tooltip cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
+                              content={({ active, payload }) => active && payload?.length ? (
+                                <div className="bg-popover border p-3 rounded-lg shadow-xl">
+                                  <p className="font-bold text-sm mb-1">{payload[0].payload.hour}</p>
+                                  <p className="text-pink-600 font-bold">{payload[0].value} un</p>
+                                  <p className="text-[10px] text-muted-foreground mt-1 underline">Clique para detalhar</p>
+                                </div>
+                              ) : null}
+                            />
+                            <Bar dataKey="displayValue" fill="hsl(var(--primary))" radius={[4,4,0,0]} className="cursor-pointer" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      {selectedHourData && (
+                        <div className="mt-4 space-y-3 animate-in fade-in slide-in-from-top-4 duration-300 border-t pt-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="font-bold text-sm">Produtos — {panelSelectedHour!.hourStr}h</h4>
+                              <p className="text-xs text-muted-foreground">{selectedHourData.total} unidades</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setPanelSelectedHour(null)}>Fechar</Button>
+                          </div>
+                          {selectedHourData.products.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-4">Nenhuma venda neste horário.</p>
+                          ) : (
+                            <div className="border rounded-xl overflow-x-auto">
+                              <table className="w-full text-sm border-collapse">
+                                <thead className="bg-muted text-muted-foreground uppercase text-[10px] font-bold">
+                                  <tr>
+                                    <th className="px-4 py-2 text-left">Produto</th>
+                                    <th className="px-4 py-2 text-right">Qtd</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {selectedHourData.products.map((p, idx) => (
+                                    <tr key={idx} className={cn("border-t hover:bg-muted/50", panelHourlySelectedProduct === p.simulationId ? "bg-primary/10 font-semibold" : "")}>
+                                      <td className="px-4 py-2">{p.name}</td>
+                                      <td className="px-4 py-2 text-right">{p.quantity} un</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 );
-              })()}
-            </CardContent>
-          </Card>
+              })}
+            </div>
+          </section>
+
+          {/* QTDE VENDIDA POR QUIOSQUE */}
+          <section>
+            <div className="flex items-center gap-2 border-b pb-2 mb-4">
+              <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Comparativo de quantidade de produtos vendidos</h3>
+            </div>
+            {panelKioskHistoryData.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">Nenhum quiosque disponível.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {panelKioskHistoryData.map(({ kioskId, kioskName, chartData }) => (
+                  <Card key={kioskId}>
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold">{kioskName}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4">
+                      <ResponsiveContainer width="100%" height={180}>
+                        <BarChart data={chartData} barCategoryGap="25%" margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={36} domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.15)]} />
+                          <Tooltip
+                            cursor={{ fill: 'hsl(var(--muted)/0.4)' }}
+                            content={({ active, payload }) => active && payload?.length ? (
+                              <div className="bg-popover border p-2 rounded-lg shadow-xl text-xs">
+                                <p className="font-semibold mb-0.5">{payload[0].payload.label}</p>
+                                <p style={{ color: payload[0].payload.isLastYear ? '#6366F1' : '#E91E8C' }} className="font-bold">
+                                  {(payload[0].value as number).toLocaleString('pt-BR')} unidades
+                                </p>
+                              </div>
+                            ) : null}
+                          />
+                          <Bar dataKey="qty" radius={[4, 4, 0, 0]}>
+                            {chartData.map((entry, idx) => (
+                              <Cell key={idx} fill={entry.isLastYear ? '#6366F1' : '#E91E8C'} />
+                            ))}
+                            <LabelList dataKey="qty" position="top" style={{ fontSize: 10, fontWeight: 600, fill: 'hsl(var(--foreground))' }}
+                              formatter={(v: number) => v > 0 ? v.toLocaleString('pt-BR') : ''} />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <div className="flex items-center gap-3 mt-2 justify-end">
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#E91E8C' }} />
+                          3 meses anteriores
+                        </span>
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#6366F1' }} />
+                          Mesmo mês ano passado
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+
         </TabsContent>
       </Tabs>
     </div>

@@ -55,7 +55,7 @@ export function PurchaseHistoryDashboard() {
         <Tabs defaultValue="orders">
             <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="orders">Ordens de Compra</TabsTrigger>
-                <TabsTrigger value="query"><LineChart className="mr-2 h-4 w-4"/>Consulta Dinâmica</TabsTrigger>
+                <TabsTrigger value="query"><LineChart className="mr-2 h-4 w-4"/>Consulta dinâmica</TabsTrigger>
             </TabsList>
             <TabsContent value="orders" className="mt-4">
                 <PurchaseOrderList />
