@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncDayAdmin } from '@/lib/integrations/pdv-legal-admin';
-import { dbAdmin } from '@/lib/firebase-admin';
+import { dbAdmin, authAdmin } from '@/lib/firebase-admin';
 
 /**
  * Endpoint para sincronização AUTÔNOMA do PDV Legal.
@@ -13,12 +13,19 @@ export async function GET(req: NextRequest) {
   const endStr = searchParams.get('end');
   const kioskId = searchParams.get('kiosk');
 
-  // Validação de Segurança
+  // Validação de segurança: aceita secret server-to-server OU Firebase ID Token
   const authHeader = req.headers.get('Authorization');
   const syncSecret = process.env.PDV_SYNC_SECRET;
-  
-  if (syncSecret && authHeader !== `Bearer ${syncSecret}`) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  const isSecretValid = syncSecret && authHeader === `Bearer ${syncSecret}`;
+
+  if (!isSecretValid) {
+    // Tenta verificar como Firebase ID Token
+    try {
+      if (!authHeader?.startsWith('Bearer ')) throw new Error('header ausente');
+      await authAdmin.verifyIdToken(authHeader.slice(7));
+    } catch {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
   try {

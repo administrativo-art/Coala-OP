@@ -25,12 +25,15 @@ const stdDev = (arr: number[]): number => {
     return Math.sqrt(arr.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / arr.length);
 };
 
+const safeNumber = (n: number, fallback = 0): number =>
+    (isFinite(n) && !isNaN(n)) ? Math.round(n * 1000) / 1000 : fallback;
+
 export function ConsumptionAnalysisDashboard() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const { reports, baseProducts, isLoading, addReport, deleteReport } = useValidatedConsumptionData();
   const { kiosks } = useKiosks();
-  const { permissions } = useAuth();
+  const { permissions, firebaseUser } = useAuth();
   const { toast } = useToast();
 
   // AI-related state moved from AverageConsumptionChart
@@ -90,18 +93,22 @@ export function ConsumptionAnalysisDashboard() {
                 return {
                     name: bp.name,
                     unit: bp.unit,
-                    series: reportsInPeriod.map(r => ({ label: `${r.month}/${r.year}`, value: r.results.find(res => res.baseProductId === bp.id)?.consumedQuantity || 0 })),
-                    periodAvg,
-                    histAvg,
+                    series: reportsInPeriod.map(r => ({ label: `${r.month}/${r.year}`, value: safeNumber(r.results.find(res => res.baseProductId === bp.id)?.consumedQuantity || 0) })),
+                    periodAvg: safeNumber(periodAvg),
+                    histAvg: safeNumber(histAvg),
                     volatility,
                 };
             }).filter(item => item.histAvg > 0 || item.periodAvg > 0)
         };
         
         try {
+            const idToken = await firebaseUser?.getIdToken();
             const response = await fetch('/api/ai/analyze-consumption', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(idToken ? { 'Authorization': `Bearer ${idToken}` } : {}),
+                },
                 body: JSON.stringify(analysisInput),
             });
 

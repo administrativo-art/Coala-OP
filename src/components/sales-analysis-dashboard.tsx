@@ -68,7 +68,7 @@ export function SalesAnalysisDashboard() {
 function SalesAnalysisDashboardInner() {
   const { salesReports, loading: reportsLoading } = useSalesReports();
   const { kiosks } = useKiosks();
-  const { user, permissions, users } = useAuth();
+  const { user, permissions, users, firebaseUser } = useAuth();
   const { periods, employeeGoals, templates } = useGoals();
   const { simulations } = useProductSimulation();
   const { categories } = useProductSimulationCategories();
@@ -736,16 +736,18 @@ function SalesAnalysisDashboardInner() {
       const failedDays: string[] = [];
       const totalSteps = days.length * kiosksToSync.length;
 
+      const idToken = await firebaseUser?.getIdToken();
+      if (!idToken) throw new Error('Usuário não autenticado.');
+
       for (const day of days) {
         for (const kId of kiosksToSync) {
-          const pdvFilialId = KIOSK_MAP[kId];
-          if (!pdvFilialId) continue;
-          
+          if (!KIOSK_MAP[kId]) continue;
+
           processedCount++;
           setSyncProgress(`[${processedCount}/${totalSteps}] ${day} - ${kId}...`);
-          
+
           try {
-            const res = await syncDayClient(day, kId, pdvFilialId);
+            const res = await syncDayClient(day, kId, idToken);
             totalItemsCount += (res.count || 0);
           } catch (e: any) {
             console.error(`[Sync Fail] ${day} ${kId}:`, e);

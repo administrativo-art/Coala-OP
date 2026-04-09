@@ -1,5 +1,6 @@
-import { initializeApp, getApps, getApp, App, cert } from 'firebase-admin/app';
+import { initializeApp, getApps, App, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 const projectId = 'smart-converter-752gf';
 
@@ -7,9 +8,8 @@ function getAdminApp(): App {
   const existingApp = getApps().find(a => a.name === 'admin-sync');
   if (existingApp) return existingApp;
 
-  // Se houver uma conta de serviço no ambiente (JSON string)
   const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
-  
+
   if (serviceAccountVar) {
     try {
       const serviceAccount = JSON.parse(serviceAccountVar);
@@ -22,13 +22,11 @@ function getAdminApp(): App {
     }
   }
 
-  // Fallback para as credenciais padrão do ambiente (Cloud Run / App Hosting)
   return initializeApp({
     projectId: projectId,
   }, 'admin-sync');
 }
 
-const app = getAdminApp();
-
-// Conecta ao banco de dados específico "coala"
-export const dbAdmin = getFirestore(app, "coala");
+export const adminApp = getAdminApp();
+export const dbAdmin = getFirestore(adminApp, "coala");
+export const authAdmin = getAuth(adminApp);

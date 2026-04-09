@@ -1,13 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { analyzeConsumption } from "@/ai/flows/analyze-consumption-flow";
 import { ConsumptionAnalysisInputSchema } from "@/ai/flows/consumption-schemas";
+import { verifyAuth } from "@/lib/verify-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Increase the timeout for Vercel
-export const maxDuration = 120; 
+export const maxDuration = 120;
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  try {
+    await verifyAuth(req);
+  } catch {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+  }
+
   try {
     const json = await req.json();
     const input = ConsumptionAnalysisInputSchema.parse(json);

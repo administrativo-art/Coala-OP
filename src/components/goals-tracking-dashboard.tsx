@@ -871,7 +871,7 @@ const TYPE_ORDER: Record<string, number> = { revenue: 0, ticket: 1, product_line
 
 export function GoalsTrackingDashboard() {
   const { periods, employeeGoals, templates, loading, deletePeriod, deleteEmployeeGoal } = useGoals();
-  const { user, permissions, users } = useAuth();
+  const { user, permissions, users, firebaseUser } = useAuth();
   const { kiosks } = useKiosks();
   const { toast } = useToast();
 
@@ -948,9 +948,13 @@ export function GoalsTrackingDashboard() {
           }))
       };
 
+      const idToken = await firebaseUser?.getIdToken();
       const response = await fetch('/api/ai/analyze-goals', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { 'Authorization': `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify(data),
       });
 

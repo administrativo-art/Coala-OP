@@ -1,7 +1,13 @@
-const COD_EMPRESA = process.env.PDVLEGAL_COD_EMPRESA || '14449';
-const API_TOKEN = process.env.PDVLEGAL_TOKEN || 'NMCB-2700-8660-1072';
-const USERNAME = process.env.PDVLEGAL_USERNAME || 'central@tabletcloud.com.br';
-const PASSWORD = process.env.PDVLEGAL_PASSWORD || 'dtat-2123-5110-5504@1707212';
+function requireEnv(name: string): string {
+  const val = process.env[name];
+  if (!val) throw new Error(`[PDV Sync] Variável de ambiente ${name} não configurada.`);
+  return val;
+}
+
+const COD_EMPRESA = requireEnv('PDVLEGAL_COD_EMPRESA');
+const API_TOKEN = requireEnv('PDVLEGAL_TOKEN');
+const USERNAME = requireEnv('PDVLEGAL_USERNAME');
+const PASSWORD = requireEnv('PDVLEGAL_PASSWORD');
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
 function extractBrazilHour(dateStr: string): string {

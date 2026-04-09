@@ -149,7 +149,7 @@ export const syncGoalsForRange = onCall(
 // --- Criar usuário (Auth + Firestore) server-side ---
 export const createUser = onCall(
   { 
-    cors: ["*"] 
+    cors: [/smart-converter-752gf\.web\.app$/, /smart-converter-752gf\.firebaseapp\.com$/, /localhost(:\d+)?$/] 
   },
   async (request: any) => {
     // Apenas admins podem criar usuários
@@ -203,7 +203,7 @@ export const createUser = onCall(
 
 // --- Deletar usuário (Auth + Firestore) server-side ---
 export const deleteUser = onCall(
-  { cors: ["*"] },
+  { cors: [/smart-converter-752gf\.web\.app$/, /smart-converter-752gf\.firebaseapp\.com$/, /localhost(:\d+)?$/] },
   async (request: any) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Não autenticado.');

@@ -87,7 +87,8 @@ service cloud.firestore {
       allow create: if isAuth() && (isAdmin() || getPerms().settings.manageProfiles == true)
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2
-        && request.resource.data.keys().hasAll(['name', 'permissions']);
+        && request.resource.data.keys().hasAll(['name', 'permissions'])
+        && request.resource.data.permissions is map;
       allow update: if isAuth() && (isAdmin() || getPerms().settings.manageProfiles == true)
         && request.resource.data.name is string;
       allow delete: if isAuth() && profileId != 'admin'
@@ -362,7 +363,8 @@ service cloud.firestore {
     }
 
     match /counters/{id} {
-      allow read, write: if isAuth();
+      allow read: if isAuth();
+      allow write: if isAuth() && isAdmin();
     }
 
     // --- COLEÇÕES DE CONCORRENTES ---

@@ -1,10 +1,17 @@
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { type ProductSimulation, type ProductSimulationItem, type BaseProduct } from '@/types';
+import { verifyAuth } from '@/lib/verify-auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  try {
+    await verifyAuth(req);
+  } catch {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+  }
+
   try {
     // 1. Fetch all necessary data in parallel
     const [simulationsSnapshot, itemsSnapshot, baseProductsSnapshot] = await Promise.all([
