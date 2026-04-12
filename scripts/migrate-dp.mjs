@@ -1,68 +1,61 @@
 /**
  * Script de migração: Coala-DP → Coala-OP (módulo Departamento Pessoal)
  *
- * CONFIGURAÇÃO (.env.local):
- *   # Coala-OP (destino) — já existentes
- *   FIREBASE_PROJECT_ID=smart-converter-752gf
- *   FIREBASE_CLIENT_EMAIL=...
- *   FIREBASE_PRIVATE_KEY=...
+ * CONFIGURAÇÃO:
+ *   Coloque os arquivos JSON das service accounts em:
+ *     scripts/sa-op.json   → Coala-OP  (smart-converter-752gf)
+ *     scripts/sa-dp.json   → Coala-DP  (studio-7671525955-67ff0)
  *
- *   # Coala-DP (origem) — adicionar
- *   DP_FIREBASE_PROJECT_ID=studio-7671525955-67ff0
- *   DP_FIREBASE_CLIENT_EMAIL=...
- *   DP_FIREBASE_PRIVATE_KEY=...
+ *   Ou passe os caminhos como argumentos:
+ *     node scripts/migrate-dp.mjs phase1 --op=caminho/op.json --dp=caminho/dp.json
  *
  * USO:
  *   node scripts/migrate-dp.mjs phase1   → coleções simples + relatório de colaboradores
  *   node scripts/migrate-dp.mjs phase2   → usuários + escalas + férias (após revisar o relatório)
- *   node scripts/migrate-dp.mjs all      → executa tudo de uma vez (se o mapeamento for claro)
+ *   node scripts/migrate-dp.mjs all      → executa tudo de uma vez
  */
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { createRequire } from 'module';
 
-const require = createRequire(import.meta.url);
+// ─── Resolve caminhos dos service accounts ────────────────────────────────────
 
-// ─── Env ─────────────────────────────────────────────────────────────────────
-
-function loadEnv() {
-  const envFile = existsSync('.env.local') ? '.env.local' : '.env';
-  if (!existsSync(envFile)) return;
-  const lines = readFileSync(envFile, 'utf-8').split('\n');
-  for (const line of lines) {
-    const [key, ...rest] = line.split('=');
-    if (key && rest.length) process.env[key.trim()] = rest.join('=').trim().replace(/^["']|["']$/g, '');
-  }
+function resolveArg(name) {
+  const arg = process.argv.find(a => a.startsWith(`--${name}=`));
+  return arg ? arg.split('=')[1] : null;
 }
-loadEnv();
+
+const opPath = resolveArg('op') ?? 'scripts/sa-op.json';
+const dpPath = resolveArg('dp') ?? 'scripts/sa-dp.json';
+
+if (!existsSync(opPath)) {
+  console.error(`❌ Service account do Coala-OP não encontrado em: ${opPath}`);
+  console.error('   Gere em: Firebase Console → smart-converter-752gf → Configurações → Contas de serviço');
+  process.exit(1);
+}
+if (!existsSync(dpPath)) {
+  console.error(`❌ Service account do Coala-DP não encontrado em: ${dpPath}`);
+  console.error('   Esperado em: scripts/sa-dp.json');
+  process.exit(1);
+}
+
+const opSA = JSON.parse(readFileSync(opPath, 'utf-8'));
+const dpSA = JSON.parse(readFileSync(dpPath, 'utf-8'));
 
 // ─── Firebase apps ────────────────────────────────────────────────────────────
 
 function initOP() {
   const existing = getApps().find(a => a.name === 'op');
   if (existing) return existing;
-  return initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  }, 'op');
+  return initializeApp({ credential: cert(opSA) }, 'op');
 }
 
 function initDP() {
   const existing = getApps().find(a => a.name === 'dp');
   if (existing) return existing;
-  return initializeApp({
-    credential: cert({
-      projectId: process.env.DP_FIREBASE_PROJECT_ID,
-      clientEmail: process.env.DP_FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.DP_FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  }, 'dp');
+  return initializeApp({ credential: cert(dpSA) }, 'dp');
 }
 
 const opApp = initOP();

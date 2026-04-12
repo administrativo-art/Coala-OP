@@ -43,3 +43,8 @@ next-env.d.ts
 # firebase
 firebase-debug.log
 firestore-debug.log
+
+# service accounts (nunca commitar)
+scripts/sa-*.json
+scripts/dp-collaborator-mapping.json
+scripts/dp-id-map.json
