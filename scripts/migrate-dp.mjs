@@ -15,7 +15,7 @@
  *   node scripts/migrate-dp.mjs all      → executa tudo de uma vez
  */
 
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { initializeApp, cert, getApps, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
@@ -27,21 +27,14 @@ function resolveArg(name) {
   return arg ? arg.split('=')[1] : null;
 }
 
-const opPath = resolveArg('op') ?? 'scripts/sa-op.json';
 const dpPath = resolveArg('dp') ?? 'scripts/sa-dp.json';
+const opPath = resolveArg('op') ?? null; // opcional — usa ADC se não informado
 
-if (!existsSync(opPath)) {
-  console.error(`❌ Service account do Coala-OP não encontrado em: ${opPath}`);
-  console.error('   Gere em: Firebase Console → smart-converter-752gf → Configurações → Contas de serviço');
-  process.exit(1);
-}
 if (!existsSync(dpPath)) {
   console.error(`❌ Service account do Coala-DP não encontrado em: ${dpPath}`);
-  console.error('   Esperado em: scripts/sa-dp.json');
   process.exit(1);
 }
 
-const opSA = JSON.parse(readFileSync(opPath, 'utf-8'));
 const dpSA = JSON.parse(readFileSync(dpPath, 'utf-8'));
 
 // ─── Firebase apps ────────────────────────────────────────────────────────────
@@ -49,7 +42,17 @@ const dpSA = JSON.parse(readFileSync(dpPath, 'utf-8'));
 function initOP() {
   const existing = getApps().find(a => a.name === 'op');
   if (existing) return existing;
-  return initializeApp({ credential: cert(opSA) }, 'op');
+
+  // Se tiver chave explícita, usa ela. Caso contrário, usa ADC (gcloud auth application-default login)
+  if (opPath && existsSync(opPath)) {
+    const opSA = JSON.parse(readFileSync(opPath, 'utf-8'));
+    return initializeApp({ credential: cert(opSA) }, 'op');
+  }
+
+  return initializeApp({
+    credential: applicationDefault(),
+    projectId: 'smart-converter-752gf',
+  }, 'op');
 }
 
 function initDP() {
