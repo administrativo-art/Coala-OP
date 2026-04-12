@@ -360,15 +360,29 @@ export type Profile = {
 }
 
 export type User = {
-    id:string; // This will be the Firebase Auth UID
-    username: string;
-    email: string;
-    profileId: string;
-    assignedKioskIds: string[];
-    avatarUrl?: string;
-    operacional?: boolean;
-    participatesInGoals?: boolean;
-    pdvOperatorIds?: { [kioskId: string]: number };
+  id: string; // Firebase Auth UID
+  username: string;
+  email: string;
+  profileId: string;
+  assignedKioskIds: string[];
+  avatarUrl?: string;
+  // Operacional (PDV)
+  operacional?: boolean;
+  participatesInGoals?: boolean;
+  pdvOperatorIds?: { [kioskId: string]: number };
+  // Departamento Pessoal (RH)
+  registrationId?: string;         // matrícula Bizneo
+  admissionDate?: Timestamp;
+  birthDate?: Timestamp;
+  unitIds?: string[];
+  shiftDefinitionId?: string;
+  needsTransportVoucher?: boolean;
+  transportVoucherValue?: number;
+  isActive?: boolean;
+  terminationDate?: Timestamp;
+  terminationReason?: 'Sem Justa Causa' | 'Pedido de Demissão' | 'Acordo' | 'Justa Causa';
+  terminationCause?: string;
+  terminationNotes?: string;
 };
 
 export type Product = {
@@ -898,25 +912,7 @@ export interface EmployeeGoal {
 }
 
 // ─── Departamento Pessoal ─────────────────────────────────────────────────────
-
-export type DPCollaborator = {
-  id: string;
-  registrationId: string;
-  name: string;
-  avatarUrl?: string;
-  birthDate?: Timestamp;
-  admissionDate: Timestamp;
-  unitIds: string[];
-  shiftDefinitionId?: string;
-  needsTransportVoucher?: boolean;
-  transportVoucherValue?: number;
-  isActive: boolean;
-  terminationDate?: Timestamp;
-  terminationReason?: string;
-  terminationCause?: string;
-  terminationNotes?: string;
-  createdAt: Timestamp;
-};
+// Colaboradores = usuários do sistema (users/). Não há coleção separada.
 
 export type DPUnit = {
   id: string;
@@ -957,7 +953,7 @@ export type DPShift = {
   id: string;
   scheduleId: string;
   unitId: string;
-  collaboratorId: string;
+  userId: string;            // referência ao users/ (Firebase UID)
   shiftDefinitionId?: string;
   date: string; // YYYY-MM-DD
   startTime: string;
@@ -993,7 +989,7 @@ export type DPVacationRecordType = 'gozo' | 'venda';
 
 export type DPVacationRecord = {
   id: string;
-  collaboratorId: string;
+  userId: string;            // referência ao users/ (Firebase UID)
   cycleId: string; // e.g. "2023-2024"
   recordType: DPVacationRecordType;
   startDate?: string; // YYYY-MM-DD
