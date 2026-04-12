@@ -234,8 +234,11 @@ async function migrateUsersAndRelational() {
     Object.keys(dpFields).forEach(k => dpFields[k] === null && delete dpFields[k]);
 
     if (entry.status === 'MATCHED' && entry.op_userId) {
-      // Atualiza usuário existente com campos DP
-      await opDB.collection('users').doc(entry.op_userId).update(dpFields);
+      // Atualiza usuário existente com campos DP + nome completo do DP
+      await opDB.collection('users').doc(entry.op_userId).update({
+        username: entry.dp_name,
+        ...dpFields,
+      });
       dpToOp[entry.dp_id] = entry.op_userId;
       console.log(`  ✓ UPDATED  ${entry.dp_name} → ${entry.op_userId}`);
 

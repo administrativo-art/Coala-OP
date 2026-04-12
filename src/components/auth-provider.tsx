@@ -11,10 +11,20 @@ import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
 
+export interface TerminateUserPayload {
+  uid: string;
+  terminationReason?: 'Sem Justa Causa' | 'Pedido de Demissão' | 'Acordo' | 'Justa Causa';
+  terminationCause?: string;
+  terminationNotes?: string;
+  terminationDate?: string;
+}
+
 export interface AuthContextType {
   user: User | null;
   firebaseUser: FirebaseUser | null;
   users: User[];
+  activeUsers: User[];
+  terminatedUsers: User[];
   isAuthenticated: boolean;
   loading: boolean;
   permissions: PermissionSet;
@@ -23,6 +33,7 @@ export interface AuthContextType {
   addUser: (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => Promise<string | null>;
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
+  terminateUser: (payload: TerminateUserPayload) => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
@@ -192,6 +203,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
   }, []);
+
+  const terminateUser = useCallback(async (payload: TerminateUserPayload) => {
+    try {
+      const terminateUserFn = httpsCallable(functions, 'terminateUser');
+      await terminateUserFn(payload);
+    } catch (error) {
+      console.error("Error terminating user:", error);
+      throw error;
+    }
+  }, []);
   
   const resetPassword = useCallback(async (email: string): Promise<boolean> => {
     try {
@@ -218,10 +239,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const activeUsers = useMemo(() => users.filter(u => u.isActive !== false), [users]);
+  const terminatedUsers = useMemo(() => users.filter(u => u.isActive === false), [users]);
+
   const value = useMemo(() => ({
     user: appUser,
     firebaseUser,
     users,
+    activeUsers,
+    terminatedUsers,
     isAuthenticated: !!appUser,
     loading: loading || profilesLoading,
     permissions,
@@ -230,10 +256,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     addUser,
     updateUser,
     deleteUser,
+    terminateUser,
     resetPassword,
     changePassword,
   }), [
-    appUser, firebaseUser, users, loading, profilesLoading, permissions, login, logout, addUser, updateUser, deleteUser, resetPassword, changePassword
+    appUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading,
+    permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, resetPassword, changePassword,
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -177,6 +177,39 @@ export const deleteUser = onCall(
   }
 );
 
+// --- Desligamento DP: remove do Auth, mantém no Firestore para histórico ---
+export const terminateUser = onCall(
+  { cors: [/smart-converter-752gf\.web\.app$/, /smart-converter-752gf\.firebaseapp\.com$/, /localhost(:\d+)?$/] },
+  async (request: any) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+    if (!request.auth.token.isDefaultAdmin) {
+      throw new HttpsError('permission-denied', 'Apenas administradores podem desligar usuários.');
+    }
+
+    const { uid, terminationReason, terminationCause, terminationNotes, terminationDate } = request.data;
+    if (!uid) throw new HttpsError('invalid-argument', 'O UID do usuário é obrigatório.');
+
+    try {
+      // 1. Remove do Firebase Auth (não consegue mais logar)
+      await auth.deleteUser(uid);
+
+      // 2. Mantém o documento no Firestore marcado como inativo
+      await db.collection('users').doc(uid).update({
+        isActive: false,
+        terminationDate: terminationDate ?? new Date().toISOString(),
+        terminationReason: terminationReason ?? null,
+        terminationCause: terminationCause ?? null,
+        terminationNotes: terminationNotes ?? null,
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Erro ao desligar usuário:', error);
+      throw new HttpsError('internal', error.message || 'Erro ao desligar usuário.');
+    }
+  }
+);
+
 // --- Custom Claims Sync: quando o documento do usuário muda ---
 export const onUserProfileChange = onDocumentWritten(
   { document: 'users/{userId}', database: 'coala' },
