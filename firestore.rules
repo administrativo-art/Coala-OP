@@ -410,6 +410,97 @@ service cloud.firestore {
       allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
     }
 
+    // --- DEPARTAMENTO PESSOAL ---
+
+    // Unidades
+    match /dp_units/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.view == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true);
+    }
+
+    // Grupos de unidades
+    match /dp_unitGroups/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.view == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true);
+    }
+
+    // Definições de turno
+    match /dp_shiftDefinitions/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.view == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageShifts == true)
+        && request.resource.data.keys().hasAll(['code', 'name', 'startTime', 'endTime'])
+        && request.resource.data.name is string
+        && request.resource.data.code is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageShifts == true);
+    }
+
+    // Escalas
+    match /dp_schedules/{scheduleId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.schedules.view == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().dp.schedules.create == true)
+        && request.resource.data.keys().hasAll(['name', 'month', 'year'])
+        && request.resource.data.name is string
+        && request.resource.data.month is int
+        && request.resource.data.year is int;
+      allow update: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
+        && request.resource.data.name is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.schedules.delete == true);
+
+      // Turnos (subcoleção)
+      match /shifts/{shiftId} {
+        allow read: if isAuth() && (isAdmin() || getPerms().dp.schedules.view == true);
+        allow create: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
+          && request.resource.data.keys().hasAll(['userId', 'date', 'startTime', 'endTime'])
+          && request.resource.data.userId is string
+          && request.resource.data.date is string;
+        allow update: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
+          && request.resource.data.userId is string;
+        allow delete: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true);
+      }
+    }
+
+    // Férias
+    match /dp_vacations/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.vacation.viewAll == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().dp.vacation.request == true)
+        && request.resource.data.keys().hasAll(['userId', 'cycleId', 'recordType', 'days', 'status'])
+        && request.resource.data.userId is string
+        && request.resource.data.days is int
+        && request.resource.data.days > 0;
+      allow update: if isAuth() && (
+        isAdmin() ||
+        getPerms().dp.vacation.approve == true ||
+        getPerms().dp.vacation.request == true
+      ) && request.resource.data.userId is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.vacation.approve == true);
+    }
+
+    // Calendários de feriados
+    match /dp_calendars/{calendarId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.view == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageCalendars == true)
+        && request.resource.data.keys().hasAll(['name', 'year'])
+        && request.resource.data.name is string
+        && request.resource.data.year is int;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageCalendars == true);
+
+      // Feriados (subcoleção)
+      match /holidays/{holidayId} {
+        allow read: if isAuth() && (isAdmin() || getPerms().dp.view == true);
+        allow create: if isAuth() && (isAdmin() || getPerms().dp.settings.manageCalendars == true)
+          && request.resource.data.keys().hasAll(['name', 'date', 'type'])
+          && request.resource.data.name is string;
+        allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageCalendars == true);
+        allow update: if false;
+      }
+    }
+
     // --- CATCH-ALL: bloqueia tudo não mapeado ---
     match /{document=**} {
       allow read, write: if false;
