@@ -343,6 +343,13 @@ export type PermissionSet = {
   reposition: { cancel: boolean; };
   // itemRequests is now managed under stock.stockCount
   itemRequests: { add: boolean; approve: boolean; };
+  dp: {
+    view: boolean;
+    schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; };
+    vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
+    collaborators: { view: boolean; add: boolean; edit: boolean; terminate: boolean; };
+    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; };
+  };
 };
 
 export type Profile = {
@@ -681,6 +688,13 @@ export const defaultGuestPermissions: PermissionSet = {
     reposition: { cancel: false },
     // itemRequests is now managed under stock.stockCount
     itemRequests: { add: false, approve: false },
+    dp: {
+      view: false,
+      schedules: { view: false, create: false, edit: false, delete: false, export: false },
+      vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
+      collaborators: { view: false, add: false, edit: false, terminate: false },
+      settings: { manageUnits: false, manageShifts: false, manageCalendars: false },
+    },
 };
 
 
@@ -695,6 +709,13 @@ export const defaultAdminPermissions: PermissionSet = {
     reposition: { cancel: true },
     help: { view: true },
     itemRequests: { add: true, approve: true },
+    dp: {
+      view: true,
+      schedules: { view: true, create: true, edit: true, delete: true, export: true },
+      vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
+      collaborators: { view: true, add: true, edit: true, terminate: true },
+      settings: { manageUnits: true, manageShifts: true, manageCalendars: true },
+    },
 };
 
 export const defaultUserPermissions: PermissionSet = { ...defaultGuestPermissions };
@@ -875,3 +896,112 @@ export interface EmployeeGoal {
   updatedAt: Timestamp
   createdAt: Timestamp
 }
+
+// ─── Departamento Pessoal ─────────────────────────────────────────────────────
+
+export type DPCollaborator = {
+  id: string;
+  registrationId: string;
+  name: string;
+  avatarUrl?: string;
+  birthDate?: Timestamp;
+  admissionDate: Timestamp;
+  unitIds: string[];
+  shiftDefinitionId?: string;
+  needsTransportVoucher?: boolean;
+  transportVoucherValue?: number;
+  isActive: boolean;
+  terminationDate?: Timestamp;
+  terminationReason?: string;
+  terminationCause?: string;
+  terminationNotes?: string;
+  createdAt: Timestamp;
+};
+
+export type DPUnit = {
+  id: string;
+  name: string;
+  groupId?: string;
+  createdAt: Timestamp;
+};
+
+export type DPUnitGroup = {
+  id: string;
+  name: string;
+  unitCount?: number;
+  createdAt: Timestamp;
+};
+
+export type DPShiftDefinition = {
+  id: string;
+  code: string;
+  name: string;
+  startTime: string; // HH:mm
+  endTime: string;   // HH:mm
+  unitId?: string;
+  unitName?: string;
+  daysOfWeek: number[]; // 0=Dom, 1=Seg, ...
+  createdAt: Timestamp;
+};
+
+export type DPSchedule = {
+  id: string;
+  name: string;
+  month: number; // 1–12
+  year: number;
+  shiftCount: number;
+  createdAt: Timestamp;
+};
+
+export type DPShift = {
+  id: string;
+  scheduleId: string;
+  unitId: string;
+  collaboratorId: string;
+  shiftDefinitionId?: string;
+  date: string; // YYYY-MM-DD
+  startTime: string;
+  endTime: string;
+  type: 'work';
+  hasConflict?: boolean;
+  consecutiveDayCount?: number;
+  createdAt: Timestamp;
+};
+
+export type DPCalendar = {
+  id: string;
+  name: string;
+  year: number;
+  state?: string;
+  city?: string;
+  holidayCount: number;
+  createdAt: Timestamp;
+};
+
+export type DPHolidayType = 'national' | 'state' | 'municipal' | 'optional';
+
+export type DPHoliday = {
+  id: string;
+  name: string;
+  date: Timestamp;
+  type: DPHolidayType;
+  createdAt: Timestamp;
+};
+
+export type DPVacationStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PLANNED';
+export type DPVacationRecordType = 'gozo' | 'venda';
+
+export type DPVacationRecord = {
+  id: string;
+  collaboratorId: string;
+  cycleId: string; // e.g. "2023-2024"
+  recordType: DPVacationRecordType;
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string;
+  days: number;
+  status: DPVacationStatus;
+  paymentDate?: string;
+  returnDate?: string;
+  warnings: string[];
+  createdAt: Timestamp;
+};
