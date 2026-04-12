@@ -26,6 +26,7 @@ import { ClassificationsProvider } from '@/components/classifications-provider';
 import { CompetitorProvider } from '@/components/competitor-provider';
 import { ProfilesProvider } from '@/components/profiles-provider';
 import { SalesReportProvider } from '@/components/sales-report-provider';
+import { DPProvider } from '@/components/dp-provider';
 import { Toaster } from "@/components/ui/toaster";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
@@ -56,7 +57,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                                                                         <ProductSimulationProvider>
                                                                             <CompetitorProvider>
                                                                                 <AllTasksProvider>
-                                                                                    {children}
+                                                                                    <DPProvider>
+                                                                                        {children}
+                                                                                    </DPProvider>
                                                                                 </AllTasksProvider>
                                                                             </CompetitorProvider>
                                                                         </ProductSimulationProvider>
