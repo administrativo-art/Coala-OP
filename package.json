@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "mcp": "node server.js"
+    "mcp": "node server.js",
+    "migrate:dp": "node scripts/migrate-dp.mjs"
   },
   "overrides": {
     "fast-xml-parser": "^5.3.6",
