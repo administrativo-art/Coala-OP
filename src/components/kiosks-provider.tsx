@@ -5,7 +5,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Kiosk } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDocs, query, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, query, updateDoc } from "firebase/firestore";
 
 export interface KiosksContextType {
   kiosks: Kiosk[];
@@ -65,8 +65,9 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
 
   const updateKiosk = useCallback(async (kioskData: Kiosk) => {
     const { id, ...data } = kioskData;
+    const cleanData = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
     try {
-        await updateDoc(doc(db, "kiosks", id), data);
+        await updateDoc(doc(db, "kiosks", id), cleanData);
     } catch(error) {
         console.error("Error updating kiosk:", error);
     }

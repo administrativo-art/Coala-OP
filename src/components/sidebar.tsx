@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -14,6 +14,14 @@ import {
   ShoppingCart, Settings, HelpCircle, LogOut, ShieldAlert,
   ListChecks, DollarSign, ListTodo, Target
 } from "lucide-react";
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  show: boolean | undefined;
+  count?: number;
+}
 
 interface GlassSidebarProps {
   open: boolean;
@@ -49,18 +57,49 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
     };
   }, [open]);
 
-  const navItems = useMemo(() => [
-    { label: "Dashboard",    href: "/dashboard",                  icon: LayoutDashboard, show: permissions.dashboard.view },
-    { label: "Tarefas",      href: "/dashboard/tasks",            icon: ListTodo,        show: permissions.tasks.view, count: legacyTasks.length },
-    { label: "Metas",        href: "/dashboard/goals",            icon: Target,          show: permissions.goals?.view },
-    { label: "Gestão de Estoque", href: "/dashboard/stock",       icon: Package,         show: permissions.stock.view },
-    { label: "Gestão de Preços",href: "/dashboard/pricing",        icon: DollarSign,      show: permissions.pricing.view },
-    { label: "Cadastros",    href: "/dashboard/registration",     icon: ListChecks,      show: permissions.registration.view },
-    { label: "Configurações",href: "/dashboard/settings",         icon: Settings,        show: permissions.settings.view },
-    { label: "Ajuda",        href: "/dashboard/help",             icon: HelpCircle,      show: permissions.help.view },
+  const navSections = useMemo((): { label: string | null; items: NavItem[] }[] => [
+    {
+      label: null,
+      items: [
+        { label: "Painel geral", href: "/dashboard", icon: LayoutDashboard, show: permissions.dashboard.view },
+      ],
+    },
+    {
+      label: "Operações",
+      items: [
+        { label: "Tarefas",           href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, count: legacyTasks.length },
+        { label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package,  show: permissions.stock.view },
+      ],
+    },
+    {
+      label: "Comercial",
+      items: [
+        { label: "Metas",             href: "/dashboard/goals",   icon: Target,     show: permissions.goals?.view },
+        { label: "Gestão de Preços",  href: "/dashboard/pricing", icon: DollarSign, show: permissions.pricing.view },
+      ],
+    },
+    {
+      label: "Configurações",
+      items: [
+        { label: "Cadastros",         href: "/dashboard/registration", icon: ListChecks, show: permissions.registration.view },
+        { label: "Configurações",     href: "/dashboard/settings",     icon: Settings,   show: permissions.settings.view },
+      ],
+    },
+    {
+      label: null,
+      items: [
+        { label: "Ajuda", href: "/dashboard/help", icon: HelpCircle, show: permissions.help.view },
+      ],
+    },
   ], [permissions, legacyTasks.length]);
 
-  const visibleNavItems = useMemo(() => navItems.filter(item => item.show), [navItems]);
+  const visibleNavSections = useMemo(
+    () =>
+      navSections
+        .map((section) => ({ ...section, items: section.items.filter((item) => item.show) }))
+        .filter((section) => section.items.length > 0),
+    [navSections]
+  );
 
   return (
     <>
@@ -112,43 +151,55 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
         <div className={cn("mx-4 h-px", isDark ? "bg-white/10" : "bg-slate-200")} />
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-          {visibleNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname.startsWith(item.href);
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+          {visibleNavSections.map((section, sectionIndex) => (
+            <div key={sectionIndex} className="space-y-0.5">
+              {section.label && (
+                <p className={cn(
+                  "px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider",
+                  isDark ? "text-slate-500" : "text-slate-400"
+                )}>
+                  {section.label}
+                </p>
+              )}
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const isActive =
+                  item.href === "/dashboard"
+                    ? pathname === "/dashboard"
+                    : pathname.startsWith(item.href);
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => onOpenChange(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 relative",
-                  isActive
-                    ? isDark
-                      ? "bg-indigo-500/20 text-indigo-300"
-                      : "bg-indigo-50 text-indigo-700"
-                    : isDark
-                    ? "text-slate-300 hover:bg-white/5 hover:text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                )}
-              >
-                <Icon className={cn("h-4 w-4 flex-shrink-0", isActive ? isDark ? "text-indigo-400" : "text-indigo-600" : "")} />
-                <span className="flex-1">{item.label}</span>
-                {item.count !== undefined && item.count > 0 && (
-                  <span className={cn(
-                    "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] px-1.5",
-                    isActive ? "bg-indigo-600 text-white" : "bg-primary text-white"
-                  )}>
-                    {item.count}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => onOpenChange(false)}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 relative",
+                      isActive
+                        ? isDark
+                          ? "bg-indigo-500/20 text-indigo-300"
+                          : "bg-indigo-50 text-indigo-700"
+                        : isDark
+                        ? "text-slate-300 hover:bg-white/5 hover:text-white"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    )}
+                  >
+                    <Icon className={cn("h-4 w-4 flex-shrink-0", isActive ? isDark ? "text-indigo-400" : "text-indigo-600" : "")} />
+                    <span className="flex-1">{item.label}</span>
+                    {item.count !== undefined && item.count > 0 && (
+                      <span className={cn(
+                        "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] px-1.5",
+                        isActive ? "bg-indigo-600 text-white" : "bg-primary text-white"
+                      )}>
+                        {item.count}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className={cn("mx-4 h-px mb-2", isDark ? "bg-white/10" : "bg-slate-200")} />

@@ -40,59 +40,6 @@ export const hourlyPdvSync = onSchedule({
   }
 });
 
-// --- Rotina Diária de Sincronização Profunda (Fins de Conferência) ---
-export const dailyDeepSync = onSchedule({
-  schedule: "0 2 * * *", // Todo dia às 02:00 da manhã
-  timeZone: "America/Sao_Paulo",
-  retryCount: 3
-}, async (event: any) => {
-  console.log("Iniciando sincronização diária profunda (últimos 7 dias)...");
-
-  try {
-    const now = new Date();
-    now.setHours(now.getHours() - 3);
-
-    const LOOKBACK_DAYS = 7;
-    const daysToCheck: string[] = [];
-    for (let i = 1; i <= LOOKBACK_DAYS; i++) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      daysToCheck.push(d.toISOString().split('T')[0]);
-    }
-
-    const kiosksSnap = await db.collection('kiosks').get();
-    if (kiosksSnap.empty) return;
-
-    for (const doc of kiosksSnap.docs) {
-      const kiosk = doc.data();
-      if (!kiosk.pdvFilialId) continue;
-
-      for (const dateStr of daysToCheck) {
-        // No Deep Sync, só rodamos se o relatório NÃO existir ou se for 'ontem' (i=1)
-        // para garantir que pegamos vendas de fechamento.
-        const d = new Date(now);
-        d.setDate(d.getDate() - 1);
-        const yesterdayStr = d.toISOString().split('T')[0];
-
-        if (dateStr !== yesterdayStr) {
-          const reportId = `sales_sync_${doc.id}_${dateStr.replace(/-/g, '_')}`;
-          const existing = await db.collection('salesReports').doc(reportId).get();
-          if (existing.exists) continue;
-        }
-
-        console.log(`Reprocessando dia: ${kiosk.name} (${dateStr})`);
-        try {
-          await syncDayAdmin(dateStr, doc.id, kiosk.pdvFilialId, db);
-        } catch (err) {
-          console.error(`Erro em ${kiosk.name} (${dateStr}):`, err);
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Erro fatal na rotina diária profunda:", error);
-  }
-});
-
 // --- Sincronizar metas para um intervalo de datas (trigger manual) ---
 export const syncGoalsForRange = onCall(
   { cors: true, timeoutSeconds: 540, memory: '512MiB' },

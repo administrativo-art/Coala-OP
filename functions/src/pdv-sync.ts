@@ -1,13 +1,9 @@
-function requireEnv(name: string): string {
+function getEnv(name: string): string {
   const val = process.env[name];
   if (!val) throw new Error(`[PDV Sync] Variável de ambiente ${name} não configurada.`);
   return val;
 }
 
-const COD_EMPRESA = requireEnv('PDVLEGAL_COD_EMPRESA');
-const API_TOKEN = requireEnv('PDVLEGAL_TOKEN');
-const USERNAME = requireEnv('PDVLEGAL_USERNAME');
-const PASSWORD = requireEnv('PDVLEGAL_PASSWORD');
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
 function extractBrazilHour(dateStr: string): string {
@@ -19,6 +15,10 @@ function extractBrazilHour(dateStr: string): string {
 }
 
 export async function getAccessToken() {
+  const COD_EMPRESA = getEnv('PDVLEGAL_COD_EMPRESA');
+  const API_TOKEN = getEnv('PDVLEGAL_TOKEN');
+  const USERNAME = getEnv('PDVLEGAL_USERNAME');
+  const PASSWORD = getEnv('PDVLEGAL_PASSWORD');
   const params = new URLSearchParams();
   params.append('grant_type', 'password');
   params.append('username', USERNAME);
@@ -39,6 +39,8 @@ export async function getAccessToken() {
 }
 
 async function fetchAllCouponsForDay(accessToken: string, date: string, filialId: string) {
+  const COD_EMPRESA = getEnv('PDVLEGAL_COD_EMPRESA');
+  const API_TOKEN = getEnv('PDVLEGAL_TOKEN');
   const response = await fetch(`${BASE_URL}/cupom/get/${date}/${date}/${filialId}`, {
     headers: { 'Authorization': `Bearer ${accessToken}`, 'CodEmpresa': COD_EMPRESA, 'Token': API_TOKEN },
   });
