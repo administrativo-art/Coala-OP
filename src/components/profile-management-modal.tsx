@@ -20,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@radix-ui/react-accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -277,6 +277,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const tasksViewWatch = form.watch('permissions.tasks.view' as any);
   const goalsViewWatch = form.watch('permissions.goals.view' as any);
   const settingsViewWatch = form.watch('permissions.settings.view' as any);
+  const dpViewWatch = form.watch('permissions.dp.view' as any);
+  const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
+  const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
+  const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
 
   return (
     <>
@@ -465,6 +469,58 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                               <AccordionContent className="space-y-2 pt-4 p-1">
                                 {renderModuleToggle("permissions.goals.view" as any, "Visualizar Metas", "Permite acessar o módulo de metas.")}
                                 {renderPermissionSwitch("permissions.goals.manage" as any, "Gerenciar Metas", "Permite criar templates, instanciar períodos e encerrar metas.", !goalsViewWatch)}
+                              </AccordionContent>
+                            </AccordionItem>
+
+                            {/* ── DEPARTAMENTO PESSOAL ── */}
+                            <AccordionItem value="dp">
+                              <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b">
+                                <div className="flex items-center"><LayoutGrid className="mr-2 h-5 w-5" /> Departamento Pessoal</div>
+                              </AccordionTrigger>
+                              <AccordionContent className="space-y-4 p-1 pt-4">
+                                {renderModuleToggle("permissions.dp.view" as any, "Acessar Módulo de DP", "Permissão geral para acessar a seção de Departamento Pessoal.")}
+
+                                {/* Escalas */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> Escalas</h4>
+                                  {renderPermissionSwitch("permissions.dp.schedules.view" as any, "Visualizar Escalas", "Permite ver a lista e abrir escalas.", !dpViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.dp.schedules.create" as any, "Criar Escalas", "Permite criar novas escalas mensais.", !dpSchedulesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.schedules.edit" as any, "Editar Escalas", "Permite adicionar/editar/remover turnos.", !dpSchedulesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.schedules.delete" as any, "Excluir Escalas", "Permite excluir escalas completas.", !dpSchedulesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.schedules.export" as any, "Exportar para Bizneo", "Permite gerar o arquivo de exportação.", !dpSchedulesViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                {/* Férias */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Umbrella className="h-4 w-4" /> Férias</h4>
+                                  {renderPermissionSwitch("permissions.dp.vacation.viewAll" as any, "Ver Todas as Férias", "Permite ver o painel de férias de todos os colaboradores.", !dpViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.dp.vacation.request" as any, "Solicitar Férias", "Permite registrar períodos de férias.", !dpVacationViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.vacation.approve" as any, "Aprovar Férias", "Permite aprovar ou rejeitar solicitações de férias.", !dpVacationViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.vacation.manageSettings" as any, "Configurar Políticas de Férias", "Permite editar regras e configurações do módulo de férias.", !dpVacationViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                {/* Colaboradores */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><UserCircle className="h-4 w-4" /> Colaboradores</h4>
+                                  {renderPermissionSwitch("permissions.dp.collaborators.view" as any, "Visualizar Colaboradores", "Permite ver o diretório de colaboradores do DP.", !dpViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.dp.collaborators.add" as any, "Adicionar Colaboradores", "Permite cadastrar novos colaboradores.", !dpCollaboratorsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.collaborators.edit" as any, "Editar Colaboradores", "Permite editar dados de colaboradores existentes.", !dpCollaboratorsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.collaborators.terminate" as any, "Desligar Colaboradores", "Permite registrar o desligamento de um colaborador.", !dpCollaboratorsViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                {/* Configurações DP */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Settings className="h-4 w-4" /> Configurações do DP</h4>
+                                  {renderPermissionSwitch("permissions.dp.settings.manageUnits" as any, "Gerenciar Unidades", "Permite criar e editar unidades (quiosques) no DP.", !dpViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.settings.manageShifts" as any, "Gerenciar Turnos", "Permite criar e editar definições de turnos.", !dpViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.settings.manageCalendars" as any, "Gerenciar Calendários", "Permite criar e editar calendários de feriados.", !dpViewWatch)}
+                                </div>
                               </AccordionContent>
                             </AccordionItem>
 
