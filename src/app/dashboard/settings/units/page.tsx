@@ -6,7 +6,12 @@ import { ArrowLeft } from 'lucide-react';
 import { PermissionGuard } from '@/components/permission-guard';
 import { DPRuntimeGuard } from '@/components/dp-runtime-guard';
 import { useAuth } from '@/hooks/use-auth';
-import { KioskManagement } from '@/components/kiosk-management';
+import dynamic from 'next/dynamic';
+
+const KioskManagement = dynamic(
+  () => import('@/components/kiosk-management').then(m => ({ default: m.KioskManagement })),
+  { ssr: false }
+);
 
 export default function UnitsPage() {
   const router = useRouter();
