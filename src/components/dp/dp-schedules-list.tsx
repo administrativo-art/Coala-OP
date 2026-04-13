@@ -324,7 +324,7 @@ function BizneoExportDialog({ open, onOpenChange }: { open: boolean; onOpenChang
             state: 'draft',
             employee_id: user?.registrationIdBizneo ?? s.userId,
             employee: user?.username ?? '',
-            shift_id: def?.bizneoTemplateId ?? s.shiftDefinitionId ?? '',
+            shift_id: def?.bizneoTemplateId ?? def?.name ?? '',
             shift: def?.name ?? `${s.startTime}–${s.endTime}`,
             unit: unitName,
           };
