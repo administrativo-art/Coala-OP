@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { PermissionGuard } from '@/components/permission-guard';
+import { DPRuntimeGuard } from '@/components/dp-runtime-guard';
 import { useAuth } from '@/hooks/use-auth';
 
 const KioskManagement = dynamic(
@@ -36,7 +37,9 @@ export default function UnitsPage() {
           </div>
         </div>
 
-        <KioskManagement />
+        <DPRuntimeGuard area="Unidades">
+          <KioskManagement />
+        </DPRuntimeGuard>
       </div>
     </PermissionGuard>
   );

@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { DPRuntimeGuard } from '@/components/dp-runtime-guard';
 import { ArrowLeft } from 'lucide-react';
 import { PermissionGuard } from "@/components/permission-guard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -56,15 +57,21 @@ export default function SettingsPage() {
                     </TabsList>
 
                     <TabsContent value="usuarios" className="mt-4">
-                        <UserManagement />
+                        <DPRuntimeGuard area="Usuários">
+                            <UserManagement />
+                        </DPRuntimeGuard>
                     </TabsContent>
 
                     <TabsContent value="unidades" className="mt-4">
-                        <KioskManagement />
+                        <DPRuntimeGuard area="Unidades">
+                            <KioskManagement />
+                        </DPRuntimeGuard>
                     </TabsContent>
 
                     <TabsContent value="calendarios" className="mt-4">
-                        <CalendarManagement />
+                        <DPRuntimeGuard area="Calendários">
+                            <CalendarManagement />
+                        </DPRuntimeGuard>
                     </TabsContent>
 
                     <TabsContent value="sincronizacao" className="mt-4">

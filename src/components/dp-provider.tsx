@@ -38,6 +38,11 @@ function normalizeDaysOfWeek(raw: unknown): number[] {
     .sort();
 }
 
+function logSubscriptionError(scope: string, error: unknown, stopLoading?: () => void) {
+  console.error(`[DPProvider] Failed to subscribe to ${scope}.`, error);
+  stopLoading?.();
+}
+
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function DPProvider({ children }: { children: React.ReactNode }) {
@@ -62,11 +67,12 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     const unsubUnits = onSnapshot(
       query(collection(db, 'dp_units'), orderBy('name')),
       (snap) => { setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit))); setUnitsLoading(false); },
-      () => setUnitsLoading(false)
+      (error) => logSubscriptionError('dp_units', error, () => setUnitsLoading(false))
     );
     const unsubGroups = onSnapshot(
       query(collection(db, 'dp_unitGroups'), orderBy('name')),
       (snap) => { setUnitGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnitGroup))); },
+      (error) => logSubscriptionError('dp_unitGroups', error)
     );
     return () => { unsubUnits(); unsubGroups(); };
   }, []);
@@ -82,7 +88,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         }));
         setShiftDefsLoading(false);
       },
-      () => setShiftDefsLoading(false)
+      (error) => logSubscriptionError('dp_shiftDefinitions', error, () => setShiftDefsLoading(false))
     );
   }, []);
 
@@ -106,7 +112,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         setSchedules(list);
         setSchedulesLoading(false);
       },
-      () => setSchedulesLoading(false)
+      (error) => logSubscriptionError('dp_schedules', error, () => setSchedulesLoading(false))
     );
   }, []);
 
@@ -115,7 +121,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     return onSnapshot(
       query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc')),
       (snap) => { setVacations(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPVacationRecord))); setVacationsLoading(false); },
-      () => setVacationsLoading(false)
+      (error) => logSubscriptionError('dp_vacations', error, () => setVacationsLoading(false))
     );
   }, []);
 
@@ -124,7 +130,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     return onSnapshot(
       query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc')),
       (snap) => { setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar))); setCalendarsLoading(false); },
-      () => setCalendarsLoading(false)
+      (error) => logSubscriptionError('dp_calendars', error, () => setCalendarsLoading(false))
     );
   }, []);
 
