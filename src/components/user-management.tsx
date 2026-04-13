@@ -16,7 +16,8 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, Building2, ArrowLeft } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, Building2, ArrowLeft, UserCircle, Briefcase, Settings2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ProfileManagementModal } from './profile-management-modal';
@@ -354,346 +355,302 @@ export function UserManagement() {
   return (
     <>
       {showForm ? (
-        <Card>
-            <CardHeader>
-                <div className="flex items-center gap-3">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 h-8 w-8 rounded-full"
-                        onClick={() => { setShowForm(false); setEditingUser(null); }}
-                        aria-label="Voltar para configurações"
-                    >
-                        <ArrowLeft className="h-4 w-4" />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-w-2xl">
+            {/* ── Back nav ── */}
+            <div className="flex items-center gap-3 mb-2">
+              <Button
+                type="button" variant="ghost" size="icon"
+                className="shrink-0 h-8 w-8 rounded-full"
+                onClick={() => { setShowForm(false); setEditingUser(null); }}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <p className="font-semibold leading-tight">
+                  {editingUser ? editingUser.username : 'Novo usuário'}
+                </p>
+                <p className="text-xs text-muted-foreground">Configurações › Usuários</p>
+              </div>
+            </div>
+
+            {/* ── Cartão 1: Identidade ── */}
+            <Card style={{ padding: '1.25rem 1.5rem' }}>
+              <div className="flex gap-5 items-start">
+                {/* Avatar + botões */}
+                <div className="flex flex-col items-center gap-2 shrink-0">
+                  <Avatar className="h-20 w-20">
+                    {isUploadingPhoto ? (
+                      <AvatarFallback><Loader2 className="h-5 w-5 animate-spin" /></AvatarFallback>
+                    ) : (
+                      <>
+                        <AvatarImage src={form.watch('avatarUrl') || undefined} />
+                        <AvatarFallback
+                          className="text-2xl font-bold text-white"
+                          style={{
+                            backgroundColor: editingUser
+                              ? getUserColor(editingUser.id, editingUser.color)
+                              : pickUserColor(users.map(u => u.color)),
+                          }}
+                        >
+                          {form.watch('username')?.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase() || '?'}
+                        </AvatarFallback>
+                      </>
+                    )}
+                  </Avatar>
+                  <div className="flex gap-1.5">
+                    <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setIsPhotoModalOpen(true)} disabled={isUploadingPhoto}>
+                      <Camera className="h-3 w-3 mr-1" /> Tirar foto
                     </Button>
-                    <div>
-                        <CardTitle>
-                            {editingUser ? `Editando ${editingUser.username}` : 'Adicionar novo usuário'}
-                        </CardTitle>
-                        <CardDescription>
-                            Preencha os detalhes do usuário abaixo.
-                        </CardDescription>
-                    </div>
+                    <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto}>
+                      <Upload className="h-3 w-3 mr-1" /> Carregar
+                    </Button>
+                  </div>
+                  <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
                 </div>
-            </CardHeader>
-            <CardContent>
-                <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <div className="space-y-4 p-1">
-                    <div className="flex flex-col md:flex-row gap-6 items-start">
-                        <div className="space-y-2">
-                            <Label>Foto do perfil</Label>
-                            <Avatar className="h-24 w-24">
-                            {isUploadingPhoto ? (
-                                <AvatarFallback>
-                                    <Loader2 className="h-6 w-6 animate-spin" />
-                                </AvatarFallback>
-                            ) : (
-                                <>
-                                    <AvatarImage src={form.watch('avatarUrl') || undefined} />
-                                    <AvatarFallback
-                                        className="text-3xl font-bold text-white"
-                                        style={{
-                                            backgroundColor: editingUser
-                                                ? getUserColor(editingUser.id, editingUser.color)
-                                                : pickUserColor(users.map(u => u.color)),
-                                        }}
-                                    >
-                                        {form.watch('username')?.charAt(0).toUpperCase() || '?'}
-                                    </AvatarFallback>
-                                </>
-                            )}
-                            </Avatar>
-                            <div className="flex flex-col gap-1.5">
-                                <Button type="button" size="sm" variant="outline" onClick={() => setIsPhotoModalOpen(true)} disabled={isUploadingPhoto}><Camera className="mr-2 h-4 w-4"/> Tirar foto</Button>
-                                <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto}><Upload className="mr-2 h-4 w-4"/> Carregar</Button>
-                            </div>
-                            <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
-                            {/* Color indicator — assigned automatically by the system */}
-                            <div className="flex items-center gap-1.5">
-                                <div
-                                    className="h-4 w-4 rounded-full ring-1 ring-white/20 shrink-0"
-                                    style={{
-                                        backgroundColor: editingUser
-                                            ? getUserColor(editingUser.id, editingUser.color)
-                                            : pickUserColor(users.map(u => u.color)),
-                                    }}
-                                />
-                                <span className="text-[11px] text-muted-foreground">Cor na escala</span>
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow">
-                            <FormField control={form.control} name="username" render={({ field }) => (
-                                <FormItem>
-                                <FormLabel>Nome de usuário</FormLabel>
-                                <FormControl><Input placeholder="ex: joao.silva" {...field} /></FormControl>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                            />
-                            <FormField control={form.control} name="email" render={({ field }) => (
-                                <FormItem>
-                                <FormLabel>E-mail</FormLabel>
-                                <FormControl><Input type="email" placeholder="email@dominio.com" {...field} disabled={!!editingUser} /></FormControl>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                            />
-                            {!editingUser &&
-                                <div className="col-span-full">
-                                <FormField
-                                        control={form.control}
-                                        name="password"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Senha</FormLabel>
-                                                <div className="relative">
-                                                    <FormControl>
-                                                        <Input
-                                                            type={showPassword ? 'text' : 'password'}
-                                                            placeholder="Senha com no mínimo 6 caracteres"
-                                                            {...field}
-                                                        />
-                                                    </FormControl>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setShowPassword(!showPassword)}
-                                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
-                                                    >
-                                                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                                    </button>
-                                                </div>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                            </div>
-                            }
-                             <div className="col-span-full">
-                                 <FormField
-                                    control={form.control}
-                                    name="operacional"
-                                    render={({ field }) => (
-                                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                                            <div className="space-y-0.5">
-                                                <FormLabel>Usuário Operacional</FormLabel>
-                                                <FormDescription className="text-xs">
-                                                    Marque se este usuário deve aparecer nas escalas de trabalho.
-                                                </FormDescription>
-                                            </div>
-                                            <FormControl>
-                                                <Switch
-                                                    checked={field.value}
-                                                    onCheckedChange={field.onChange}
-                                                />
-                                            </FormControl>
-                                        </FormItem>
-                                    )}
-                                />
-                             </div>
-                             <div className="col-span-full">
-                                 <FormField
-                                    control={form.control}
-                                    name="participatesInGoals"
-                                    render={({ field }) => (
-                                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                                            <div className="space-y-0.5">
-                                                <FormLabel>Participa de Metas</FormLabel>
-                                                <FormDescription className="text-xs">
-                                                    Marque se este usuário deve ser incluído no acompanhamento de metas do quiosque.
-                                                </FormDescription>
-                                            </div>
-                                            <FormControl>
-                                                <Switch
-                                                    checked={field.value}
-                                                    onCheckedChange={field.onChange}
-                                                />
-                                            </FormControl>
-                                        </FormItem>
-                                    )}
-                                />
-                             </div>
-                             {form.watch('assignedKioskIds')?.length > 0 && (
-                               <div className="col-span-full space-y-2">
-                                 <FormLabel>ID do Operador no PDV</FormLabel>
-                                 <FormDescription className="text-xs">
-                                   ID numérico do colaborador no PDV Legal, por quiosque. Usado para vincular faturamento às metas.
-                                 </FormDescription>
-                                 {form.watch('assignedKioskIds').map(kioskId => {
-                                   const kioskName = kiosks.find(k => k.id === kioskId)?.name ?? kioskId;
-                                   return (
-                                     <div key={kioskId} className="flex items-center gap-3">
-                                       <span className="text-sm text-muted-foreground w-32 shrink-0">{kioskName}</span>
-                                       <Input
-                                         type="number"
-                                         placeholder="Ex: 436145"
-                                         value={pdvOperatorIds[kioskId] ?? ''}
-                                         onChange={e => setPdvOperatorIds(prev => ({ ...prev, [kioskId]: e.target.value }))}
-                                         className="max-w-[180px]"
-                                       />
-                                     </div>
-                                   );
-                                 })}
-                               </div>
-                             )}
-                        </div>
+                {/* Nome, e-mail, badges */}
+                <div className="flex-1 space-y-3 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className="h-3 w-3 rounded-full ring-1 ring-border shrink-0"
+                        style={{
+                          backgroundColor: editingUser
+                            ? getUserColor(editingUser.id, editingUser.color)
+                            : pickUserColor(users.map(u => u.color)),
+                        }}
+                      />
+                      <span className="text-[11px] text-muted-foreground">Cor na escala</span>
                     </div>
-
-                    <Separator />
-                    <h4 className="font-medium text-muted-foreground">Permissões e alocação</h4>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField control={form.control} name="profileId" render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>Perfil de permissão</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value} disabled={profilesLoading}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione um perfil"/></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    {profiles.map(p => <SelectItem key={p.id} value={p.id} disabled={p.isDefaultAdmin && currentUser?.profileId !== adminProfileId}>{p.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                        />
-                        <Controller
-                            control={form.control}
-                            name="assignedKioskIds"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Quiosques</FormLabel>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <FormControl>
-                                                <Button variant="outline" className="w-full justify-between font-normal">
-                                                    {(field.value?.length || 0) > 0 ? `${field.value.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
-                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                </Button>
-                                            </FormControl>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                                            <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
-                                            <DropdownMenuSeparator />
-                                            <ScrollArea className="h-48">
-                                                {kiosks.map((kiosk) => (
-                                                    <DropdownMenuCheckboxItem
-                                                        key={kiosk.id}
-                                                        checked={field.value?.includes(kiosk.id)}
-                                                        onCheckedChange={(checked) => {
-                                                            const selected = field.value || [];
-                                                            return checked
-                                                                ? field.onChange([...selected, kiosk.id])
-                                                                : field.onChange(selected.filter((id) => id !== kiosk.id));
-                                                        }}
-                                                        onSelect={(e) => e.preventDefault()}
-                                                    >
-                                                        {kiosk.name}
-                                                    </DropdownMenuCheckboxItem>
-                                                ))}
-                                            </ScrollArea>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                            />
-                    </div>
-                    </div>
-
-                    {/* ── Seção Departamento Pessoal (apenas ao editar) ── */}
-                    {editingUser && permissions.dp?.view && (
-                      <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
-                        <h4 className="font-semibold text-sm">Departamento Pessoal</h4>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <FormField control={form.control} name="registrationIdBizneo" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Matrícula Bizneo</FormLabel>
-                              <FormControl><Input placeholder="Ex: 18043422" className="bg-background" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )} />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <FormField control={form.control} name="admissionDate" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Data de admissão</FormLabel>
-                              <FormControl><Input type="date" className="bg-background" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )} />
-                          <FormField control={form.control} name="birthDate" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Data de nascimento</FormLabel>
-                              <FormControl><Input type="date" className="bg-background" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )} />
-                          <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Turno padrão</FormLabel>
-                              <Select
-                                value={field.value || '__none__'}
-                                onValueChange={v => field.onChange(v === '__none__' ? '' : v)}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="bg-background">
-                                    <SelectValue placeholder="Nenhum" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="__none__">— Nenhum —</SelectItem>
-                                  {shiftDefinitions.map(def => (
-                                    <SelectItem key={def.id} value={def.id}>
-                                      {def.name} ({def.startTime}–{def.endTime})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )} />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
-                            <FormItem className="flex flex-row items-center justify-between rounded-lg border bg-background p-3">
-                              <div className="space-y-0.5">
-                                <FormLabel>Vale-transporte</FormLabel>
-                                <FormDescription className="text-xs">Colaborador recebe vale-transporte.</FormDescription>
-                              </div>
+                    {editingUser && (
+                      <Badge variant={editingUser.isActive !== false ? 'default' : 'secondary'} className="text-[10px]">
+                        {editingUser.isActive !== false ? 'Ativo' : 'Inativo'}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <FormField control={form.control} name="username" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nome</FormLabel>
+                        <FormControl><Input placeholder="ex: Maria Silva" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="email" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>E-mail</FormLabel>
+                        <FormControl><Input type="email" placeholder="email@dominio.com" {...field} disabled={!!editingUser} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    {!editingUser && (
+                      <div className="col-span-full">
+                        <FormField control={form.control} name="password" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Senha</FormLabel>
+                            <div className="relative">
                               <FormControl>
-                                <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                <Input type={showPassword ? 'text' : 'password'} placeholder="Mínimo 6 caracteres" {...field} />
                               </FormControl>
-                            </FormItem>
-                          )} />
-
-                          {form.watch('needsTransportVoucher') && (
-                            <FormField control={form.control} name="transportVoucherValue" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Valor mensal (R$)</FormLabel>
-                                <FormControl>
-                                  <Input type="number" step="0.01" min="0" placeholder="0,00" className="bg-background" {...field} value={field.value ?? ''} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )} />
-                          )}
-                        </div>
+                              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground">
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+            </Card>
 
-                    <div className="flex justify-end gap-2 pt-4">
-                    <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                    <Button type="submit" disabled={isUploadingPhoto}>{editingUser ? 'Salvar alterações' : 'Criar usuário'}</Button>
+            {/* ── Cartão 2: Comportamento no sistema ── */}
+            <Card style={{ padding: '1.25rem 1.5rem' }}>
+              <p className="text-sm font-semibold mb-3">Comportamento no sistema</p>
+              <div className="space-y-2">
+                <FormField control={form.control} name="operacional" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel className="font-medium">Usuário operacional</FormLabel>
+                      <FormDescription className="text-xs">Aparece nas escalas de trabalho e relatórios operacionais.</FormDescription>
                     </div>
-                </form>
-                </Form>
-            </CardContent>
-        </Card>
+                    <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="participatesInGoals" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel className="font-medium">Participa de metas</FormLabel>
+                      <FormDescription className="text-xs">Incluído no acompanhamento de metas do quiosque.</FormDescription>
+                    </div>
+                    <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel className="font-medium">Vale-transporte</FormLabel>
+                      <FormDescription className="text-xs">Colaborador tem direito a vale-transporte mensal.</FormDescription>
+                    </div>
+                    <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+                )} />
+                <div
+                  className="overflow-hidden transition-all duration-200"
+                  style={{ maxHeight: form.watch('needsTransportVoucher') ? '80px' : '0', opacity: form.watch('needsTransportVoucher') ? 1 : 0 }}
+                >
+                  <div className="pt-2">
+                    <FormField control={form.control} name="transportVoucherValue" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Valor mensal (R$)</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" min="0" placeholder="0,00" {...field} value={field.value ?? ''} className="max-w-[180px]" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* ── Cartão 3: Permissões e alocação ── */}
+            <Card style={{ padding: '1.25rem 1.5rem' }}>
+              <p className="text-sm font-semibold mb-3">Permissões e alocação</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField control={form.control} name="profileId" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Perfil de permissão</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={profilesLoading}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione um perfil" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {profiles.map(p => (
+                          <SelectItem key={p.id} value={p.id} disabled={p.isDefaultAdmin && currentUser?.profileId !== adminProfileId}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <Controller control={form.control} name="assignedKioskIds" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Quiosques</FormLabel>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <FormControl>
+                          <Button variant="outline" className="w-full justify-between font-normal">
+                            {(field.value?.length || 0) > 0 ? `${field.value.length} quiosque(s)` : 'Selecione quiosques'}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                        <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <ScrollArea className="h-48">
+                          {kiosks.map(kiosk => (
+                            <DropdownMenuCheckboxItem
+                              key={kiosk.id}
+                              checked={field.value?.includes(kiosk.id)}
+                              onCheckedChange={checked => {
+                                const selected = field.value || [];
+                                field.onChange(checked ? [...selected, kiosk.id] : selected.filter(id => id !== kiosk.id));
+                              }}
+                              onSelect={e => e.preventDefault()}
+                            >
+                              {kiosk.name}
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </ScrollArea>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              {/* PDV operator IDs — somente leitura */}
+              {form.watch('assignedKioskIds')?.length > 0 && Object.keys(pdvOperatorIds).some(k => pdvOperatorIds[k]) && (
+                <div className="mt-4 space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">IDs no PDV</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {form.watch('assignedKioskIds').map(kioskId => {
+                      const id = pdvOperatorIds[kioskId];
+                      if (!id) return null;
+                      const name = kiosks.find(k => k.id === kioskId)?.name ?? kioskId;
+                      return (
+                        <span key={kioskId} className="inline-flex items-center gap-1 text-xs bg-muted text-muted-foreground rounded-md px-2 py-1">
+                          <span className="font-medium">{name}</span>
+                          <span className="text-muted-foreground/60">·</span>
+                          {id}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* ── Cartão 4: Departamento Pessoal (edição + permissão dp) ── */}
+            {editingUser && permissions.dp?.view && (
+              <Card style={{ padding: '1.25rem 1.5rem' }}>
+                <p className="text-sm font-semibold mb-3">Departamento Pessoal</p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="registrationIdBizneo" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Matrícula Bizneo</FormLabel>
+                        <FormControl><Input placeholder="Ex: 18043422" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Turno padrão</FormLabel>
+                        <Select value={field.value || '__none__'} onValueChange={v => field.onChange(v === '__none__' ? '' : v)}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">— Nenhum —</SelectItem>
+                            {shiftDefinitions.map(def => (
+                              <SelectItem key={def.id} value={def.id}>{def.name} ({def.startTime}–{def.endTime})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="admissionDate" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Data de admissão</FormLabel>
+                        <FormControl><Input type="date" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="birthDate" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Data de nascimento</FormLabel>
+                        <FormControl><Input type="date" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* ── Footer ── */}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditingUser(null); }}>Cancelar</Button>
+              <Button type="submit" disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty)}>
+                {editingUser ? 'Salvar alterações' : 'Criar usuário'}
+              </Button>
+            </div>
+          </form>
+        </Form>
       ) : (
         <div className="space-y-5">
           {/* Actions */}

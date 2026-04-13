@@ -8,14 +8,21 @@ function requireEnv(name: string): string {
   return val;
 }
 
-const COD_EMPRESA = requireEnv('PDVLEGAL_COD_EMPRESA');
-const API_TOKEN = requireEnv('PDVLEGAL_TOKEN');
-const USERNAME = requireEnv('PDVLEGAL_USERNAME');
-const PASSWORD = requireEnv('PDVLEGAL_PASSWORD');
+// Lazy getters — evaluated at request time, never at module load / build time.
+function getEnv() {
+  return {
+    COD_EMPRESA: requireEnv('PDVLEGAL_COD_EMPRESA'),
+    API_TOKEN:   requireEnv('PDVLEGAL_TOKEN'),
+    USERNAME:    requireEnv('PDVLEGAL_USERNAME'),
+    PASSWORD:    requireEnv('PDVLEGAL_PASSWORD'),
+  };
+}
 
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
 export async function getAccessToken() {
+  const { COD_EMPRESA, API_TOKEN, USERNAME, PASSWORD } = getEnv();
+
   const params = new URLSearchParams();
   params.append('grant_type', 'password');
   params.append('username', USERNAME);
@@ -46,10 +53,11 @@ export async function getAccessToken() {
  * Busca cupons exaustivamente (Paginado) no servidor.
  */
 async function fetchAllCouponsForDay(accessToken: string, date: string, filialId: string) {
+  const { COD_EMPRESA, API_TOKEN } = getEnv();
   console.log(`[PDV Legal] Iniciando coleta: ${date} (Filial: ${filialId})`);
 
   const url = `${BASE_URL}/cupom/get/${date}/${date}/${filialId}`;
-  
+
   const response = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${accessToken}`,
