@@ -4,21 +4,23 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { format } from 'date-fns';
+import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProfiles } from '@/hooks/use-profiles';
+import { useDP } from '@/hooks/use-dp';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, Warehouse, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, Building2 } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Users, Shield, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, Building2, ArrowLeft } from 'lucide-react';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { LocationManagementModal } from './location-management-modal';
 import { ProfileManagementModal } from './profile-management-modal';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from './ui/scroll-area';
@@ -28,6 +30,12 @@ import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 import { storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { pickUserColor, getUserColor } from '@/lib/utils/user-colors';
+
+function timestampToDateInput(ts: Timestamp | undefined): string {
+  if (!ts) return '';
+  try { return format(ts.toDate(), 'yyyy-MM-dd'); } catch { return ''; }
+}
 
 
 const userSchema = z.object({
@@ -39,6 +47,14 @@ const userSchema = z.object({
   avatarUrl: z.string().optional(),
   operacional: z.boolean().optional(),
   participatesInGoals: z.boolean().optional(),
+  // Departamento Pessoal
+  registrationIdBizneo: z.string().optional(),
+  registrationIdPdv: z.string().optional(),
+  admissionDate: z.string().optional(),
+  birthDate: z.string().optional(),
+  shiftDefinitionId: z.string().optional(),
+  needsTransportVoucher: z.boolean().optional(),
+  transportVoucherValue: z.coerce.number().nonnegative().optional(),
 }).refine(data => {
     return !data.password || data.password.length >= 6;
 }, {
@@ -57,15 +73,15 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 export function UserManagement() {
   const { permissions, users, addUser, deleteUser, user: currentUser, updateUser, resetPassword } = useAuth();
-  const { kiosks, updateKiosk, deleteKiosk: deleteKioskFromProvider, loading: kiosksLoading } = useKiosks();
+  const { kiosks, loading: kiosksLoading } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
+  const { shiftDefinitions } = useDP();
   const { toast } = useToast();
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
-  const [isKiosksModalOpen, setIsKiosksModalOpen] = useState(false);
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [profileFilter, setProfileFilter] = useState('all');
@@ -87,6 +103,13 @@ export function UserManagement() {
         avatarUrl: '',
         operacional: false,
         participatesInGoals: false,
+        registrationIdBizneo: '',
+        registrationIdPdv: '',
+        admissionDate: '',
+        birthDate: '',
+        shiftDefinitionId: '',
+        needsTransportVoucher: false,
+        transportVoucherValue: undefined,
     }
   });
 
@@ -98,6 +121,33 @@ export function UserManagement() {
       return searchMatch && profileMatch && kioskMatch;
     });
   }, [users, searchTerm, profileFilter, kioskFilter]);
+
+  // Group users by profile, ordered: admin → gestor/gerente → líder → others
+  const groupedUsers = useMemo(() => {
+    const profileOrder = (profileId: string, name: string) => {
+      if (profileId === adminProfileId) return 0;
+      const n = name.toLowerCase();
+      if (n.includes('gestor') || n.includes('gerente')) return 1;
+      if (n.includes('líder') || n.includes('lider')) return 2;
+      return 3;
+    };
+
+    const map = new Map<string, { profileId: string; profileName: string; order: number; users: User[] }>();
+    filteredUsers.forEach(user => {
+      const profileName = profiles.find(p => p.id === user.profileId)?.name ?? 'Sem perfil';
+      if (!map.has(user.profileId)) {
+        map.set(user.profileId, {
+          profileId: user.profileId,
+          profileName,
+          order: profileOrder(user.profileId, profileName),
+          users: [],
+        });
+      }
+      map.get(user.profileId)!.users.push(user);
+    });
+
+    return [...map.values()].sort((a, b) => a.order - b.order || a.profileName.localeCompare(b.profileName));
+  }, [filteredUsers, profiles, adminProfileId]);
 
 
   const handleAddNew = () => {
@@ -111,6 +161,13 @@ export function UserManagement() {
       avatarUrl: '',
       operacional: false,
       participatesInGoals: false,
+      registrationIdBizneo: '',
+      registrationIdPdv: '',
+      admissionDate: '',
+      birthDate: '',
+      shiftDefinitionId: '',
+      needsTransportVoucher: false,
+      transportVoucherValue: undefined,
     });
     setPdvOperatorIds({});
     setShowForm(true);
@@ -127,6 +184,13 @@ export function UserManagement() {
       avatarUrl: user.avatarUrl || '',
       operacional: user.operacional || false,
       participatesInGoals: user.participatesInGoals || false,
+      registrationIdBizneo: user.registrationIdBizneo ?? '',
+      registrationIdPdv: user.registrationIdPdv ?? '',
+      admissionDate: timestampToDateInput(user.admissionDate),
+      birthDate: timestampToDateInput(user.birthDate),
+      shiftDefinitionId: user.shiftDefinitionId ?? '',
+      needsTransportVoucher: user.needsTransportVoucher ?? false,
+      transportVoucherValue: user.transportVoucherValue,
     });
     const existing: Record<string, string> = {};
     Object.entries(user.pdvOperatorIds ?? {}).forEach(([k, v]) => { existing[k] = String(v); });
@@ -166,34 +230,56 @@ export function UserManagement() {
     }
   };
 
-  const onSubmit = (values: UserFormValues) => {
+  const onSubmit = async (values: UserFormValues) => {
     const avatarUrl = values.avatarUrl || '';
     if (editingUser) {
+      // Converte datas DP para Timestamp
+      const admissionDate = values.admissionDate
+        ? Timestamp.fromDate(new Date(values.admissionDate + 'T12:00:00'))
+        : undefined;
+      const birthDate = values.birthDate
+        ? Timestamp.fromDate(new Date(values.birthDate + 'T12:00:00'))
+        : undefined;
+
       const updatedData: Partial<User> = {
           ...values,
           avatarUrl,
           pdvOperatorIds: Object.fromEntries(
             Object.entries(pdvOperatorIds).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])
           ),
+          registrationIdBizneo: values.registrationIdBizneo || undefined,
+          registrationIdPdv: values.registrationIdPdv || undefined,
+          admissionDate,
+          birthDate,
+          shiftDefinitionId: values.shiftDefinitionId || undefined,
+          needsTransportVoucher: values.needsTransportVoucher,
+          transportVoucherValue: values.needsTransportVoucher ? values.transportVoucherValue : undefined,
       };
-      delete (updatedData as any).password; 
-      updateUser({ ...editingUser, ...updatedData });
+      delete (updatedData as any).password;
+      await updateUser({ ...editingUser, ...updatedData });
     } else {
         if (!values.password) {
              form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
              return;
         }
-      addUser({
+      const uid = await addUser({
           username: values.username,
           profileId: values.profileId,
           assignedKioskIds: values.assignedKioskIds,
           avatarUrl: avatarUrl,
+          color: pickUserColor(users.map(u => u.color)),
           operacional: values.operacional,
           participatesInGoals: values.participatesInGoals,
           pdvOperatorIds: Object.fromEntries(
             Object.entries(pdvOperatorIds).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])
           ),
       }, values.email, values.password);
+
+      if (!uid) {
+        toast({ title: 'Erro ao criar usuário.', description: 'Verifique o console para detalhes.', variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Usuário criado com sucesso.' });
     }
     setShowForm(false);
     setEditingUser(null);
@@ -207,6 +293,11 @@ export function UserManagement() {
       await uploadString(storageRef, dataUrl, 'data_url');
       const downloadURL = await getDownloadURL(storageRef);
       form.setValue('avatarUrl', downloadURL, { shouldDirty: true });
+      // Auto-save avatarUrl immediately so the photo persists
+      // even if the user closes the form without clicking "Salvar alterações"
+      if (editingUser) {
+        await updateUser({ ...editingUser, avatarUrl: downloadURL });
+      }
       toast({ title: "Foto atualizada!" });
     } catch (error) {
       console.error(error);
@@ -239,9 +330,8 @@ export function UserManagement() {
 
 
   const canManageAnyUsers = permissions.settings.manageUsers;
-  const canManageKiosks = permissions.settings.manageKiosks;
 
-  
+
   if (!canManageAnyUsers) {
     return (
         <Card className="w-full max-w-2xl mx-auto">
@@ -266,12 +356,26 @@ export function UserManagement() {
       {showForm ? (
         <Card>
             <CardHeader>
-                <CardTitle>
-                    {editingUser ? `Editando ${editingUser.username}` : 'Adicionar novo usuário'}
-                </CardTitle>
-                <CardDescription>
-                    Preencha os detalhes do usuário abaixo.
-                </CardDescription>
+                <div className="flex items-center gap-3">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 h-8 w-8 rounded-full"
+                        onClick={() => { setShowForm(false); setEditingUser(null); }}
+                        aria-label="Voltar para configurações"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <div>
+                        <CardTitle>
+                            {editingUser ? `Editando ${editingUser.username}` : 'Adicionar novo usuário'}
+                        </CardTitle>
+                        <CardDescription>
+                            Preencha os detalhes do usuário abaixo.
+                        </CardDescription>
+                    </div>
+                </div>
             </CardHeader>
             <CardContent>
                 <Form {...form}>
@@ -288,7 +392,14 @@ export function UserManagement() {
                             ) : (
                                 <>
                                     <AvatarImage src={form.watch('avatarUrl') || undefined} />
-                                    <AvatarFallback className="text-3xl bg-primary text-primary-foreground">
+                                    <AvatarFallback
+                                        className="text-3xl font-bold text-white"
+                                        style={{
+                                            backgroundColor: editingUser
+                                                ? getUserColor(editingUser.id, editingUser.color)
+                                                : pickUserColor(users.map(u => u.color)),
+                                        }}
+                                    >
                                         {form.watch('username')?.charAt(0).toUpperCase() || '?'}
                                     </AvatarFallback>
                                 </>
@@ -299,6 +410,18 @@ export function UserManagement() {
                                 <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto}><Upload className="mr-2 h-4 w-4"/> Carregar</Button>
                             </div>
                             <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                            {/* Color indicator — assigned automatically by the system */}
+                            <div className="flex items-center gap-1.5">
+                                <div
+                                    className="h-4 w-4 rounded-full ring-1 ring-white/20 shrink-0"
+                                    style={{
+                                        backgroundColor: editingUser
+                                            ? getUserColor(editingUser.id, editingUser.color)
+                                            : pickUserColor(users.map(u => u.color)),
+                                    }}
+                                />
+                                <span className="text-[11px] text-muted-foreground">Cor na escala</span>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow">
@@ -479,6 +602,90 @@ export function UserManagement() {
                     </div>
                     </div>
 
+                    {/* ── Seção Departamento Pessoal (apenas ao editar) ── */}
+                    {editingUser && permissions.dp?.view && (
+                      <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                        <h4 className="font-semibold text-sm">Departamento Pessoal</h4>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <FormField control={form.control} name="registrationIdBizneo" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Matrícula Bizneo</FormLabel>
+                              <FormControl><Input placeholder="Ex: 18043422" className="bg-background" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <FormField control={form.control} name="admissionDate" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Data de admissão</FormLabel>
+                              <FormControl><Input type="date" className="bg-background" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name="birthDate" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Data de nascimento</FormLabel>
+                              <FormControl><Input type="date" className="bg-background" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Turno padrão</FormLabel>
+                              <Select
+                                value={field.value || '__none__'}
+                                onValueChange={v => field.onChange(v === '__none__' ? '' : v)}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="bg-background">
+                                    <SelectValue placeholder="Nenhum" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="__none__">— Nenhum —</SelectItem>
+                                  {shiftDefinitions.map(def => (
+                                    <SelectItem key={def.id} value={def.id}>
+                                      {def.name} ({def.startTime}–{def.endTime})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg border bg-background p-3">
+                              <div className="space-y-0.5">
+                                <FormLabel>Vale-transporte</FormLabel>
+                                <FormDescription className="text-xs">Colaborador recebe vale-transporte.</FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch checked={field.value} onCheckedChange={field.onChange} />
+                              </FormControl>
+                            </FormItem>
+                          )} />
+
+                          {form.watch('needsTransportVoucher') && (
+                            <FormField control={form.control} name="transportVoucherValue" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Valor mensal (R$)</FormLabel>
+                                <FormControl>
+                                  <Input type="number" step="0.01" min="0" placeholder="0,00" className="bg-background" {...field} value={field.value ?? ''} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex justify-end gap-2 pt-4">
                     <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
                     <Button type="submit" disabled={isUploadingPhoto}>{editingUser ? 'Salvar alterações' : 'Criar usuário'}</Button>
@@ -488,109 +695,126 @@ export function UserManagement() {
             </CardContent>
         </Card>
       ) : (
-        <Card>
-            <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Building2 /> Configurações</CardTitle>
-            <CardDescription>Adicione ou edite usuários e atribua perfis de permissão.</CardDescription>
-            </CardHeader>
-            <CardContent>
-            <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={handleAddNew} className="flex-grow" disabled={!permissions.settings.manageUsers}>
-                <PlusCircle className="mr-2" /> Adicionar usuário
-                </Button>
-                <Button variant="outline" onClick={() => setIsProfilesModalOpen(true)} className="flex-grow" disabled={!permissions.settings.manageProfiles}>
-                    <Shield className="mr-2" /> Gerenciar perfis
-                </Button>
-                <Button variant="outline" onClick={() => setIsKiosksModalOpen(true)} className="flex-grow" disabled={!canManageKiosks}>
-                    <Warehouse className="mr-2" /> Gerenciar quiosques
-                </Button>
-            </div>
+        <div className="space-y-5">
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={handleAddNew} disabled={!permissions.settings.manageUsers}>
+              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar usuário
+            </Button>
+            <Button variant="outline" onClick={() => setIsProfilesModalOpen(true)} disabled={!permissions.settings.manageProfiles}>
+              <Shield className="mr-2 h-4 w-4" /> Gerenciar perfis
+            </Button>
+          </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-2 mt-4 p-3 border rounded-lg bg-muted/50">
-                <div className="relative flex-grow w-full">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar por nome..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 w-full"
-                    />
-                </div>
-                <Select value={profileFilter} onValueChange={setProfileFilter}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                        <SelectValue placeholder="Perfil" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos os Perfis</SelectItem>
-                        {profiles.map(profile => (
-                            <SelectItem key={profile.id} value={profile.id}>{profile.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <Select value={kioskFilter} onValueChange={setKioskFilter}>
-                    <SelectTrigger className="w-full sm:w-[220px]">
-                        <SelectValue placeholder="Quiosque" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos os Quiosques</SelectItem>
-                        {kiosks.map(kiosk => (
-                            <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <Button variant="ghost" onClick={() => {
-                    setSearchTerm('');
-                    setProfileFilter('all');
-                    setKioskFilter('all');
-                }}>
-                    <Eraser className="mr-2 h-4 w-4" />
-                    Limpar
-                </Button>
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row items-center gap-2 p-3 border rounded-lg bg-muted/50">
+            <div className="relative flex-grow w-full">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 w-full"
+              />
             </div>
-            
-            <Separator className="my-4" />
-            <div className="space-y-2">
-                <ScrollArea className="h-[40vh]">
-                <div className="pr-4 space-y-2">
-                    {filteredUsers.map(user => (
-                    <div key={user.id} className="grid grid-cols-2 items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 md:grid-cols-4">
-                        <div className="font-medium">
-                        <span className="md:hidden text-muted-foreground">Usuário: </span>
-                        {user.username}
+            <Select value={profileFilter} onValueChange={setProfileFilter}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Perfil" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Perfis</SelectItem>
+                {profiles.map(profile => (
+                  <SelectItem key={profile.id} value={profile.id}>{profile.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={kioskFilter} onValueChange={setKioskFilter}>
+              <SelectTrigger className="w-full sm:w-[220px]">
+                <SelectValue placeholder="Quiosque" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Quiosques</SelectItem>
+                {kiosks.map(kiosk => (
+                  <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" onClick={() => { setSearchTerm(''); setProfileFilter('all'); setKioskFilter('all'); }}>
+              <Eraser className="mr-2 h-4 w-4" /> Limpar
+            </Button>
+          </div>
+
+          {/* Grouped user list */}
+          {groupedUsers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Nenhum usuário encontrado.</p>
+          ) : (
+            <div className="space-y-6">
+              {groupedUsers.map(group => (
+                <div key={group.profileId} className="space-y-2">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                    {group.profileName}
+                    <span className="ml-2 font-normal normal-case">({group.users.length})</span>
+                  </h3>
+                  <div className="space-y-1.5">
+                    {group.users.map(user => (
+                      <div key={user.id} className="flex items-start gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-muted/40">
+                        <Avatar className="h-8 w-8 shrink-0 mt-0.5">
+                          <AvatarImage src={user.avatarUrl} />
+                          <AvatarFallback className="text-xs text-white" style={{ backgroundColor: getUserColor(user.id, user.color) }}>
+                            {user.username.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{user.username}</p>
+                          {user.assignedKioskIds?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {user.assignedKioskIds.map(id => {
+                                const name = kiosks.find(k => k.id === id)?.name ?? id;
+                                return (
+                                  <span key={id} className="text-[11px] bg-muted text-muted-foreground rounded px-1.5 py-0.5 leading-none">
+                                    {name}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                        <div>
-                        <span className="md:hidden text-muted-foreground">Perfil: </span>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${profileIsAdmin(user.profileId) ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>
-                            {getProfileName(user.profileId)}
-                        </span>
-                        </div>
-                        <div className="text-muted-foreground text-sm truncate">
-                        <span className="md:hidden font-medium text-card-foreground">Quiosque(s): </span>
-                        {getKioskNames(user.assignedKioskIds)}
-                        </div>
-                        <div className="col-span-2 flex justify-end gap-2 md:col-span-1">
-                            {permissions.settings.manageUsers && <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}><Edit className="h-4 w-4" /></Button>}
-                            {permissions.settings.manageUsers && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          {permissions.settings.manageUsers && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(user)}>
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          {permissions.settings.manageUsers && (
                             <DeleteConfirmationDialog
-                                open={false}
-                                onOpenChange={() => {}}
-                                onConfirm={() => setUserToResetPassword(user)}
-                                title={`Redefinir senha de ${user.username}?`}
-                                description={`Um e-mail será enviado para ${user.email} com instruções para redefinir a senha.`}
-                                confirmButtonText="Sim, enviar e-mail"
-                                confirmButtonVariant="default"
-                                triggerButton={<Button variant="ghost" size="icon"><KeyRound className="h-4 w-4" /></Button>}
+                              open={false}
+                              onOpenChange={() => {}}
+                              onConfirm={() => setUserToResetPassword(user)}
+                              title={`Redefinir senha de ${user.username}?`}
+                              description={`Um e-mail será enviado para ${user.email} com instruções para redefinir a senha.`}
+                              confirmButtonText="Sim, enviar e-mail"
+                              confirmButtonVariant="default"
+                              triggerButton={<Button variant="ghost" size="icon" className="h-8 w-8"><KeyRound className="h-3.5 w-3.5" /></Button>}
                             />
-                            )}
-                            {permissions.settings.manageUsers && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(user)} disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}><Trash2 className="h-4 w-4" /></Button>}
+                          )}
+                          {permissions.settings.manageUsers && (
+                            <Button
+                              variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => handleDeleteClick(user)}
+                              disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
-                    </div>
+                      </div>
                     ))}
+                  </div>
                 </div>
-                </ScrollArea>
+              ))}
             </div>
-            </CardContent>
-        </Card>
+          )}
+        </div>
       )}
       
       <ProfileManagementModal 
@@ -599,15 +823,6 @@ export function UserManagement() {
         canEdit={!!permissions.settings.manageProfiles}
       />
 
-      <LocationManagementModal
-        open={isKiosksModalOpen}
-        onOpenChange={setIsKiosksModalOpen}
-        kiosks={kiosks}
-        updateKiosk={updateKiosk}
-        deleteKiosk={deleteKioskFromProvider}
-        permissions={{add: !!canManageKiosks, delete: !!canManageKiosks}}
-      />
-      
       <PhotoCaptureModal 
         open={isPhotoModalOpen}
         onOpenChange={setIsPhotoModalOpen}

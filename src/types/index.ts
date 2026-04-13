@@ -13,6 +13,7 @@ export type Kiosk = {
   id: string;
   name: string;
   pdvFilialId?: string;
+  bizneoId?: string;
 };
 
 export type Location = {
@@ -366,15 +367,17 @@ export type User = {
   profileId: string;
   assignedKioskIds: string[];
   avatarUrl?: string;
+  color?: string;              // hex color for avatar/schedule display
   // Operacional (PDV)
   operacional?: boolean;
   participatesInGoals?: boolean;
   pdvOperatorIds?: { [kioskId: string]: number };
   // Departamento Pessoal (RH)
-  registrationId?: string;         // matrícula Bizneo
+  registrationIdBizneo?: string;   // matrícula no Bizneo HR
+  registrationIdPdv?: string;      // código no PDV
+  unitIds?: string[];               // unidade(s) de trabalho
   admissionDate?: Timestamp;
   birthDate?: Timestamp;
-  unitIds?: string[];
   shiftDefinitionId?: string;
   needsTransportVoucher?: boolean;
   transportVoucherValue?: number;
@@ -918,6 +921,7 @@ export type DPUnit = {
   id: string;
   name: string;
   groupId?: string;
+  bizneoTaxonId?: number; // ID do taxon (local) no Bizneo
   createdAt: Timestamp;
 };
 
@@ -932,12 +936,19 @@ export type DPShiftDefinition = {
   id: string;
   code: string;
   name: string;
-  startTime: string; // HH:mm
-  endTime: string;   // HH:mm
+  startTime: string;   // HH:mm — início do primeiro range
+  endTime: string;     // HH:mm — fim do último range
+  breakStart?: string; // HH:mm — início do intervalo (opcional); gera dois time_ranges no Bizneo
+  breakEnd?: string;   // HH:mm — fim do intervalo
   unitId?: string;
   unitName?: string;
   daysOfWeek: number[]; // 0=Dom, 1=Seg, ...
+  bizneoTemplateId?: string; // ID numérico do modelo no Bizneo (usado no shift_id do export)
   createdAt: Timestamp;
+};
+
+export type DPScheduleSnapshot = {
+  users: Record<string, { username: string; color?: string; avatarUrl?: string; needsTransportVoucher?: boolean; transportVoucherValue?: number }>;
 };
 
 export type DPSchedule = {
@@ -946,6 +957,10 @@ export type DPSchedule = {
   month: number; // 1–12
   year: number;
   shiftCount: number;
+  unitId?: string;     // per-unit schedule; absent = legacy (all units)
+  calendarId?: string; // optional: linked holiday calendar
+  locked?: boolean;    // when true, snapshot is frozen
+  snapshot?: DPScheduleSnapshot; // frozen user data at lock time
   createdAt: Timestamp;
 };
 
