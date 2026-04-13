@@ -5,7 +5,7 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth, functions } from '@/lib/firebase';
-import { collection, onSnapshot, doc, query, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, query, getDoc, updateDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
@@ -40,21 +40,50 @@ export interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function sanitizeFirestoreUpdate(value: unknown): unknown {
+  if (value === undefined) {
+    return deleteField();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizeFirestoreUpdate(item));
+  }
+
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, sanitizeFirestoreUpdate(entry)])
+    );
+  }
+
+  return value;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [permissions, setPermissions] = useState<PermissionSet>(defaultGuestPermissions);
   const [loading, setLoading] = useState(true);
+  const [permissionsReady, setPermissionsReady] = useState(false);
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const router = useRouter();
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      setLoading(true);
+      setPermissionsReady(false);
       setFirebaseUser(user);
+
+      if (!user) {
+        setAppUser(null);
+        setPermissions(defaultGuestPermissions);
+        setPermissionsReady(true);
+        setLoading(false);
+        return;
+      }
+
       if (user) {
         if (profilesLoading) {
-            setLoading(true);
             return;
         }
 
@@ -76,8 +105,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await signOut(auth);
           setAppUser(null);
         }
-      } else {
-        setAppUser(null);
       }
       setLoading(false);
     });
@@ -121,8 +148,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (loading || !appUser || profilesLoading || !profiles || !adminProfileId) {
+    if (loading || profilesLoading) {
+      setPermissionsReady(false);
+      return;
+    }
+
+    if (!appUser) {
       setPermissions(defaultGuestPermissions);
+      setPermissionsReady(true);
+      return;
+    }
+
+    if (!profiles || !adminProfileId) {
+      setPermissionsReady(false);
       return;
     }
     
@@ -130,11 +168,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     if (userProfile?.isDefaultAdmin) {
       setPermissions(defaultAdminPermissions);
+      setPermissionsReady(true);
       return;
     }
 
     if (!userProfile?.permissions) {
       setPermissions(defaultGuestPermissions);
+      setPermissionsReady(true);
       return;
     }
     
@@ -143,16 +183,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     setPermissions(finalPermissions);
+    setPermissionsReady(true);
   }, [appUser, profiles, loading, profilesLoading, adminProfileId, mergeRecursive]);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
+      setLoading(true);
+      setPermissionsReady(false);
       const credential = await signInWithEmailAndPassword(auth, email, password);
       // Força refresh do token para pegar os custom claims mais recentes
       await credential.user.getIdToken(true);
       return true;
     } catch (error) {
       console.error("Login error:", error);
+      setLoading(false);
+      setPermissionsReady(true);
       return false;
     }
   }, []);
@@ -191,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userRef = doc(db, "users", updatedUser.id);
     const { id, email, ...dataToUpdate } = updatedUser as any;
     delete dataToUpdate.password;
-    await updateDoc(userRef, dataToUpdate);
+    await updateDoc(userRef, sanitizeFirestoreUpdate(dataToUpdate) as Record<string, unknown>);
   }, []);
   
   const deleteUser = useCallback(async (userId: string) => {
@@ -249,7 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     activeUsers,
     terminatedUsers,
     isAuthenticated: !!appUser,
-    loading: loading || profilesLoading,
+    loading: loading || profilesLoading || !permissionsReady,
     permissions,
     login,
     logout,
@@ -261,7 +306,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     changePassword,
   }), [
     appUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading,
-    permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, resetPassword, changePassword,
+    permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, resetPassword, changePassword,
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

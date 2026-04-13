@@ -43,7 +43,21 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const { auditSessions, loading: auditLoading } = useStockAudit();
   const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
 
-  const loading = authLoading || tasksLoading || repositionLoading || returnsLoading || auditLoading || itemAdditionLoading;
+  const shouldLoadTasks = !!user;
+  const shouldLoadAudit = !!user && !!permissions.stock.stockCount.approve;
+  const shouldLoadReturns = !!user && !!permissions.stock.returns.updateStatus;
+  const shouldLoadReposition = !!user && (
+    user.username === 'Tiago Brasil' ||
+    (Array.isArray(user.assignedKioskIds) && user.assignedKioskIds.length > 0) ||
+    !!permissions.stock.stockCount.approve
+  );
+
+  const loading = authLoading
+    || (shouldLoadTasks && tasksLoading)
+    || (shouldLoadReposition && repositionLoading)
+    || (shouldLoadReturns && returnsLoading)
+    || (shouldLoadAudit && auditLoading)
+    || itemAdditionLoading;
 
   const allTasks: Task[] = useMemo(() => {
     if (loading || !user) return [];

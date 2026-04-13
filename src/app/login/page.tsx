@@ -42,9 +42,7 @@ export default function LoginPage() {
   async function onSubmit(data: LoginFormData) {
     setError(null);
     const success = await login(data.email, data.password);
-    if (success) {
-      router.push("/dashboard");
-    } else {
+    if (!success) {
       setError("E-mail ou senha inválidos. Verifique seus dados e tente novamente.");
     }
   }

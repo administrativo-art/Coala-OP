@@ -33,7 +33,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const { legacyTasks, loading: tasksLoading } = useAllTasks();
+  const { legacyTasks } = useAllTasks();
   const router = useRouter();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -54,7 +54,7 @@ export default function DashboardLayout({
     }
   }, [isAuthenticated, authLoading, router]);
   
-  if (!isMounted || authLoading || tasksLoading || !isAuthenticated) {
+  if (!isMounted || authLoading || !isAuthenticated) {
     return <LoadingSkeleton />;
   }
 
