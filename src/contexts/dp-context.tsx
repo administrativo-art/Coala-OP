@@ -52,7 +52,7 @@ export interface DPContextType {
 }
 
 // Singleton para evitar que o Webpack/Next.js em produção crie chunks duplicados deste contexto
-const DPContextGlobal = (globalThis as any).__DPContext || createContext<DPContextType | undefined>(undefined);
+const DPContextGlobal = ((globalThis as any).__DPContext || createContext<DPContextType | undefined>(undefined)) as React.Context<DPContextType | undefined>;
 if (typeof window !== 'undefined') {
   (globalThis as any).__DPContext = DPContextGlobal;
 }
