@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext } from 'react';
-import { DPContext, type DPContextType } from '@/components/dp-provider';
+import { DPContext, type DPContextType } from '@/contexts/dp-context';
 
 export const useDP = (): DPContextType => {
   const context = useContext(DPContext);
