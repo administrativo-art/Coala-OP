@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
+import { DPSettingsUnits } from '@/components/dp/dp-settings-units';
 
 export default function DPSettingsUnitsPage() {
   const { permissions } = useAuth();
@@ -11,8 +12,8 @@ export default function DPSettingsUnitsPage() {
 
   return (
     <div className="space-y-4">
-      <p className="text-muted-foreground text-sm">Unidades e grupos de unidades.</p>
-      {/* TODO: DPUnitsCRUD */}
+      <p className="text-muted-foreground text-sm">Unidades e grupos de unidades utilizados nas escalas.</p>
+      <DPSettingsUnits />
     </div>
   );
 }

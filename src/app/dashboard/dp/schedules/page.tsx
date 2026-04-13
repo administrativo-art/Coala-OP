@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
+import { DPSchedulesList } from '@/components/dp/dp-schedules-list';
 
 export default function DPSchedulesPage() {
   const { permissions } = useAuth();
@@ -15,7 +16,7 @@ export default function DPSchedulesPage() {
         <h1 className="text-2xl font-semibold">Escalas</h1>
         <p className="text-muted-foreground text-sm mt-1">Gerencie as escalas mensais de colaboradores.</p>
       </div>
-      {/* TODO: DPSchedulesManager */}
+      <DPSchedulesList />
     </div>
   );
 }

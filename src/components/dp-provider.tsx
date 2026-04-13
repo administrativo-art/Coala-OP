@@ -58,6 +58,31 @@ export interface DPContextType {
 
 export const DPContext = createContext<DPContextType | undefined>(undefined);
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// Normaliza daysOfWeek: migração antiga usa strings ("monday"), tipo espera números (0–6)
+const DOW_STRING_MAP: Record<string, number> = {
+  sunday: 0, dom: 0,
+  monday: 1, seg: 1,
+  tuesday: 2, ter: 2,
+  wednesday: 3, qua: 3,
+  thursday: 4, qui: 4,
+  friday: 5, sex: 5,
+  saturday: 6, sáb: 6, sab: 6,
+};
+
+function normalizeDaysOfWeek(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(d => {
+      if (typeof d === 'number') return d;
+      if (typeof d === 'string') return DOW_STRING_MAP[d.toLowerCase()] ?? -1;
+      return -1;
+    })
+    .filter(d => d >= 0 && d <= 6)
+    .sort();
+}
+
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function DPProvider({ children }: { children: React.ReactNode }) {
@@ -95,7 +120,13 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     return onSnapshot(
       query(collection(db, 'dp_shiftDefinitions'), orderBy('name')),
-      (snap) => { setShiftDefinitions(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPShiftDefinition))); setShiftDefsLoading(false); },
+      (snap) => {
+        setShiftDefinitions(snap.docs.map(d => {
+          const data = d.data();
+          return { id: d.id, ...data, daysOfWeek: normalizeDaysOfWeek(data.daysOfWeek) } as DPShiftDefinition;
+        }));
+        setShiftDefsLoading(false);
+      },
       () => setShiftDefsLoading(false)
     );
   }, []);
@@ -103,8 +134,23 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   // Escalas
   useEffect(() => {
     return onSnapshot(
-      query(collection(db, 'dp_schedules'), orderBy('year', 'desc'), orderBy('month', 'desc')),
-      (snap) => { setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPSchedule))); setSchedulesLoading(false); },
+      query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc')),
+      (snap) => {
+        const list = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            month: Number(data.month),
+            year: Number(data.year),
+            shiftCount: Number(data.shiftCount ?? 0),
+          } as DPSchedule;
+        });
+        // Ordenar por ano desc, mês desc no cliente (evita índice composto)
+        list.sort((a, b) => b.year - a.year || b.month - a.month);
+        setSchedules(list);
+        setSchedulesLoading(false);
+      },
       () => setSchedulesLoading(false)
     );
   }, []);
@@ -121,7 +167,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   // Calendários
   useEffect(() => {
     return onSnapshot(
-      query(collection(db, 'dp_calendars'), orderBy('year', 'desc'), orderBy('name')),
+      query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc')),
       (snap) => { setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar))); setCalendarsLoading(false); },
       () => setCalendarsLoading(false)
     );

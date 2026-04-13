@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
+import { DPSettingsCalendars } from '@/components/dp/dp-settings-calendars';
 
 export default function DPSettingsCalendarsPage() {
   const { permissions } = useAuth();
@@ -12,7 +13,7 @@ export default function DPSettingsCalendarsPage() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground text-sm">Calendários de feriados por estado e município.</p>
-      {/* TODO: DPCalendarsCRUD */}
+      <DPSettingsCalendars />
     </div>
   );
 }

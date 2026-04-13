@@ -13,7 +13,7 @@ import {
   X, LayoutDashboard, Package, ClipboardList, BarChart2,
   ShoppingCart, Settings, HelpCircle, LogOut, ShieldAlert,
   ListChecks, DollarSign, ListTodo, Target,
-  Users, CalendarDays, Umbrella, LayoutGrid
+  CalendarDays, Umbrella, LayoutGrid
 } from "lucide-react";
 
 interface NavItem {
@@ -82,10 +82,9 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
     {
       label: "Departamento Pessoal",
       items: [
-        { label: "Painel DP",       href: "/dashboard/dp",                  icon: LayoutGrid,   show: permissions.dp?.view },
-        { label: "Escalas",         href: "/dashboard/dp/schedules",         icon: CalendarDays, show: permissions.dp?.schedules?.view },
-        { label: "Férias",          href: "/dashboard/dp/ferias",            icon: Umbrella,     show: permissions.dp?.vacation?.viewAll },
-        { label: "Colaboradores",   href: "/dashboard/dp/collaborators",     icon: Users,        show: permissions.dp?.collaborators?.view },
+        { label: "Painel DP",       href: "/dashboard/dp",               icon: LayoutGrid,   show: permissions.dp?.view },
+        { label: "Escalas",         href: "/dashboard/dp/schedules",      icon: CalendarDays, show: permissions.dp?.schedules?.view },
+        { label: "Férias",          href: "/dashboard/dp/ferias",         icon: Umbrella,     show: permissions.dp?.vacation?.viewAll },
       ],
     },
     {

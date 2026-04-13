@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
+import { DPSettingsShifts } from '@/components/dp/dp-settings-shifts';
 
 export default function DPSettingsShiftsPage() {
   const { permissions } = useAuth();
@@ -11,8 +12,8 @@ export default function DPSettingsShiftsPage() {
 
   return (
     <div className="space-y-4">
-      <p className="text-muted-foreground text-sm">Definições de turno (templates reutilizáveis nas escalas).</p>
-      {/* TODO: DPShiftDefinitionsCRUD */}
+      <p className="text-muted-foreground text-sm">Definições de turno reutilizáveis nas escalas.</p>
+      <DPSettingsShifts />
     </div>
   );
 }

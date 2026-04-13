@@ -258,9 +258,18 @@ export function PdvSyncManagement() {
                       <span className="font-mono text-muted-foreground">{format(new Date(log.date + 'T12:00:00Z'), 'dd/MM')}</span>
                       <span className="font-medium">{log.kioskName}</span>
                     </div>
-                    <div>
+                    <div className="flex flex-col items-end gap-0.5 max-w-[180px]">
                       {log.status === 'success' && <span className="text-green-600 font-bold">R$ {log.revenue?.toFixed(2)}</span>}
-                      {log.status === 'error' && <span className="text-destructive font-bold" title={log.errorMessage}>Falha</span>}
+                      {log.status === 'error' && (
+                        <>
+                          <span className="text-destructive font-bold">Falha</span>
+                          {log.errorMessage && (
+                            <span className="text-[9px] text-destructive/70 truncate w-full text-right" title={log.errorMessage}>
+                              {log.errorMessage}
+                            </span>
+                          )}
+                        </>
+                      )}
                       {log.status === 'loading' && <span className="text-blue-500 animate-pulse">Processando...</span>}
                     </div>
                   </div>

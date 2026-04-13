@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
+import { DPCollaboratorsDirectory } from '@/components/dp/dp-collaborators-directory';
 
 export default function DPCollaboratorsPage() {
   const { permissions } = useAuth();
@@ -13,9 +14,9 @@ export default function DPCollaboratorsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Colaboradores</h1>
-        <p className="text-muted-foreground text-sm mt-1">Diretório de colaboradores ativos e inativos.</p>
+        <p className="text-muted-foreground text-sm mt-1">Diretório de colaboradores ativos e desligados.</p>
       </div>
-      {/* TODO: DPCollaboratorsTable */}
+      <DPCollaboratorsDirectory />
     </div>
   );
 }
