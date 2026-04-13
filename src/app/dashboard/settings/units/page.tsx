@@ -1,17 +1,12 @@
 "use client";
 
-import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { PermissionGuard } from '@/components/permission-guard';
 import { DPRuntimeGuard } from '@/components/dp-runtime-guard';
 import { useAuth } from '@/hooks/use-auth';
-
-const KioskManagement = dynamic(
-  () => import('@/components/kiosk-management').then(m => ({ default: m.KioskManagement })),
-  { ssr: false }
-);
+import { KioskManagement } from '@/components/kiosk-management';
 
 export default function UnitsPage() {
   const router = useRouter();
