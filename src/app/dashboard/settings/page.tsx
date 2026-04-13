@@ -1,15 +1,29 @@
 "use client";
 
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/hooks/use-auth';
-import { UserManagement } from '@/components/user-management';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { PermissionGuard } from "@/components/permission-guard";
-import { PdvSyncManagement } from '@/components/pdv-sync-management';
-import { CalendarManagement } from '@/components/calendar-management';
-import { KioskManagement } from '@/components/kiosk-management';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+const UserManagement = dynamic(
+  () => import('@/components/user-management').then(m => ({ default: m.UserManagement })),
+  { ssr: false }
+);
+const KioskManagement = dynamic(
+  () => import('@/components/kiosk-management').then(m => ({ default: m.KioskManagement })),
+  { ssr: false }
+);
+const CalendarManagement = dynamic(
+  () => import('@/components/calendar-management').then(m => ({ default: m.CalendarManagement })),
+  { ssr: false }
+);
+const PdvSyncManagement = dynamic(
+  () => import('@/components/pdv-sync-management').then(m => ({ default: m.PdvSyncManagement })),
+  { ssr: false }
+);
 
 export default function SettingsPage() {
     const { permissions } = useAuth();
