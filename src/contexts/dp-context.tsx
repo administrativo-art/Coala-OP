@@ -51,4 +51,10 @@ export interface DPContextType {
   deleteHoliday: (calendarId: string, holidayId: string) => Promise<void>;
 }
 
-export const DPContext = createContext<DPContextType | undefined>(undefined);
+// Singleton para evitar que o Webpack/Next.js em produção crie chunks duplicados deste contexto
+const DPContextGlobal = (globalThis as any).__DPContext || createContext<DPContextType | undefined>(undefined);
+if (typeof window !== 'undefined') {
+  (globalThis as any).__DPContext = DPContextGlobal;
+}
+
+export const DPContext = DPContextGlobal;
