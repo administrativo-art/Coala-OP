@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { PermissionGuard } from "@/components/permission-guard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DPProvider } from '@/components/dp-provider';
 import dynamic from 'next/dynamic';
 
 const UserManagement = dynamic(() => import('@/components/user-management').then(mod => mod.UserManagement), { ssr: false });
@@ -36,35 +35,30 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                {/* Local DPProvider guarantees the context is available for
-                    DP-dependent components on this page, regardless of how
-                    Next.js splits chunks in production. */}
-                <DPProvider>
-                    <Tabs defaultValue="usuarios">
-                        <TabsList>
-                            <TabsTrigger value="usuarios">Usuários</TabsTrigger>
-                            <TabsTrigger value="unidades">Unidades</TabsTrigger>
-                            <TabsTrigger value="calendarios">Calendários</TabsTrigger>
-                            <TabsTrigger value="sincronizacao">Sincronização PDV</TabsTrigger>
-                        </TabsList>
+                <Tabs defaultValue="usuarios">
+                    <TabsList>
+                        <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+                        <TabsTrigger value="unidades">Unidades</TabsTrigger>
+                        <TabsTrigger value="calendarios">Calendários</TabsTrigger>
+                        <TabsTrigger value="sincronizacao">Sincronização PDV</TabsTrigger>
+                    </TabsList>
 
-                        <TabsContent value="usuarios" className="mt-4">
-                            <UserManagement />
-                        </TabsContent>
+                    <TabsContent value="usuarios" className="mt-4">
+                        <UserManagement />
+                    </TabsContent>
 
-                        <TabsContent value="unidades" className="mt-4">
-                            <KioskManagement />
-                        </TabsContent>
+                    <TabsContent value="unidades" className="mt-4">
+                        <KioskManagement />
+                    </TabsContent>
 
-                        <TabsContent value="calendarios" className="mt-4">
-                            <CalendarManagement />
-                        </TabsContent>
+                    <TabsContent value="calendarios" className="mt-4">
+                        <CalendarManagement />
+                    </TabsContent>
 
-                        <TabsContent value="sincronizacao" className="mt-4">
-                            <PdvSyncManagement />
-                        </TabsContent>
-                    </Tabs>
-                </DPProvider>
+                    <TabsContent value="sincronizacao" className="mt-4">
+                        <PdvSyncManagement />
+                    </TabsContent>
+                </Tabs>
             </div>
         </PermissionGuard>
     );

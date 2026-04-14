@@ -9,7 +9,7 @@ import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProfiles } from '@/hooks/use-profiles';
-import { useDP } from '@/components/dp-provider';
+import { useDP } from '@/components/dp-context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useDP } from '@/components/dp-provider';
+import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import type { Kiosk, DPUnit, DPShiftDefinition } from '@/types';

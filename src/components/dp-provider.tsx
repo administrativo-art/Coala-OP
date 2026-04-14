@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
@@ -11,79 +11,8 @@ import type {
   DPUnit, DPUnitGroup, DPShiftDefinition,
   DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
 } from '@/types';
-
-// ─── Context type ────────────────────────────────────────────────────────────
-
-export interface DPContextType {
-  // Unidades
-  units: DPUnit[];
-  unitGroups: DPUnitGroup[];
-  unitsLoading: boolean;
-  addUnit: (data: Omit<DPUnit, 'id' | 'createdAt'>) => Promise<void>;
-  updateUnit: (unit: DPUnit) => Promise<void>;
-  deleteUnit: (unitId: string) => Promise<void>;
-  addUnitGroup: (data: Omit<DPUnitGroup, 'id' | 'createdAt'>) => Promise<void>;
-  updateUnitGroup: (group: DPUnitGroup) => Promise<void>;
-  deleteUnitGroup: (groupId: string) => Promise<void>;
-
-  // Definições de turno
-  shiftDefinitions: DPShiftDefinition[];
-  shiftDefsLoading: boolean;
-  addShiftDefinition: (data: Omit<DPShiftDefinition, 'id' | 'createdAt'>) => Promise<void>;
-  updateShiftDefinition: (def: DPShiftDefinition) => Promise<void>;
-  deleteShiftDefinition: (defId: string) => Promise<void>;
-
-  // Escalas
-  schedules: DPSchedule[];
-  schedulesLoading: boolean;
-  addSchedule: (data: Omit<DPSchedule, 'id' | 'createdAt' | 'shiftCount'>) => Promise<string>;
-  updateSchedule: (schedule: DPSchedule) => Promise<void>;
-  deleteSchedule: (scheduleId: string) => Promise<void>;
-
-  // Férias
-  vacations: DPVacationRecord[];
-  vacationsLoading: boolean;
-  addVacation: (data: Omit<DPVacationRecord, 'id' | 'createdAt'>) => Promise<void>;
-  updateVacation: (vacation: DPVacationRecord) => Promise<void>;
-  deleteVacation: (vacationId: string) => Promise<void>;
-
-  // Calendários
-  calendars: DPCalendar[];
-  calendarsLoading: boolean;
-  addCalendar: (data: Omit<DPCalendar, 'id' | 'createdAt' | 'holidayCount'>) => Promise<string>;
-  updateCalendar: (calendar: DPCalendar) => Promise<void>;
-  deleteCalendar: (calendarId: string) => Promise<void>;
-  addHoliday: (calendarId: string, data: Omit<DPHoliday, 'id' | 'createdAt'>) => Promise<void>;
-  deleteHoliday: (calendarId: string, holidayId: string) => Promise<void>;
-}
-
-// ─── Singleton guard ─────────────────────────────────────────────────────────
-// Next.js/Webpack duplicates this module across multiple production chunks.
-// Each copy would call createContext() independently, producing separate
-// context objects. Provider in chunk A, Consumer in chunk B — never match.
-//
-// Fix: cache the context on the real global object. The try/catch prevents
-// SWC from dead-code-eliminating the server fallback (SWC assumes "use client"
-// modules always have window, but they DO run on the server during SSR).
-// ─────────────────────────────────────────────────────────────────────────────
-const _DP_KEY = '__COALA_DP_CONTEXT__';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _store: any;
-try { _store = window; } catch { _store = typeof global !== 'undefined' ? global : {}; }
-
-export const DPContext: React.Context<DPContextType | undefined> =
-  _store[_DP_KEY] || (_store[_DP_KEY] = createContext<DPContextType | undefined>(undefined));
-
-export const useDP = (): DPContextType => {
-  const context = useContext(DPContext);
-  if (context === undefined) {
-    throw new Error(
-      'useDP must be used within a DPProvider. If this happens in dashboard/settings, check for duplicated DPContext chunks and prefer next/dynamic({ ssr: false }) for DP-dependent modules.'
-    );
-  }
-  return context;
-};
+export { DPContext, useDP } from './dp-context';
+import { DPContext } from './dp-context';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -134,9 +63,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   const [calendarsLoading, setCalendarsLoading] = useState(true);
 
   useEffect(() => {
-    // Só abre subscriptions quando o usuário estiver autenticado.
-    // Isso evita que os onSnapshot disparem antes do token estar pronto e
-    // morram silenciosamente com permission-denied.
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (!user) {
         setUnits([]);
@@ -263,10 +189,9 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteSchedule = useCallback(async (scheduleId: string) => {
-    const shiftsSnap = await import('firebase/firestore').then(({ getDocs }) =>
-      getDocs(collection(db, 'dp_schedules', scheduleId, 'shifts'))
-    );
-    const batch = writeBatch(db);
+    const firestore = await import('firebase/firestore');
+    const shiftsSnap = await firestore.getDocs(collection(db, 'dp_schedules', scheduleId, 'shifts'));
+    const batch = firestore.writeBatch(db);
     shiftsSnap.docs.forEach(d => batch.delete(d.ref));
     batch.delete(doc(db, 'dp_schedules', scheduleId));
     await batch.commit();
@@ -294,10 +219,9 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteCalendar = useCallback(async (calendarId: string) => {
-    const holidaysSnap = await import('firebase/firestore').then(({ getDocs }) =>
-      getDocs(collection(db, 'dp_calendars', calendarId, 'holidays'))
-    );
-    const batch = writeBatch(db);
+    const firestore = await import('firebase/firestore');
+    const holidaysSnap = await firestore.getDocs(collection(db, 'dp_calendars', calendarId, 'holidays'));
+    const batch = firestore.writeBatch(db);
     holidaysSnap.docs.forEach(d => batch.delete(d.ref));
     batch.delete(doc(db, 'dp_calendars', calendarId));
     await batch.commit();
@@ -318,7 +242,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     await batch.commit();
   }, []);
 
-  const value = useMemo<DPContextType>(() => ({
+  const value = useMemo(() => ({
     units, unitGroups, unitsLoading,
     addUnit, updateUnit, deleteUnit,
     addUnitGroup, updateUnitGroup, deleteUnitGroup,
