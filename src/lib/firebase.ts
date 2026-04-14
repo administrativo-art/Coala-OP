@@ -16,9 +16,10 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Connect to the specific "coala" database and force Long Polling
+// Connect to the specific "coala" database. Auto-detect long polling only when needed,
+// which avoids client-side blockers breaking Firestore listeners in production.
 const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: true,
 }, "coala");
 const storage = getStorage(app);
 const auth = getAuth(app);
