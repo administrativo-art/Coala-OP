@@ -410,6 +410,12 @@ service cloud.firestore {
       allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
     }
 
+    // Presença de usuários
+    match /userPresence/{userId} {
+      allow read: if isAuth();
+      allow write: if isAuth() && request.auth.uid == userId;
+    }
+
     // --- DEPARTAMENTO PESSOAL ---
 
     // Unidades
