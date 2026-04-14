@@ -1,50 +1,11 @@
 "use client";
-import { createContext, useContext } from 'react';
-import type {
-  DPUnit, DPUnitGroup, DPShiftDefinition,
-  DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
-} from '@/types';
 
-export interface DPContextType {
-  units: DPUnit[];
-  unitGroups: DPUnitGroup[];
-  unitsLoading: boolean;
-  addUnit: (data: Omit<DPUnit, 'id' | 'createdAt'>) => Promise<void>;
-  updateUnit: (unit: DPUnit) => Promise<void>;
-  deleteUnit: (unitId: string) => Promise<void>;
-  addUnitGroup: (data: Omit<DPUnitGroup, 'id' | 'createdAt'>) => Promise<void>;
-  updateUnitGroup: (group: DPUnitGroup) => Promise<void>;
-  deleteUnitGroup: (groupId: string) => Promise<void>;
-  shiftDefinitions: DPShiftDefinition[];
-  shiftDefsLoading: boolean;
-  addShiftDefinition: (data: Omit<DPShiftDefinition, 'id' | 'createdAt'>) => Promise<void>;
-  updateShiftDefinition: (def: DPShiftDefinition) => Promise<void>;
-  deleteShiftDefinition: (defId: string) => Promise<void>;
-  schedules: DPSchedule[];
-  schedulesLoading: boolean;
-  addSchedule: (data: Omit<DPSchedule, 'id' | 'createdAt' | 'shiftCount'>) => Promise<string>;
-  updateSchedule: (schedule: DPSchedule) => Promise<void>;
-  deleteSchedule: (scheduleId: string) => Promise<void>;
-  vacations: DPVacationRecord[];
-  vacationsLoading: boolean;
-  addVacation: (data: Omit<DPVacationRecord, 'id' | 'createdAt'>) => Promise<void>;
-  updateVacation: (vacation: DPVacationRecord) => Promise<void>;
-  deleteVacation: (vacationId: string) => Promise<void>;
-  calendars: DPCalendar[];
-  calendarsLoading: boolean;
-  addCalendar: (data: Omit<DPCalendar, 'id' | 'createdAt' | 'holidayCount'>) => Promise<string>;
-  updateCalendar: (calendar: DPCalendar) => Promise<void>;
-  deleteCalendar: (calendarId: string) => Promise<void>;
-  addHoliday: (calendarId: string, data: Omit<DPHoliday, 'id' | 'createdAt'>) => Promise<void>;
-  deleteHoliday: (calendarId: string, holidayId: string) => Promise<void>;
-}
+import { useDPStore, type DPStoreState } from '@/store/use-dp-store';
 
-export const DPContext = createContext<DPContextType | null>(null);
-
-export const useDP = (): DPContextType => {
-  const context = useContext(DPContext);
-  if (!context) {
-    throw new Error('useDP must be used within a DPProvider.');
-  }
-  return context;
+/**
+ * useDP Hook - Bridging to Zustand store.
+ * This ensures compatibility with existing components while fixing context duplication issues permanently.
+ */
+export const useDP = (): DPStoreState => {
+  return useDPStore();
 };

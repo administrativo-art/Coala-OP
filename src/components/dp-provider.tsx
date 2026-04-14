@@ -1,17 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-  collection, onSnapshot, addDoc, updateDoc, deleteDoc,
-  doc, query, orderBy, serverTimestamp, writeBatch, increment,
+  collection, onSnapshot, query, orderBy,
 } from 'firebase/firestore';
 import type {
   DPUnit, DPUnitGroup, DPShiftDefinition,
-  DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
+  DPSchedule, DPVacationRecord, DPCalendar,
 } from '@/types';
-import { DPContext } from './dp-context';
+import { useDPStore } from '@/store/use-dp-store';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -42,63 +41,47 @@ function logSubscriptionError(scope: string, error: unknown, stopLoading?: () =>
   stopLoading?.();
 }
 
-// ─── Provider ────────────────────────────────────────────────────────────────
+// ─── Lifecycle Manager (Refactored DPProvider) ───────────────────────────────
 
 export function DPProvider({ children }: { children: React.ReactNode }) {
-  const [units, setUnits] = useState<DPUnit[]>([]);
-  const [unitGroups, setUnitGroups] = useState<DPUnitGroup[]>([]);
-  const [unitsLoading, setUnitsLoading] = useState(true);
-
-  const [shiftDefinitions, setShiftDefinitions] = useState<DPShiftDefinition[]>([]);
-  const [shiftDefsLoading, setShiftDefsLoading] = useState(true);
-
-  const [schedules, setSchedules] = useState<DPSchedule[]>([]);
-  const [schedulesLoading, setSchedulesLoading] = useState(true);
-
-  const [vacations, setVacations] = useState<DPVacationRecord[]>([]);
-  const [vacationsLoading, setVacationsLoading] = useState(true);
-
-  const [calendars, setCalendars] = useState<DPCalendar[]>([]);
-  const [calendarsLoading, setCalendarsLoading] = useState(true);
+  const store = useDPStore();
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        setUnits([]);
-        setUnitGroups([]);
-        setShiftDefinitions([]);
-        setSchedules([]);
-        setVacations([]);
-        setCalendars([]);
-        setUnitsLoading(false);
-        setShiftDefsLoading(false);
-        setSchedulesLoading(false);
-        setVacationsLoading(false);
-        setCalendarsLoading(false);
+        store.resetStore();
         return;
       }
 
       const unsubUnits = onSnapshot(
         query(collection(db, 'dp_units'), orderBy('name')),
-        (snap) => { setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit))); setUnitsLoading(false); },
-        (error) => logSubscriptionError('dp_units', error, () => setUnitsLoading(false))
+        (snap) => { 
+          store.setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit))); 
+          store.setUnitsLoading(false); 
+        },
+        (error) => logSubscriptionError('dp_units', error, () => store.setUnitsLoading(false))
       );
+
       const unsubGroups = onSnapshot(
         query(collection(db, 'dp_unitGroups'), orderBy('name')),
-        (snap) => { setUnitGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnitGroup))); },
+        (snap) => { 
+          store.setUnitGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnitGroup))); 
+        },
         (error) => logSubscriptionError('dp_unitGroups', error)
       );
+
       const unsubShifts = onSnapshot(
         query(collection(db, 'dp_shiftDefinitions'), orderBy('name')),
         (snap) => {
-          setShiftDefinitions(snap.docs.map(d => {
+          store.setShiftDefinitions(snap.docs.map(d => {
             const data = d.data();
             return { id: d.id, ...data, daysOfWeek: normalizeDaysOfWeek(data.daysOfWeek) } as DPShiftDefinition;
           }));
-          setShiftDefsLoading(false);
+          store.setShiftDefsLoading(false);
         },
-        (error) => logSubscriptionError('dp_shiftDefinitions', error, () => setShiftDefsLoading(false))
+        (error) => logSubscriptionError('dp_shiftDefinitions', error, () => store.setShiftDefsLoading(false))
       );
+
       const unsubSchedules = onSnapshot(
         query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc')),
         (snap) => {
@@ -113,20 +96,28 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
             } as DPSchedule;
           });
           list.sort((a, b) => b.year - a.year || b.month - a.month);
-          setSchedules(list);
-          setSchedulesLoading(false);
+          store.setSchedules(list);
+          store.setSchedulesLoading(false);
         },
-        (error) => logSubscriptionError('dp_schedules', error, () => setSchedulesLoading(false))
+        (error) => logSubscriptionError('dp_schedules', error, () => store.setSchedulesLoading(false))
       );
+
       const unsubVacations = onSnapshot(
         query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc')),
-        (snap) => { setVacations(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPVacationRecord))); setVacationsLoading(false); },
-        (error) => logSubscriptionError('dp_vacations', error, () => setVacationsLoading(false))
+        (snap) => { 
+          store.setVacations(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPVacationRecord))); 
+          store.setVacationsLoading(false); 
+        },
+        (error) => logSubscriptionError('dp_vacations', error, () => store.setVacationsLoading(false))
       );
+
       const unsubCalendars = onSnapshot(
         query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc')),
-        (snap) => { setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar))); setCalendarsLoading(false); },
-        (error) => logSubscriptionError('dp_calendars', error, () => setCalendarsLoading(false))
+        (snap) => { 
+          store.setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar))); 
+          store.setCalendarsLoading(false); 
+        },
+        (error) => logSubscriptionError('dp_calendars', error, () => store.setCalendarsLoading(false))
       );
 
       return () => {
@@ -140,134 +131,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubAuth();
-  }, []);
+  }, [store]);
 
-  const addUnit = useCallback(async (data: Omit<DPUnit, 'id' | 'createdAt'>) => {
-    await addDoc(collection(db, 'dp_units'), { ...data, createdAt: serverTimestamp() });
-  }, []);
-
-  const updateUnit = useCallback(async ({ id, ...data }: DPUnit) => {
-    await updateDoc(doc(db, 'dp_units', id), data as any);
-  }, []);
-
-  const deleteUnit = useCallback(async (unitId: string) => {
-    await deleteDoc(doc(db, 'dp_units', unitId));
-  }, []);
-
-  const addUnitGroup = useCallback(async (data: Omit<DPUnitGroup, 'id' | 'createdAt'>) => {
-    await addDoc(collection(db, 'dp_unitGroups'), { ...data, unitCount: 0, createdAt: serverTimestamp() });
-  }, []);
-
-  const updateUnitGroup = useCallback(async ({ id, ...data }: DPUnitGroup) => {
-    await updateDoc(doc(db, 'dp_unitGroups', id), data as any);
-  }, []);
-
-  const deleteUnitGroup = useCallback(async (groupId: string) => {
-    await deleteDoc(doc(db, 'dp_unitGroups', groupId));
-  }, []);
-
-  const addShiftDefinition = useCallback(async (data: Omit<DPShiftDefinition, 'id' | 'createdAt'>) => {
-    await addDoc(collection(db, 'dp_shiftDefinitions'), { ...data, createdAt: serverTimestamp() });
-  }, []);
-
-  const updateShiftDefinition = useCallback(async ({ id, ...data }: DPShiftDefinition) => {
-    await updateDoc(doc(db, 'dp_shiftDefinitions', id), data as any);
-  }, []);
-
-  const deleteShiftDefinition = useCallback(async (defId: string) => {
-    await deleteDoc(doc(db, 'dp_shiftDefinitions', defId));
-  }, []);
-
-  const addSchedule = useCallback(async (data: Omit<DPSchedule, 'id' | 'createdAt' | 'shiftCount'>): Promise<string> => {
-    const ref = await addDoc(collection(db, 'dp_schedules'), { ...data, shiftCount: 0, createdAt: serverTimestamp() });
-    return ref.id;
-  }, []);
-
-  const updateSchedule = useCallback(async ({ id, ...data }: DPSchedule) => {
-    await updateDoc(doc(db, 'dp_schedules', id), data as any);
-  }, []);
-
-  const deleteSchedule = useCallback(async (scheduleId: string) => {
-    const firestore = await import('firebase/firestore');
-    const shiftsSnap = await firestore.getDocs(collection(db, 'dp_schedules', scheduleId, 'shifts'));
-    const batch = firestore.writeBatch(db);
-    shiftsSnap.docs.forEach(d => batch.delete(d.ref));
-    batch.delete(doc(db, 'dp_schedules', scheduleId));
-    await batch.commit();
-  }, []);
-
-  const addVacation = useCallback(async (data: Omit<DPVacationRecord, 'id' | 'createdAt'>) => {
-    await addDoc(collection(db, 'dp_vacations'), { ...data, createdAt: serverTimestamp() });
-  }, []);
-
-  const updateVacation = useCallback(async ({ id, ...data }: DPVacationRecord) => {
-    await updateDoc(doc(db, 'dp_vacations', id), data as any);
-  }, []);
-
-  const deleteVacation = useCallback(async (vacationId: string) => {
-    await deleteDoc(doc(db, 'dp_vacations', vacationId));
-  }, []);
-
-  const addCalendar = useCallback(async (data: Omit<DPCalendar, 'id' | 'createdAt' | 'holidayCount'>): Promise<string> => {
-    const ref = await addDoc(collection(db, 'dp_calendars'), { ...data, holidayCount: 0, createdAt: serverTimestamp() });
-    return ref.id;
-  }, []);
-
-  const updateCalendar = useCallback(async ({ id, ...data }: DPCalendar) => {
-    await updateDoc(doc(db, 'dp_calendars', id), data as any);
-  }, []);
-
-  const deleteCalendar = useCallback(async (calendarId: string) => {
-    const firestore = await import('firebase/firestore');
-    const holidaysSnap = await firestore.getDocs(collection(db, 'dp_calendars', calendarId, 'holidays'));
-    const batch = firestore.writeBatch(db);
-    holidaysSnap.docs.forEach(d => batch.delete(d.ref));
-    batch.delete(doc(db, 'dp_calendars', calendarId));
-    await batch.commit();
-  }, []);
-
-  const addHoliday = useCallback(async (calendarId: string, data: Omit<DPHoliday, 'id' | 'createdAt'>) => {
-    const batch = writeBatch(db);
-    const holidayRef = doc(collection(db, 'dp_calendars', calendarId, 'holidays'));
-    batch.set(holidayRef, { ...data, createdAt: serverTimestamp() });
-    batch.update(doc(db, 'dp_calendars', calendarId), { holidayCount: increment(1) });
-    await batch.commit();
-  }, []);
-
-  const deleteHoliday = useCallback(async (calendarId: string, holidayId: string) => {
-    const batch = writeBatch(db);
-    batch.delete(doc(db, 'dp_calendars', calendarId, 'holidays', holidayId));
-    batch.update(doc(db, 'dp_calendars', calendarId), { holidayCount: increment(-1) });
-    await batch.commit();
-  }, []);
-
-  const value = useMemo(() => ({
-    units, unitGroups, unitsLoading,
-    addUnit, updateUnit, deleteUnit,
-    addUnitGroup, updateUnitGroup, deleteUnitGroup,
-    shiftDefinitions, shiftDefsLoading,
-    addShiftDefinition, updateShiftDefinition, deleteShiftDefinition,
-    schedules, schedulesLoading,
-    addSchedule, updateSchedule, deleteSchedule,
-    vacations, vacationsLoading,
-    addVacation, updateVacation, deleteVacation,
-    calendars, calendarsLoading,
-    addCalendar, updateCalendar, deleteCalendar,
-    addHoliday, deleteHoliday,
-  }), [
-    units, unitGroups, unitsLoading,
-    addUnit, updateUnit, deleteUnit,
-    addUnitGroup, updateUnitGroup, deleteUnitGroup,
-    shiftDefinitions, shiftDefsLoading,
-    addShiftDefinition, updateShiftDefinition, deleteShiftDefinition,
-    schedules, schedulesLoading,
-    addSchedule, updateSchedule, deleteSchedule,
-    vacations, vacationsLoading,
-    addVacation, updateVacation, deleteVacation,
-    calendars, calendarsLoading,
-    addCalendar, updateCalendar, deleteCalendar,
-    addHoliday, deleteHoliday,
-  ]);
-
-  return <DPContext.Provider value={value}>{children}</DPContext.Provider>;
+  return <>{children}</>;
 }
