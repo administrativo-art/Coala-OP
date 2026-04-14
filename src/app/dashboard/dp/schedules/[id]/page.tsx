@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDP } from '@/hooks/use-dp';
+import { useDP } from '@/components/dp-provider';
 import { useParams } from 'next/navigation';
 import { DPScheduleEditor } from '@/components/dp/dp-schedule-editor';
 

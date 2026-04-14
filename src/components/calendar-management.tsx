@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { useDP } from '@/hooks/use-dp';
+import { useDP } from '@/components/dp-provider';
 import { DPSettingsCalendars } from '@/components/dp/dp-settings-calendars';
 import { DPCalendarHolidays } from '@/components/dp/dp-calendar-holidays';
 

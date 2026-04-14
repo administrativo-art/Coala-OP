@@ -9,7 +9,7 @@ import { ptBR } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDP } from '@/hooks/use-dp';
+import { useDP } from '@/components/dp-provider';
 import type { User } from '@/types';
 
 import { Button } from '@/components/ui/button';

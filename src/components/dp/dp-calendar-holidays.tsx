@@ -8,8 +8,7 @@ import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Timestamp } from 'firebase/firestore';
-
-import { useDP } from '@/hooks/use-dp';
+import { useDP } from '@/components/dp-provider';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import type { DPCalendar, DPHoliday, DPHolidayType } from '@/types';
 
