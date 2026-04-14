@@ -62,20 +62,22 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
     {
       label: null,
       items: [
-        { label: "Painel geral", href: "/dashboard", icon: LayoutDashboard, show: permissions.dashboard.view },
+        { label: "Painel Central", href: "/dashboard", icon: LayoutDashboard, show: permissions.dashboard.view },
       ],
     },
     {
       label: "Operações",
       items: [
-        { label: "Tarefas",           href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, count: legacyTasks.length },
+        { label: "Painel de Operações", href: "/dashboard/operations", icon: LayoutGrid, show: permissions.dashboard.operational },
+        { label: "Tarefas gerais",           href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, count: legacyTasks.length },
         { label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package,  show: permissions.stock.view },
       ],
     },
     {
       label: "Comercial",
       items: [
-        { label: "Metas",             href: "/dashboard/goals",   icon: Target,     show: permissions.goals?.view },
+        { label: "Painel Comercial",  href: "/dashboard/commercial", icon: LayoutGrid, show: permissions.dashboard.pricing || permissions.dashboard.technicalSheets },
+        { label: "Metas de Vendas",   href: "/dashboard/goals",   icon: Target,     show: permissions.goals?.view },
         { label: "Gestão de Preços",  href: "/dashboard/pricing", icon: DollarSign, show: permissions.pricing.view },
       ],
     },
@@ -83,8 +85,8 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
       label: "Departamento Pessoal",
       items: [
         { label: "Painel DP",       href: "/dashboard/dp",               icon: LayoutGrid,   show: permissions.dp?.view },
-        { label: "Escalas",         href: "/dashboard/dp/schedules",      icon: CalendarDays, show: permissions.dp?.schedules?.view },
-        { label: "Férias",          href: "/dashboard/dp/ferias",         icon: Umbrella,     show: permissions.dp?.vacation?.viewAll },
+        { label: "Escalas de Trabalho",         href: "/dashboard/dp/schedules",      icon: CalendarDays, show: permissions.dp?.schedules?.view },
+        { label: "Férias da equipe",          href: "/dashboard/dp/ferias",         icon: Umbrella,     show: permissions.dp?.vacation?.viewAll },
       ],
     },
     {
