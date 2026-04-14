@@ -57,22 +57,28 @@ export interface DPContextType {
 }
 
 // ─── Singleton guard ─────────────────────────────────────────────────────────
-// Next.js/Webpack duplicates this module across multiple chunks in production.
-// Each chunk would call createContext() independently, producing separate
-// context objects in memory. The Provider lives in one chunk, the Consumer
-// in another — they never find each other.
+// Next.js/Webpack duplicates this module across multiple production chunks.
+// Each copy would call createContext() independently, producing separate
+// context objects. Provider in chunk A, Consumer in chunk B — never match.
 //
-// Symbol.for() returns the SAME symbol for a given key across the entire JS
-// runtime, regardless of which chunk calls it. We use it as a stable key on
-// globalThis so that only the very first execution creates the context.
-// All subsequent chunk executions simply reuse the existing one.
+// Fix: store the context on the REAL global object (window on client, global
+// on server) using a plain string key. This bypasses any SWC/Webpack
+// polyfill inconsistencies with globalThis or Symbol.for.
 // ─────────────────────────────────────────────────────────────────────────────
-const DP_CTX_KEY = Symbol.for('coalashakes.dp.context');
-const _g = globalThis as unknown as Record<symbol, unknown>;
+const _DP_KEY = '__COALA_DP_CONTEXT__';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const _getGlobal = (): any => {
+  if (typeof window !== 'undefined') return window;
+  if (typeof global !== 'undefined') return global;
+  if (typeof globalThis !== 'undefined') return globalThis;
+  return {};
+};
+const _g = _getGlobal();
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export const DPContext: React.Context<DPContextType | undefined> =
-  (_g[DP_CTX_KEY] as React.Context<DPContextType | undefined>) ??
-  (_g[DP_CTX_KEY] = createContext<DPContextType | undefined>(undefined));
+  _g[_DP_KEY] || (_g[_DP_KEY] = createContext<DPContextType | undefined>(undefined));
 
 export const useDP = (): DPContextType => {
   const context = useContext(DPContext);

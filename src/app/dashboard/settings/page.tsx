@@ -3,10 +3,10 @@
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { DPRuntimeGuard } from '@/components/dp-runtime-guard';
 import { ArrowLeft } from 'lucide-react';
 import { PermissionGuard } from "@/components/permission-guard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DPProvider } from '@/components/dp-provider';
 import { UserManagement } from '@/components/user-management';
 import { KioskManagement } from '@/components/kiosk-management';
 import { CalendarManagement } from '@/components/calendar-management';
@@ -34,37 +34,37 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                <Tabs defaultValue="usuarios">
-                    <TabsList>
-                        <TabsTrigger value="usuarios">Usuários</TabsTrigger>
-                        <TabsTrigger value="unidades">Unidades</TabsTrigger>
-                        <TabsTrigger value="calendarios">Calendários</TabsTrigger>
-                        <TabsTrigger value="sincronizacao">Sincronização PDV</TabsTrigger>
-                    </TabsList>
+                {/* Local DPProvider guarantees the context is available for
+                    DP-dependent components on this page, regardless of how
+                    Next.js splits chunks in production. */}
+                <DPProvider>
+                    <Tabs defaultValue="usuarios">
+                        <TabsList>
+                            <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+                            <TabsTrigger value="unidades">Unidades</TabsTrigger>
+                            <TabsTrigger value="calendarios">Calendários</TabsTrigger>
+                            <TabsTrigger value="sincronizacao">Sincronização PDV</TabsTrigger>
+                        </TabsList>
 
-                    <TabsContent value="usuarios" className="mt-4">
-                        <DPRuntimeGuard area="Usuários">
+                        <TabsContent value="usuarios" className="mt-4">
                             <UserManagement />
-                        </DPRuntimeGuard>
-                    </TabsContent>
+                        </TabsContent>
 
-                    <TabsContent value="unidades" className="mt-4">
-                        <DPRuntimeGuard area="Unidades">
+                        <TabsContent value="unidades" className="mt-4">
                             <KioskManagement />
-                        </DPRuntimeGuard>
-                    </TabsContent>
+                        </TabsContent>
 
-                    <TabsContent value="calendarios" className="mt-4">
-                        <DPRuntimeGuard area="Calendários">
+                        <TabsContent value="calendarios" className="mt-4">
                             <CalendarManagement />
-                        </DPRuntimeGuard>
-                    </TabsContent>
+                        </TabsContent>
 
-                    <TabsContent value="sincronizacao" className="mt-4">
-                        <PdvSyncManagement />
-                    </TabsContent>
-                </Tabs>
+                        <TabsContent value="sincronizacao" className="mt-4">
+                            <PdvSyncManagement />
+                        </TabsContent>
+                    </Tabs>
+                </DPProvider>
             </div>
         </PermissionGuard>
     );
 }
+
