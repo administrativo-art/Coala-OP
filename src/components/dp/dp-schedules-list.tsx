@@ -454,11 +454,15 @@ function BizneoExportDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPSchedulesList() {
-  const { schedules, schedulesLoading, bootstrapError, deleteSchedule, units } = useDP();
-  const { permissions } = useAuth();
+  const { deleteSchedule } = useDP();
+  const { permissions, firebaseUser } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
+  const [schedules, setSchedules] = useState<DPSchedule[]>([]);
+  const [units, setUnits] = useState<Array<{ id: string; name: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createDefaultUnit, setCreateDefaultUnit] = useState<string | undefined>();
   const [exportBizneoOpen, setExportBizneoOpen] = useState(false);
@@ -468,6 +472,46 @@ export function DPSchedulesList() {
 
   const canCreate = permissions.dp?.schedules?.create ?? false;
   const canDelete = permissions.dp?.schedules?.delete ?? false;
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      if (!firebaseUser) return;
+      setLoading(true);
+      setLoadError(null);
+
+      try {
+        const token = await firebaseUser.getIdToken();
+        const res = await fetch('/api/dp/bootstrap', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(payload?.error ? `${res.status} - ${payload.error}` : `Falha ${res.status}`);
+        }
+
+        if (cancelled) return;
+        const nextSchedules = (payload.schedules ?? []).map((s: any) => ({
+          ...s,
+          month: Number(s.month),
+          year: Number(s.year),
+          shiftCount: Number(s.shiftCount ?? 0),
+        })) as DPSchedule[];
+        nextSchedules.sort((a, b) => b.year - a.year || b.month - a.month);
+        setSchedules(nextSchedules);
+        setUnits((payload.units ?? []) as Array<{ id: string; name: string }>);
+      } catch (error: any) {
+        if (!cancelled) setLoadError(error?.message ?? 'Falha ao carregar escalas.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [firebaseUser]);
 
   function openCreate(unitId?: string) {
     setCreateDefaultUnit(unitId);
@@ -526,6 +570,7 @@ export function DPSchedulesList() {
     setDeleting(true);
     try {
       await deleteSchedule(deleteTarget.id);
+      setSchedules(prev => prev.filter(item => item.id !== deleteTarget.id));
       toast({ title: 'Escala excluída.' });
     } catch {
       toast({ title: 'Erro ao excluir escala.', variant: 'destructive' });
@@ -535,7 +580,7 @@ export function DPSchedulesList() {
     }
   }
 
-  if (schedulesLoading) {
+  if (loading) {
     return (
       <div className="space-y-6">
         {[1, 2].map(i => (
@@ -550,20 +595,17 @@ export function DPSchedulesList() {
     );
   }
 
-  if (bootstrapError && schedules.length === 0) {
+  if (loadError && schedules.length === 0) {
     return (
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
         <p className="font-medium text-destructive">Falha ao carregar o módulo de Escalas.</p>
-        <p className="mt-1 text-muted-foreground">{bootstrapError}</p>
+        <p className="mt-1 text-muted-foreground">{loadError}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
-      <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-        debug: loading={String(schedulesLoading)} schedules={schedules.length} units={units.length} canCreate={String(canCreate)} canDelete={String(canDelete)}
-      </div>
       {schedules.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <CalendarDays className="h-12 w-12 opacity-30" />
