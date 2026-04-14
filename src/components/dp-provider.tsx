@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { db } from '@/lib/firebase';
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc,
@@ -10,12 +10,66 @@ import type {
   DPUnit, DPUnitGroup, DPShiftDefinition,
   DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
 } from '@/types';
-import { DPContext, type DPContextType } from '@/contexts/dp-context';
-export type { DPContextType } from '@/contexts/dp-context';
+
+// ─── Context type ────────────────────────────────────────────────────────────
+
+export interface DPContextType {
+  // Unidades
+  units: DPUnit[];
+  unitGroups: DPUnitGroup[];
+  unitsLoading: boolean;
+  addUnit: (data: Omit<DPUnit, 'id' | 'createdAt'>) => Promise<void>;
+  updateUnit: (unit: DPUnit) => Promise<void>;
+  deleteUnit: (unitId: string) => Promise<void>;
+  addUnitGroup: (data: Omit<DPUnitGroup, 'id' | 'createdAt'>) => Promise<void>;
+  updateUnitGroup: (group: DPUnitGroup) => Promise<void>;
+  deleteUnitGroup: (groupId: string) => Promise<void>;
+
+  // Definições de turno
+  shiftDefinitions: DPShiftDefinition[];
+  shiftDefsLoading: boolean;
+  addShiftDefinition: (data: Omit<DPShiftDefinition, 'id' | 'createdAt'>) => Promise<void>;
+  updateShiftDefinition: (def: DPShiftDefinition) => Promise<void>;
+  deleteShiftDefinition: (defId: string) => Promise<void>;
+
+  // Escalas
+  schedules: DPSchedule[];
+  schedulesLoading: boolean;
+  addSchedule: (data: Omit<DPSchedule, 'id' | 'createdAt' | 'shiftCount'>) => Promise<string>;
+  updateSchedule: (schedule: DPSchedule) => Promise<void>;
+  deleteSchedule: (scheduleId: string) => Promise<void>;
+
+  // Férias
+  vacations: DPVacationRecord[];
+  vacationsLoading: boolean;
+  addVacation: (data: Omit<DPVacationRecord, 'id' | 'createdAt'>) => Promise<void>;
+  updateVacation: (vacation: DPVacationRecord) => Promise<void>;
+  deleteVacation: (vacationId: string) => Promise<void>;
+
+  // Calendários
+  calendars: DPCalendar[];
+  calendarsLoading: boolean;
+  addCalendar: (data: Omit<DPCalendar, 'id' | 'createdAt' | 'holidayCount'>) => Promise<string>;
+  updateCalendar: (calendar: DPCalendar) => Promise<void>;
+  deleteCalendar: (calendarId: string) => Promise<void>;
+  addHoliday: (calendarId: string, data: Omit<DPHoliday, 'id' | 'createdAt'>) => Promise<void>;
+  deleteHoliday: (calendarId: string, holidayId: string) => Promise<void>;
+}
+
+export const DPContext = createContext<DPContextType | undefined>(undefined);
+
+export const useDP = (): DPContextType => {
+  const context = useContext(DPContext);
+  if (context === undefined) {
+    throw new Error(
+      'useDP must be used within a DPProvider. If this happens in dashboard/settings, check for duplicated DPContext chunks and prefer next/dynamic({ ssr: false }) for DP-dependent modules.'
+    );
+  }
+  return context;
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Normaliza daysOfWeek: migração antiga usa strings ("monday"), tipo espera números (0–6)
 const DOW_STRING_MAP: Record<string, number> = {
   sunday: 0, dom: 0,
   monday: 1, seg: 1,
@@ -62,7 +116,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   const [calendars, setCalendars] = useState<DPCalendar[]>([]);
   const [calendarsLoading, setCalendarsLoading] = useState(true);
 
-  // Unidades
   useEffect(() => {
     const unsubUnits = onSnapshot(
       query(collection(db, 'dp_units'), orderBy('name')),
@@ -77,7 +130,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     return () => { unsubUnits(); unsubGroups(); };
   }, []);
 
-  // Definições de turno
   useEffect(() => {
     return onSnapshot(
       query(collection(db, 'dp_shiftDefinitions'), orderBy('name')),
@@ -92,7 +144,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  // Escalas
   useEffect(() => {
     return onSnapshot(
       query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc')),
@@ -107,7 +158,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
             shiftCount: Number(data.shiftCount ?? 0),
           } as DPSchedule;
         });
-        // Ordenar por ano desc, mês desc no cliente (evita índice composto)
         list.sort((a, b) => b.year - a.year || b.month - a.month);
         setSchedules(list);
         setSchedulesLoading(false);
@@ -116,7 +166,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  // Férias
   useEffect(() => {
     return onSnapshot(
       query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc')),
@@ -125,7 +174,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  // Calendários
   useEffect(() => {
     return onSnapshot(
       query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc')),
@@ -133,8 +181,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       (error) => logSubscriptionError('dp_calendars', error, () => setCalendarsLoading(false))
     );
   }, []);
-
-  // ─── Unidades ───────────────────────────────────────────────────────────────
 
   const addUnit = useCallback(async (data: Omit<DPUnit, 'id' | 'createdAt'>) => {
     await addDoc(collection(db, 'dp_units'), { ...data, createdAt: serverTimestamp() });
@@ -160,8 +206,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     await deleteDoc(doc(db, 'dp_unitGroups', groupId));
   }, []);
 
-  // ─── Definições de turno ────────────────────────────────────────────────────
-
   const addShiftDefinition = useCallback(async (data: Omit<DPShiftDefinition, 'id' | 'createdAt'>) => {
     await addDoc(collection(db, 'dp_shiftDefinitions'), { ...data, createdAt: serverTimestamp() });
   }, []);
@@ -174,8 +218,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     await deleteDoc(doc(db, 'dp_shiftDefinitions', defId));
   }, []);
 
-  // ─── Escalas ────────────────────────────────────────────────────────────────
-
   const addSchedule = useCallback(async (data: Omit<DPSchedule, 'id' | 'createdAt' | 'shiftCount'>): Promise<string> => {
     const ref = await addDoc(collection(db, 'dp_schedules'), { ...data, shiftCount: 0, createdAt: serverTimestamp() });
     return ref.id;
@@ -186,7 +228,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteSchedule = useCallback(async (scheduleId: string) => {
-    // Deleta todos os turnos da subcoleção antes de deletar a escala
     const shiftsSnap = await import('firebase/firestore').then(({ getDocs }) =>
       getDocs(collection(db, 'dp_schedules', scheduleId, 'shifts'))
     );
@@ -195,8 +236,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     batch.delete(doc(db, 'dp_schedules', scheduleId));
     await batch.commit();
   }, []);
-
-  // ─── Férias ─────────────────────────────────────────────────────────────────
 
   const addVacation = useCallback(async (data: Omit<DPVacationRecord, 'id' | 'createdAt'>) => {
     await addDoc(collection(db, 'dp_vacations'), { ...data, createdAt: serverTimestamp() });
@@ -209,8 +248,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   const deleteVacation = useCallback(async (vacationId: string) => {
     await deleteDoc(doc(db, 'dp_vacations', vacationId));
   }, []);
-
-  // ─── Calendários ────────────────────────────────────────────────────────────
 
   const addCalendar = useCallback(async (data: Omit<DPCalendar, 'id' | 'createdAt' | 'holidayCount'>): Promise<string> => {
     const ref = await addDoc(collection(db, 'dp_calendars'), { ...data, holidayCount: 0, createdAt: serverTimestamp() });
@@ -245,8 +282,6 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     batch.update(doc(db, 'dp_calendars', calendarId), { holidayCount: increment(-1) });
     await batch.commit();
   }, []);
-
-  // ─── Value ──────────────────────────────────────────────────────────────────
 
   const value = useMemo<DPContextType>(() => ({
     units, unitGroups, unitsLoading,
