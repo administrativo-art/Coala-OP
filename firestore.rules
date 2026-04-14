@@ -14,8 +14,14 @@ service cloud.firestore {
       return isAuth() && request.auth.token.isDefaultAdmin == true;
     }
 
+    function getProfileId() {
+      return request.auth.token.profileId != null
+        ? request.auth.token.profileId
+        : get(/databases/$(database)/documents/users/$(request.auth.uid)).data.profileId;
+    }
+
     function getPerms() {
-      let profileId = request.auth.token.profileId;
+      let profileId = getProfileId();
       return get(/databases/$(database)/documents/profiles/$(profileId)).data.permissions;
     }
 
