@@ -2,7 +2,8 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { type PricingParameters } from '@/types';
 
@@ -38,35 +39,44 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const settingsRef = doc(db, 'settings', 'company');
-    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data() as CompanySettings;
-            setLabelSizeId(data.labelSizeId || '6080');
-            
-            const params = data.pricingParameters || {};
-            const validatedParams: PricingParameters = {
-                ...defaultPricingParameters,
-                ...params,
-                profitRanges: (data.pricingParameters?.profitRanges && data.pricingParameters.profitRanges.length > 0)
-                    ? data.pricingParameters.profitRanges
-                    : defaultPricingParameters.profitRanges,
-            };
-            setPricingParameters(validatedParams);
-        } else {
-            // If doc doesn't exist, create it with defaults
-            setDoc(settingsRef, {
-                labelSizeId: '6080',
-                pricingParameters: defaultPricingParameters,
-            });
-        }
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) {
         setLoading(false);
-    }, (error) => {
-        console.error("Error fetching company settings: ", error);
-        setLoading(false);
+        return;
+      }
+
+      const settingsRef = doc(db, 'settings', 'company');
+      const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+          if (docSnap.exists()) {
+              const data = docSnap.data() as CompanySettings;
+              setLabelSizeId(data.labelSizeId || '6080');
+              
+              const params = data.pricingParameters || {};
+              const validatedParams: PricingParameters = {
+                  ...defaultPricingParameters,
+                  ...params,
+                  profitRanges: (data.pricingParameters?.profitRanges && data.pricingParameters.profitRanges.length > 0)
+                      ? data.pricingParameters.profitRanges
+                      : defaultPricingParameters.profitRanges,
+              };
+              setPricingParameters(validatedParams);
+          } else {
+              // If doc doesn't exist, create it with defaults
+              setDoc(settingsRef, {
+                  labelSizeId: '6080',
+                  pricingParameters: defaultPricingParameters,
+              });
+          }
+          setLoading(false);
+      }, (error) => {
+          console.error("Error fetching company settings: ", error);
+          setLoading(false);
+      });
+
+      return () => unsubscribe();
     });
 
-    return () => unsubscribe();
+    return () => unsubAuth();
   }, []);
 
   const updateLabelSize = useCallback(async (sizeId: string | null) => {

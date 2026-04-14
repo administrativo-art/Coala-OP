@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc,
   doc, query, orderBy, serverTimestamp, writeBatch, increment,
@@ -133,69 +134,87 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
   const [calendarsLoading, setCalendarsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubUnits = onSnapshot(
-      query(collection(db, 'dp_units'), orderBy('name')),
-      (snap) => { setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit))); setUnitsLoading(false); },
-      (error) => logSubscriptionError('dp_units', error, () => setUnitsLoading(false))
-    );
-    const unsubGroups = onSnapshot(
-      query(collection(db, 'dp_unitGroups'), orderBy('name')),
-      (snap) => { setUnitGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnitGroup))); },
-      (error) => logSubscriptionError('dp_unitGroups', error)
-    );
-    return () => { unsubUnits(); unsubGroups(); };
-  }, []);
-
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(db, 'dp_shiftDefinitions'), orderBy('name')),
-      (snap) => {
-        setShiftDefinitions(snap.docs.map(d => {
-          const data = d.data();
-          return { id: d.id, ...data, daysOfWeek: normalizeDaysOfWeek(data.daysOfWeek) } as DPShiftDefinition;
-        }));
+    // Só abre subscriptions quando o usuário estiver autenticado.
+    // Isso evita que os onSnapshot disparem antes do token estar pronto e
+    // morram silenciosamente com permission-denied.
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        setUnits([]);
+        setUnitGroups([]);
+        setShiftDefinitions([]);
+        setSchedules([]);
+        setVacations([]);
+        setCalendars([]);
+        setUnitsLoading(false);
         setShiftDefsLoading(false);
-      },
-      (error) => logSubscriptionError('dp_shiftDefinitions', error, () => setShiftDefsLoading(false))
-    );
-  }, []);
-
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc')),
-      (snap) => {
-        const list = snap.docs.map(d => {
-          const data = d.data();
-          return {
-            id: d.id,
-            ...data,
-            month: Number(data.month),
-            year: Number(data.year),
-            shiftCount: Number(data.shiftCount ?? 0),
-          } as DPSchedule;
-        });
-        list.sort((a, b) => b.year - a.year || b.month - a.month);
-        setSchedules(list);
         setSchedulesLoading(false);
-      },
-      (error) => logSubscriptionError('dp_schedules', error, () => setSchedulesLoading(false))
-    );
-  }, []);
+        setVacationsLoading(false);
+        setCalendarsLoading(false);
+        return;
+      }
 
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc')),
-      (snap) => { setVacations(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPVacationRecord))); setVacationsLoading(false); },
-      (error) => logSubscriptionError('dp_vacations', error, () => setVacationsLoading(false))
-    );
-  }, []);
+      const unsubUnits = onSnapshot(
+        query(collection(db, 'dp_units'), orderBy('name')),
+        (snap) => { setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit))); setUnitsLoading(false); },
+        (error) => logSubscriptionError('dp_units', error, () => setUnitsLoading(false))
+      );
+      const unsubGroups = onSnapshot(
+        query(collection(db, 'dp_unitGroups'), orderBy('name')),
+        (snap) => { setUnitGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnitGroup))); },
+        (error) => logSubscriptionError('dp_unitGroups', error)
+      );
+      const unsubShifts = onSnapshot(
+        query(collection(db, 'dp_shiftDefinitions'), orderBy('name')),
+        (snap) => {
+          setShiftDefinitions(snap.docs.map(d => {
+            const data = d.data();
+            return { id: d.id, ...data, daysOfWeek: normalizeDaysOfWeek(data.daysOfWeek) } as DPShiftDefinition;
+          }));
+          setShiftDefsLoading(false);
+        },
+        (error) => logSubscriptionError('dp_shiftDefinitions', error, () => setShiftDefsLoading(false))
+      );
+      const unsubSchedules = onSnapshot(
+        query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc')),
+        (snap) => {
+          const list = snap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              ...data,
+              month: Number(data.month),
+              year: Number(data.year),
+              shiftCount: Number(data.shiftCount ?? 0),
+            } as DPSchedule;
+          });
+          list.sort((a, b) => b.year - a.year || b.month - a.month);
+          setSchedules(list);
+          setSchedulesLoading(false);
+        },
+        (error) => logSubscriptionError('dp_schedules', error, () => setSchedulesLoading(false))
+      );
+      const unsubVacations = onSnapshot(
+        query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc')),
+        (snap) => { setVacations(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPVacationRecord))); setVacationsLoading(false); },
+        (error) => logSubscriptionError('dp_vacations', error, () => setVacationsLoading(false))
+      );
+      const unsubCalendars = onSnapshot(
+        query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc')),
+        (snap) => { setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar))); setCalendarsLoading(false); },
+        (error) => logSubscriptionError('dp_calendars', error, () => setCalendarsLoading(false))
+      );
 
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc')),
-      (snap) => { setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar))); setCalendarsLoading(false); },
-      (error) => logSubscriptionError('dp_calendars', error, () => setCalendarsLoading(false))
-    );
+      return () => {
+        unsubUnits();
+        unsubGroups();
+        unsubShifts();
+        unsubSchedules();
+        unsubVacations();
+        unsubCalendars();
+      };
+    });
+
+    return () => unsubAuth();
   }, []);
 
   const addUnit = useCallback(async (data: Omit<DPUnit, 'id' | 'createdAt'>) => {

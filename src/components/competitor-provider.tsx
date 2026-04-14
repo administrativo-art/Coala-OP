@@ -8,7 +8,8 @@ import {
     type CompetitorPrice,
     type CompetitorGroup
 } from '@/types';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { 
     collection, 
     onSnapshot, 
@@ -60,34 +61,47 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsubCompetitors = onSnapshot(query(collection(db, "concorrentes")), (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Competitor));
-            setCompetitors(data);
-        }, (error) => console.error("Error fetching competitors:", error));
+        const unsubAuth = onAuthStateChanged(auth, (user) => {
+            if (!user) {
+                setCompetitors([]);
+                setCompetitorGroups([]);
+                setCompetitorProducts([]);
+                setCompetitorPrices([]);
+                setLoading(false);
+                return;
+            }
 
-        const unsubGroups = onSnapshot(query(collection(db, "competitorGroups")), (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorGroup));
-            setCompetitorGroups(data);
-        }, (error) => console.error("Error fetching competitor groups:", error));
+            const unsubCompetitors = onSnapshot(query(collection(db, "concorrentes")), (snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Competitor));
+                setCompetitors(data);
+            }, (error) => console.error("Error fetching competitors:", error));
 
-        const unsubProducts = onSnapshot(query(collection(db, "concorrente_produtos")), (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorProduct));
-            setCompetitorProducts(data);
-        }, (error) => console.error("Error fetching competitor products:", error));
+            const unsubGroups = onSnapshot(query(collection(db, "competitorGroups")), (snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorGroup));
+                setCompetitorGroups(data);
+            }, (error) => console.error("Error fetching competitor groups:", error));
 
-        const unsubPrices = onSnapshot(query(collection(db, "concorrente_precos")), (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorPrice));
-            setCompetitorPrices(data);
-        }, (error) => console.error("Error fetching competitor prices:", error));
+            const unsubProducts = onSnapshot(query(collection(db, "concorrente_produtos")), (snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorProduct));
+                setCompetitorProducts(data);
+            }, (error) => console.error("Error fetching competitor products:", error));
 
-        setLoading(false);
+            const unsubPrices = onSnapshot(query(collection(db, "concorrente_precos")), (snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorPrice));
+                setCompetitorPrices(data);
+            }, (error) => console.error("Error fetching competitor prices:", error));
 
-        return () => {
-            unsubCompetitors();
-            unsubGroups();
-            unsubProducts();
-            unsubPrices();
-        };
+            setLoading(false);
+
+            return () => {
+                unsubCompetitors();
+                unsubGroups();
+                unsubProducts();
+                unsubPrices();
+            };
+        });
+
+        return () => unsubAuth();
     }, []);
 
     // Competitor Groups

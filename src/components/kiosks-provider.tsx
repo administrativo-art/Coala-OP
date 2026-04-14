@@ -4,7 +4,8 @@
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Kiosk } from '@/types';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, query, updateDoc } from "firebase/firestore";
 
 export interface KiosksContextType {
@@ -22,35 +23,45 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, "kiosks"));
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-      // If the collection is empty, seed it with default data.
-      if (querySnapshot.empty && !localStorage.getItem('kiosks_seeded')) {
-        console.log("No kiosks found. Seeding default kiosks...");
-        const batch = writeBatch(db);
-        
-        batch.set(doc(db, "kiosks", "matriz"), { name: 'Centro de distribuição - Matriz' });
-        batch.set(doc(db, "kiosks", "tirirical"), { name: 'Quiosque Tirirical' });
-        batch.set(doc(db, "kiosks", "joao-paulo"), { name: 'Quiosque João Paulo' });
-        
-        try {
-          await batch.commit();
-          localStorage.setItem('kiosks_seeded', 'true');
-        } catch (seedError) {
-          console.error("Error seeding kiosks:", seedError);
-        }
-        return; // Listener will re-run with new data.
-      }
-      
-      const kiosksData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Kiosk));
-      setKiosks(kiosksData);
-      setLoading(false);
-    }, (error) => {
-        console.error("Error fetching kiosks from Firestore: ", error);
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        setKiosks([]);
         setLoading(false);
+        return;
+      }
+
+      const q = query(collection(db, "kiosks"));
+      const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+        // If the collection is empty, seed it with default data.
+        if (querySnapshot.empty && !localStorage.getItem('kiosks_seeded')) {
+          console.log("No kiosks found. Seeding default kiosks...");
+          const batch = writeBatch(db);
+          
+          batch.set(doc(db, "kiosks", "matriz"), { name: 'Centro de distribuição - Matriz' });
+          batch.set(doc(db, "kiosks", "tirirical"), { name: 'Quiosque Tirirical' });
+          batch.set(doc(db, "kiosks", "joao-paulo"), { name: 'Quiosque João Paulo' });
+          
+          try {
+            await batch.commit();
+            localStorage.setItem('kiosks_seeded', 'true');
+          } catch (seedError) {
+            console.error("Error seeding kiosks:", seedError);
+          }
+          return; // Listener will re-run with new data.
+        }
+        
+        const kiosksData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Kiosk));
+        setKiosks(kiosksData);
+        setLoading(false);
+      }, (error) => {
+          console.error("Error fetching kiosks from Firestore: ", error);
+          setLoading(false);
+      });
+
+      return () => unsubscribe();
     });
 
-    return () => unsubscribe();
+    return () => unsubAuth();
   }, []);
   
   const addKiosk = useCallback(async (kioskData: Partial<Kiosk>) => {
