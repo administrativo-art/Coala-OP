@@ -52,6 +52,10 @@ function normalizeSchedule(doc: { id: string; data: () => Record<string, unknown
   } as DPSchedule;
 }
 
+function normalizeVacation(doc: { id: string; data: () => Record<string, unknown> }): DPVacationRecord {
+  return { id: doc.id, ...doc.data() } as DPVacationRecord;
+}
+
 // ─── Lifecycle Manager (Refactored DPProvider) ───────────────────────────────
 
 export function DPProvider({ children }: { children: React.ReactNode }) {
@@ -62,6 +66,8 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     let unsubSchedules: (() => void) | undefined;
     let unsubVacations: (() => void) | undefined;
     let unsubCalendars: (() => void) | undefined;
+    let schedulesFallbackTimeout: number | undefined;
+    let vacationsFallbackTimeout: number | undefined;
 
     const cleanupSubscriptions = () => {
       unsubUnits?.();
@@ -76,6 +82,10 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       unsubSchedules = undefined;
       unsubVacations = undefined;
       unsubCalendars = undefined;
+      if (schedulesFallbackTimeout !== undefined) window.clearTimeout(schedulesFallbackTimeout);
+      if (vacationsFallbackTimeout !== undefined) window.clearTimeout(vacationsFallbackTimeout);
+      schedulesFallbackTimeout = undefined;
+      vacationsFallbackTimeout = undefined;
     };
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
@@ -104,13 +114,14 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       store.setCalendarsLoading(true);
 
       let schedulesResolved = false;
+      let vacationsResolved = false;
       const schedulesQuery = query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc'));
-      const schedulesFallback = window.setTimeout(async () => {
+      const vacationsQuery = query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc'));
+      schedulesFallbackTimeout = window.setTimeout(async () => {
         if (schedulesResolved) return;
 
         try {
           const snap = await getDocs(schedulesQuery);
-          console.log('escalas data (fallback):', snap.docs.map(d => d.data()));
           const list = snap.docs.map(normalizeSchedule);
           list.sort((a, b) => b.year - a.year || b.month - a.month);
           store.setSchedules(list);
@@ -119,6 +130,19 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         } finally {
           schedulesResolved = true;
           store.setSchedulesLoading(false);
+        }
+      }, 4000);
+      vacationsFallbackTimeout = window.setTimeout(async () => {
+        if (vacationsResolved) return;
+
+        try {
+          const snap = await getDocs(vacationsQuery);
+          store.setVacations(snap.docs.map(normalizeVacation));
+        } catch (error) {
+          console.error('[DPProvider] Fallback fetch for dp_vacations failed.', error);
+        } finally {
+          vacationsResolved = true;
+          store.setVacationsLoading(false);
         }
       }, 4000);
 
@@ -155,8 +179,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         schedulesQuery,
         (snap) => {
           schedulesResolved = true;
-          window.clearTimeout(schedulesFallback);
-          console.log('escalas data:', snap.docs.map(d => d.data()));
+          if (schedulesFallbackTimeout !== undefined) window.clearTimeout(schedulesFallbackTimeout);
           const list = snap.docs.map(normalizeSchedule);
           list.sort((a, b) => b.year - a.year || b.month - a.month);
           store.setSchedules(list);
@@ -164,18 +187,24 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           schedulesResolved = true;
-          window.clearTimeout(schedulesFallback);
+          if (schedulesFallbackTimeout !== undefined) window.clearTimeout(schedulesFallbackTimeout);
           logSubscriptionError('dp_schedules', error, () => store.setSchedulesLoading(false));
         }
       );
 
       unsubVacations = onSnapshot(
-        query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc')),
+        vacationsQuery,
         (snap) => { 
-          store.setVacations(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPVacationRecord))); 
+          vacationsResolved = true;
+          if (vacationsFallbackTimeout !== undefined) window.clearTimeout(vacationsFallbackTimeout);
+          store.setVacations(snap.docs.map(normalizeVacation)); 
           store.setVacationsLoading(false); 
         },
-        (error) => logSubscriptionError('dp_vacations', error, () => store.setVacationsLoading(false))
+        (error) => {
+          vacationsResolved = true;
+          if (vacationsFallbackTimeout !== undefined) window.clearTimeout(vacationsFallbackTimeout);
+          logSubscriptionError('dp_vacations', error, () => store.setVacationsLoading(false));
+        }
       );
 
       unsubCalendars = onSnapshot(
