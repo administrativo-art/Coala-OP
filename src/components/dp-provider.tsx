@@ -56,7 +56,23 @@ export interface DPContextType {
   deleteHoliday: (calendarId: string, holidayId: string) => Promise<void>;
 }
 
-export const DPContext = createContext<DPContextType | undefined>(undefined);
+// ─── Singleton guard ─────────────────────────────────────────────────────────
+// Next.js/Webpack duplicates this module across multiple chunks in production.
+// Each chunk would call createContext() independently, producing separate
+// context objects in memory. The Provider lives in one chunk, the Consumer
+// in another — they never find each other.
+//
+// Symbol.for() returns the SAME symbol for a given key across the entire JS
+// runtime, regardless of which chunk calls it. We use it as a stable key on
+// globalThis so that only the very first execution creates the context.
+// All subsequent chunk executions simply reuse the existing one.
+// ─────────────────────────────────────────────────────────────────────────────
+const DP_CTX_KEY = Symbol.for('coalashakes.dp.context');
+const _g = globalThis as unknown as Record<symbol, unknown>;
+
+export const DPContext: React.Context<DPContextType | undefined> =
+  (_g[DP_CTX_KEY] as React.Context<DPContextType | undefined>) ??
+  (_g[DP_CTX_KEY] = createContext<DPContextType | undefined>(undefined));
 
 export const useDP = (): DPContextType => {
   const context = useContext(DPContext);
