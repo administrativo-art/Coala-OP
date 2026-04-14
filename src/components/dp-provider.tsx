@@ -61,24 +61,18 @@ export interface DPContextType {
 // Each copy would call createContext() independently, producing separate
 // context objects. Provider in chunk A, Consumer in chunk B — never match.
 //
-// Fix: store the context on the REAL global object (window on client, global
-// on server) using a plain string key. This bypasses any SWC/Webpack
-// polyfill inconsistencies with globalThis or Symbol.for.
+// Fix: cache the context on the real global object. The try/catch prevents
+// SWC from dead-code-eliminating the server fallback (SWC assumes "use client"
+// modules always have window, but they DO run on the server during SSR).
 // ─────────────────────────────────────────────────────────────────────────────
 const _DP_KEY = '__COALA_DP_CONTEXT__';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const _getGlobal = (): any => {
-  if (typeof window !== 'undefined') return window;
-  if (typeof global !== 'undefined') return global;
-  if (typeof globalThis !== 'undefined') return globalThis;
-  return {};
-};
-const _g = _getGlobal();
-/* eslint-enable @typescript-eslint/no-explicit-any */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _store: any;
+try { _store = window; } catch { _store = typeof global !== 'undefined' ? global : {}; }
 
 export const DPContext: React.Context<DPContextType | undefined> =
-  _g[_DP_KEY] || (_g[_DP_KEY] = createContext<DPContextType | undefined>(undefined));
+  _store[_DP_KEY] || (_store[_DP_KEY] = createContext<DPContextType | undefined>(undefined));
 
 export const useDP = (): DPContextType => {
   const context = useContext(DPContext);
