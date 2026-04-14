@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-import { useDP } from '@/components/dp-provider';
+import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
 import type { DPSchedule, DPShift } from '@/types';
 

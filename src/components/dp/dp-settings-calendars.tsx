@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
-import { useDP } from '@/components/dp-provider';
+import { useDP } from '@/components/dp-context';
 import type { DPCalendar } from '@/types';
 
 import { Button } from '@/components/ui/button';

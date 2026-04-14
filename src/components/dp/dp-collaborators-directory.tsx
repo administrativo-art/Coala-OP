@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDP } from '@/components/dp-provider';
+import { useDP } from '@/components/dp-context';
 import type { User } from '@/types';
 
 import { Input } from '@/components/ui/input';

@@ -11,7 +11,6 @@ import type {
   DPUnit, DPUnitGroup, DPShiftDefinition,
   DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
 } from '@/types';
-export { DPContext, useDP } from './dp-context';
 import { DPContext } from './dp-context';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

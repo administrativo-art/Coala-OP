@@ -5,7 +5,7 @@ import { format, isToday, isWithinInterval, startOfDay, endOfDay, addDays, parse
 import { ptBR } from 'date-fns/locale';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDP } from '@/components/dp-provider';
+import { useDP } from '@/components/dp-context';
 import { useDPShifts } from '@/hooks/use-dp-shifts';
 import type { User, DPVacationRecord } from '@/types';
 

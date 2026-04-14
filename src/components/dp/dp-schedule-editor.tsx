@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { format, getDaysInMonth, isToday, parseISO, differenceInCalendarDays, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-import { useDP } from '@/components/dp-provider';
+import { useDP } from '@/components/dp-context';
 import { useDPShifts } from '@/hooks/use-dp-shifts';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';

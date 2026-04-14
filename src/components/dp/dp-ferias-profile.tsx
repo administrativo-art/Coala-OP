@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { format, differenceInCalendarDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-import { useDP } from '@/components/dp-provider';
+import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
 import type { DPVacationRecord } from '@/types';
 

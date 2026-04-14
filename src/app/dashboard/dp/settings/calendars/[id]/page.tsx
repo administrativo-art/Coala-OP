@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDP } from '@/components/dp-provider';
+import { useDP } from '@/components/dp-context';
 import { useParams } from 'next/navigation';
 import { DPCalendarHolidays } from '@/components/dp/dp-calendar-holidays';
 

@@ -49,22 +49,12 @@ export interface DPContextType {
   deleteHoliday: (calendarId: string, holidayId: string) => Promise<void>;
 }
 
-// Singleton pattern for Context to prevent hydration/chunking mismatches in Next.js
-const _DP_KEY = '__COALA_DP_CONTEXT__';
-const _store = typeof window !== 'undefined' ? (window as any) : (global as any);
-
-// Explicitly type the context to avoid 'ServerContextJSONValue' inference issues
-export const DPContext: React.Context<DPContextType | undefined> = 
-  _store[_DP_KEY] || (_store[_DP_KEY] = createContext<DPContextType | undefined>(undefined));
+export const DPContext = createContext<DPContextType | null>(null);
 
 export const useDP = (): DPContextType => {
   const context = useContext(DPContext);
-  
   if (!context) {
-    throw new Error(
-      'useDP must be used within a DPProvider. If this happens in production, ensure you are not importing DPContext from multiple locations and that DPProvider is higher in the tree.'
-    );
+    throw new Error('useDP must be used within a DPProvider.');
   }
-  
-  return context as DPContextType;
+  return context;
 };
