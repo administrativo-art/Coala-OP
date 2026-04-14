@@ -454,7 +454,7 @@ function BizneoExportDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPSchedulesList() {
-  const { schedules, schedulesLoading, deleteSchedule, units } = useDP();
+  const { schedules, schedulesLoading, bootstrapError, deleteSchedule, units } = useDP();
   const { permissions } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
@@ -546,6 +546,15 @@ export function DPSchedulesList() {
             </div>
           </div>
         ))}
+      </div>
+    );
+  }
+
+  if (bootstrapError && schedules.length === 0) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+        <p className="font-medium text-destructive">Falha ao carregar o módulo de Escalas.</p>
+        <p className="mt-1 text-muted-foreground">{bootstrapError}</p>
       </div>
     );
   }

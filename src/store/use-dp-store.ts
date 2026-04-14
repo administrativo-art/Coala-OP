@@ -18,6 +18,7 @@ export interface DPStoreState {
   shiftDefsLoading: boolean;
   schedules: DPSchedule[];
   schedulesLoading: boolean;
+  bootstrapError: string | null;
   vacations: DPVacationRecord[];
   vacationsLoading: boolean;
   calendars: DPCalendar[];
@@ -31,6 +32,7 @@ export interface DPStoreState {
   setShiftDefsLoading: (loading: boolean) => void;
   setSchedules: (schedules: DPSchedule[]) => void;
   setSchedulesLoading: (loading: boolean) => void;
+  setBootstrapError: (error: string | null) => void;
   setVacations: (vacations: DPVacationRecord[]) => void;
   setVacationsLoading: (loading: boolean) => void;
   setCalendars: (calendars: DPCalendar[]) => void;
@@ -69,6 +71,7 @@ const initialState = {
   shiftDefsLoading: true,
   schedules: [],
   schedulesLoading: true,
+  bootstrapError: null,
   vacations: [],
   vacationsLoading: true,
   calendars: [],
@@ -86,6 +89,7 @@ export const useDPStore = create<DPStoreState>((set) => ({
   setShiftDefsLoading: (shiftDefsLoading) => set({ shiftDefsLoading }),
   setSchedules: (schedules) => set({ schedules }),
   setSchedulesLoading: (schedulesLoading) => set({ schedulesLoading }),
+  setBootstrapError: (bootstrapError) => set({ bootstrapError }),
   setVacations: (vacations) => set({ vacations }),
   setVacationsLoading: (vacationsLoading) => set({ vacationsLoading }),
   setCalendars: (calendars) => set({ calendars }),

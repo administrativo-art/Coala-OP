@@ -74,7 +74,12 @@ async function fetchDPBootstrap(user: NonNullable<typeof auth.currentUser>) {
   });
 
   if (!res.ok) {
-    throw new Error(`DP bootstrap failed: ${res.status}`);
+    let detail = '';
+    try {
+      const data = await res.json();
+      detail = data?.error ? ` - ${data.error}` : '';
+    } catch {}
+    throw new Error(`DP bootstrap failed: ${res.status}${detail}`);
   }
 
   return res.json();
@@ -136,6 +141,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       store.setSchedulesLoading(true);
       store.setVacationsLoading(true);
       store.setCalendarsLoading(true);
+      store.setBootstrapError(null);
 
       fetchDPBootstrap(user).then((payload) => {
         store.setUnits((payload.units ?? []) as DPUnit[]);
@@ -154,6 +160,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         store.setCalendarsLoading(false);
       }).catch((error) => {
         console.error('[DPProvider] Bootstrap fetch failed.', error);
+        store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar bootstrap do DP.');
       });
 
       let schedulesResolved = false;
