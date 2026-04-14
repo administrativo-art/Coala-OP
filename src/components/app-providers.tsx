@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from 'next/navigation';
 import { AuthProvider } from '@/components/auth-provider';
 import { ProductsProvider } from '@/components/products-provider';
 import { KiosksProvider } from '@/components/kiosks-provider';
@@ -30,6 +31,18 @@ import { DPProvider } from '@/components/dp-provider';
 import { Toaster } from "@/components/ui/toaster";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isStandaloneEscala = pathname === '/escala';
+
+  if (isStandaloneEscala) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        {children}
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <ProfilesProvider>
