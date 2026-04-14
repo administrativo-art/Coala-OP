@@ -552,6 +552,9 @@ export function DPSchedulesList() {
 
   return (
     <div className="space-y-8">
+      <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+        debug: loading={String(schedulesLoading)} schedules={schedules.length} units={units.length} canCreate={String(canCreate)} canDelete={String(canDelete)}
+      </div>
       {schedules.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <CalendarDays className="h-12 w-12 opacity-30" />

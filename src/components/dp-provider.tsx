@@ -110,6 +110,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
 
         try {
           const snap = await getDocs(schedulesQuery);
+          console.log('escalas data (fallback):', snap.docs.map(d => d.data()));
           const list = snap.docs.map(normalizeSchedule);
           list.sort((a, b) => b.year - a.year || b.month - a.month);
           store.setSchedules(list);
@@ -155,6 +156,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         (snap) => {
           schedulesResolved = true;
           window.clearTimeout(schedulesFallback);
+          console.log('escalas data:', snap.docs.map(d => d.data()));
           const list = snap.docs.map(normalizeSchedule);
           list.sort((a, b) => b.year - a.year || b.month - a.month);
           store.setSchedules(list);
