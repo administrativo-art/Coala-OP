@@ -44,16 +44,55 @@ function logSubscriptionError(scope: string, error: unknown, stopLoading?: () =>
 // ─── Lifecycle Manager (Refactored DPProvider) ───────────────────────────────
 
 export function DPProvider({ children }: { children: React.ReactNode }) {
-  const store = useDPStore();
-
   useEffect(() => {
+    let unsubUnits: (() => void) | undefined;
+    let unsubGroups: (() => void) | undefined;
+    let unsubShifts: (() => void) | undefined;
+    let unsubSchedules: (() => void) | undefined;
+    let unsubVacations: (() => void) | undefined;
+    let unsubCalendars: (() => void) | undefined;
+
+    const cleanupSubscriptions = () => {
+      unsubUnits?.();
+      unsubGroups?.();
+      unsubShifts?.();
+      unsubSchedules?.();
+      unsubVacations?.();
+      unsubCalendars?.();
+      unsubUnits = undefined;
+      unsubGroups = undefined;
+      unsubShifts = undefined;
+      unsubSchedules = undefined;
+      unsubVacations = undefined;
+      unsubCalendars = undefined;
+    };
+
     const unsubAuth = onAuthStateChanged(auth, (user) => {
+      const store = useDPStore.getState();
+      cleanupSubscriptions();
+
       if (!user) {
-        store.resetStore();
+        store.setUnits([]);
+        store.setUnitGroups([]);
+        store.setShiftDefinitions([]);
+        store.setSchedules([]);
+        store.setVacations([]);
+        store.setCalendars([]);
+        store.setUnitsLoading(false);
+        store.setShiftDefsLoading(false);
+        store.setSchedulesLoading(false);
+        store.setVacationsLoading(false);
+        store.setCalendarsLoading(false);
         return;
       }
 
-      const unsubUnits = onSnapshot(
+      store.setUnitsLoading(true);
+      store.setShiftDefsLoading(true);
+      store.setSchedulesLoading(true);
+      store.setVacationsLoading(true);
+      store.setCalendarsLoading(true);
+
+      unsubUnits = onSnapshot(
         query(collection(db, 'dp_units'), orderBy('name')),
         (snap) => { 
           store.setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit))); 
@@ -62,7 +101,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         (error) => logSubscriptionError('dp_units', error, () => store.setUnitsLoading(false))
       );
 
-      const unsubGroups = onSnapshot(
+      unsubGroups = onSnapshot(
         query(collection(db, 'dp_unitGroups'), orderBy('name')),
         (snap) => { 
           store.setUnitGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnitGroup))); 
@@ -70,7 +109,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         (error) => logSubscriptionError('dp_unitGroups', error)
       );
 
-      const unsubShifts = onSnapshot(
+      unsubShifts = onSnapshot(
         query(collection(db, 'dp_shiftDefinitions'), orderBy('name')),
         (snap) => {
           store.setShiftDefinitions(snap.docs.map(d => {
@@ -82,7 +121,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         (error) => logSubscriptionError('dp_shiftDefinitions', error, () => store.setShiftDefsLoading(false))
       );
 
-      const unsubSchedules = onSnapshot(
+      unsubSchedules = onSnapshot(
         query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc')),
         (snap) => {
           const list = snap.docs.map(d => {
@@ -102,7 +141,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         (error) => logSubscriptionError('dp_schedules', error, () => store.setSchedulesLoading(false))
       );
 
-      const unsubVacations = onSnapshot(
+      unsubVacations = onSnapshot(
         query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc')),
         (snap) => { 
           store.setVacations(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPVacationRecord))); 
@@ -111,7 +150,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         (error) => logSubscriptionError('dp_vacations', error, () => store.setVacationsLoading(false))
       );
 
-      const unsubCalendars = onSnapshot(
+      unsubCalendars = onSnapshot(
         query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc')),
         (snap) => { 
           store.setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar))); 
@@ -119,19 +158,13 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => logSubscriptionError('dp_calendars', error, () => store.setCalendarsLoading(false))
       );
-
-      return () => {
-        unsubUnits();
-        unsubGroups();
-        unsubShifts();
-        unsubSchedules();
-        unsubVacations();
-        unsubCalendars();
-      };
     });
 
-    return () => unsubAuth();
-  }, [store]);
+    return () => {
+      cleanupSubscriptions();
+      unsubAuth();
+    };
+  }, []);
 
   return <>{children}</>;
 }
