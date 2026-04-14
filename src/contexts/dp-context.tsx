@@ -51,10 +51,8 @@ export interface DPContextType {
   deleteHoliday: (calendarId: string, holidayId: string) => Promise<void>;
 }
 
-// Singleton para evitar que o Webpack/Next.js em produção crie chunks duplicados deste contexto
+// Singleton blindado tanto para o Servidor (Node) quanto para o Navegador (Window)
 const DPContextGlobal = ((globalThis as any).__DPContext || createContext<DPContextType | undefined>(undefined)) as React.Context<DPContextType | undefined>;
-if (typeof window !== 'undefined') {
-  (globalThis as any).__DPContext = DPContextGlobal;
-}
+(globalThis as any).__DPContext = DPContextGlobal;
 
 export const DPContext = DPContextGlobal;
