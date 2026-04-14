@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-  collection, onSnapshot, query, orderBy,
+  collection, getDocs, onSnapshot, query, orderBy,
 } from 'firebase/firestore';
 import type {
   DPUnit, DPUnitGroup, DPShiftDefinition,
@@ -39,6 +39,17 @@ function normalizeDaysOfWeek(raw: unknown): number[] {
 function logSubscriptionError(scope: string, error: unknown, stopLoading?: () => void) {
   console.error(`[DPProvider] Failed to subscribe to ${scope}.`, error);
   stopLoading?.();
+}
+
+function normalizeSchedule(doc: { id: string; data: () => Record<string, unknown> }): DPSchedule {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    ...data,
+    month: Number(data.month),
+    year: Number(data.year),
+    shiftCount: Number(data.shiftCount ?? 0),
+  } as DPSchedule;
 }
 
 // ─── Lifecycle Manager (Refactored DPProvider) ───────────────────────────────
@@ -92,6 +103,24 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       store.setVacationsLoading(true);
       store.setCalendarsLoading(true);
 
+      let schedulesResolved = false;
+      const schedulesQuery = query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc'));
+      const schedulesFallback = window.setTimeout(async () => {
+        if (schedulesResolved) return;
+
+        try {
+          const snap = await getDocs(schedulesQuery);
+          const list = snap.docs.map(normalizeSchedule);
+          list.sort((a, b) => b.year - a.year || b.month - a.month);
+          store.setSchedules(list);
+        } catch (error) {
+          console.error('[DPProvider] Fallback fetch for dp_schedules failed.', error);
+        } finally {
+          schedulesResolved = true;
+          store.setSchedulesLoading(false);
+        }
+      }, 4000);
+
       unsubUnits = onSnapshot(
         query(collection(db, 'dp_units'), orderBy('name')),
         (snap) => { 
@@ -122,23 +151,20 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       );
 
       unsubSchedules = onSnapshot(
-        query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc')),
+        schedulesQuery,
         (snap) => {
-          const list = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id,
-              ...data,
-              month: Number(data.month),
-              year: Number(data.year),
-              shiftCount: Number(data.shiftCount ?? 0),
-            } as DPSchedule;
-          });
+          schedulesResolved = true;
+          window.clearTimeout(schedulesFallback);
+          const list = snap.docs.map(normalizeSchedule);
           list.sort((a, b) => b.year - a.year || b.month - a.month);
           store.setSchedules(list);
           store.setSchedulesLoading(false);
         },
-        (error) => logSubscriptionError('dp_schedules', error, () => store.setSchedulesLoading(false))
+        (error) => {
+          schedulesResolved = true;
+          window.clearTimeout(schedulesFallback);
+          logSubscriptionError('dp_schedules', error, () => store.setSchedulesLoading(false));
+        }
       );
 
       unsubVacations = onSnapshot(
