@@ -56,6 +56,30 @@ function normalizeVacation(doc: { id: string; data: () => Record<string, unknown
   return { id: doc.id, ...doc.data() } as DPVacationRecord;
 }
 
+function normalizeScheduleRecord(data: any): DPSchedule {
+  return {
+    ...data,
+    month: Number(data.month),
+    year: Number(data.year),
+    shiftCount: Number(data.shiftCount ?? 0),
+  } as DPSchedule;
+}
+
+async function fetchDPBootstrap(user: NonNullable<typeof auth.currentUser>) {
+  const token = await user.getIdToken();
+  const res = await fetch('/api/dp/bootstrap', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`DP bootstrap failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
 // ─── Lifecycle Manager (Refactored DPProvider) ───────────────────────────────
 
 export function DPProvider({ children }: { children: React.ReactNode }) {
@@ -112,6 +136,25 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       store.setSchedulesLoading(true);
       store.setVacationsLoading(true);
       store.setCalendarsLoading(true);
+
+      fetchDPBootstrap(user).then((payload) => {
+        store.setUnits((payload.units ?? []) as DPUnit[]);
+        store.setUnitGroups((payload.unitGroups ?? []) as DPUnitGroup[]);
+        store.setShiftDefinitions((payload.shiftDefinitions ?? []).map((item: any) => ({
+          ...item,
+          daysOfWeek: normalizeDaysOfWeek(item.daysOfWeek),
+        })) as DPShiftDefinition[]);
+        store.setSchedules((payload.schedules ?? []).map(normalizeScheduleRecord).sort((a: DPSchedule, b: DPSchedule) => b.year - a.year || b.month - a.month));
+        store.setVacations((payload.vacations ?? []) as DPVacationRecord[]);
+        store.setCalendars((payload.calendars ?? []) as DPCalendar[]);
+        store.setUnitsLoading(false);
+        store.setShiftDefsLoading(false);
+        store.setSchedulesLoading(false);
+        store.setVacationsLoading(false);
+        store.setCalendarsLoading(false);
+      }).catch((error) => {
+        console.error('[DPProvider] Bootstrap fetch failed.', error);
+      });
 
       let schedulesResolved = false;
       let vacationsResolved = false;
