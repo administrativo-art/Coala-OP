@@ -7,10 +7,12 @@ import { ArrowLeft } from 'lucide-react';
 import { PermissionGuard } from "@/components/permission-guard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DPProvider } from '@/components/dp-provider';
-import { UserManagement } from '@/components/user-management';
-import { KioskManagement } from '@/components/kiosk-management';
-import { CalendarManagement } from '@/components/calendar-management';
-import { PdvSyncManagement } from '@/components/pdv-sync-management';
+import dynamic from 'next/dynamic';
+
+const UserManagement = dynamic(() => import('@/components/user-management').then(mod => mod.UserManagement), { ssr: false });
+const KioskManagement = dynamic(() => import('@/components/kiosk-management').then(mod => mod.KioskManagement), { ssr: false });
+const CalendarManagement = dynamic(() => import('@/components/calendar-management').then(mod => mod.CalendarManagement), { ssr: false });
+const PdvSyncManagement = dynamic(() => import('@/components/pdv-sync-management').then(mod => mod.PdvSyncManagement), { ssr: false });
 
 export default function SettingsPage() {
     const { permissions } = useAuth();
