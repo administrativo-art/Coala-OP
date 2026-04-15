@@ -22,6 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -185,6 +186,9 @@ function ShiftDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Editar turno' : 'Adicionar turno'}</DialogTitle>
+          <DialogDescription>
+            Preencha colaborador, unidade, data e faixa de horário do turno.
+          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>

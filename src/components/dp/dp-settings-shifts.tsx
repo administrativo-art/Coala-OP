@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -147,6 +148,9 @@ function ShiftDefDialog({ def, open, onOpenChange, units }: {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{def ? 'Editar turno' : 'Novo turno'}</DialogTitle>
+          <DialogDescription>
+            Configure código, nome, horários e dias da semana do turno reutilizável.
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">

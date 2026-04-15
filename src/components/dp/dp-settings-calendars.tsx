@@ -17,6 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -108,6 +109,9 @@ function CalendarDialog({ calendar, open, onOpenChange, onCreated }: { calendar?
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{calendar ? 'Editar calendário' : 'Novo calendário'}</DialogTitle>
+          <DialogDescription>
+            Informe nome, ano e localização do calendário de feriados.
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">

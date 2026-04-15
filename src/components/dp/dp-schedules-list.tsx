@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -146,6 +147,9 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Criar Escala</DialogTitle>
+          <DialogDescription>
+            Selecione unidade, período e calendário para criar uma nova escala mensal.
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
@@ -359,6 +363,9 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Exportar para Bizneo</DialogTitle>
+          <DialogDescription>
+            Escolha o mês e as escalas por unidade que serão exportadas para o Bizneo.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-2">

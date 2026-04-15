@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -96,6 +97,9 @@ function UnitDialog({ unit, open, onOpenChange, unitGroups }: {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{unit ? 'Editar unidade' : 'Nova unidade'}</DialogTitle>
+          <DialogDescription>
+            Defina o nome da unidade, grupo opcional e identificador de integração.
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
@@ -177,6 +181,9 @@ function GroupDialog({ group, open, onOpenChange }: { group?: DPUnitGroup | null
       <DialogContent className="max-w-xs">
         <DialogHeader>
           <DialogTitle>{group ? 'Editar grupo' : 'Novo grupo'}</DialogTitle>
+          <DialogDescription>
+            Crie um agrupamento para organizar unidades relacionadas.
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">

@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -215,6 +216,9 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Editar férias' : 'Agendar férias'}</DialogTitle>
+          <DialogDescription>
+            Registre o ciclo, o tipo e o período do lançamento de férias.
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
