@@ -474,24 +474,6 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const [locking, setLocking] = useState(false);
   const [prevExpanded, setPrevExpanded] = useState(false);
 
-  if (bootstrapLoading) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        <div className="h-8 w-64 bg-muted rounded" />
-        <div className="h-4 w-40 bg-muted/60 rounded" />
-        <div className="rounded-xl border overflow-hidden">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-14 border-b bg-muted/20" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (bootstrapError) {
-    return <p className="text-sm text-destructive">Erro ao carregar dados da escala: {bootstrapError}</p>;
-  }
-
   async function handleLock() {
     if (!permissions.dp?.schedules?.edit) return;
     setLocking(true);
@@ -744,6 +726,24 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     });
     return total;
   }, [shifts, operationalUsers, schedule]);
+
+  if (bootstrapLoading) {
+    return (
+      <div className="space-y-4 animate-pulse">
+        <div className="h-8 w-64 bg-muted rounded" />
+        <div className="h-4 w-40 bg-muted/60 rounded" />
+        <div className="rounded-xl border overflow-hidden">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-14 border-b bg-muted/20" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (bootstrapError) {
+    return <p className="text-sm text-destructive">Erro ao carregar dados da escala: {bootstrapError}</p>;
+  }
 
   async function confirmDelete() {
     if (!deleteTarget) return;
