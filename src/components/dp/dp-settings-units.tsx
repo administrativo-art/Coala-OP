@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 import { useDP } from '@/components/dp-context';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { DPUnit, DPUnitGroup } from '@/types';
 
 import { Button } from '@/components/ui/button';
@@ -58,8 +59,13 @@ const unitSchema = z.object({
 });
 type UnitForm = z.infer<typeof unitSchema>;
 
-function UnitDialog({ unit, open, onOpenChange }: { unit?: DPUnit | null; open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { addUnit, updateUnit, unitGroups } = useDP();
+function UnitDialog({ unit, open, onOpenChange, unitGroups }: {
+  unit?: DPUnit | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  unitGroups: DPUnitGroup[];
+}) {
+  const { addUnit, updateUnit } = useDP();
   const { toast } = useToast();
   const form = useForm<UnitForm>({
     resolver: zodResolver(unitSchema),
@@ -197,7 +203,8 @@ function GroupDialog({ group, open, onOpenChange }: { group?: DPUnitGroup | null
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPSettingsUnits() {
-  const { units, unitGroups, unitsLoading, deleteUnit, deleteUnitGroup } = useDP();
+  const { deleteUnit, deleteUnitGroup } = useDP();
+  const { units, unitGroups, loading: unitsLoading, error } = useDPBootstrap();
   const { toast } = useToast();
 
   const [unitDialog, setUnitDialog] = useState<DPUnit | null | 'new'>('new' as any);
@@ -241,6 +248,7 @@ export function DPSettingsUnits() {
   }
 
   if (unitsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (error) return <p className="text-sm text-destructive">Erro ao carregar unidades: {error}</p>;
 
   return (
     <div className="space-y-8">
@@ -342,7 +350,7 @@ export function DPSettingsUnits() {
       </div>
 
       {/* Dialogs */}
-      <UnitDialog unit={editUnit} open={unitOpen} onOpenChange={setUnitOpen} />
+      <UnitDialog unit={editUnit} open={unitOpen} onOpenChange={setUnitOpen} unitGroups={unitGroups} />
       <GroupDialog group={editGroup} open={groupOpen} onOpenChange={setGroupOpen} />
 
       <AlertDialog open={!!unitToDelete} onOpenChange={open => { if (!open) setUnitToDelete(null); }}>

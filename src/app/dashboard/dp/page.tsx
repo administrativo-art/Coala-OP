@@ -5,7 +5,7 @@ import { format, isToday, isWithinInterval, startOfDay, endOfDay, addDays, parse
 import { ptBR } from 'date-fns/locale';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDP } from '@/components/dp-context';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import { useDPShifts } from '@/hooks/use-dp-shifts';
 import type { User, DPVacationRecord } from '@/types';
 
@@ -433,7 +433,7 @@ function TodayShiftsCard({ todayShifts }: {
 
 export default function DPDashboardPage() {
   const { permissions, users } = useAuth();
-  const { vacations, schedules, units, shiftDefinitions } = useDP();
+  const { vacations, schedules, units, shiftDefinitions, loading, error } = useDPBootstrap();
 
   // Encontra a escala do mês atual (ou o mais recente)
   const now = new Date();
@@ -518,6 +518,14 @@ export default function DPDashboardPage() {
 
   if (!permissions.dp?.view) {
     return <p className="text-muted-foreground p-6">Sem permissão para acessar o Departamento Pessoal.</p>;
+  }
+
+  if (loading) {
+    return <p className="text-muted-foreground p-6 text-sm">Carregando...</p>;
+  }
+
+  if (error) {
+    return <p className="text-destructive p-6 text-sm">Erro ao carregar dashboard do DP: {error}</p>;
   }
 
   return (

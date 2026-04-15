@@ -10,6 +10,7 @@ import { db } from '@/lib/firebase';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { DPSchedule, DPShift } from '@/types';
 
 import { Button } from '@/components/ui/button';
@@ -74,12 +75,15 @@ type ScheduleFormValues = z.infer<typeof scheduleSchema>;
 
 // ─── Create Dialog ────────────────────────────────────────────────────────────
 
-function CreateScheduleDialog({ open, onOpenChange, defaultUnitId }: {
+function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, units, schedules }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   defaultUnitId?: string;
+  calendars: any[];
+  units: Array<{ id: string; name: string }>;
+  schedules: DPSchedule[];
 }) {
-  const { addSchedule, calendars, units, schedules } = useDP();
+  const { addSchedule } = useDP();
   const { toast } = useToast();
   const router = useRouter();
   const now = new Date();
@@ -224,9 +228,14 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId }: {
 
 // ─── Bizneo Export Dialog ─────────────────────────────────────────────────────
 
-function BizneoExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinitions }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  schedules: DPSchedule[];
+  units: Array<{ id: string; name: string }>;
+  shiftDefinitions: any[];
+}) {
   const now = new Date();
-  const { schedules, units, shiftDefinitions } = useDP();
   const { activeUsers } = useAuth();
   const { toast } = useToast();
 
@@ -455,14 +464,10 @@ function BizneoExportDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 
 export function DPSchedulesList() {
   const { deleteSchedule } = useDP();
-  const { permissions, firebaseUser } = useAuth();
+  const { permissions } = useAuth();
+  const { schedules, units, calendars, shiftDefinitions, loading, error: loadError } = useDPBootstrap();
   const { toast } = useToast();
   const router = useRouter();
-
-  const [schedules, setSchedules] = useState<DPSchedule[]>([]);
-  const [units, setUnits] = useState<Array<{ id: string; name: string }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createDefaultUnit, setCreateDefaultUnit] = useState<string | undefined>();
   const [exportBizneoOpen, setExportBizneoOpen] = useState(false);
@@ -472,46 +477,6 @@ export function DPSchedulesList() {
 
   const canCreate = permissions.dp?.schedules?.create ?? false;
   const canDelete = permissions.dp?.schedules?.delete ?? false;
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      if (!firebaseUser) return;
-      setLoading(true);
-      setLoadError(null);
-
-      try {
-        const token = await firebaseUser.getIdToken();
-        const res = await fetch('/api/dp/bootstrap', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(payload?.error ? `${res.status} - ${payload.error}` : `Falha ${res.status}`);
-        }
-
-        if (cancelled) return;
-        const nextSchedules = (payload.schedules ?? []).map((s: any) => ({
-          ...s,
-          month: Number(s.month),
-          year: Number(s.year),
-          shiftCount: Number(s.shiftCount ?? 0),
-        })) as DPSchedule[];
-        nextSchedules.sort((a, b) => b.year - a.year || b.month - a.month);
-        setSchedules(nextSchedules);
-        setUnits((payload.units ?? []) as Array<{ id: string; name: string }>);
-      } catch (error: any) {
-        if (!cancelled) setLoadError(error?.message ?? 'Falha ao carregar escalas.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => { cancelled = true; };
-  }, [firebaseUser]);
 
   function openCreate(unitId?: string) {
     setCreateDefaultUnit(unitId);
@@ -570,7 +535,6 @@ export function DPSchedulesList() {
     setDeleting(true);
     try {
       await deleteSchedule(deleteTarget.id);
-      setSchedules(prev => prev.filter(item => item.id !== deleteTarget.id));
       toast({ title: 'Escala excluída.' });
     } catch {
       toast({ title: 'Erro ao excluir escala.', variant: 'destructive' });
@@ -707,8 +671,21 @@ export function DPSchedulesList() {
         )}
       </div>
 
-      <CreateScheduleDialog open={createOpen} onOpenChange={setCreateOpen} defaultUnitId={createDefaultUnit} />
-      <BizneoExportDialog open={exportBizneoOpen} onOpenChange={setExportBizneoOpen} />
+      <CreateScheduleDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        defaultUnitId={createDefaultUnit}
+        calendars={calendars}
+        units={units}
+        schedules={schedules}
+      />
+      <BizneoExportDialog
+        open={exportBizneoOpen}
+        onOpenChange={setExportBizneoOpen}
+        schedules={schedules}
+        units={units}
+        shiftDefinitions={shiftDefinitions}
+      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>

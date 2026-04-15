@@ -5,8 +5,8 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDP } from '@/components/dp-context';
-import type { User } from '@/types';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
+import type { DPShiftDefinition, User } from '@/types';
 
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -25,9 +25,7 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function CollaboratorCard({ user }: { user: User }) {
-  const { shiftDefinitions } = useDP();
-
+function CollaboratorCard({ user, shiftDefinitions }: { user: User; shiftDefinitions: DPShiftDefinition[] }) {
   const shiftDef = shiftDefinitions.find(d => d.id === user.shiftDefinitionId);
 
   function fmtDate(ts: any) {
@@ -81,7 +79,7 @@ function CollaboratorCard({ user }: { user: User }) {
   );
 }
 
-function CollaboratorList({ users, emptyMessage }: { users: User[]; emptyMessage: string }) {
+function CollaboratorList({ users, emptyMessage, shiftDefinitions }: { users: User[]; emptyMessage: string; shiftDefinitions: DPShiftDefinition[] }) {
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
@@ -115,7 +113,7 @@ function CollaboratorList({ users, emptyMessage }: { users: User[]; emptyMessage
           </p>
         ) : (
           <div className="divide-y">
-            {filtered.map(u => <CollaboratorCard key={u.id} user={u} />)}
+            {filtered.map(u => <CollaboratorCard key={u.id} user={u} shiftDefinitions={shiftDefinitions} />)}
           </div>
         )}
       </ScrollArea>
@@ -125,6 +123,10 @@ function CollaboratorList({ users, emptyMessage }: { users: User[]; emptyMessage
 
 export function DPCollaboratorsDirectory() {
   const { activeUsers, terminatedUsers } = useAuth();
+  const { shiftDefinitions, loading, error } = useDPBootstrap();
+
+  if (loading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (error) return <p className="text-sm text-destructive">Erro ao carregar turnos: {error}</p>;
 
   return (
     <Tabs defaultValue="active">
@@ -140,11 +142,11 @@ export function DPCollaboratorsDirectory() {
       </TabsList>
 
       <TabsContent value="active" className="mt-4">
-        <CollaboratorList users={activeUsers} emptyMessage="Nenhum colaborador ativo." />
+        <CollaboratorList users={activeUsers} emptyMessage="Nenhum colaborador ativo." shiftDefinitions={shiftDefinitions} />
       </TabsContent>
 
       <TabsContent value="terminated" className="mt-4">
-        <CollaboratorList users={terminatedUsers} emptyMessage="Nenhum colaborador desligado." />
+        <CollaboratorList users={terminatedUsers} emptyMessage="Nenhum colaborador desligado." shiftDefinitions={shiftDefinitions} />
       </TabsContent>
     </Tabs>
   );

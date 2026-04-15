@@ -1,13 +1,13 @@
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDP } from '@/components/dp-context';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import { useParams } from 'next/navigation';
 import { DPCalendarHolidays } from '@/components/dp/dp-calendar-holidays';
 
 export default function DPSettingsCalendarHolidaysPage() {
   const { permissions } = useAuth();
-  const { calendars, calendarsLoading } = useDP();
+  const { calendars, loading: calendarsLoading, error } = useDPBootstrap();
   const { id } = useParams<{ id: string }>();
 
   if (!permissions.dp?.settings?.manageCalendars) {
@@ -16,6 +16,10 @@ export default function DPSettingsCalendarHolidaysPage() {
 
   if (calendarsLoading) {
     return <p className="text-muted-foreground p-6 text-sm">Carregando...</p>;
+  }
+
+  if (error) {
+    return <p className="text-destructive p-6 text-sm">Erro ao carregar calendário: {error}</p>;
   }
 
   const calendar = calendars.find(c => c.id === id);

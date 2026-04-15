@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 import { useDP } from '@/components/dp-context';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { DPCalendar } from '@/types';
 
 import { Button } from '@/components/ui/button';
@@ -158,7 +159,8 @@ function CalendarDialog({ calendar, open, onOpenChange, onCreated }: { calendar?
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPSettingsCalendars({ onSelect }: { onSelect?: (id: string) => void } = {}) {
-  const { calendars, calendarsLoading, deleteCalendar } = useDP();
+  const { deleteCalendar } = useDP();
+  const { calendars, loading: calendarsLoading, error } = useDPBootstrap();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -196,6 +198,7 @@ export function DPSettingsCalendars({ onSelect }: { onSelect?: (id: string) => v
   })();
 
   if (calendarsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (error) return <p className="text-sm text-destructive">Erro ao carregar calendários: {error}</p>;
 
   return (
     <div className="space-y-4">

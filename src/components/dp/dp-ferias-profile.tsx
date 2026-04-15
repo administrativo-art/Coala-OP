@@ -10,6 +10,7 @@ import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { DPVacationRecord } from '@/types';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -488,7 +489,8 @@ interface DPFeriasProfileProps {
 export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   const router = useRouter();
   const { users, permissions } = useAuth();
-  const { vacations, vacationsLoading, updateVacation, deleteVacation } = useDP();
+  const { updateVacation, deleteVacation } = useDP();
+  const { vacations, loading: vacationsLoading, error } = useDPBootstrap();
   const { toast } = useToast();
 
   const canEdit    = permissions.dp?.vacation?.request ?? false;
@@ -545,6 +547,17 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
         <p className="text-sm">Colaborador não encontrado.</p>
+        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/dp/ferias')}>
+          <ArrowLeft className="mr-2 h-4 w-4" />Voltar
+        </Button>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <p className="text-sm text-destructive">Erro ao carregar férias: {error}</p>
         <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/dp/ferias')}>
           <ArrowLeft className="mr-2 h-4 w-4" />Voltar
         </Button>

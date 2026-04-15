@@ -7,6 +7,7 @@ import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { User } from '@/types';
 import {
   Select,
@@ -212,8 +213,8 @@ function CardSkeleton() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPFeriasManager() {
-  const { vacations, vacationsLoading, units } = useDP();
   const { activeUsers } = useAuth();
+  const { vacations, units, loading: vacationsLoading, error } = useDPBootstrap();
   const router = useRouter();
 
   const [search, setSearch] = useState('');
@@ -306,6 +307,12 @@ export function DPFeriasManager() {
 
   return (
     <div className="space-y-8">
+      {error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+          <p className="font-medium text-destructive">Falha ao carregar férias.</p>
+          <p className="mt-1 text-muted-foreground">{error}</p>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">

@@ -9,6 +9,7 @@ import { format, getDaysInMonth, isToday, parseISO, differenceInCalendarDays, pa
 import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import { useDPShifts } from '@/hooks/use-dp-shifts';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
@@ -92,6 +93,7 @@ interface ShiftDialogProps {
   defaultDate?: string;
   defaultUnitId?: string;
   units: DPUnit[];
+  shiftDefinitions: DPShiftDefinition[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
   /** userId → Set<date> of dates already occupied in sibling units */
@@ -99,9 +101,8 @@ interface ShiftDialogProps {
 }
 
 function ShiftDialog({
-  scheduleId, shift, defaultDate, defaultUnitId, units, open, onOpenChange, siblingOccupied,
+  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied,
 }: ShiftDialogProps) {
-  const { shiftDefinitions } = useDP();
   const { activeUsers } = useAuth();
   const { addShift, updateShift } = useDPShifts(scheduleId);
   const { toast } = useToast();
@@ -393,10 +394,17 @@ interface DPScheduleEditorProps {
 export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const router = useRouter();
   const { activeUsers, permissions, updateUser } = useAuth();
-  const { units, shiftDefinitions, schedules, updateSchedule } = useDP();
+  const { updateSchedule } = useDP();
+  const {
+    units,
+    shiftDefinitions,
+    schedules,
+    calendars,
+    loading: bootstrapLoading,
+    error: bootstrapError,
+  } = useDPBootstrap();
   const { shifts, loading, deleteShift: doDelete } = useDPShifts(schedule.id);
   const { toast } = useToast();
-  const { calendars } = useDP();
 
   // Calendar for holidays
   const { holidays } = useDPHolidays(schedule.calendarId ?? null);
@@ -465,6 +473,24 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const [deleting, setDeleting] = useState(false);
   const [locking, setLocking] = useState(false);
   const [prevExpanded, setPrevExpanded] = useState(false);
+
+  if (bootstrapLoading) {
+    return (
+      <div className="space-y-4 animate-pulse">
+        <div className="h-8 w-64 bg-muted rounded" />
+        <div className="h-4 w-40 bg-muted/60 rounded" />
+        <div className="rounded-xl border overflow-hidden">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-14 border-b bg-muted/20" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (bootstrapError) {
+    return <p className="text-sm text-destructive">Erro ao carregar dados da escala: {bootstrapError}</p>;
+  }
 
   async function handleLock() {
     if (!permissions.dp?.schedules?.edit) return;
@@ -1095,6 +1121,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         defaultDate={addDialog?.date}
         defaultUnitId={addDialog?.unitId}
         units={activeUnits}
+        shiftDefinitions={shiftDefinitions}
         open={!!addDialog}
         onOpenChange={open => { if (!open) setAddDialog(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
@@ -1104,6 +1131,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         scheduleId={schedule.id}
         shift={editShift}
         units={activeUnits}
+        shiftDefinitions={shiftDefinitions}
         open={!!editShift}
         onOpenChange={open => { if (!open) setEditShift(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}

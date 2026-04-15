@@ -10,7 +10,8 @@ import { Timestamp } from 'firebase/firestore';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useDP } from '@/components/dp-context';
-import type { User } from '@/types';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
+import type { DPShiftDefinition, User } from '@/types';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -116,11 +117,11 @@ interface EditSheetProps {
   user: User | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  shiftDefinitions: DPShiftDefinition[];
 }
 
-function EditSheet({ user, open, onOpenChange }: EditSheetProps) {
+function EditSheet({ user, open, onOpenChange, shiftDefinitions }: EditSheetProps) {
   const { updateUser } = useAuth();
-  const { shiftDefinitions } = useDP();
   const { toast } = useToast();
 
   const form = useForm<CollaboratorFormValues>({
@@ -474,11 +475,10 @@ interface CollaboratorRowProps {
   onTerminate: (user: User) => void;
   canEdit: boolean;
   canTerminate: boolean;
+  shiftDefinitions: DPShiftDefinition[];
 }
 
-function CollaboratorRow({ user, onEdit, onTerminate, canEdit, canTerminate }: CollaboratorRowProps) {
-  const { shiftDefinitions } = useDP();
-
+function CollaboratorRow({ user, onEdit, onTerminate, canEdit, canTerminate, shiftDefinitions }: CollaboratorRowProps) {
   const shiftDef = useMemo(
     () => shiftDefinitions.find(d => d.id === user.shiftDefinitionId),
     [user.shiftDefinitionId, shiftDefinitions]
@@ -542,6 +542,7 @@ function CollaboratorRow({ user, onEdit, onTerminate, canEdit, canTerminate }: C
 
 export function DPCollaboratorsManager() {
   const { activeUsers, permissions, updateUser } = useAuth();
+  const { shiftDefinitions, loading: bootstrapLoading, error: bootstrapError } = useDPBootstrap();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [editUser, setEditUser] = useState<User | null>(null);
@@ -600,6 +601,14 @@ export function DPCollaboratorsManager() {
     );
   }, [activeUsers, search]);
 
+  if (bootstrapLoading) {
+    return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  }
+
+  if (bootstrapError) {
+    return <p className="text-sm text-destructive">Erro ao carregar dados do DP: {bootstrapError}</p>;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -642,6 +651,7 @@ export function DPCollaboratorsManager() {
                 onTerminate={setTerminateUser}
                 canEdit={canEdit}
                 canTerminate={canTerminate}
+                shiftDefinitions={shiftDefinitions}
               />
             ))}
           </div>
@@ -651,6 +661,7 @@ export function DPCollaboratorsManager() {
       <EditSheet
         user={editUser}
         open={!!editUser}
+        shiftDefinitions={shiftDefinitions}
         onOpenChange={open => { if (!open) setEditUser(null); }}
       />
 

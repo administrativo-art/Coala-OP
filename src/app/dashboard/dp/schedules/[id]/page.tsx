@@ -1,13 +1,13 @@
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDP } from '@/components/dp-context';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import { useParams } from 'next/navigation';
 import { DPScheduleEditor } from '@/components/dp/dp-schedule-editor';
 
 export default function DPScheduleEditorPage() {
   const { permissions } = useAuth();
-  const { schedules, schedulesLoading } = useDP();
+  const { schedules, loading: schedulesLoading, error } = useDPBootstrap();
   const { id } = useParams<{ id: string }>();
 
   if (!permissions.dp?.schedules?.view) {
@@ -16,6 +16,10 @@ export default function DPScheduleEditorPage() {
 
   if (schedulesLoading) {
     return <p className="text-muted-foreground p-6 text-sm">Carregando...</p>;
+  }
+
+  if (error) {
+    return <p className="text-destructive p-6 text-sm">Erro ao carregar escala: {error}</p>;
   }
 
   const schedule = schedules.find(s => s.id === id);

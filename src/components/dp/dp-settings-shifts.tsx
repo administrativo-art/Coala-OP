@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 import { useDP } from '@/components/dp-context';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { DPShiftDefinition } from '@/types';
 
 import { Button } from '@/components/ui/button';
@@ -71,8 +72,13 @@ type ShiftDefForm = z.infer<typeof shiftDefSchema>;
 
 // ─── Dialog ───────────────────────────────────────────────────────────────────
 
-function ShiftDefDialog({ def, open, onOpenChange }: { def?: DPShiftDefinition | null; open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { addShiftDefinition, updateShiftDefinition, units } = useDP();
+function ShiftDefDialog({ def, open, onOpenChange, units }: {
+  def?: DPShiftDefinition | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  units: Array<{ id: string; name: string }>;
+}) {
+  const { addShiftDefinition, updateShiftDefinition } = useDP();
   const { toast } = useToast();
 
   const form = useForm<ShiftDefForm>({
@@ -261,7 +267,8 @@ function ShiftDefDialog({ def, open, onOpenChange }: { def?: DPShiftDefinition |
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPSettingsShifts() {
-  const { shiftDefinitions, shiftDefsLoading, deleteShiftDefinition } = useDP();
+  const { deleteShiftDefinition } = useDP();
+  const { shiftDefinitions, units, loading: shiftDefsLoading, error } = useDPBootstrap();
   const { toast } = useToast();
 
   const [open, setOpen] = useState(false);
@@ -284,6 +291,7 @@ export function DPSettingsShifts() {
   }
 
   if (shiftDefsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (error) return <p className="text-sm text-destructive">Erro ao carregar turnos: {error}</p>;
 
   return (
     <div className="space-y-3">
@@ -337,7 +345,7 @@ export function DPSettingsShifts() {
         )}
       </ScrollArea>
 
-      <ShiftDefDialog def={editDef} open={open} onOpenChange={setOpen} />
+      <ShiftDefDialog def={editDef} open={open} onOpenChange={setOpen} units={units} />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
