@@ -6,12 +6,17 @@ function getEnv(name: string): string {
 
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
-function extractBrazilHour(dateStr: string): string {
-  if (!dateStr) return '00';
+function extractPdvTime(dateStr: string): string {
+  if (!dateStr) return '00:00';
+  const match = dateStr.trim().match(/[T ](\d{2}):(\d{2})/);
+  if (match) return `${match[1]}:${match[2]}`;
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '00';
-  const brt = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-  return brt.getHours().toString().padStart(2, '0');
+  if (isNaN(d.getTime())) return '00:00';
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function extractBrazilHour(dateStr: string): string {
+  return extractPdvTime(dateStr).split(':')[0];
 }
 
 export async function getAccessToken() {
@@ -142,9 +147,16 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
       else validMappedItemsForCombo.push({ name: sim.name, qty });
 
       const itTime = item.dtmovimento || coupon.dtabertura || coupon.dtrecebimento;
-      const itemTimestamp = itTime ? new Date(itTime).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : `${hour}:00`;
+      const itemTimestamp = extractPdvTime(itTime || '') || `${hour}:00`;
       if (!productTotals[sim.id]) {
-        productTotals[sim.id] = { sku, productName: sim.name, quantity: 0, simulationId: sim.id, timestamp: itemTimestamp, unitPrice: item.valortotal || 0 };
+        productTotals[sim.id] = {
+          sku,
+          productName: sim.name,
+          quantity: 0,
+          simulationId: sim.id,
+          timestamp: itemTimestamp,
+          unitPrice: item.PrecoVenda || item.precoVenda || (qty > 0 ? revenue / qty : 0),
+        };
       }
       productTotals[sim.id].quantity += qty;
       if (!productHourlySales[sim.id]) productHourlySales[sim.id] = {};

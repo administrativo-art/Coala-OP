@@ -335,19 +335,30 @@ function SalesAnalysisDashboardInner() {
 
   // ── VENDAS POR HORA ────────────────────────────────────────────────────────
   const hourlySalesData = useMemo(() => {
-    const hours: Record<string, { total: number; products: Record<string, { simulationId: string; name: string; quantity: number }> }> = {};
+    const hours: Record<string, {
+      totalUnits: number;
+      totalCoupons: number;
+      products: Record<string, { simulationId: string; name: string; quantity: number }>;
+    }> = {};
     for (let i = 0; i < 24; i++) {
-      hours[i.toString().padStart(2, '0')] = { total: 0, products: {} };
+      hours[i.toString().padStart(2, '0')] = { totalUnits: 0, totalCoupons: 0, products: {} };
     }
 
     filteredReports.forEach(r => {
+      if (r.hourlySales) {
+        Object.entries(r.hourlySales).forEach(([hour, qty]) => {
+          if (!hours[hour]) return;
+          hours[hour].totalCoupons += Number(qty) || 0;
+        });
+      }
+
       if (r.productHourlySales) {
         Object.entries(r.productHourlySales).forEach(([simulationId, hourlyData]) => {
           const item = r.items.find(i => i.simulationId === simulationId);
           if (!item) return;
           Object.entries(hourlyData).forEach(([hour, qty]) => {
             if (!hours[hour]) return;
-            hours[hour].total += qty;
+            hours[hour].totalUnits += qty;
             if (!hours[hour].products[simulationId]) {
               hours[hour].products[simulationId] = { simulationId, name: item.productName, quantity: 0 };
             }
@@ -358,7 +369,7 @@ function SalesAnalysisDashboardInner() {
         r.items.forEach(item => {
           const hour = item.timestamp ? item.timestamp.split(':')[0] : '00';
           if (hours[hour]) {
-            hours[hour].total += (item.quantity || 0);
+            hours[hour].totalUnits += (item.quantity || 0);
             if (!hours[hour].products[item.simulationId]) {
               hours[hour].products[item.simulationId] = { simulationId: item.simulationId, name: item.productName, quantity: 0 };
             }
@@ -368,19 +379,22 @@ function SalesAnalysisDashboardInner() {
       }
     });
 
-    return Object.entries(hours).map(([hour, data]) => ({ 
-      hourStr: hour,
-      hour: `${hour}h`, 
-      total: data.total,
-      products: Object.values(data.products).sort((a, b) => b.quantity - a.quantity)
-    }));
+    return Object.entries(hours)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([hour, data]) => ({
+        hourStr: hour,
+        hour: `${hour}h`,
+        total: data.totalUnits,
+        coupons: data.totalCoupons,
+        products: Object.values(data.products).sort((a, b) => b.quantity - a.quantity)
+      }));
   }, [filteredReports]);
 
   const filteredHourlyData = useMemo(() => {
     return hourlySalesData.map(d => {
       let displayValue = 0;
       if (hourlySelectedProduct === 'all') {
-        displayValue = d.total;
+        displayValue = d.coupons;
       } else {
         const prod = d.products.find(p => p.simulationId === hourlySelectedProduct);
         displayValue = prod ? prod.quantity : 0;
@@ -441,16 +455,27 @@ function SalesAnalysisDashboardInner() {
 
   // ── PAINEL: HORÁRIOS — por quiosque ─────────────────────────────────────
   const buildHourlyData = (reports: typeof panelHourlyReports) => {
-    const hours: Record<string, { total: number; products: Record<string, { simulationId: string; name: string; quantity: number }> }> = {};
-    for (let i = 0; i < 24; i++) hours[i.toString().padStart(2, '0')] = { total: 0, products: {} };
+    const hours: Record<string, {
+      totalUnits: number;
+      totalCoupons: number;
+      products: Record<string, { simulationId: string; name: string; quantity: number }>;
+    }> = {};
+    for (let i = 0; i < 24; i++) hours[i.toString().padStart(2, '0')] = { totalUnits: 0, totalCoupons: 0, products: {} };
     reports.forEach(r => {
+      if (r.hourlySales) {
+        Object.entries(r.hourlySales).forEach(([hour, qty]) => {
+          if (!hours[hour]) return;
+          hours[hour].totalCoupons += Number(qty) || 0;
+        });
+      }
+
       if (r.productHourlySales) {
         Object.entries(r.productHourlySales).forEach(([simId, hourlyData]) => {
           const item = r.items.find(i => i.simulationId === simId);
           if (!item) return;
           Object.entries(hourlyData).forEach(([hour, qty]) => {
             if (!hours[hour]) return;
-            hours[hour].total += qty;
+            hours[hour].totalUnits += qty;
             if (!hours[hour].products[simId]) hours[hour].products[simId] = { simulationId: simId, name: item.productName, quantity: 0 };
             hours[hour].products[simId].quantity += qty;
           });
@@ -459,17 +484,22 @@ function SalesAnalysisDashboardInner() {
         r.items.forEach(item => {
           const hour = item.timestamp ? item.timestamp.split(':')[0] : '00';
           if (hours[hour]) {
-            hours[hour].total += (item.quantity || 0);
+            hours[hour].totalUnits += (item.quantity || 0);
             if (!hours[hour].products[item.simulationId]) hours[hour].products[item.simulationId] = { simulationId: item.simulationId, name: item.productName, quantity: 0 };
             hours[hour].products[item.simulationId].quantity += (item.quantity || 0);
           }
         });
       }
     });
-    return Object.entries(hours).map(([hour, data]) => ({
-      hourStr: hour, hour: `${hour}h`, total: data.total,
-      products: Object.values(data.products).sort((a, b) => b.quantity - a.quantity),
-    }));
+    return Object.entries(hours)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([hour, data]) => ({
+        hourStr: hour,
+        hour: `${hour}h`,
+        total: data.totalUnits,
+        coupons: data.totalCoupons,
+        products: Object.values(data.products).sort((a, b) => b.quantity - a.quantity),
+      }));
   };
 
   const panelHourlyByKiosk = useMemo(() => {
@@ -1549,9 +1579,10 @@ function SalesAnalysisDashboardInner() {
             </div>
             <div className="space-y-4">
               {panelHourlyByKiosk.map(({ kioskId, kioskName, data }) => {
+                const showingCoupons = panelHourlySelectedProduct === 'all';
                 const filteredData = data.map(d => ({
                   ...d,
-                  displayValue: panelHourlySelectedProduct === 'all' ? d.total : (d.products.find(p => p.simulationId === panelHourlySelectedProduct)?.quantity || 0),
+                  displayValue: showingCoupons ? d.coupons : (d.products.find(p => p.simulationId === panelHourlySelectedProduct)?.quantity || 0),
                 }));
                 const selectedHourData = panelSelectedHour?.kioskId === kioskId
                   ? filteredData.find(d => d.hourStr === panelSelectedHour.hourStr) ?? null
@@ -1580,7 +1611,9 @@ function SalesAnalysisDashboardInner() {
                               content={({ active, payload }) => active && payload?.length ? (
                                 <div className="bg-popover border p-3 rounded-lg shadow-xl">
                                   <p className="font-bold text-sm mb-1">{payload[0].payload.hour}</p>
-                                  <p className="text-pink-600 font-bold">{payload[0].value} un</p>
+                                  <p className="text-pink-600 font-bold">
+                                    {payload[0].value} {showingCoupons ? 'cupons' : 'un'}
+                                  </p>
                                   <p className="text-[10px] text-muted-foreground mt-1 underline">Clique para detalhar</p>
                                 </div>
                               ) : null}
@@ -1594,7 +1627,11 @@ function SalesAnalysisDashboardInner() {
                           <div className="flex items-center justify-between">
                             <div>
                               <h4 className="font-bold text-sm">Produtos — {panelSelectedHour!.hourStr}h</h4>
-                              <p className="text-xs text-muted-foreground">{selectedHourData.total} unidades</p>
+                              <p className="text-xs text-muted-foreground">
+                                {showingCoupons
+                                  ? `${selectedHourData.coupons} cupons · ${selectedHourData.total} unidades`
+                                  : `${selectedHourData.total} unidades`}
+                              </p>
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => setPanelSelectedHour(null)}>Fechar</Button>
                           </div>

@@ -79,12 +79,17 @@ async function fetchAllCouponsForDay(accessToken: string, date: string, filialId
   return coupons || [];
 }
 
-function extractBrazilHour(dateStr: string): string {
-  if (!dateStr) return '00';
+function extractPdvTime(dateStr: string): string {
+  if (!dateStr) return '00:00';
+  const match = dateStr.trim().match(/[T ](\d{2}):(\d{2})/);
+  if (match) return `${match[1]}:${match[2]}`;
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '00';
-  const brt = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-  return brt.getHours().toString().padStart(2, '0');
+  if (isNaN(d.getTime())) return '00:00';
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function extractBrazilHour(dateStr: string): string {
+  return extractPdvTime(dateStr).split(':')[0];
 }
 
 export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId: string) {
@@ -162,8 +167,9 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
         const sku = sim.ppo?.sku?.toString().trim() || mainSku;
 
         const itTime = coupon.dtrecebimento || coupon.dtabertura || item.dtmovimento;
-        const itemTimestamp = itTime ? new Date(itTime).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : `${hour}:00`;
-        const unitPrice = item.PrecoVenda || 0;
+        const itemTimestamp = extractPdvTime(itTime || '') || `${hour}:00`;
+        const itemTotal = item.valortotal || item.ValorTotal || 0;
+        const unitPrice = item.PrecoVenda || item.precoVenda || (qty > 0 ? itemTotal / qty : 0);
 
         if (!productTotals[sim.id]) {
           productTotals[sim.id] = { 
