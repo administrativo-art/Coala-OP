@@ -52,61 +52,37 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full overflow-hidden font-sans">
-      {/* Imagem de fundo — apenas desktop */}
-      <img
-        src={brand.loginBg}
-        alt=""
-        aria-hidden
-        className="absolute inset-0 h-full w-full object-cover hidden lg:block"
-        style={{ objectPosition: "left center" }}
-      />
+    <div className="relative min-h-screen overflow-hidden font-sans">
+      <div className="absolute inset-0">
+        <img
+          src={brand.loginBg}
+          alt=""
+          aria-hidden
+          className="h-full w-full scale-[1.18] -translate-x-[10%] object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-white/18" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.42),transparent_28%),radial-gradient(circle_at_80%_25%,rgba(255,255,255,0.22),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.1),rgba(255,255,255,0.02))]" />
+      </div>
 
-      {/* Overlay — apenas desktop */}
-      <div className="absolute inset-0 bg-slate-900/20 hidden lg:block" />
+      <div className="relative min-h-screen">
+        <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[34rem] bg-gradient-to-l from-white/16 via-white/6 to-transparent lg:block" />
 
-      {/* Layout */}
-      <div className="relative z-10 flex min-h-screen w-full">
-
-        {/* Coluna esquerda — apenas desktop, assinatura sobre a imagem */}
-        <div className="hidden lg:flex flex-1 relative">
-          <div style={{ position: "absolute", top: "64px", left: "48px", display: "flex", flexDirection: "column", gap: "4px" }}>
-            <h2 style={{ fontSize: "28px", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.2 }}>
-              Coala Operação{" "}
-              <span style={{ fontWeight: 300, color: "rgba(255,255,255,0.7)" }}>| Estoque</span>
-            </h2>
-            <p style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.75)", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
-              Gestão Inteligente de Estoque
-            </p>
-          </div>
-        </div>
-
-        {/* Painel de login */}
-        <div
-          className="relative flex w-full lg:max-w-md flex-col min-h-screen lg:min-h-0"
-          style={{
-            background: "rgba(255, 255, 255, 0.92)",
-            backdropFilter: "blur(24px)",
-            WebkitBackdropFilter: "blur(24px)",
-          }}
-        >
-          {/* Formulário centralizado com espaço para a assinatura */}
+        <div className="relative flex min-h-screen items-center justify-center px-5 py-8 sm:px-8 lg:justify-end lg:px-12 xl:px-0">
           <div
-            className="flex flex-col justify-center flex-1 px-12"
-            style={{ paddingTop: "64px", paddingBottom: "64px" }}
+            className="w-full max-w-[420px] rounded-[28px] border border-white/60 bg-white/82 p-8 shadow-[0_8px_40px_rgba(0,0,0,0.10)] backdrop-blur-[18px] sm:p-10 lg:absolute lg:top-1/2 lg:-translate-y-1/2"
+            style={{ right: "6%" }}
           >
-            {/* Assinatura — apenas mobile (no desktop aparece sobre a imagem) */}
-            <div className="lg:hidden mb-8">
-              <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#111827", margin: 0, lineHeight: 1.2 }}>
-                Coala Operação{" "}
-                <span style={{ fontWeight: 300, color: "#6B7280" }}>| Estoque</span>
+            <div className="mb-10">
+              <h2 className="text-[22px] font-bold leading-tight tracking-[-0.3px] text-[#1a1a1a]">
+                Coala Shakes
               </h2>
-              <p style={{ fontSize: "12px", fontWeight: 500, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
-                Gestão Inteligente de Estoque
+              <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">
+                Gestão inteligente
               </p>
             </div>
+
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-slate-800 tracking-tight">
+              <h1 className="text-[28px] font-extrabold tracking-[-0.5px] text-[#1a1a1a]">
                 Acesso ao sistema
               </h1>
               <p className="mt-1 text-sm text-slate-500">
@@ -116,14 +92,16 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-slate-700">E-mail</Label>
+                <Label htmlFor="email" className="text-[13px] font-semibold text-[#444]">
+                  E-mail
+                </Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="seu@email.com"
                   autoComplete="email"
                   {...register("email")}
-                  className="bg-white/70 h-12 rounded-xl"
+                  className="h-12 rounded-xl border-[1.5px] border-[#e0e0e0] bg-white/70 px-4 text-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-[border-color,box-shadow] focus-visible:border-[#E91E8C] focus-visible:ring-[3px] focus-visible:ring-[#E91E8C]/12 focus-visible:ring-offset-0"
                 />
                 {errors.email && (
                   <p className="text-xs text-destructive">{errors.email.message}</p>
@@ -131,7 +109,9 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-slate-700">Senha</Label>
+                <Label htmlFor="password" className="text-[13px] font-semibold text-[#444]">
+                  Senha
+                </Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -139,12 +119,12 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     autoComplete="current-password"
                     {...register("password")}
-                    className="bg-white/70 h-12 rounded-xl pr-10"
+                    className="h-12 rounded-xl border-[1.5px] border-[#e0e0e0] bg-white/70 px-4 pr-11 text-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-[border-color,box-shadow] focus-visible:border-[#E91E8C] focus-visible:ring-[3px] focus-visible:ring-[#E91E8C]/12 focus-visible:ring-offset-0"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-[#C4187A]"
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
@@ -155,14 +135,14 @@ export default function LoginPage() {
               </div>
 
               {error && (
-                <div className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive border border-destructive/20">
+                <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
                 </div>
               )}
 
               <Button
                 type="submit"
-                className="w-full h-12 rounded-xl text-base font-semibold shadow-lg shadow-primary/20"
+                className="h-14 w-full rounded-xl bg-[#E91E8C] text-[15px] font-bold tracking-[0.2px] text-white shadow-[0_8px_24px_rgba(233,30,140,0.22)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[#C4187A] hover:shadow-[0_4px_20px_rgba(233,30,140,0.35)] active:translate-y-0"
                 size="lg"
                 disabled={isSubmitting}
               >
@@ -175,7 +155,7 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <p className="mt-8 text-center text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+            <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
               © {new Date().getFullYear()} Coala Operação. Todos os direitos reservados.
             </p>
           </div>

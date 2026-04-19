@@ -9,7 +9,11 @@ const nextConfig = {
       { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
     ],
   },
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.cache = false;
+    }
+
     config.resolve.alias['@/components/dp-context'] = path.resolve(__dirname, 'src/components/dp-context.tsx');
     return config;
   },

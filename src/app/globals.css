@@ -48,7 +48,11 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 10%;
   }
   .dark {
     --background: 224 23% 15%; /* #1E2230 */
@@ -70,6 +74,10 @@
     --border: 225 14% 28%; /* #394050 */
     --input: 225 14% 35%; /* #4A5164 - Darker for better contrast */
     --ring: 195 85% 41%;
+    --success: 142 72% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 10%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;

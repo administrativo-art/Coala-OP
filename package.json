@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "fuser -k 3000/tcp 2>/dev/null; next dev",
+    "dev": "node scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "mcp": "node server.js",
-    "migrate:dp": "node scripts/migrate-dp.mjs"
+    "migrate:dp": "node scripts/migrate-dp.mjs",
+    "migrate:financial": "node scripts/migrate-financial.mjs"
   },
   "overrides": {
     "fast-xml-parser": "^5.3.6",
