@@ -12,6 +12,8 @@ const UserManagement = dynamic(() => import('@/components/user-management').then
 const KioskManagement = dynamic(() => import('@/components/kiosk-management').then(mod => mod.KioskManagement), { ssr: false });
 const CalendarManagement = dynamic(() => import('@/components/calendar-management').then(mod => mod.CalendarManagement), { ssr: false });
 const PdvSyncManagement = dynamic(() => import('@/components/pdv-sync-management').then(mod => mod.PdvSyncManagement), { ssr: false });
+const FinancialProvider = dynamic(() => import('@/features/financial/components/financial-provider').then(mod => mod.FinancialProvider), { ssr: false });
+const FinancialSettingsPage = dynamic(() => import('@/features/financial/pages/settings-page').then(mod => mod.FinancialSettingsPage), { ssr: false });
 
 export default function SettingsPage() {
     const { permissions } = useAuth();
@@ -41,6 +43,7 @@ export default function SettingsPage() {
                         <TabsTrigger value="unidades">Unidades</TabsTrigger>
                         <TabsTrigger value="calendarios">Calendários</TabsTrigger>
                         <TabsTrigger value="sincronizacao">Sincronização PDV</TabsTrigger>
+                        <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="usuarios" className="mt-4">
@@ -57,6 +60,12 @@ export default function SettingsPage() {
 
                     <TabsContent value="sincronizacao" className="mt-4">
                         <PdvSyncManagement />
+                    </TabsContent>
+
+                    <TabsContent value="financeiro" className="mt-4">
+                        <FinancialProvider>
+                            <FinancialSettingsPage />
+                        </FinancialProvider>
                     </TabsContent>
                 </Tabs>
             </div>

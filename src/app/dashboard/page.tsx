@@ -8,7 +8,7 @@ import { GlassCard } from "@/components/ui/glass-card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { format } from "date-fns"
 import { ptBR } from 'date-fns/locale'
-import { Wifi, Users, LayoutDashboard, Briefcase, Calculator, Layers, ArrowRight } from 'lucide-react'
+import { Wifi, Users, LayoutDashboard, Briefcase, Calculator, Layers, ArrowRight, Wallet } from 'lucide-react'
 import { collection, onSnapshot, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -195,6 +195,17 @@ export default function DashboardPage() {
                   icon={<Briefcase className="h-6 w-6" />}
                   color="purple"
                   badge="RH & Escalas"
+                />
+              )}
+
+              {permissions.financial?.view && (
+                <SectionShortcut
+                  title="Financeiro"
+                  description="Fluxo de caixa, DRE, despesas, importação de extrato e cadastros financeiros no banco dedicado."
+                  href="/dashboard/financial"
+                  icon={<Wallet className="h-6 w-6" />}
+                  color="amber"
+                  badge="Caixa & DRE"
                 />
               )}
             </div>

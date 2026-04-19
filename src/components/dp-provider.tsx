@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
@@ -88,7 +89,22 @@ async function fetchDPBootstrap(user: NonNullable<typeof auth.currentUser>) {
 // ─── Lifecycle Manager (Refactored DPProvider) ───────────────────────────────
 
 export function DPProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isDPRoute = pathname?.startsWith('/dashboard/dp') || pathname === '/dashboard/settings/units';
+
   useEffect(() => {
+    const store = useDPStore.getState();
+
+    if (!isDPRoute) {
+      store.resetStore();
+      store.setUnitsLoading(false);
+      store.setShiftDefsLoading(false);
+      store.setSchedulesLoading(false);
+      store.setVacationsLoading(false);
+      store.setCalendarsLoading(false);
+      return;
+    }
+
     let unsubUnits: (() => void) | undefined;
     let unsubGroups: (() => void) | undefined;
     let unsubShifts: (() => void) | undefined;
@@ -271,7 +287,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       cleanupSubscriptions();
       unsubAuth();
     };
-  }, []);
+  }, [isDPRoute]);
 
   return <>{children}</>;
 }

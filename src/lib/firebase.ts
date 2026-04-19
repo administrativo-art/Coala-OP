@@ -3,18 +3,12 @@ import { initializeFirestore, connectFirestoreEmulator } from "firebase/firestor
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
+import { assertFirebaseClientConfig, firebaseClientConfig } from "./firebase-client-config";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCn2V94gjX_Y1n4IOY40Y0JBKgXl--Sgns",
-  authDomain: "smart-converter-752gf.firebaseapp.com",
-  projectId: "smart-converter-752gf",
-  storageBucket: "smart-converter-752gf.firebasestorage.app",
-  messagingSenderId: "787876557774",
-  appId: "1:787876557774:web:cf2b2c3d7d0aae313a319f"
-};
+assertFirebaseClientConfig();
 
 // Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const app = !getApps().length ? initializeApp(firebaseClientConfig) : getApp();
 
 // Connect to the specific "coala" database using Firestore defaults.
 const db = initializeFirestore(app, {}, "coala");

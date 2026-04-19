@@ -36,23 +36,38 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const [unitsSnap, groupsSnap, shiftsSnap, schedulesSnap, vacationsSnap, calendarsSnap] = await Promise.all([
-      dbAdmin.collection('dp_units').orderBy('name').get(),
-      dbAdmin.collection('dp_unitGroups').orderBy('name').get(),
-      dbAdmin.collection('dp_shiftDefinitions').orderBy('name').get(),
-      dbAdmin.collection('dp_schedules').orderBy('createdAt', 'desc').get(),
-      dbAdmin.collection('dp_vacations').orderBy('createdAt', 'desc').get(),
-      dbAdmin.collection('dp_calendars').orderBy('createdAt', 'desc').get(),
-    ]);
+    try {
+      const [unitsSnap, groupsSnap, shiftsSnap, schedulesSnap, vacationsSnap, calendarsSnap] = await Promise.all([
+        dbAdmin.collection('dp_units').orderBy('name').get(),
+        dbAdmin.collection('dp_unitGroups').orderBy('name').get(),
+        dbAdmin.collection('dp_shiftDefinitions').orderBy('name').get(),
+        dbAdmin.collection('dp_schedules').orderBy('createdAt', 'desc').get(),
+        dbAdmin.collection('dp_vacations').orderBy('createdAt', 'desc').get(),
+        dbAdmin.collection('dp_calendars').orderBy('createdAt', 'desc').get(),
+      ]);
 
-    return NextResponse.json({
-      units: unitsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
-      unitGroups: groupsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
-      shiftDefinitions: shiftsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
-      schedules: schedulesSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
-      vacations: vacationsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
-      calendars: calendarsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
-    });
+      return NextResponse.json({
+        units: unitsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
+        unitGroups: groupsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
+        shiftDefinitions: shiftsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
+        schedules: schedulesSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
+        vacations: vacationsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
+        calendars: calendarsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
+        bootstrapMode: 'full',
+      });
+    } catch (dataError: any) {
+      console.warn('[DP bootstrap] Falling back to empty payload after data read failure.', dataError);
+      return NextResponse.json({
+        units: [],
+        unitGroups: [],
+        shiftDefinitions: [],
+        schedules: [],
+        vacations: [],
+        calendars: [],
+        bootstrapMode: 'fallback',
+        error: dataError?.message ?? 'Falha ao carregar dados do DP.',
+      });
+    }
   } catch (error: any) {
     console.error('[DP bootstrap] Failed to load bootstrap data.', error);
     return NextResponse.json({ error: error?.message ?? 'Erro ao carregar bootstrap do DP.' }, { status: 500 });

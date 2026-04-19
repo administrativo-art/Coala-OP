@@ -13,7 +13,7 @@ import {
   X, LayoutDashboard, Package, ClipboardList, BarChart2,
   ShoppingCart, Settings, HelpCircle, LogOut, ShieldAlert,
   ListChecks, DollarSign, ListTodo, Target,
-  CalendarDays, Umbrella, LayoutGrid
+  CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet, ReceiptText, Landmark
 } from "lucide-react";
 
 interface NavItem {
@@ -82,11 +82,27 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
       ],
     },
     {
+      label: "Financeiro",
+      items: [
+        { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
+        { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view },
+        { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view },
+        { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", icon: DollarSign, show: permissions.financial?.financialFlow },
+        { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
+      ],
+    },
+    {
       label: "Departamento Pessoal",
       items: [
         { label: "Painel DP",       href: "/dashboard/dp",               icon: LayoutGrid,   show: permissions.dp?.view },
         { label: "Escalas de Trabalho",         href: "/dashboard/dp/schedules",      icon: CalendarDays, show: permissions.dp?.schedules?.view },
         { label: "Férias da equipe",          href: "/dashboard/dp/ferias",         icon: Umbrella,     show: permissions.dp?.vacation?.viewAll },
+      ],
+    },
+    {
+      label: "Mídia",
+      items: [
+        { label: "Coala Signage", href: "/signage", icon: MonitorPlay, show: permissions.signage?.view || permissions.signage?.manage },
       ],
     },
     {
@@ -138,13 +154,14 @@ export function GlassSidebar({ open, onOpenChange }: GlassSidebarProps) {
         )}
       >
         {/* Logo */}
-        <div className="relative flex-shrink-0">
-          <img
-            src={brand.logo}
-            alt={brand.name}
-            className="w-full rounded-t-2xl p-4"
-            style={{ objectFit: "contain", display: "block" }}
-          />
+        <div className="relative flex-shrink-0 px-4 pt-4 pb-2">
+          <div className="overflow-hidden rounded-xl">
+            <img
+              src={brand.logo}
+              alt={brand.name}
+              className="block h-28 w-full object-cover object-center"
+            />
+          </div>
           <button
             onClick={() => onOpenChange(false)}
             className={cn(

@@ -14,6 +14,7 @@ export type Kiosk = {
   name: string;
   pdvFilialId?: string;
   bizneoId?: string;
+  signageEnabled?: boolean;
 };
 
 export type Location = {
@@ -344,12 +345,22 @@ export type PermissionSet = {
   reposition: { cancel: boolean; };
   // itemRequests is now managed under stock.stockCount
   itemRequests: { add: boolean; approve: boolean; };
+  signage: { view: boolean; manage: boolean; };
   dp: {
     view: boolean;
     schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
     collaborators: { view: boolean; add: boolean; edit: boolean; terminate: boolean; };
     settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; };
+  };
+  financial: {
+    view: boolean;
+    dashboard: boolean;
+    cashFlow: { view: boolean; create: boolean; };
+    financialFlow: boolean;
+    dre: boolean;
+    expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
+    settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; };
   };
 };
 
@@ -386,6 +397,65 @@ export type User = {
   terminationReason?: 'Sem Justa Causa' | 'Pedido de Demissão' | 'Acordo' | 'Justa Causa';
   terminationCause?: string;
   terminationNotes?: string;
+};
+
+export type SignageSlideType = 'image' | 'video' | 'text';
+
+export type SignageSlide = {
+  id: string;
+  title: string;
+  type: SignageSlideType;
+  durationMs: number;
+  order: number;
+  kioskIds: string[];
+  isActive: boolean;
+  assetUrl?: string;
+  assetPath?: string;
+  assetKind?: 'image' | 'video';
+  text?: string;
+  background?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: {
+    userId: string;
+    username: string;
+  };
+  updatedBy: {
+    userId: string;
+    username: string;
+  };
+};
+
+export type PublishedPlayerSlide = {
+  id: string;
+  title: string;
+  type: SignageSlideType;
+  durationMs: number;
+  order: number;
+  assetUrl?: string;
+  assetKind?: 'image' | 'video';
+  text?: string;
+  background?: string;
+};
+
+export type PublishedPlayerDocument = {
+  kioskId: string;
+  kioskName?: string;
+  updatedAt: string;
+  generatedBy: {
+    userId: string;
+    username: string;
+  };
+  slides: PublishedPlayerSlide[];
+};
+
+export type PlayerHeartbeat = {
+  kioskId: string;
+  kioskName?: string;
+  lastSeenAt: string;
+  status: 'cache' | 'realtime';
+  currentSlideId?: string;
+  updatedAt?: string;
 };
 
 export type Product = {
@@ -705,12 +775,22 @@ export const defaultGuestPermissions: PermissionSet = {
     reposition: { cancel: false },
     // itemRequests is now managed under stock.stockCount
     itemRequests: { add: false, approve: false },
+    signage: { view: false, manage: false },
     dp: {
       view: false,
       schedules: { view: false, create: false, edit: false, delete: false, export: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
       collaborators: { view: false, add: false, edit: false, terminate: false },
       settings: { manageUnits: false, manageShifts: false, manageCalendars: false },
+    },
+    financial: {
+      view: false,
+      dashboard: false,
+      cashFlow: { view: false, create: false },
+      financialFlow: false,
+      dre: false,
+      expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
+      settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false },
     },
 };
 
@@ -726,12 +806,22 @@ export const defaultAdminPermissions: PermissionSet = {
     reposition: { cancel: true },
     help: { view: true },
     itemRequests: { add: true, approve: true },
+    signage: { view: true, manage: true },
     dp: {
       view: true,
       schedules: { view: true, create: true, edit: true, delete: true, export: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
       collaborators: { view: true, add: true, edit: true, terminate: true },
       settings: { manageUnits: true, manageShifts: true, manageCalendars: true },
+    },
+    financial: {
+      view: true,
+      dashboard: true,
+      cashFlow: { view: true, create: true },
+      financialFlow: true,
+      dre: true,
+      expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
+      settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true },
     },
 };
 

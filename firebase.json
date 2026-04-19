@@ -2,11 +2,23 @@
   "storage": {
     "rules": "storage.rules"
   },
-  "firestore": {
-    "database": "coala",
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
+  "firestore": [
+    {
+      "database": "coala",
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
+    },
+    {
+      "database": "coala-signage",
+      "rules": "firestore.signage.rules",
+      "indexes": "firestore.signage.indexes.json"
+    },
+    {
+      "database": "coala-financeiro",
+      "rules": "firestore.financial.rules",
+      "indexes": "firestore.financial.indexes.json"
+    }
+  ],
   "functions": [
     {
       "source": "functions",

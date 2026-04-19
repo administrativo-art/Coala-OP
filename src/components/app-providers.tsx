@@ -33,11 +33,30 @@ import { Toaster } from "@/components/ui/toaster";
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isStandaloneEscala = pathname === '/escala';
+  const isPlayerRoute = pathname?.startsWith('/player');
+  const isSignageRoute = pathname?.startsWith('/signage');
+  const needsDPProvider = pathname?.startsWith('/dashboard/dp') || pathname === '/dashboard/settings/units';
+  const appChildren = needsDPProvider ? <DPProvider>{children}</DPProvider> : children;
 
-  if (isStandaloneEscala) {
+  if (isStandaloneEscala || isPlayerRoute) {
     return (
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         {children}
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
+  if (isSignageRoute) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ProfilesProvider>
+          <AuthProvider>
+            <KiosksProvider>
+              {children}
+            </KiosksProvider>
+          </AuthProvider>
+        </ProfilesProvider>
         <Toaster />
       </ThemeProvider>
     );
@@ -70,9 +89,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                                                                         <ProductSimulationProvider>
                                                                             <CompetitorProvider>
                                                                                 <AllTasksProvider>
-                                                                                    <DPProvider>
-                                                                                        {children}
-                                                                                    </DPProvider>
+                                                                                    {appChildren}
                                                                                 </AllTasksProvider>
                                                                             </CompetitorProvider>
                                                                         </ProductSimulationProvider>

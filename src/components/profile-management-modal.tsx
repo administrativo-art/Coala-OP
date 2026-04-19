@@ -20,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@radix-ui/react-accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 
@@ -277,6 +277,11 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const tasksViewWatch = form.watch('permissions.tasks.view' as any);
   const goalsViewWatch = form.watch('permissions.goals.view' as any);
   const settingsViewWatch = form.watch('permissions.settings.view' as any);
+  const signageViewWatch = form.watch('permissions.signage.view' as any);
+  const financialViewWatch = form.watch('permissions.financial.view' as any);
+  const financialCashFlowViewWatch = form.watch('permissions.financial.cashFlow.view' as any);
+  const financialExpensesViewWatch = form.watch('permissions.financial.expenses.view' as any);
+  const financialSettingsViewWatch = form.watch('permissions.financial.settings.view' as any);
   const dpViewWatch = form.watch('permissions.dp.view' as any);
   const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
   const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
@@ -469,6 +474,65 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                               <AccordionContent className="space-y-2 pt-4 p-1">
                                 {renderModuleToggle("permissions.goals.view" as any, "Visualizar Metas", "Permite acessar o módulo de metas.")}
                                 {renderPermissionSwitch("permissions.goals.manage" as any, "Gerenciar Metas", "Permite criar templates, instanciar períodos e encerrar metas.", !goalsViewWatch)}
+                              </AccordionContent>
+                            </AccordionItem>
+
+                            {/* ── SIGNAGE ── */}
+                            <AccordionItem value="signage">
+                              <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b">
+                                <div className="flex items-center"><MonitorPlay className="mr-2 h-5 w-5" /> Signage</div>
+                              </AccordionTrigger>
+                              <AccordionContent className="space-y-2 pt-4 p-1">
+                                {renderModuleToggle("permissions.signage.view" as any, "Visualizar Coala Signage", "Permite acessar o painel do signage e acompanhar o conteúdo publicado.")}
+                                {renderPermissionSwitch("permissions.signage.manage" as any, "Gerenciar Coala Signage", "Permite criar slides, enviar mídia e publicar conteúdo por quiosque.", !signageViewWatch)}
+                              </AccordionContent>
+                            </AccordionItem>
+
+                            {/* ── FINANCEIRO ── */}
+                            <AccordionItem value="financial">
+                              <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b">
+                                <div className="flex items-center"><DollarSign className="mr-2 h-5 w-5" /> Financeiro</div>
+                              </AccordionTrigger>
+                              <AccordionContent className="space-y-4 p-1 pt-4">
+                                {renderModuleToggle("permissions.financial.view" as any, "Acessar módulo financeiro", "Permissão geral para acessar o dashboard financeiro, DRE, fluxo de caixa e despesas.")}
+                                {renderPermissionSwitch("permissions.financial.dashboard" as any, "Visualizar painel financeiro", "Permite acessar o painel consolidado do módulo.", !financialViewWatch)}
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Fluxo de caixa</h4>
+                                  {renderPermissionSwitch("permissions.financial.cashFlow.view" as any, "Visualizar fluxo de caixa", "Permite consultar contas, saldos e lançamentos financeiros.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.cashFlow.create" as any, "Criar lançamentos", "Permite registrar receitas, transferências e ajustes.", !financialCashFlowViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Receipt className="h-4 w-4" /> Despesas</h4>
+                                  {renderPermissionSwitch("permissions.financial.expenses.view" as any, "Visualizar despesas", "Permite acessar despesas, contas a pagar e histórico.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.expenses.create" as any, "Criar despesas", "Permite lançar novas despesas e parcelas.", !financialExpensesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.expenses.edit" as any, "Editar despesas", "Permite alterar despesas e classificações.", !financialExpensesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.expenses.pay" as any, "Registrar pagamentos", "Permite liquidar despesas e gerar pagamentos.", !financialExpensesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.expenses.import" as any, "Importar extratos", "Permite importar extratos bancários e efetivar transações.", !financialExpensesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.expenses.delete" as any, "Excluir despesas", "Permite remover despesas e registros financeiros.", !financialExpensesViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><AreaChart className="h-4 w-4" /> Análises</h4>
+                                  {renderPermissionSwitch("permissions.financial.financialFlow" as any, "Visualizar fluxo financeiro", "Permite analisar despesas provisionadas e pagas.", !financialViewWatch)}
+                                  {renderPermissionSwitch("permissions.financial.dre" as any, "Visualizar DRE", "Permite acessar o demonstrativo de resultado.", !financialViewWatch)}
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Settings className="h-4 w-4" /> Configurações financeiras</h4>
+                                  {renderPermissionSwitch("permissions.financial.settings.view" as any, "Visualizar configurações financeiras", "Permite acessar cadastros e parâmetros do módulo financeiro.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.settings.manageAccountPlans" as any, "Gerenciar plano de contas", "Permite criar, editar e excluir planos de contas.", !financialSettingsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.settings.manageResultCenters" as any, "Gerenciar centros de resultado", "Permite criar, editar e excluir centros de resultado.", !financialSettingsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.settings.manageBankAccounts" as any, "Gerenciar contas bancárias", "Permite manter contas e métodos de pagamento.", !financialSettingsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.settings.manageImportAliases" as any, "Gerenciar aliases de importação", "Permite manter regras automáticas de classificação de extratos.", !financialSettingsViewWatch, true)}
+                                  </div>
+                                </div>
                               </AccordionContent>
                             </AccordionItem>
 
