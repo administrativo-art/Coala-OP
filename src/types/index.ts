@@ -143,6 +143,7 @@ export type ConsumptionReport = {
   reportName?: string;
   month: number;
   year: number;
+  day?: number;
   kioskId: string;
   kioskName?: string;
   createdAt: string; // ISO String

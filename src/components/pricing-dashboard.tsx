@@ -222,7 +222,7 @@ export function PricingDashboard({ simulations, categories, isLoading, getProfit
                                 <CardDescription>Clique em uma barra para selecionar a mercadoria e ver mais detalhes.</CardDescription>
                             </div>
                              <Select value={chartFilter} onValueChange={setChartFilter}>
-                                <SelectTrigger className="w-[300px]">
+                                <SelectTrigger className="w-full sm:w-[300px]">
                                     <SelectValue placeholder="Filtrar por..." />
                                 </SelectTrigger>
                                 <SelectContent>

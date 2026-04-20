@@ -125,6 +125,7 @@ export function GoalsAnalysisDashboard() {
           {historicPeriods.length === 0 ? (
             <p className="py-10 text-center text-muted-foreground">Nenhum período encerrado encontrado.</p>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -163,6 +164,7 @@ export function GoalsAnalysisDashboard() {
                 })}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
