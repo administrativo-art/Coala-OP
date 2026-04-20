@@ -66,34 +66,15 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
     const all: NavSection[] = [
       {
         key: "ops",
-        label: "Operações",
+        label: "Departamento Operacional",
         color: SECTION_COLORS.ops,
         items: [
           { label: "Painel de Operações", href: "/dashboard/operations", icon: LayoutGrid, show: permissions.dashboard.operational },
           { label: "Tarefas gerais", href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, badge: legacyTasks.length > 0 ? { count: legacyTasks.length, variant: "warn" } : undefined },
           { label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package, show: permissions.stock.view },
-        ],
-      },
-      {
-        key: "com",
-        label: "Comercial",
-        color: SECTION_COLORS.com,
-        items: [
           { label: "Painel Comercial", href: "/dashboard/commercial", icon: LayoutGrid, show: permissions.dashboard.pricing || permissions.dashboard.technicalSheets },
           { label: "Metas de Vendas", href: "/dashboard/goals", icon: Target, show: permissions.goals?.view },
           { label: "Gestão de Preços", href: "/dashboard/pricing", icon: DollarSign, show: permissions.pricing.view },
-        ],
-      },
-      {
-        key: "fin",
-        label: "Financeiro",
-        color: SECTION_COLORS.fin,
-        items: [
-          { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
-          { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view },
-          { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view },
-          { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", icon: DollarSign, show: permissions.financial?.financialFlow },
-          { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
         ],
       },
       {
@@ -108,10 +89,22 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       },
       {
         key: "midia",
-        label: "Mídia",
+        label: "Departamento de Marketing",
         color: SECTION_COLORS.midia,
         items: [
           { label: "Coala Signage", href: "/signage", icon: MonitorPlay, show: permissions.signage?.view || permissions.signage?.manage },
+        ],
+      },
+      {
+        key: "fin",
+        label: "Departamento Financeiro",
+        color: SECTION_COLORS.fin,
+        items: [
+          { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
+          { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view },
+          { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view },
+          { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", icon: DollarSign, show: permissions.financial?.financialFlow },
+          { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
         ],
       },
       {
@@ -130,7 +123,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
 
   // Default: open all sections
   const [openSections, setOpenSections] = useState<Set<string>>(
-    () => new Set(["ops", "com", "fin", "dp", "midia", "cfg"])
+    () => new Set(["ops", "dp", "midia", "fin", "cfg"])
   );
 
   function toggleSection(key: string) {
