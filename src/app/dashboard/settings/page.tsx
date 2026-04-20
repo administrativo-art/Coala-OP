@@ -3,73 +3,116 @@
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Settings2 } from 'lucide-react';
 import { PermissionGuard } from "@/components/permission-guard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import dynamic from 'next/dynamic';
 
-const UserManagement = dynamic(() => import('@/components/user-management').then(mod => mod.UserManagement), { ssr: false });
-const KioskManagement = dynamic(() => import('@/components/kiosk-management').then(mod => mod.KioskManagement), { ssr: false });
-const CalendarManagement = dynamic(() => import('@/components/calendar-management').then(mod => mod.CalendarManagement), { ssr: false });
-const PdvSyncManagement = dynamic(() => import('@/components/pdv-sync-management').then(mod => mod.PdvSyncManagement), { ssr: false });
-const FinancialProvider = dynamic(() => import('@/features/financial/components/financial-provider').then(mod => mod.FinancialProvider), { ssr: false });
-const FinancialSettingsPage = dynamic(() => import('@/features/financial/pages/settings-page').then(mod => mod.FinancialSettingsPage), { ssr: false });
+const UserManagement      = dynamic(() => import('@/components/user-management').then(m => m.UserManagement), { ssr: false });
+const KioskManagement     = dynamic(() => import('@/components/kiosk-management').then(m => m.KioskManagement), { ssr: false });
+const CalendarManagement  = dynamic(() => import('@/components/calendar-management').then(m => m.CalendarManagement), { ssr: false });
+const PdvSyncManagement   = dynamic(() => import('@/components/pdv-sync-management').then(m => m.PdvSyncManagement), { ssr: false });
+const FinancialProvider   = dynamic(() => import('@/features/financial/components/financial-provider').then(m => m.FinancialProvider), { ssr: false });
+const FinancialSettingsPage = dynamic(() => import('@/features/financial/pages/settings-page').then(m => m.FinancialSettingsPage), { ssr: false });
 
-export default function SettingsPage() {
-    const { permissions } = useAuth();
-    const router = useRouter();
-
-    return (
-        <PermissionGuard allowed={permissions.settings.view}>
-            <div className="w-full space-y-6">
-                <div className="flex items-center gap-4 mb-2">
-                    <Button
-                        onClick={() => router.back()}
-                        variant="ghost"
-                        className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                        aria-label="Voltar"
-                    >
-                        <ArrowLeft className="w-6 h-6" />
-                    </Button>
-                    <div>
-                        <h1 className="text-3xl font-bold">Configurações</h1>
-                        <p className="text-sm text-muted-foreground">Gerencie usuários, perfis e outras configurações do sistema.</p>
-                    </div>
-                </div>
-
-                <Tabs defaultValue="usuarios">
-                    <TabsList className="flex w-full overflow-x-auto">
-                        <TabsTrigger value="usuarios" className="flex-shrink-0">Usuários</TabsTrigger>
-                        <TabsTrigger value="unidades" className="flex-shrink-0">Unidades</TabsTrigger>
-                        <TabsTrigger value="calendarios" className="flex-shrink-0">Calendários</TabsTrigger>
-                        <TabsTrigger value="sincronizacao" className="flex-shrink-0">Sincronização PDV</TabsTrigger>
-                        <TabsTrigger value="financeiro" className="flex-shrink-0">Financeiro</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="usuarios" className="mt-4">
-                        <UserManagement />
-                    </TabsContent>
-
-                    <TabsContent value="unidades" className="mt-4">
-                        <KioskManagement />
-                    </TabsContent>
-
-                    <TabsContent value="calendarios" className="mt-4">
-                        <CalendarManagement />
-                    </TabsContent>
-
-                    <TabsContent value="sincronizacao" className="mt-4">
-                        <PdvSyncManagement />
-                    </TabsContent>
-
-                    <TabsContent value="financeiro" className="mt-4">
-                        <FinancialProvider>
-                            <FinancialSettingsPage />
-                        </FinancialProvider>
-                    </TabsContent>
-                </Tabs>
-            </div>
-        </PermissionGuard>
-    );
+function SectionHeader({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="mb-4 border-b pb-3">
+      <h2 className="text-base font-semibold">{title}</h2>
+      {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+    </div>
+  );
 }
 
+function EmptySection({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed py-16 text-center text-muted-foreground">
+      <Settings2 className="h-8 w-8 opacity-30" />
+      <p className="text-sm font-medium">Configurações de {label}</p>
+      <p className="text-xs opacity-60">Em breve disponíveis aqui.</p>
+    </div>
+  );
+}
+
+export default function SettingsPage() {
+  const { permissions } = useAuth();
+  const router = useRouter();
+
+  return (
+    <PermissionGuard allowed={permissions.settings.view}>
+      <div className="w-full space-y-6">
+        <div className="flex items-center gap-4 mb-2">
+          <Button
+            onClick={() => router.back()}
+            variant="ghost"
+            className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
+            aria-label="Voltar"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Configurações</h1>
+            <p className="text-sm text-muted-foreground">Gerencie as configurações de cada departamento.</p>
+          </div>
+        </div>
+
+        <Tabs defaultValue="operacional">
+          <TabsList className="flex w-full overflow-x-auto">
+            <TabsTrigger value="operacional" className="flex-shrink-0">Operacional</TabsTrigger>
+            <TabsTrigger value="comercial"   className="flex-shrink-0">Comercial</TabsTrigger>
+            <TabsTrigger value="pessoal"     className="flex-shrink-0">Pessoal</TabsTrigger>
+            <TabsTrigger value="financeiro"  className="flex-shrink-0">Financeiro</TabsTrigger>
+          </TabsList>
+
+          {/* ── Operacional ───────────────────────────────────── */}
+          <TabsContent value="operacional" className="mt-6 space-y-10">
+            <div>
+              <SectionHeader
+                title="Unidades e Kiosks"
+                description="Gerencie as unidades operacionais do sistema."
+              />
+              <KioskManagement />
+            </div>
+            <div>
+              <SectionHeader
+                title="Sincronização PDV"
+                description="Configure a integração com o ponto de venda."
+              />
+              <PdvSyncManagement />
+            </div>
+          </TabsContent>
+
+          {/* ── Comercial ─────────────────────────────────────── */}
+          <TabsContent value="comercial" className="mt-6">
+            <EmptySection label="Comercial" />
+          </TabsContent>
+
+          {/* ── Pessoal ───────────────────────────────────────── */}
+          <TabsContent value="pessoal" className="mt-6 space-y-10">
+            <div>
+              <SectionHeader
+                title="Usuários e Perfis"
+                description="Gerencie os usuários e permissões de acesso ao sistema."
+              />
+              <UserManagement />
+            </div>
+            <div>
+              <SectionHeader
+                title="Calendários de Trabalho"
+                description="Configure os calendários usados nas escalas do departamento pessoal."
+              />
+              <CalendarManagement />
+            </div>
+          </TabsContent>
+
+          {/* ── Financeiro ────────────────────────────────────── */}
+          <TabsContent value="financeiro" className="mt-6">
+            <FinancialProvider>
+              <FinancialSettingsPage />
+            </FinancialProvider>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </PermissionGuard>
+  );
+}
