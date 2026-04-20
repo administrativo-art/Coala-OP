@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import { Menu, Search } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { Menu, Search, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserProfile } from "./user-profile";
 import { type LegacyTask, NotificationCenter } from "./notification-center";
 import { GlobalBarcodeScanner } from "./global-barcode-scanner";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
+import { cn } from "@/lib/utils";
 
 // ── Route label map (mirrors sidebar) ────────────────────────────────────────
 
@@ -157,35 +158,152 @@ function StatusBar({ taskCount }: { taskCount: number }) {
   );
 }
 
+// ── Search items (all navigable pages) ───────────────────────────────────────
+
+const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
+  { label: "Painel Central", href: "/dashboard", section: "Início" },
+  { label: "Painel de Operações", href: "/dashboard/operations", section: "Departamento Operacional" },
+  { label: "Tarefas gerais", href: "/dashboard/tasks", section: "Departamento Operacional" },
+  { label: "Gestão de Estoque", href: "/dashboard/stock", section: "Departamento Operacional" },
+  { label: "Validades", href: "/dashboard/stock/expiry", section: "Departamento Operacional" },
+  { label: "Reposição", href: "/dashboard/stock/restock", section: "Departamento Operacional" },
+  { label: "Histórico de Movimentos", href: "/dashboard/stock/movement", section: "Departamento Operacional" },
+  { label: "Auditoria de Estoque", href: "/dashboard/stock/audit", section: "Departamento Operacional" },
+  { label: "Análise de Consumo", href: "/dashboard/stock/analysis", section: "Departamento Operacional" },
+  { label: "Compras", href: "/dashboard/stock/purchasing", section: "Departamento Operacional" },
+  { label: "Painel Comercial", href: "/dashboard/commercial", section: "Departamento Operacional" },
+  { label: "Metas de Vendas", href: "/dashboard/goals", section: "Departamento Operacional" },
+  { label: "Gestão de Preços", href: "/dashboard/pricing", section: "Departamento Operacional" },
+  { label: "Painel DP", href: "/dashboard/dp", section: "Departamento Pessoal" },
+  { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", section: "Departamento Pessoal" },
+  { label: "Férias da equipe", href: "/dashboard/dp/ferias", section: "Departamento Pessoal" },
+  { label: "Coala Signage", href: "/signage", section: "Departamento de Marketing" },
+  { label: "Painel Financeiro", href: "/dashboard/financial", section: "Departamento Financeiro" },
+  { label: "Despesas", href: "/dashboard/financial/expenses", section: "Departamento Financeiro" },
+  { label: "Nova Despesa", href: "/dashboard/financial/expenses/new", section: "Departamento Financeiro" },
+  { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", section: "Departamento Financeiro" },
+  { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", section: "Departamento Financeiro" },
+  { label: "DRE", href: "/dashboard/financial/dre", section: "Departamento Financeiro" },
+  { label: "Cadastros", href: "/dashboard/registration", section: "Configurações" },
+  { label: "Configurações", href: "/dashboard/settings", section: "Configurações" },
+  { label: "Ajuda", href: "/dashboard/help", section: "Configurações" },
+];
+
 // ── Search bar ────────────────────────────────────────────────────────────────
 
 function HeaderSearch() {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
 
+  const results = query.trim()
+    ? SEARCH_ITEMS.filter(item =>
+        item.label.toLowerCase().includes(query.toLowerCase()) ||
+        item.section.toLowerCase().includes(query.toLowerCase())
+      ).slice(0, 8)
+    : [];
+
+  const navigate = useCallback((href: string) => {
+    router.push(href);
+    setQuery("");
+    setOpen(false);
+    inputRef.current?.blur();
+  }, [router]);
+
+  // ⌘K global shortcut
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         inputRef.current?.focus();
+        setOpen(true);
       }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  // Close on outside click
+  useEffect(() => {
+    function onPointer(e: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, []);
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setCursor(c => Math.min(c + 1, results.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setCursor(c => Math.max(c - 1, 0));
+    } else if (e.key === "Enter") {
+      if (results[cursor]) navigate(results[cursor].href);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+      setQuery("");
+      inputRef.current?.blur();
+    }
+  }
+
   return (
-    <div className="ml-4 hidden max-w-[260px] flex-1 lg:flex">
-      <label className="flex h-8 w-full cursor-text items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 text-xs text-muted-foreground transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+    <div ref={containerRef} className="relative ml-4 hidden max-w-[260px] flex-1 lg:flex">
+      <label className={cn(
+        "flex h-8 w-full cursor-text items-center gap-2 rounded-lg border bg-muted/50 px-3 text-xs text-muted-foreground transition-colors",
+        open ? "border-primary ring-2 ring-primary/20" : "border-border"
+      )}>
         <Search className="h-3 w-3 flex-shrink-0" />
         <input
           ref={inputRef}
           className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
           placeholder="Buscar…"
+          value={query}
+          onChange={e => { setQuery(e.target.value); setCursor(0); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          autoComplete="off"
         />
-        <kbd className="hidden rounded bg-border px-1 py-px font-mono text-[9px] text-muted-foreground sm:block">
-          ⌘K
-        </kbd>
+        {!open && (
+          <kbd className="rounded bg-border px-1 py-px font-mono text-[9px] text-muted-foreground">
+            ⌘K
+          </kbd>
+        )}
       </label>
+
+      {open && results.length > 0 && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-full overflow-hidden rounded-xl border bg-background shadow-xl">
+          {results.map((item, i) => (
+            <button
+              key={item.href}
+              type="button"
+              onPointerDown={e => { e.preventDefault(); navigate(item.href); }}
+              className={cn(
+                "flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
+                i === cursor ? "bg-muted" : "hover:bg-muted/60"
+              )}
+            >
+              <ArrowRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">{item.label}</p>
+                <p className="truncate text-[10px] text-muted-foreground">{item.section}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {open && query.trim() && results.length === 0 && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-full overflow-hidden rounded-xl border bg-background shadow-xl">
+          <p className="px-3 py-4 text-center text-xs text-muted-foreground">Nenhuma página encontrada.</p>
+        </div>
+      )}
     </div>
   );
 }
