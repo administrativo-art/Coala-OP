@@ -88,7 +88,7 @@ function StatusBar({ taskCount }: { taskCount: number }) {
   const now = Date.now();
   const in48h = now + 48 * 60 * 60 * 1000;
   const expiringCount = lots.filter((l) => {
-    if (!l.expiryDate) return false;
+    if (!l.expiryDate || (l.quantity ?? 0) <= 0) return false;
     const d = new Date(l.expiryDate).getTime();
     return d >= now && d <= in48h;
   }).length;
