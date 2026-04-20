@@ -319,11 +319,19 @@ function getInitials(name: string): string {
   return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
 }
 
+function looksLikeOpaqueUserIdentifier(value?: string | null): boolean {
+  if (!value) return true;
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+
+  return /^[A-Za-z0-9_-]{20,}$/.test(trimmed);
+}
+
 // ── Dialog de análise diária (Mensal) ─────────────────────────────────────────
 
-function DailyAnalysisModal({ open, onOpenChange, period, title }: {
+function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName }: {
   open: boolean; onOpenChange: (v: boolean) => void;
-  period: GoalPeriodDoc | null; title: string;
+  period: GoalPeriodDoc | null; title: string; subjectName?: string | null;
 }) {
   if (!period) return null;
   const now = new Date();
@@ -364,9 +372,14 @@ function DailyAnalysisModal({ open, onOpenChange, period, title }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-md">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="pr-6 text-left leading-tight">{title}</DialogTitle>
+          {subjectName ? (
+            <div className="text-sm font-semibold text-foreground/85 break-words">
+              {subjectName}
+            </div>
+          ) : null}
           <DialogDescription>Detalhamento de metas diárias para o período</DialogDescription>
         </DialogHeader>
 
@@ -881,7 +894,20 @@ export function GoalsTrackingDashboard() {
   const availableKiosks = isAdmin ? kiosks : kiosks.filter(k => userKioskIds.includes(k.id));
 
   const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name ?? id;
-  const getUserName = (id: string) => users.find(u => u.id === id)?.username ?? id;
+  const getUserName = (id: string) => {
+    const collaborator = users.find(u => u.id === id);
+    if (!collaborator) return "Colaborador removido";
+
+    const candidates = [
+      collaborator.username,
+      collaborator.email?.split('@')[0],
+      collaborator.registrationIdBizneo,
+      collaborator.registrationIdPdv,
+    ];
+
+    const preferred = candidates.find(candidate => candidate && !looksLikeOpaqueUserIdentifier(candidate));
+    return preferred ?? "Colaborador";
+  };
 
   // Modais
   const [newMetaOpen, setNewMetaOpen] = useState(false);
@@ -1321,7 +1347,8 @@ export function GoalsTrackingDashboard() {
           targetValue: dailyEmpModalData.eg.targetValue,
           dailyProgress: dailyEmpModalData.eg.dailyProgress,
         } : null} 
-        title={`Detalhamento Diário: ${dailyEmpModalData?.userName}`}
+        title="Detalhamento Diário"
+        subjectName={dailyEmpModalData?.userName}
       />
       
       <GoalsAiAnalysisModal

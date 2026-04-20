@@ -21,7 +21,7 @@ export default function MovementAnalysisPage() {
             </div>
             <div className="space-y-1 mb-6">
                 <h1 className="text-3xl font-bold">Análise de movimentações</h1>
-                <p className="text-sm text-muted-foreground">Analise o comportamento de abastecimento e movimentação de insumos entre as unidades.</p>
+                <p className="text-sm text-muted-foreground">Compare consumo, saldo e transferências de insumos entre as unidades.</p>
             </div>
             <MovementAnalysis />
         </div>

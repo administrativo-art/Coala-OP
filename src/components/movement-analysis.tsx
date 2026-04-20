@@ -21,7 +21,7 @@ import { Skeleton } from "./ui/skeleton"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
 import { Input } from "./ui/input"
 import { MultiSelect } from "./ui/multi-select"
-import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, ChevronLeft, ChevronRight, Package, Wrench, ArrowLeftRight, Filter } from "lucide-react";
+import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, ChevronLeft, ChevronRight, Package, Wrench, ArrowLeftRight, Filter, AlertTriangle } from "lucide-react";
 import { LineChart, Line, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -33,12 +33,85 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 
 const stdDev = (arr: number[]): number => {
     if (arr.length === 0) return 0;
     const mean = arr.reduce((a, b) => a + b) / arr.length;
     return Math.sqrt(arr.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / arr.length);
 };
+
+const GENERIC_PACKAGE_UNITS = new Set(['un', 'unidade', 'bag', 'pacote', 'caixa']);
+
+function getMovementQuantityInBaseUnit(
+  movement: Pick<MovementRecord, 'quantityChange'>,
+  product: Product,
+  baseProduct: BaseProduct,
+) {
+  const quantity = Number(movement.quantityChange || 0);
+  if (!Number.isFinite(quantity)) return 0;
+
+  try {
+    const fromUnit = (product.unit || 'un').toLowerCase();
+    if (GENERIC_PACKAGE_UNITS.has(fromUnit)) {
+      return quantity * Number(product.packageSize || 1);
+    }
+
+    const valueOfOnePackage = convertValue(
+      Number(product.packageSize || 1),
+      product.unit,
+      baseProduct.unit,
+      product.category,
+    );
+
+    return quantity * valueOfOnePackage;
+  } catch {
+    return quantity * Number(product.packageSize || 1);
+  }
+}
+
+function getSignedAdjustmentDelta(type: string, quantityInBase: number) {
+  if (!quantityInBase) return 0;
+  if (type === 'ENTRADA_CORRECAO' || type === 'ENTRADA_ESTORNO' || type.includes('acréscimo')) {
+    return quantityInBase;
+  }
+
+  if (
+    type === 'SAIDA_CORRECAO' ||
+    type === 'SAIDA_ESTORNO' ||
+    type.includes('decréscimo') ||
+    type.includes('Divergência')
+  ) {
+    return -quantityInBase;
+  }
+
+  return 0;
+}
+
+function getConsumptionReportDate(report: ConsumptionReport) {
+  if (typeof report.day === 'number') {
+    return new Date(report.year, report.month - 1, report.day);
+  }
+
+  const idMatch = report.id.match(/(\d{4})_(\d{2})_(\d{2})$/);
+  if (idMatch) {
+    return new Date(Number(idMatch[1]), Number(idMatch[2]) - 1, Number(idMatch[3]));
+  }
+
+  const nameMatch = report.reportName?.match(/(\d{4})-(\d{2})-(\d{2})$/);
+  if (nameMatch) {
+    return new Date(Number(nameMatch[1]), Number(nameMatch[2]) - 1, Number(nameMatch[3]));
+  }
+
+  return null;
+}
+
+function rangeFullyCoversMonth(startDate: Date, endDate: Date, monthDate: Date) {
+  const monthStart = startOfMonth(monthDate);
+  const monthEnd = endOfMonth(monthDate);
+
+  return startDate <= monthStart && endDate >= monthEnd;
+}
 
 // Card model for transfer data
 type TransferCardModel = {
@@ -175,7 +248,7 @@ const formatNumber = (value: number) => {
     return value.toLocaleString('pt-BR', options);
 };
 
-function BalanceAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; systemStartDate?: string; }) {
+function BalanceAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; systemStartDate?: string | null; }) {
   const { history, loading: historyLoading } = useMovementHistory();
   const { products, loading: productsLoading } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
@@ -227,24 +300,7 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate 
           const product = productMap.get(movement.productId);
           if (!product || product.baseProductId !== selectedBaseId) return;
 
-          let qtyInBase = 0;
-          try {
-            // A quantidade da movimentação é em pacotes. Precisamos converter para a unidade base.
-            // Se a unidade for 'un' ou similar, e o insumo base for volume/massa, usamos o packageSize como fator.
-            const fromUnit = (product.unit || 'un').toLowerCase();
-            const toUnit = (baseProduct.unit || '').toLowerCase();
-            
-            if (fromUnit === 'un' || fromUnit === 'unidade' || fromUnit === 'bag' || fromUnit === 'pacote' || fromUnit === 'caixa') {
-                 // Fallback: se é uma unidade genérica, tratamos o packageSize como o valor absoluto na unidade base
-                 qtyInBase = movement.quantityChange * (product.packageSize || 1);
-            } else {
-                 const valueOfOnePackage = convertValue(product.packageSize || 1, product.unit, baseProduct.unit, product.category);
-                 qtyInBase = movement.quantityChange * valueOfOnePackage;
-            }
-          } catch(e) {
-            // Último recurso: usar apenas o packageSize se a conversão falhar por categoria
-            qtyInBase = movement.quantityChange * (product.packageSize || 1);
-          }
+          const qtyInBase = getMovementQuantityInBaseUnit(movement, product, baseProduct);
 
           const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
           const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
@@ -283,7 +339,7 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate 
   }, [selectedBaseIds, startPeriod, endPeriod, history, products, baseProducts, loading, productMap, baseProductMap, kioskId, systemStartDate]);
   
   const productOptions = useMemo(() => 
-    baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(p => ({ value: p.id, label: p.name })),
+    [...baseProducts].sort((a,b) => a.name.localeCompare(b.name)).map(p => ({ value: p.id, label: p.name })),
   [baseProducts]);
   
   const formatValue = (value: number, unit: string) => {
@@ -386,7 +442,7 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate 
   );
 }
 
-function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; systemStartDate?: string; }) {
+function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate }: { kioskId: string; startPeriod: string | null; endPeriod: string | null; systemStartDate?: string | null; }) {
   const { history, loading: historyLoading } = useMovementHistory();
   const { products, loading: productsLoading } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
@@ -426,8 +482,13 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const baseProductMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
 
-  const comparisonData = useMemo(() => {
-    if (!startPeriod || !endPeriod || loading) return [];
+  const comparisonSummary = useMemo(() => {
+    if (!startPeriod || !endPeriod || loading) {
+      return {
+        rows: [],
+        hasPartialMonthlyCoverageGap: false,
+      };
+    }
 
     const baseList = selectedBaseIds.length > 0 
       ? baseProducts.filter(bp => selectedBaseIds.includes(bp.id))
@@ -435,8 +496,9 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
 
     const startDate = startOfDay(parseISO(startPeriod));
     const endDate = endOfDay(parseISO(endPeriod));
+    let hasPartialMonthlyCoverageGap = false;
 
-    return baseList.map(baseProduct => {
+    const rows = baseList.map(baseProduct => {
       // 1. Calcular Estoque Inicial (Saldo Anterior acumulado de todo o histórico)
       let estoqueInicial = 0;
       history.forEach(movement => {
@@ -453,18 +515,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
             }
         }
 
-        let qtyInBase = 0;
-        try {
-          const fromUnit = (product.unit || 'un').toLowerCase();
-          if (fromUnit === 'un' || fromUnit === 'unidade' || fromUnit === 'bag' || fromUnit === 'pacote' || fromUnit === 'caixa') {
-              qtyInBase = (movement.quantityChange || 0) * (product.packageSize || 1);
-          } else {
-              const valueOfOnePackage = convertValue(product.packageSize || 0, product.unit, baseProduct.unit, product.category);
-              qtyInBase = (movement.quantityChange || 0) * valueOfOnePackage;
-          }
-        } catch(e) {
-          qtyInBase = (movement.quantityChange || 0) * (product.packageSize || 1);
-        }
+        const qtyInBase = getMovementQuantityInBaseUnit(movement, product, baseProduct);
 
         const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
         const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
@@ -481,33 +532,30 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
       // 2. Calcular Vendas Teóricas (API)
       let theoreticalConsumption = 0;
       reports.forEach(report => {
-        // Lógica de Data similar ao dashboard de vendas
         let dateMatch = false;
-        const reportYear = report.year;
-        const reportMonth = report.month;
-        
-        // Se o relatório tiver o campo 'day' (nem todos têm), usamos precisão diária
-        // Caso contrário, usamos o mês inteiro
-        if ((report as any).day) {
-            const reportDate = new Date(reportYear, reportMonth - 1, (report as any).day);
-            dateMatch = isWithinInterval(reportDate, { start: startDate, end: endDate }) || 
-                        isSameDay(reportDate, startDate) || 
-                        isSameDay(reportDate, endDate);
+        const reportDate = getConsumptionReportDate(report);
+
+        if (reportDate) {
+          dateMatch = isWithinInterval(reportDate, { start: startDate, end: endDate });
         } else {
-            const reportMonthStart = new Date(reportYear, reportMonth - 1, 1);
-            const reportMonthEnd = endOfMonth(reportMonthStart);
-            // Verifica se há sobreposição entre o mês do relatório e o filtro do usuário
-            dateMatch = (reportMonthStart <= endDate && reportMonthEnd >= startDate);
+          const reportMonthStart = new Date(report.year, report.month - 1, 1);
+          const reportMonthEnd = endOfMonth(reportMonthStart);
+
+          if (rangeFullyCoversMonth(startDate, endDate, reportMonthStart)) {
+            dateMatch = true;
+          } else if (reportMonthStart <= endDate && reportMonthEnd >= startDate) {
+            hasPartialMonthlyCoverageGap = true;
+          }
         }
 
         if (dateMatch) {
-            if (kioskId === 'all' || report.kioskId === kioskId) {
-                report.results.forEach(item => {
-                    if (item.baseProductId === baseProduct.id) {
-                        theoreticalConsumption += item.consumedQuantity;
-                    }
-                });
-            }
+          if (kioskId === 'all' || report.kioskId === kioskId) {
+            report.results.forEach(item => {
+              if (item.baseProductId === baseProduct.id) {
+                theoreticalConsumption += item.consumedQuantity;
+              }
+            });
+          }
         }
       });
 
@@ -543,18 +591,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
           const product = productMap.get(movement.productId);
           if (!product || product.baseProductId !== baseProduct.id) return;
 
-          let qtyInBase = 0;
-          try {
-            const fromUnit = (product.unit || 'un').toLowerCase();
-            if (fromUnit === 'un' || fromUnit === 'unidade' || fromUnit === 'bag' || fromUnit === 'pacote' || fromUnit === 'caixa') {
-                qtyInBase = movement.quantityChange * (product.packageSize || 1);
-            } else {
-                const valueOfOnePackage = convertValue(product.packageSize || 1, product.unit, baseProduct.unit, product.category);
-                qtyInBase = movement.quantityChange * valueOfOnePackage;
-            }
-          } catch(e) {
-            qtyInBase = movement.quantityChange * (product.packageSize || 1);
-          }
+          const qtyInBase = getMovementQuantityInBaseUnit(movement, product, baseProduct);
 
           const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
           const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
@@ -568,28 +605,27 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
           // Entradas: Compras e Transferências de Entrada
           const isSupply = type === 'ENTRADA' || type === 'TRANSFERENCIA_ENTRADA';
           
-          // Saídas: Consumo, Perdas, Descartes, Transferências de Saída, Estornos de Entrada
+          // Saídas operacionais: Consumo, Perdas, Descartes e Transferências de Saída
           const isRealExit = type.startsWith('SAIDA_CONSUMO') || 
                             type.startsWith('SAIDA_DESCARTE') || 
-                            type === 'TRANSFERENCIA_SAIDA' || 
-                            type === 'ENTRADA_ESTORNO';
+                            type === 'TRANSFERENCIA_SAIDA';
 
-          // Ajustes: Correções de Inventário e Divergências de Contagem
-          const isAdjustment = type.includes('CORRECAO') || type.includes('Divergência');
+          // Ajustes: Correções, Divergências e Estornos
+          const isAdjustment = type.includes('CORRECAO') || type.includes('Divergência') || type.includes('ESTORNO');
 
           if (isAdjustment) {
-              if (isToKiosk || isFromKiosk) totals.ajustes += qtyInBase;
+              if (isToKiosk || isFromKiosk) {
+                totals.ajustes += getSignedAdjustmentDelta(type, qtyInBase);
+              }
           } else if (isSupply) {
               if (isToKiosk) totals.entradas += qtyInBase;
           } else if (isRealExit) {
-              // We use Math.abs here for easier dashboard display of "Saidas" if needed, 
-              // but for balance math we just sum signed qty.
               if (isFromKiosk) totals.saidas += Math.abs(qtyInBase);
           }
       });
 
-      const divergence = theoreticalConsumption - totals.saidas;
-      const estoqueFinal = (isNaN(estoqueInicial) ? 0 : estoqueInicial) + totals.entradas - totals.saidas;
+      const divergence = theoreticalConsumption - totals.saidas + totals.ajustes;
+      const estoqueFinal = (isNaN(estoqueInicial) ? 0 : estoqueInicial) + totals.entradas - totals.saidas + totals.ajustes;
 
       return {
         baseProductId: baseProduct.id,
@@ -603,12 +639,17 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
         divergence: divergence,
         estoqueFinal
       };
-    }).filter(d => d.entradas > 0 || d.saidasReais > 0 || d.vendasTeoricas > 0 || Math.abs(d.estoqueInicial) > 0)
+    }).filter(d => d.entradas > 0 || d.saidasReais > 0 || d.vendasTeoricas > 0 || Math.abs(d.estoqueInicial) > 0 || Math.abs(d.ajustes) > 0)
       .sort((a, b) => Math.abs(b.divergence) - Math.abs(a.divergence));
-  }, [selectedBaseIds, startPeriod, endPeriod, history, products, baseProducts, reports, loading, productMap, kioskId, systemStartDate]);
+
+    return {
+      rows,
+      hasPartialMonthlyCoverageGap,
+    };
+  }, [selectedBaseIds, startPeriod, endPeriod, history, baseProducts, reports, loading, productMap, kioskId, systemStartDate]);
 
   const productOptions = useMemo(() => 
-    baseProducts.sort((a,b) => a.name.localeCompare(b.name)).map(p => ({ value: p.id, label: p.name })),
+    [...baseProducts].sort((a,b) => a.name.localeCompare(b.name)).map(p => ({ value: p.id, label: p.name })),
   [baseProducts]);
 
   if (loading) return <Skeleton className="h-64 w-full" />;
@@ -626,6 +667,16 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
         />
       </div>
 
+      {comparisonSummary.hasPartialMonthlyCoverageGap && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTitle>Período parcial com consumo mensal</AlertTitle>
+          <AlertDescription>
+            Alguns relatórios de consumo não têm granularidade diária. Para evitar superestimar o período, eles foram ignorados neste comparativo.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader className="bg-muted/50">
@@ -634,6 +685,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
               <TableHead className="text-right">Estoque Inicial</TableHead>
               <TableHead className="text-right">Entradas</TableHead>
               <TableHead className="text-right">Saídas (Sistema)</TableHead>
+              <TableHead className="text-right">Ajustes</TableHead>
               <TableHead className="text-right">Vendas (API)</TableHead>
               <TableHead className="text-right">Divergência</TableHead>
               <TableHead className="text-right">Estoque Final</TableHead>
@@ -641,14 +693,14 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
             </TableRow>
           </TableHeader>
           <TableBody>
-            {comparisonData.length === 0 ? (
+            {comparisonSummary.rows.length === 0 ? (
                 <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                         Nenhum dado encontrado para o período/unidade selecionado.
                     </TableCell>
                 </TableRow>
             ) : (
-                comparisonData.map(row => (
+                comparisonSummary.rows.map(row => (
                     <TableRow key={row.baseProductId}>
                         <TableCell className="font-medium">{row.baseProductName}</TableCell>
                         <TableCell className="text-right text-muted-foreground whitespace-nowrap">
@@ -679,6 +731,17 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                                 className="text-red-600 hover:underline w-full text-right"
                             >
                                 -{formatNumber(row.saidasReais)}
+                            </button>
+                        </TableCell>
+                        <TableCell className={cn(
+                            "text-right",
+                            row.ajustes > 0 ? "text-green-600" : row.ajustes < 0 ? "text-red-600" : "text-muted-foreground"
+                        )}>
+                            <button
+                                onClick={() => openHistory(row.baseProductId, 'AJUSTE')}
+                                className="hover:underline w-full text-right"
+                            >
+                                {row.ajustes > 0 ? '+' : ''}{formatNumber(row.ajustes)}
                             </button>
                         </TableCell>
                         <TableCell className="text-right">
@@ -746,14 +809,14 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
 
 export function MovementAnalysis() {
     const [dateRange, setDateRange] = useState<{ start: string, end: string }>({
-        start: '2026-03-01',
+        start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
         end: format(new Date(), 'yyyy-MM-dd')
     });
     const [activePreset, setActivePreset] = useState<string>('custom');
-    const systemStartDate = '2026-03-01';
     const [selectedBaseProducts, setSelectedBaseProducts] = useState<string[]>([]);
     const [kioskId, setKioskId] = useState<string>('all');
     const [view, setView] = useState<'cards' | 'saldo' | 'comparison'>('comparison');
+    const [hasInitializedCustomRange, setHasInitializedCustomRange] = useState(false);
     
     const { history, loading: historyLoading } = useMovementHistory();
     const { products, loading: productsLoading } = useProducts();
@@ -762,6 +825,31 @@ export function MovementAnalysis() {
     
     const loading = historyLoading || productsLoading || baseProductsLoading || kiosksLoading;
     const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+    const baseProductMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
+    const systemStartDate = useMemo(() => {
+        let earliestDate: Date | null = null;
+
+        history.forEach(movement => {
+            const movementDate = parseISO(movement.timestamp);
+            if (!isValid(movementDate)) return;
+
+            if (!earliestDate || movementDate < earliestDate) {
+                earliestDate = movementDate;
+            }
+        });
+
+        return earliestDate ? format(earliestDate, 'yyyy-MM-dd') : null;
+    }, [history]);
+
+    useEffect(() => {
+        if (loading || hasInitializedCustomRange || !systemStartDate) return;
+
+        setDateRange(prev => ({
+            start: systemStartDate,
+            end: prev.end,
+        }));
+        setHasInitializedCustomRange(true);
+    }, [loading, hasInitializedCustomRange, systemStartDate]);
 
     const applyPreset = (preset: string) => {
         const today = new Date();
@@ -802,7 +890,9 @@ export function MovementAnalysis() {
     const endPeriod = dateRange.end;
 
     const productOptions = useMemo(() => 
-        baseProducts.map(p => ({ value: p.id, label: p.name })),
+        [...baseProducts]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(p => ({ value: p.id, label: p.name })),
     [baseProducts]);
 
     const cardData: TransferCardModel[] = useMemo(() => {
@@ -818,15 +908,11 @@ export function MovementAnalysis() {
             const product = productMap.get(movement.productId);
             if (!product || !product.baseProductId) return;
 
-            const baseProduct = baseProducts.find(bp => bp.id === product.baseProductId);
+            const baseProduct = baseProductMap.get(product.baseProductId);
             if (!baseProduct) return;
             
-            let quantityInBaseUnit = 0;
-            try {
-                quantityInBaseUnit = convertValue(Number(movement.quantityChange), product.unit, baseProduct.unit, product.category);
-            } catch {
-                return;
-            }
+            const quantityInBaseUnit = getMovementQuantityInBaseUnit(movement, product, baseProduct);
+            if (!quantityInBaseUnit) return;
 
             const monthStr = format(parseISO(movement.timestamp), 'yyyy-MM');
 
@@ -861,7 +947,7 @@ export function MovementAnalysis() {
             const transfersInPeriod = Array.from((monthlyTransfers.get(bp.id) || new Map<string, number>()).entries())
                 .filter(([monthStr,]) => {
                     const monthDate = parseISO(`${monthStr}-01`);
-                    return isWithinInterval(monthDate, {start, end}) || isSameDay(monthDate, start) || isSameDay(monthDate, end);
+                    return monthDate <= end && endOfMonth(monthDate) >= start;
                 })
                 .map(([label, value]): {label: string, value: number} => ({ label: format(parseISO(`${label}-01`), 'MMM/yy'), value }));
             
@@ -909,7 +995,7 @@ export function MovementAnalysis() {
         }).filter(d => d.periodAvg > 0 || d.histAvg > 0)
           .sort((a,b) => (b.periodAvg * Math.abs(b.periodChangePct)) - (a.periodAvg * Math.abs(a.periodChangePct)));
 
-    }, [loading, startPeriod, endPeriod, kioskId, selectedBaseProducts, history, products, baseProducts, productMap, systemStartDate]);
+    }, [loading, startPeriod, endPeriod, kioskId, selectedBaseProducts, history, products, baseProducts, productMap, baseProductMap]);
 
 
     if (loading) {
@@ -957,7 +1043,7 @@ export function MovementAnalysis() {
                            <div className="flex flex-col gap-1.5 border-l pl-4 justify-center">
                                <div className="bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-md">
                                    <p className="text-[10px] text-orange-600 font-bold uppercase tracking-wider">Marco Zero da Auditoria</p>
-                                   <p className="text-sm font-bold text-orange-700">01/03/2026</p>
+                                   <p className="text-sm font-bold text-orange-700">{systemStartDate ? format(parseISO(systemStartDate), 'dd/MM/yyyy') : 'Sem histórico'}</p>
                                </div>
                            </div>
                       </div>
@@ -965,7 +1051,7 @@ export function MovementAnalysis() {
                           <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
                               <ToggleGroupItem value="comparison" className="text-xs">Vendas vs Estoque</ToggleGroupItem>
                               <ToggleGroupItem value="saldo" className="text-xs">Saldo Movimentado</ToggleGroupItem>
-                              <ToggleGroupItem value="cards" className="text-xs">Análise de Tendência</ToggleGroupItem>
+                              <ToggleGroupItem value="cards" className="text-xs">Tendência de Transferências</ToggleGroupItem>
                           </ToggleGroup>
                       </div>
                   </div>

@@ -213,7 +213,7 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
 
   await dbAdmin.collection('consumptionReports').doc(`cons_${reportId}`).set({
     reportName: `Sincronização PDV Legal ${dateStr}`,
-    month, year, kioskId, createdAt: new Date().toISOString(), status: 'completed',
+    month, year, day, kioskId, createdAt: new Date().toISOString(), status: 'completed',
     results: Object.entries(consumptionByBaseProduct).map(([id, data]) => ({
       productId: id, productName: data.name, consumedQuantity: data.quantity, baseProductId: id
     }))
