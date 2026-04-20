@@ -626,7 +626,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
         />
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
+      <div className="overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>

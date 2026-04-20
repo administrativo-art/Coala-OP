@@ -38,12 +38,12 @@ export default function SettingsPage() {
                 </div>
 
                 <Tabs defaultValue="usuarios">
-                    <TabsList>
-                        <TabsTrigger value="usuarios">Usuários</TabsTrigger>
-                        <TabsTrigger value="unidades">Unidades</TabsTrigger>
-                        <TabsTrigger value="calendarios">Calendários</TabsTrigger>
-                        <TabsTrigger value="sincronizacao">Sincronização PDV</TabsTrigger>
-                        <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
+                    <TabsList className="flex w-full overflow-x-auto">
+                        <TabsTrigger value="usuarios" className="flex-shrink-0">Usuários</TabsTrigger>
+                        <TabsTrigger value="unidades" className="flex-shrink-0">Unidades</TabsTrigger>
+                        <TabsTrigger value="calendarios" className="flex-shrink-0">Calendários</TabsTrigger>
+                        <TabsTrigger value="sincronizacao" className="flex-shrink-0">Sincronização PDV</TabsTrigger>
+                        <TabsTrigger value="financeiro" className="flex-shrink-0">Financeiro</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="usuarios" className="mt-4">

@@ -655,7 +655,7 @@ export function DPSchedulesList() {
       )}
 
       {/* FABs */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-2 items-end">
+      <div className="fixed bottom-4 right-4 flex flex-col gap-2 items-end sm:bottom-6 sm:right-6">
         {schedules.some(s => s.unitId) && (
           <Button
             onClick={() => setExportBizneoOpen(true)}

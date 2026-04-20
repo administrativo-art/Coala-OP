@@ -213,7 +213,7 @@ export function CashFlowPage() {
             <CardTitle>Entradas vs saídas</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
+            <div className="h-48 sm:h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
@@ -234,7 +234,7 @@ export function CashFlowPage() {
             <CardTitle>Lançamentos recentes</CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <div className="max-h-[400px] space-y-4 overflow-y-auto px-6">
+            <div className="max-h-[300px] space-y-4 overflow-y-auto px-4 sm:max-h-[400px] sm:px-6">
               {loading ? (
                 <Skeleton className="h-40 w-full" />
               ) : allTransactions.length === 0 ? (

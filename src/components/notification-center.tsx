@@ -90,7 +90,7 @@ export function NotificationCenter({ tasks, criticalCount = 0 }: NotificationCen
       {open && (
         <div
           ref={panelRef}
-          className="absolute right-0 top-full z-50 mt-2 flex w-[340px] flex-col overflow-hidden rounded-xl border bg-background shadow-xl"
+          className="absolute right-0 top-full z-50 mt-2 flex w-[calc(100vw-2rem)] max-w-[340px] flex-col overflow-hidden rounded-xl border bg-background shadow-xl sm:w-[340px]"
           style={{ maxHeight: 480 }}
         >
           {/* Header */}

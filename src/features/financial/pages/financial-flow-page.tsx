@@ -229,7 +229,7 @@ export function FinancialFlowPage() {
               </SelectContent>
             </Select>
 
-            <div className="max-h-[320px] overflow-y-auto rounded-lg border">
+            <div className="max-h-[320px] overflow-x-auto overflow-y-auto rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
