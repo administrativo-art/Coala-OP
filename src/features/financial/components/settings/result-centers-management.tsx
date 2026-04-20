@@ -195,6 +195,7 @@ export default function ResultCentersManagement({ canManage = true }: { canManag
             </div>
           </div>
         )}
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -257,6 +258,7 @@ export default function ResultCentersManagement({ canManage = true }: { canManag
             )}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
 
       <Dialog

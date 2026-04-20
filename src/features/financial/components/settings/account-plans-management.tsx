@@ -613,7 +613,7 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
             Nenhum plano de contas cadastrado.
           </div>
         ) : (
-          <div className="rounded-lg border">
+          <div className="overflow-x-auto rounded-lg border">
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopDragEnd}>
               <SortableContext items={topGroups} strategy={verticalListSortingStrategy}>
                 {tree.map((group, index) => (
