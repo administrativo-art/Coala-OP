@@ -76,7 +76,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       },
       {
         key: "com",
-        label: "Comercial",
+        label: "Departamento Comercial",
         color: SECTION_COLORS.com,
         items: [
           { label: "Painel Comercial", href: "/dashboard/commercial", icon: LayoutGrid, show: permissions.dashboard.pricing || permissions.dashboard.technicalSheets },
