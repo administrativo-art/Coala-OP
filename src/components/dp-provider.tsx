@@ -122,7 +122,10 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
 
     cleanupSubscriptions();
 
-    if (authLoading) {
+    // Only wait for auth when firebaseUser hasn't resolved yet.
+    // Ignoring the compound authLoading (which includes profilesLoading and !permissionsReady)
+    // prevents oscillation from cancelling Firestore subscriptions while the user is already authed.
+    if (!firebaseUser && authLoading) {
       return () => {
         cleanupSubscriptions();
       };
@@ -354,7 +357,10 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cleanupSubscriptions();
     };
-  }, [authLoading, firebaseUser?.uid, isDPRoute, isSettingsLikeRoute]);
+  // authLoading intentionally excluded: when firebaseUser is set, subscriptions must not be
+  // cancelled by permission-computation oscillations in the compound loading state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firebaseUser?.uid, isDPRoute, isSettingsLikeRoute]);
 
   return <>{children}</>;
 }
