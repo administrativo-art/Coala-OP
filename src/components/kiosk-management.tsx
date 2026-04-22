@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
+import { hasStoredPdvFilialId, resolvePdvFilialId } from '@/lib/kiosk-identifiers';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, Save, Store, Clock3 } from 'lucide-react';
+import { Plus, Trash2, Store, Clock3 } from 'lucide-react';
 
 // ─── Name normalizer for Kiosk ↔ DPUnit matching ─────────────────────────────
 
@@ -99,41 +100,18 @@ function getShiftAccent(name: string) {
 function KioskRow({
   kiosk,
   canEdit,
-  onSave,
   onDelete,
   shifts,
   compact = false,
 }: {
   kiosk: Kiosk;
   canEdit: boolean;
-  onSave: (updated: Kiosk) => Promise<void>;
   onDelete: () => void;
   shifts: DPShiftDefinition[];
   compact?: boolean;
 }) {
-  const [pdv, setPdv] = useState(kiosk.pdvFilialId ?? '');
-  const [bizneo, setBizneo] = useState(kiosk.bizneoId ?? '');
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
-
-  const isDirty =
-    pdv !== (kiosk.pdvFilialId ?? '') || bizneo !== (kiosk.bizneoId ?? '');
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      await onSave({
-        ...kiosk,
-        pdvFilialId: pdv.trim() || undefined,
-        bizneoId: bizneo.trim() || undefined,
-      });
-      toast({ title: 'Identificadores salvos.', description: kiosk.name });
-    } catch {
-      toast({ title: 'Erro ao salvar.', variant: 'destructive' });
-    } finally {
-      setSaving(false);
-    }
-  }
+  const resolvedPdv = resolvePdvFilialId(kiosk) ?? '';
+  const hasStoredPdv = hasStoredPdvFilialId(kiosk);
 
   return (
     <div
@@ -178,35 +156,27 @@ function KioskRow({
       </div>
 
       <div className={cn('mt-4', compact ? 'space-y-3' : 'space-y-4')}>
-        <div className="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto_auto_minmax(0,1fr)] lg:items-center">
+        <div className="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center">
           <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             PDV
           </Label>
           <Input
-            placeholder="ex: 17343"
-            value={pdv}
-            onChange={e => setPdv(e.target.value)}
-            disabled={!canEdit}
-            className={cn(
-              'rounded-xl border-border/70 bg-background/70 text-base shadow-none',
-              compact ? 'h-14 px-4' : 'h-12'
-            )}
-          />
-          <span className="hidden text-lg text-muted-foreground/40 lg:inline">·</span>
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Bizneo
-          </Label>
-          <Input
-            placeholder="ex: 42"
-            value={bizneo}
-            onChange={e => setBizneo(e.target.value)}
-            disabled={!canEdit}
+            readOnly
+            value={resolvedPdv}
+            placeholder="Sem mapeamento automático"
             className={cn(
               'rounded-xl border-border/70 bg-background/70 text-base shadow-none',
               compact ? 'h-14 px-4' : 'h-12'
             )}
           />
         </div>
+        <p className="text-xs text-muted-foreground">
+          {resolvedPdv
+            ? hasStoredPdv
+              ? 'ID de PDV salvo no cadastro da unidade.'
+              : 'ID de PDV resolvido automaticamente pelo mapeamento padrão do sistema.'
+            : 'Esta unidade ainda não possui mapeamento automático de PDV.'}
+        </p>
 
         {shifts.length > 0 ? (
           <div className="flex flex-wrap gap-2">
@@ -230,15 +200,6 @@ function KioskRow({
           </p>
         )}
       </div>
-
-      {isDirty && (
-        <div className="mt-4 flex justify-end">
-          <Button size="sm" className="rounded-xl" onClick={handleSave} disabled={saving || !canEdit}>
-            <Save className="mr-1.5 h-3.5 w-3.5" />
-            {saving ? 'Salvando...' : 'Salvar'}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -246,7 +207,7 @@ function KioskRow({
 // ─── KioskManagement (main export) ───────────────────────────────────────────
 
 export function KioskManagement({ compact = false }: { compact?: boolean } = {}) {
-  const { kiosks, loading, addKiosk, updateKiosk, deleteKiosk } = useKiosks();
+  const { kiosks, loading, addKiosk, deleteKiosk } = useKiosks();
   const { units, shiftDefinitions } = useDP();
   const { permissions } = useAuth();
   const { toast } = useToast();
@@ -324,7 +285,6 @@ export function KioskManagement({ compact = false }: { compact?: boolean } = {})
             key={kiosk.id}
             kiosk={kiosk}
             canEdit={canEdit}
-            onSave={updateKiosk}
             onDelete={() => setKioskToDelete(kiosk)}
             shifts={kioskShifts.get(kiosk.id) ?? []}
             compact={compact}

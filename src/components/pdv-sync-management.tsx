@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { RefreshCw, CheckCircle2, AlertCircle, Calendar as CalendarIcon, Loader2, PlayCircle } from 'lucide-react';
 import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { resolvePdvFilialId } from '@/lib/kiosk-identifiers';
 
 type SyncLog = {
   date: string;
@@ -55,14 +56,9 @@ export function PdvSyncManagement() {
     }
   };
 
-  const FALLBACK_PDV_IDS: Record<string, string> = {
-    'tirirical': '17343',
-    'joao-paulo': '17344',
-  };
-
   const resolvedKiosks = kiosks.map(k => ({
     ...k,
-    pdvFilialId: k.pdvFilialId || FALLBACK_PDV_IDS[k.id] || undefined,
+    pdvFilialId: resolvePdvFilialId(k),
   }));
 
   async function startSync() {

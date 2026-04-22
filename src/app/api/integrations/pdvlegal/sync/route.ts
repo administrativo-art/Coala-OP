@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncDayAdmin } from '@/lib/integrations/pdv-legal-admin';
 import { dbAdmin, authAdmin } from '@/lib/firebase-admin';
+import { resolvePdvFilialId } from '@/lib/kiosk-identifiers';
 
 /**
  * Endpoint para sincronização AUTÔNOMA do PDV Legal.
@@ -33,15 +34,9 @@ export async function GET(req: NextRequest) {
     const kiosksSnap = await dbAdmin.collection('kiosks').get();
     const allKiosks = kiosksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
     
-    // Fallback manual para os quiosques conhecidos caso não estejam no Firestore com o ID
-    const FALLBACK_MAP: Record<string, string> = {
-      'tirirical': '17343',
-      'joao-paulo': '17344',
-    };
-
-    // Mapeamento final: prioriza Firestore, depois fallback
+    // Mapeamento final: prioriza Firestore, depois fallback padrão da aplicação.
     const validKiosks = allKiosks.map(k => {
-      const pdvId = k.pdvFilialId || FALLBACK_MAP[k.id];
+      const pdvId = resolvePdvFilialId(k);
       return pdvId ? { ...k, pdvFilialId: pdvId } : null;
     }).filter(Boolean) as any[];
 

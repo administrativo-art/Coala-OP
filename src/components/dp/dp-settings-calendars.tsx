@@ -198,7 +198,7 @@ export function DPSettingsCalendars({ onSelect }: { onSelect?: (id: string) => v
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
   })();
 
-  if (calendarsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (calendarsLoading && calendars.length === 0) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (bootstrapError) {
     return <p className="text-sm text-destructive">Erro ao carregar calendários: {bootstrapError}</p>;
   }

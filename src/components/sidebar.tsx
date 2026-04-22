@@ -140,10 +140,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
     return all.map(s => ({ ...s, items: s.items.filter(i => i.show) })).filter(s => s.items.length > 0);
   }, [permissions, legacyTasks.length]);
 
-  // Default: open all sections
-  const [openSections, setOpenSections] = useState<Set<string>>(
-    () => new Set(["ops", "com", "dp", "midia", "fin", "cfg"])
-  );
+  // Start with all accordion sections collapsed.
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set());
 
   function toggleSection(key: string) {
     setOpenSections(prev => {

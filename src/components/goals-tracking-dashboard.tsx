@@ -3,7 +3,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '@/lib/firebase';
+import { doc, getDoc, getDocFromCache } from 'firebase/firestore';
+import { db, functions } from '@/lib/firebase';
 import { useGoals } from '@/contexts/goals-context';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -36,6 +37,7 @@ import {
 import { ptBR } from 'date-fns/locale';
 import { GoalsAiAnalysisModal } from '@/components/goals-ai-analysis-modal';
 import { GoalsAnalysisOutputSchema } from '@/ai/flows/goals-schemas';
+import { getUserDisplayName, pickUserIdentitySnapshot, type UserIdentityLike } from '@/lib/user-display';
 import { z } from 'zod';
 
 const PdfDownloadButton = dynamic(() => import('@/components/goal-report-pdf'), { ssr: false });
@@ -317,14 +319,6 @@ function collaboratorAvatarClass(employeeId: string): string {
 
 function getInitials(name: string): string {
   return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
-}
-
-function looksLikeOpaqueUserIdentifier(value?: string | null): boolean {
-  if (!value) return true;
-  const trimmed = value.trim();
-  if (!trimmed) return true;
-
-  return /^[A-Za-z0-9_-]{20,}$/.test(trimmed);
 }
 
 // ── Dialog de análise diária (Mensal) ─────────────────────────────────────────
@@ -887,26 +881,71 @@ export function GoalsTrackingDashboard() {
   const { user, permissions, users, firebaseUser } = useAuth();
   const { kiosks } = useKiosks();
   const { toast } = useToast();
+  const [fallbackUsersById, setFallbackUsersById] = useState<Record<string, UserIdentityLike | null>>({});
 
   const isManager = (permissions.goals?.manage ?? false) || (permissions.settings?.manageUsers ?? false);
   const isAdmin = permissions.settings?.manageUsers ?? false;
   const userKioskIds = user?.assignedKioskIds ?? [];
   const availableKiosks = isAdmin ? kiosks : kiosks.filter(k => userKioskIds.includes(k.id));
+  const usersById = useMemo(
+    () => Object.fromEntries(users.map(collaborator => [collaborator.id, collaborator])),
+    [users]
+  );
 
   const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name ?? id;
+  const missingEmployeeIds = useMemo(() => {
+    const uniqueIds = Array.from(new Set(employeeGoals.map(goal => goal.employeeId)));
+    return uniqueIds.filter(id => !usersById[id] && !(id in fallbackUsersById));
+  }, [employeeGoals, usersById, fallbackUsersById]);
+
+  useEffect(() => {
+    if (missingEmployeeIds.length === 0) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      const resolvedEntries = await Promise.all(
+        missingEmployeeIds.map(async (id) => {
+          const userRef = doc(db, 'users', id);
+          let snapshot = null;
+
+          try {
+            snapshot = await getDoc(userRef);
+          } catch {
+            try {
+              snapshot = await getDocFromCache(userRef);
+            } catch {
+              snapshot = null;
+            }
+          }
+
+          if (snapshot?.exists()) {
+            return [id, pickUserIdentitySnapshot(id, snapshot.data())] as const;
+          }
+
+          return [id, null] as const;
+        })
+      );
+
+      if (cancelled) return;
+
+      setFallbackUsersById(prev => {
+        const next = { ...prev };
+        for (const [id, resolvedUser] of resolvedEntries) {
+          next[id] = resolvedUser;
+        }
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [missingEmployeeIds]);
+
   const getUserName = (id: string) => {
-    const collaborator = users.find(u => u.id === id);
-    if (!collaborator) return "Colaborador removido";
-
-    const candidates = [
-      collaborator.username,
-      collaborator.email?.split('@')[0],
-      collaborator.registrationIdBizneo,
-      collaborator.registrationIdPdv,
-    ];
-
-    const preferred = candidates.find(candidate => candidate && !looksLikeOpaqueUserIdentifier(candidate));
-    return preferred ?? "Colaborador";
+    const collaborator = usersById[id] ?? fallbackUsersById[id];
+    return getUserDisplayName(collaborator, id);
   };
 
   // Modais

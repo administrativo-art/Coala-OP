@@ -88,6 +88,9 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     let unsubSchedules: (() => void) | undefined;
     let unsubVacations: (() => void) | undefined;
     let unsubCalendars: (() => void) | undefined;
+    let unitsFallbackTimeout: number | undefined;
+    let shiftsFallbackTimeout: number | undefined;
+    let calendarsFallbackTimeout: number | undefined;
     let schedulesFallbackTimeout: number | undefined;
     let vacationsFallbackTimeout: number | undefined;
 
@@ -104,8 +107,14 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       unsubSchedules = undefined;
       unsubVacations = undefined;
       unsubCalendars = undefined;
+      if (unitsFallbackTimeout !== undefined) window.clearTimeout(unitsFallbackTimeout);
+      if (shiftsFallbackTimeout !== undefined) window.clearTimeout(shiftsFallbackTimeout);
+      if (calendarsFallbackTimeout !== undefined) window.clearTimeout(calendarsFallbackTimeout);
       if (schedulesFallbackTimeout !== undefined) window.clearTimeout(schedulesFallbackTimeout);
       if (vacationsFallbackTimeout !== undefined) window.clearTimeout(vacationsFallbackTimeout);
+      unitsFallbackTimeout = undefined;
+      shiftsFallbackTimeout = undefined;
+      calendarsFallbackTimeout = undefined;
       schedulesFallbackTimeout = undefined;
       vacationsFallbackTimeout = undefined;
     };
@@ -145,8 +154,67 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
 
       let schedulesResolved = false;
       let vacationsResolved = false;
+      let unitsResolved = false;
+      let shiftsResolved = false;
+      let calendarsResolved = false;
+      const unitsQuery = query(collection(db, 'dp_units'), orderBy('name'));
+      const unitGroupsQuery = query(collection(db, 'dp_unitGroups'), orderBy('name'));
+      const shiftsQuery = query(collection(db, 'dp_shiftDefinitions'), orderBy('name'));
       const schedulesQuery = query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc'));
       const vacationsQuery = query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc'));
+      const calendarsQuery = query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc'));
+
+      unitsFallbackTimeout = window.setTimeout(async () => {
+        if (unitsResolved) return;
+
+        try {
+          const [unitsSnap, groupsSnap] = await Promise.all([
+            getDocs(unitsQuery),
+            getDocs(unitGroupsQuery),
+          ]);
+          store.setUnits(unitsSnap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit)));
+          store.setUnitGroups(groupsSnap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnitGroup)));
+        } catch (error) {
+          console.error('[DPProvider] Fallback fetch for dp_units/dp_unitGroups failed.', error);
+        } finally {
+          unitsResolved = true;
+          store.setUnitsLoading(false);
+        }
+      }, 4000);
+
+      shiftsFallbackTimeout = window.setTimeout(async () => {
+        if (shiftsResolved) return;
+
+        try {
+          const snap = await getDocs(shiftsQuery);
+          store.setShiftDefinitions(
+            snap.docs.map(d => {
+              const data = d.data();
+              return { id: d.id, ...data, daysOfWeek: normalizeDaysOfWeek(data.daysOfWeek) } as DPShiftDefinition;
+            })
+          );
+        } catch (error) {
+          console.error('[DPProvider] Fallback fetch for dp_shiftDefinitions failed.', error);
+        } finally {
+          shiftsResolved = true;
+          store.setShiftDefsLoading(false);
+        }
+      }, 4000);
+
+      calendarsFallbackTimeout = window.setTimeout(async () => {
+        if (calendarsResolved) return;
+
+        try {
+          const snap = await getDocs(calendarsQuery);
+          store.setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar)));
+        } catch (error) {
+          console.error('[DPProvider] Fallback fetch for dp_calendars failed.', error);
+        } finally {
+          calendarsResolved = true;
+          store.setCalendarsLoading(false);
+        }
+      }, 4000);
+
       if (!isSettingsLikeRoute) {
         schedulesFallbackTimeout = window.setTimeout(async () => {
           if (schedulesResolved) return;
@@ -179,19 +247,23 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       }
 
       unsubUnits = onSnapshot(
-        query(collection(db, 'dp_units'), orderBy('name')),
+        unitsQuery,
         (snap) => { 
+          unitsResolved = true;
+          if (unitsFallbackTimeout !== undefined) window.clearTimeout(unitsFallbackTimeout);
           store.setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit))); 
           store.setUnitsLoading(false); 
         },
         (error) => {
+          unitsResolved = true;
+          if (unitsFallbackTimeout !== undefined) window.clearTimeout(unitsFallbackTimeout);
           store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar unidades do DP.');
           logSubscriptionError('dp_units', error, () => store.setUnitsLoading(false));
         }
       );
 
       unsubGroups = onSnapshot(
-        query(collection(db, 'dp_unitGroups'), orderBy('name')),
+        unitGroupsQuery,
         (snap) => { 
           store.setUnitGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnitGroup))); 
         },
@@ -202,8 +274,10 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       );
 
       unsubShifts = onSnapshot(
-        query(collection(db, 'dp_shiftDefinitions'), orderBy('name')),
+        shiftsQuery,
         (snap) => {
+          shiftsResolved = true;
+          if (shiftsFallbackTimeout !== undefined) window.clearTimeout(shiftsFallbackTimeout);
           store.setShiftDefinitions(snap.docs.map(d => {
             const data = d.data();
             return { id: d.id, ...data, daysOfWeek: normalizeDaysOfWeek(data.daysOfWeek) } as DPShiftDefinition;
@@ -211,6 +285,8 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
           store.setShiftDefsLoading(false);
         },
         (error) => {
+          shiftsResolved = true;
+          if (shiftsFallbackTimeout !== undefined) window.clearTimeout(shiftsFallbackTimeout);
           store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar turnos do DP.');
           logSubscriptionError('dp_shiftDefinitions', error, () => store.setShiftDefsLoading(false));
         }
@@ -253,12 +329,16 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       }
 
       unsubCalendars = onSnapshot(
-        query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc')),
+        calendarsQuery,
         (snap) => { 
+          calendarsResolved = true;
+          if (calendarsFallbackTimeout !== undefined) window.clearTimeout(calendarsFallbackTimeout);
           store.setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar))); 
           store.setCalendarsLoading(false); 
         },
         (error) => {
+          calendarsResolved = true;
+          if (calendarsFallbackTimeout !== undefined) window.clearTimeout(calendarsFallbackTimeout);
           store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar calendários do DP.');
           logSubscriptionError('dp_calendars', error, () => store.setCalendarsLoading(false));
         }

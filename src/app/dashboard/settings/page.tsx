@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ChevronRight, Settings2 } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import dynamic from "next/dynamic";
+import { cn } from "@/lib/utils";
+import { ChartLineUp, Storefront, Users, Wallet } from "@phosphor-icons/react";
 
 const UserManagement = dynamic(
   () => import("@/components/user-management").then((m) => m.UserManagement),
@@ -86,6 +88,48 @@ type NestedTab = {
   content: React.ReactNode;
 };
 
+type DepartmentTab = {
+  value: string;
+  label: string;
+  icon: React.ReactNode;
+  tabs: NestedTab[];
+  emptyLabel: string;
+};
+
+function SegmentedTabs<T extends { value: string; label: string; icon?: React.ReactNode }>({
+  tabs,
+  value,
+  onChange,
+  withIcons = false,
+}: {
+  tabs: T[];
+  value: string;
+  onChange: (value: string) => void;
+  withIcons?: boolean;
+}) {
+  return (
+    <div className="flex overflow-x-auto rounded-md border border-border bg-background">
+      {tabs.map((tab) => (
+        <button
+          key={tab.value}
+          type="button"
+          onClick={() => onChange(tab.value)}
+          className={cn(
+            "flex items-center gap-1.5 whitespace-nowrap border-r border-border transition-all last:border-r-0",
+            withIcons ? "px-4 py-2 text-xs" : "px-3.5 py-1.5 text-xs",
+            value === tab.value
+              ? "bg-[#FBEAF0] font-medium text-[#993556]"
+              : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          {withIcons ? tab.icon : null}
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function DepartmentSubtabs({
   tabs,
   emptyLabel,
@@ -94,28 +138,26 @@ function DepartmentSubtabs({
   emptyLabel: string;
 }) {
   const defaultTab = tabs[0]?.value;
+  const [activeSubTab, setActiveSubTab] = useState(defaultTab ?? "");
+
+  useEffect(() => {
+    setActiveSubTab(defaultTab ?? "");
+  }, [defaultTab]);
 
   if (!defaultTab) {
     return <EmptySection label={emptyLabel} />;
   }
 
-  return (
-    <Tabs defaultValue={defaultTab} className="space-y-6">
-      <TabsList className="flex w-full overflow-x-auto">
-        {tabs.map((tab) => (
-          <TabsTrigger key={tab.value} value={tab.value} className="flex-shrink-0">
-            {tab.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+  const activeTab = tabs.find((tab) => tab.value === activeSubTab) ?? tabs[0];
 
-      {tabs.map((tab) => (
-        <TabsContent key={tab.value} value={tab.value} className="space-y-4">
-          <SectionHeader title={tab.title} description={tab.description} />
-          {tab.content}
-        </TabsContent>
-      ))}
-    </Tabs>
+  return (
+    <div className="space-y-6">
+      <SegmentedTabs tabs={tabs} value={activeTab.value} onChange={setActiveSubTab} />
+      <div className="space-y-4">
+        <SectionHeader title={activeTab.title} description={activeTab.description} />
+        {activeTab.content}
+      </div>
+    </div>
   );
 }
 
@@ -265,6 +307,48 @@ export default function SettingsPage() {
     },
   ].filter(() => !!permissions.financial?.settings?.view);
 
+  const departmentTabs: DepartmentTab[] = [
+    {
+      value: "operacional",
+      label: "Operacional",
+      icon: <Storefront size={14} weight="light" />,
+      tabs: operationalTabs,
+      emptyLabel: "Operacional",
+    },
+    {
+      value: "comercial",
+      label: "Comercial",
+      icon: <ChartLineUp size={14} weight="light" />,
+      tabs: commercialTabs,
+      emptyLabel: "Comercial",
+    },
+    {
+      value: "pessoal",
+      label: "Pessoal",
+      icon: <Users size={14} weight="light" />,
+      tabs: personalTabs,
+      emptyLabel: "Pessoal",
+    },
+    {
+      value: "financeiro",
+      label: "Financeiro",
+      icon: <Wallet size={14} weight="light" />,
+      tabs: financialTabs,
+      emptyLabel: "Financeiro",
+    },
+  ];
+
+  const [activeDepartment, setActiveDepartment] = useState("operacional");
+
+  useEffect(() => {
+    if (!departmentTabs.some((tab) => tab.value === activeDepartment)) {
+      setActiveDepartment(departmentTabs[0]?.value ?? "operacional");
+    }
+  }, [activeDepartment, departmentTabs]);
+
+  const activeDepartmentTab =
+    departmentTabs.find((tab) => tab.value === activeDepartment) ?? departmentTabs[0];
+
   return (
     <PermissionGuard allowed={permissions.settings.view}>
       <div className="w-full space-y-6">
@@ -283,30 +367,21 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="operacional">
-          <TabsList className="flex w-full overflow-x-auto">
-            <TabsTrigger value="operacional" className="flex-shrink-0">Operacional</TabsTrigger>
-            <TabsTrigger value="comercial" className="flex-shrink-0">Comercial</TabsTrigger>
-            <TabsTrigger value="pessoal" className="flex-shrink-0">Pessoal</TabsTrigger>
-            <TabsTrigger value="financeiro" className="flex-shrink-0">Financeiro</TabsTrigger>
-          </TabsList>
+        <div className="space-y-6">
+          <SegmentedTabs
+            tabs={departmentTabs}
+            value={activeDepartmentTab?.value ?? "operacional"}
+            onChange={setActiveDepartment}
+            withIcons
+          />
 
-          <TabsContent value="operacional" className="mt-6">
-            <DepartmentSubtabs tabs={operationalTabs} emptyLabel="Operacional" />
-          </TabsContent>
-
-          <TabsContent value="comercial" className="mt-6">
-            <DepartmentSubtabs tabs={commercialTabs} emptyLabel="Comercial" />
-          </TabsContent>
-
-          <TabsContent value="pessoal" className="mt-6">
-            <DepartmentSubtabs tabs={personalTabs} emptyLabel="Pessoal" />
-          </TabsContent>
-
-          <TabsContent value="financeiro" className="mt-6">
-            <DepartmentSubtabs tabs={financialTabs} emptyLabel="Financeiro" />
-          </TabsContent>
-        </Tabs>
+          {activeDepartmentTab ? (
+            <DepartmentSubtabs
+              tabs={activeDepartmentTab.tabs}
+              emptyLabel={activeDepartmentTab.emptyLabel}
+            />
+          ) : null}
+        </div>
       </div>
     </PermissionGuard>
   );

@@ -11,7 +11,7 @@ export function CalendarManagement() {
 
   const selected = selectedId ? calendars.find(c => c.id === selectedId) ?? null : null;
 
-  if (calendarsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (calendarsLoading && calendars.length === 0) return <p className="text-sm text-muted-foreground">Carregando...</p>;
   if (bootstrapError) return <p className="text-sm text-destructive">Erro ao carregar calendários: {bootstrapError}</p>;
 
   if (selected) {

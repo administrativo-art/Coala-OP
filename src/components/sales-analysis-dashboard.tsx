@@ -27,6 +27,7 @@ import { syncDayClient } from '@/lib/integrations/pdv-legal-client';
 import { GoalsProvider } from '@/components/goals-provider';
 import { useGoals } from '@/contexts/goals-context';
 import { type SalesReport } from '@/types';
+import { getUserDisplayName } from '@/lib/user-display';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MONTH_NUMS = [1,2,3,4,5,6,7,8,9,10,11,12];
@@ -711,9 +712,17 @@ function SalesAnalysisDashboardInner() {
     return Array.from(byEmpKiosk.values())
       .map(({ employeeId, kioskId, dailyRev, targetValue, upValue }) => {
         const monthRevenue = Object.values(dailyRev).reduce((s, v) => s + v, 0);
-        const u = (users as { id: string; username: string }[]).find(u => u.id === employeeId);
+        const u = users.find(u => u.id === employeeId);
         const kiosk = kiosks.find(k => k.id === kioskId);
-        return { employeeId, userName: u?.username ?? "Colaborador removido", kioskId, kioskName: kiosk?.name || kioskId, monthRevenue, targetValue, upValue };
+        return {
+          employeeId,
+          userName: getUserDisplayName(u, employeeId),
+          kioskId,
+          kioskName: kiosk?.name || kioskId,
+          monthRevenue,
+          targetValue,
+          upValue,
+        };
       })
       .filter(c => c.monthRevenue > 0)
       .sort((a, b) => b.monthRevenue - a.monthRevenue);
