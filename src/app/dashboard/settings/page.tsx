@@ -108,24 +108,26 @@ function SegmentedTabs<T extends { value: string; label: string; icon?: React.Re
   withIcons?: boolean;
 }) {
   return (
-    <div className="flex overflow-x-auto rounded-md border border-border bg-background">
-      {tabs.map((tab) => (
-        <button
-          key={tab.value}
-          type="button"
-          onClick={() => onChange(tab.value)}
-          className={cn(
-            "flex items-center gap-1.5 whitespace-nowrap border-r border-border transition-all last:border-r-0",
-            withIcons ? "px-4 py-2 text-xs" : "px-3.5 py-1.5 text-xs",
-            value === tab.value
-              ? "bg-[#FBEAF0] font-medium text-[#993556]"
-              : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-          )}
-        >
-          {withIcons ? tab.icon : null}
-          {tab.label}
-        </button>
-      ))}
+    <div className="max-w-full overflow-x-auto">
+      <div className="inline-flex min-w-max rounded-md border border-border bg-background">
+        {tabs.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => onChange(tab.value)}
+            className={cn(
+              "flex items-center gap-1.5 whitespace-nowrap border-r border-border transition-all last:border-r-0",
+              withIcons ? "px-4 py-2 text-xs" : "px-3.5 py-1.5 text-xs",
+              value === tab.value
+                ? "bg-[#FBEAF0] font-medium text-[#993556]"
+                : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            {withIcons ? tab.icon : null}
+            {tab.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
