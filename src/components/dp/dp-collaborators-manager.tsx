@@ -10,7 +10,6 @@ import { Timestamp } from 'firebase/firestore';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useDP } from '@/components/dp-context';
-import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { DPShiftDefinition, User } from '@/types';
 
 import { Button } from '@/components/ui/button';
@@ -542,7 +541,7 @@ function CollaboratorRow({ user, onEdit, onTerminate, canEdit, canTerminate, shi
 
 export function DPCollaboratorsManager() {
   const { activeUsers, permissions, updateUser } = useAuth();
-  const { shiftDefinitions, loading: bootstrapLoading, error: bootstrapError } = useDPBootstrap();
+  const { shiftDefinitions, shiftDefsLoading, bootstrapError } = useDP();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [editUser, setEditUser] = useState<User | null>(null);
@@ -601,7 +600,7 @@ export function DPCollaboratorsManager() {
     );
   }, [activeUsers, search]);
 
-  if (bootstrapLoading) {
+  if (shiftDefsLoading) {
     return <p className="text-sm text-muted-foreground">Carregando...</p>;
   }
 

@@ -7,13 +7,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 import { useDP } from '@/components/dp-context';
-import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { DPCalendar } from '@/types';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -163,8 +161,7 @@ function CalendarDialog({ calendar, open, onOpenChange, onCreated }: { calendar?
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPSettingsCalendars({ onSelect }: { onSelect?: (id: string) => void } = {}) {
-  const { deleteCalendar } = useDP();
-  const { calendars, loading: calendarsLoading, error } = useDPBootstrap();
+  const { calendars, calendarsLoading, bootstrapError, deleteCalendar } = useDP();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -202,7 +199,9 @@ export function DPSettingsCalendars({ onSelect }: { onSelect?: (id: string) => v
   })();
 
   if (calendarsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
-  if (error) return <p className="text-sm text-destructive">Erro ao carregar calendários: {error}</p>;
+  if (bootstrapError) {
+    return <p className="text-sm text-destructive">Erro ao carregar calendários: {bootstrapError}</p>;
+  }
 
   return (
     <div className="space-y-4">
@@ -222,19 +221,19 @@ export function DPSettingsCalendars({ onSelect }: { onSelect?: (id: string) => v
       ) : (
         <div className="space-y-5">
           {groups.map(group => (
-            <div key={group.label} className="space-y-1.5">
+            <div key={group.label} className="space-y-2">
               {/* Group header */}
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
                 {group.label}
               </p>
-              <div className="rounded-md border divide-y">
+              <div className="space-y-2">
                 {group.items.map(cal => (
                   <div
                     key={cal.id}
-                    className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                    className="flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/30 px-4 py-4 shadow-sm transition-colors hover:bg-muted/40"
                     onClick={() => onSelect ? onSelect(cal.id) : router.push(`/dashboard/dp/settings/calendars/${cal.id}`)}
                   >
-                    <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
                       <CalendarDays className="h-4 w-4 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">

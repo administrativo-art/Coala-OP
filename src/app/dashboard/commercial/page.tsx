@@ -5,10 +5,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PricingDashboard } from "@/components/pricing-dashboard";
 import { TechnicalSheetDashboard } from "@/components/technical-sheet-dashboard";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProductSimulation } from "@/hooks/use-product-simulation";
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
 import { useCompanySettings } from "@/hooks/use-company-settings";
-import { DollarSign, FileText, Target } from "lucide-react";
+import { ArrowRight, DollarSign, FileText, Target } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { type ProductSimulation } from "@/types";
@@ -138,10 +139,43 @@ function PricingReportDashboard() {
   );
 }
 
+function CommercialEntryCard({
+  href,
+  icon,
+  title,
+  description,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group rounded-xl border bg-card p-5 shadow-sm transition-colors hover:bg-muted/50"
+    >
+      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+        {icon}
+      </div>
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      <div className="mt-4 flex items-center gap-1 text-sm font-medium text-primary">
+        Abrir <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+      </div>
+    </Link>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CommercialPage() {
   const { permissions } = useAuth();
+  const hasPricingTab = permissions.dashboard.pricing;
+  const hasTechnicalSheetsTab = permissions.dashboard.technicalSheets;
+  const hasCommercialTabs = hasPricingTab || hasTechnicalSheetsTab;
 
   if (!permissions.dashboard?.view) {
     return <p className="text-muted-foreground p-6">Sem permissão para acessar o Painel Comercial.</p>;
@@ -173,33 +207,69 @@ export default function CommercialPage() {
         )}
       </div>
 
+      {!hasCommercialTabs && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Atalhos do Comercial</CardTitle>
+            <CardDescription>
+              Nenhuma aba do painel comercial está habilitada neste perfil. Use os acessos disponíveis abaixo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            {permissions.goals?.view && (
+              <CommercialEntryCard
+                href="/dashboard/goals/tracking"
+                icon={<Target className="h-4 w-4" />}
+                title="Metas de Vendas"
+                description="Acompanhe metas por período, quiosque e colaborador."
+              />
+            )}
+            {permissions.pricing.view && (
+              <CommercialEntryCard
+                href="/dashboard/pricing"
+                icon={<DollarSign className="h-4 w-4" />}
+                title="Gestão de Preços"
+                description="Abra o módulo de preços, comparação e simulações."
+              />
+            )}
+            {!permissions.goals?.view && !permissions.pricing.view && (
+              <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
+                Este perfil não tem abas comerciais nem módulos comerciais auxiliares liberados.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabs */}
-      <Tabs defaultValue={getDefaultTab()} className="w-full">
+      {hasCommercialTabs && (
+        <Tabs defaultValue={getDefaultTab()} className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
-          {permissions.dashboard.pricing && (
+          {hasPricingTab && (
             <TabsTrigger value="pricing" className="gap-2">
               <DollarSign className="h-4 w-4" /> Gestão de Preços
             </TabsTrigger>
           )}
-          {permissions.dashboard.technicalSheets && (
+          {hasTechnicalSheetsTab && (
             <TabsTrigger value="technical-sheets" className="gap-2">
               <FileText className="h-4 w-4" /> Fichas Técnicas
             </TabsTrigger>
           )}
         </TabsList>
 
-        {permissions.dashboard.pricing && (
+        {hasPricingTab && (
           <TabsContent value="pricing" className="mt-6">
             <PricingReportDashboard />
           </TabsContent>
         )}
         
-        {permissions.dashboard.technicalSheets && (
+        {hasTechnicalSheetsTab && (
           <TabsContent value="technical-sheets" className="mt-6">
             <TechnicalSheetDashboard />
           </TabsContent>
         )}
-      </Tabs>
+        </Tabs>
+      )}
     </div>
   );
 }

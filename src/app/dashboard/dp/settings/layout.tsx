@@ -4,15 +4,17 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
-import { Building2, Clock, CalendarDays } from 'lucide-react';
+import { Building2, Clock, CalendarDays, Users } from 'lucide-react';
 
 const navItems = [
+  { label: 'Colaboradores', href: '/dashboard/dp/settings/collaborators', icon: Users,        perm: 'collaborators' as const },
   { label: 'Unidades',    href: '/dashboard/dp/settings/units',     icon: Building2,    perm: 'units' as const },
   { label: 'Turnos',      href: '/dashboard/dp/settings/shifts',    icon: Clock,        perm: 'shifts' as const },
   { label: 'Calendários', href: '/dashboard/dp/settings/calendars', icon: CalendarDays, perm: 'calendars' as const },
 ];
 
 const permMap = {
+  collaborators: (dp: any) => dp?.collaborators?.edit || dp?.collaborators?.terminate,
   units:     (dp: any) => dp?.settings?.manageUnits,
   shifts:    (dp: any) => dp?.settings?.manageShifts,
   calendars: (dp: any) => dp?.settings?.manageCalendars,

@@ -356,7 +356,7 @@ export function UserManagement() {
     <>
       {showForm ? (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-w-2xl">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             {/* ── Back nav ── */}
             <div className="flex items-center gap-3 mb-2">
               <Button

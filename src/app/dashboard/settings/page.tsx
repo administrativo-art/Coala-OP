@@ -1,19 +1,34 @@
 "use client";
 
-import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, Settings2 } from 'lucide-react';
+import Link from "next/link";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, ChevronRight, Settings2 } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import dynamic from 'next/dynamic';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import dynamic from "next/dynamic";
 
-const UserManagement      = dynamic(() => import('@/components/user-management').then(m => m.UserManagement), { ssr: false });
-const KioskManagement     = dynamic(() => import('@/components/kiosk-management').then(m => m.KioskManagement), { ssr: false });
-const CalendarManagement  = dynamic(() => import('@/components/calendar-management').then(m => m.CalendarManagement), { ssr: false });
-const PdvSyncManagement   = dynamic(() => import('@/components/pdv-sync-management').then(m => m.PdvSyncManagement), { ssr: false });
-const FinancialProvider   = dynamic(() => import('@/features/financial/components/financial-provider').then(m => m.FinancialProvider), { ssr: false });
-const FinancialSettingsPage = dynamic(() => import('@/features/financial/pages/settings-page').then(m => m.FinancialSettingsPage), { ssr: false });
+const UserManagement = dynamic(
+  () => import("@/components/user-management").then((m) => m.UserManagement),
+  { ssr: false }
+);
+const CalendarManagement = dynamic(
+  () => import("@/components/calendar-management").then((m) => m.CalendarManagement),
+  { ssr: false }
+);
+const DPSettingsShifts = dynamic(
+  () => import("@/components/dp/dp-settings-shifts").then((m) => m.DPSettingsShifts),
+  { ssr: false }
+);
+const KioskManagement = dynamic(
+  () => import("@/components/kiosk-management").then((m) => m.KioskManagement),
+  { ssr: false }
+);
+const PdvSyncManagement = dynamic(
+  () => import("@/components/pdv-sync-management").then((m) => m.PdvSyncManagement),
+  { ssr: false }
+);
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -34,9 +49,221 @@ function EmptySection({ label }: { label: string }) {
   );
 }
 
+function SettingsLaunchPanel({
+  title,
+  description,
+  href,
+  actionLabel,
+}: {
+  title: string;
+  description: string;
+  href: string;
+  actionLabel: string;
+}) {
+  return (
+    <div className="rounded-xl border bg-card px-5 py-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="text-sm text-muted-foreground mt-1">{description}</p>
+        </div>
+        <Button asChild variant="outline" className="gap-1.5 sm:ml-4 sm:shrink-0">
+          <Link href={href}>
+            {actionLabel}
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+type NestedTab = {
+  value: string;
+  label: string;
+  title: string;
+  description: string;
+  content: React.ReactNode;
+};
+
+function DepartmentSubtabs({
+  tabs,
+  emptyLabel,
+}: {
+  tabs: NestedTab[];
+  emptyLabel: string;
+}) {
+  const defaultTab = tabs[0]?.value;
+
+  if (!defaultTab) {
+    return <EmptySection label={emptyLabel} />;
+  }
+
+  return (
+    <Tabs defaultValue={defaultTab} className="space-y-6">
+      <TabsList className="flex w-full overflow-x-auto">
+        {tabs.map((tab) => (
+          <TabsTrigger key={tab.value} value={tab.value} className="flex-shrink-0">
+            {tab.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+
+      {tabs.map((tab) => (
+        <TabsContent key={tab.value} value={tab.value} className="space-y-4">
+          <SectionHeader title={tab.title} description={tab.description} />
+          {tab.content}
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+}
+
 export default function SettingsPage() {
   const { permissions } = useAuth();
   const router = useRouter();
+
+  const operationalTabs: NestedTab[] = [
+    {
+      value: "units",
+      label: "Unidades",
+      title: "Unidades",
+      description: "Gerencie as unidades operacionais e integrações principais.",
+      content: <KioskManagement compact />,
+    },
+    {
+      value: "pdv-sync",
+      label: "Sincronizar",
+      title: "Sincronização PDV",
+      description: "Reprocesse dados históricos e configure a rotina operacional ligada ao PDV.",
+      content: <PdvSyncManagement />,
+    },
+  ];
+
+  const commercialTabs: NestedTab[] = [
+    {
+      value: "pricing",
+      label: "Precificação",
+      title: "Precificação",
+      description: "Parâmetros e rotinas ligadas a preços, margens e simulações.",
+      content: (
+        <SettingsLaunchPanel
+          title="Parâmetros de precificação"
+          description="Abra o módulo comercial para ajustar taxas, margens, metas e categorias de simulação."
+          href="/dashboard/pricing"
+          actionLabel="Abrir módulo"
+        />
+      ),
+    },
+    {
+      value: "competitors",
+      label: "Concorrentes",
+      title: "Concorrentes",
+      description: "Gestão de grupos, unidades e produtos monitorados da concorrência.",
+      content: (
+        <SettingsLaunchPanel
+          title="Estudo de preço e concorrentes"
+          description="Abra o estudo de preço para gerenciar concorrentes e mercadorias relacionadas."
+          href="/dashboard/pricing/price-comparison"
+          actionLabel="Abrir estudo"
+        />
+      ),
+    },
+    {
+      value: "goals",
+      label: "Metas",
+      title: "Metas",
+      description: "Templates e acompanhamento das metas do departamento comercial.",
+      content: (
+        <SettingsLaunchPanel
+          title="Templates e acompanhamento de metas"
+          description="Abra o módulo de metas para gerenciar templates, períodos e acompanhamento comercial."
+          href="/dashboard/goals/tracking"
+          actionLabel="Abrir metas"
+        />
+      ),
+    },
+  ];
+
+  const personalTabs: NestedTab[] = [
+    {
+      value: "users",
+      label: "Usuários",
+      title: "Usuários",
+      description: "Gerencie usuários, perfis de acesso e dados complementares do DP.",
+      content: <UserManagement />,
+    },
+    {
+      value: "shifts",
+      label: "Turnos",
+      title: "Turnos",
+      description: "Configure os turnos reutilizáveis do departamento pessoal.",
+      content: <DPSettingsShifts />,
+    },
+    {
+      value: "calendars",
+      label: "Calendário",
+      title: "Calendários de Trabalho",
+      description: "Configure calendários de feriados usados nas escalas.",
+      content: <CalendarManagement />,
+    },
+  ].filter((tab) => {
+    if (tab.value === "users") {
+      return !!(permissions.settings.manageUsers || permissions.settings.manageProfiles);
+    }
+    if (tab.value === "shifts") {
+      return !!permissions.dp?.settings?.manageShifts;
+    }
+    if (tab.value === "calendars") {
+      return !!permissions.dp?.settings?.manageCalendars;
+    }
+    return false;
+  });
+
+  const financialTabs: NestedTab[] = [
+    {
+      value: "accounting",
+      label: "Contabilidade",
+      title: "Cadastros Contábeis",
+      description: "Plano de contas e centros de resultado do módulo financeiro.",
+      content: (
+        <SettingsLaunchPanel
+          title="Abrir cadastros contábeis"
+          description="Abra a tela financeira já posicionada na aba de contabilidade."
+          href="/dashboard/financial/settings?tab=accounting"
+          actionLabel="Abrir contabilidade"
+        />
+      ),
+    },
+    {
+      value: "accounts",
+      label: "Contas",
+      title: "Contas Bancárias",
+      description: "Gerencie bancos, contas e vínculos usados no financeiro.",
+      content: (
+        <SettingsLaunchPanel
+          title="Abrir contas bancárias"
+          description="Abra a tela financeira já posicionada na aba de contas."
+          href="/dashboard/financial/settings?tab=accounts"
+          actionLabel="Abrir contas"
+        />
+      ),
+    },
+    {
+      value: "import",
+      label: "Importação",
+      title: "Aliases de Importação",
+      description: "Mapeie aliases e regras usadas na importação financeira.",
+      content: (
+        <SettingsLaunchPanel
+          title="Abrir aliases de importação"
+          description="Abra a tela financeira já posicionada na aba de importação."
+          href="/dashboard/financial/settings?tab=import"
+          actionLabel="Abrir importação"
+        />
+      ),
+    },
+  ].filter(() => !!permissions.financial?.settings?.view);
 
   return (
     <PermissionGuard allowed={permissions.settings.view}>
@@ -59,57 +286,25 @@ export default function SettingsPage() {
         <Tabs defaultValue="operacional">
           <TabsList className="flex w-full overflow-x-auto">
             <TabsTrigger value="operacional" className="flex-shrink-0">Operacional</TabsTrigger>
-            <TabsTrigger value="comercial"   className="flex-shrink-0">Comercial</TabsTrigger>
-            <TabsTrigger value="pessoal"     className="flex-shrink-0">Pessoal</TabsTrigger>
-            <TabsTrigger value="financeiro"  className="flex-shrink-0">Financeiro</TabsTrigger>
+            <TabsTrigger value="comercial" className="flex-shrink-0">Comercial</TabsTrigger>
+            <TabsTrigger value="pessoal" className="flex-shrink-0">Pessoal</TabsTrigger>
+            <TabsTrigger value="financeiro" className="flex-shrink-0">Financeiro</TabsTrigger>
           </TabsList>
 
-          {/* ── Operacional ───────────────────────────────────── */}
-          <TabsContent value="operacional" className="mt-6 space-y-10">
-            <div>
-              <SectionHeader
-                title="Unidades e Kiosks"
-                description="Gerencie as unidades operacionais do sistema."
-              />
-              <KioskManagement />
-            </div>
-            <div>
-              <SectionHeader
-                title="Sincronização PDV"
-                description="Configure a integração com o ponto de venda."
-              />
-              <PdvSyncManagement />
-            </div>
+          <TabsContent value="operacional" className="mt-6">
+            <DepartmentSubtabs tabs={operationalTabs} emptyLabel="Operacional" />
           </TabsContent>
 
-          {/* ── Comercial ─────────────────────────────────────── */}
           <TabsContent value="comercial" className="mt-6">
-            <EmptySection label="Comercial" />
+            <DepartmentSubtabs tabs={commercialTabs} emptyLabel="Comercial" />
           </TabsContent>
 
-          {/* ── Pessoal ───────────────────────────────────────── */}
-          <TabsContent value="pessoal" className="mt-6 space-y-10">
-            <div>
-              <SectionHeader
-                title="Usuários e Perfis"
-                description="Gerencie os usuários e permissões de acesso ao sistema."
-              />
-              <UserManagement />
-            </div>
-            <div>
-              <SectionHeader
-                title="Calendários de Trabalho"
-                description="Configure os calendários usados nas escalas do departamento pessoal."
-              />
-              <CalendarManagement />
-            </div>
+          <TabsContent value="pessoal" className="mt-6">
+            <DepartmentSubtabs tabs={personalTabs} emptyLabel="Pessoal" />
           </TabsContent>
 
-          {/* ── Financeiro ────────────────────────────────────── */}
           <TabsContent value="financeiro" className="mt-6">
-            <FinancialProvider>
-              <FinancialSettingsPage />
-            </FinancialProvider>
+            <DepartmentSubtabs tabs={financialTabs} emptyLabel="Financeiro" />
           </TabsContent>
         </Tabs>
       </div>

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { db } from '@/lib/firebase';
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, 
-  serverTimestamp, writeBatch, increment, getDocs
+  collection, addDoc, updateDoc, deleteDoc, doc,
+  serverTimestamp, writeBatch, increment, getDocs, deleteField
 } from 'firebase/firestore';
 import type {
   DPUnit, DPUnitGroup, DPShiftDefinition,
@@ -78,6 +78,51 @@ const initialState = {
   calendarsLoading: true,
 };
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function stripUndefinedForCreate(value: unknown): unknown {
+  if (value === undefined) return undefined;
+
+  if (Array.isArray(value)) {
+    return value
+      .map(item => stripUndefinedForCreate(item))
+      .filter(item => item !== undefined);
+  }
+
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value).flatMap(([key, entry]) => {
+        const sanitized = stripUndefinedForCreate(entry);
+        return sanitized === undefined ? [] : [[key, sanitized]];
+      })
+    );
+  }
+
+  return value;
+}
+
+function sanitizeFirestoreUpdate(value: unknown): unknown {
+  if (value === undefined) {
+    return deleteField();
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map(item => stripUndefinedForCreate(item))
+      .filter(item => item !== undefined);
+  }
+
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, sanitizeFirestoreUpdate(entry)])
+    );
+  }
+
+  return value;
+}
+
 export const useDPStore = create<DPStoreState>((set) => ({
   ...initialState,
 
@@ -99,38 +144,38 @@ export const useDPStore = create<DPStoreState>((set) => ({
 
   // CRUD Implementation
   addUnit: async (data) => {
-    await addDoc(collection(db, 'dp_units'), { ...data, createdAt: serverTimestamp() });
+    await addDoc(collection(db, 'dp_units'), stripUndefinedForCreate({ ...data, createdAt: serverTimestamp() }) as Record<string, unknown>);
   },
   updateUnit: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_units', id), data as any);
+    await updateDoc(doc(db, 'dp_units', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
   },
   deleteUnit: async (unitId) => {
     await deleteDoc(doc(db, 'dp_units', unitId));
   },
   addUnitGroup: async (data) => {
-    await addDoc(collection(db, 'dp_unitGroups'), { ...data, unitCount: 0, createdAt: serverTimestamp() });
+    await addDoc(collection(db, 'dp_unitGroups'), stripUndefinedForCreate({ ...data, unitCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>);
   },
   updateUnitGroup: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_unitGroups', id), data as any);
+    await updateDoc(doc(db, 'dp_unitGroups', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
   },
   deleteUnitGroup: async (groupId) => {
     await deleteDoc(doc(db, 'dp_unitGroups', groupId));
   },
   addShiftDefinition: async (data) => {
-    await addDoc(collection(db, 'dp_shiftDefinitions'), { ...data, createdAt: serverTimestamp() });
+    await addDoc(collection(db, 'dp_shiftDefinitions'), stripUndefinedForCreate({ ...data, createdAt: serverTimestamp() }) as Record<string, unknown>);
   },
   updateShiftDefinition: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_shiftDefinitions', id), data as any);
+    await updateDoc(doc(db, 'dp_shiftDefinitions', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
   },
   deleteShiftDefinition: async (defId) => {
     await deleteDoc(doc(db, 'dp_shiftDefinitions', defId));
   },
   addSchedule: async (data) => {
-    const ref = await addDoc(collection(db, 'dp_schedules'), { ...data, shiftCount: 0, createdAt: serverTimestamp() });
+    const ref = await addDoc(collection(db, 'dp_schedules'), stripUndefinedForCreate({ ...data, shiftCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>);
     return ref.id;
   },
   updateSchedule: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_schedules', id), data as any);
+    await updateDoc(doc(db, 'dp_schedules', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
   },
   deleteSchedule: async (scheduleId) => {
     const shiftsSnap = await getDocs(collection(db, 'dp_schedules', scheduleId, 'shifts'));
@@ -140,20 +185,20 @@ export const useDPStore = create<DPStoreState>((set) => ({
     await batch.commit();
   },
   addVacation: async (data) => {
-    await addDoc(collection(db, 'dp_vacations'), { ...data, createdAt: serverTimestamp() });
+    await addDoc(collection(db, 'dp_vacations'), stripUndefinedForCreate({ ...data, createdAt: serverTimestamp() }) as Record<string, unknown>);
   },
   updateVacation: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_vacations', id), data as any);
+    await updateDoc(doc(db, 'dp_vacations', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
   },
   deleteVacation: async (vacationId) => {
     await deleteDoc(doc(db, 'dp_vacations', vacationId));
   },
   addCalendar: async (data) => {
-    const ref = await addDoc(collection(db, 'dp_calendars'), { ...data, holidayCount: 0, createdAt: serverTimestamp() });
+    const ref = await addDoc(collection(db, 'dp_calendars'), stripUndefinedForCreate({ ...data, holidayCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>);
     return ref.id;
   },
   updateCalendar: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_calendars', id), data as any);
+    await updateDoc(doc(db, 'dp_calendars', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
   },
   deleteCalendar: async (calendarId) => {
     const holidaysSnap = await getDocs(collection(db, 'dp_calendars', calendarId, 'holidays'));
@@ -165,7 +210,7 @@ export const useDPStore = create<DPStoreState>((set) => ({
   addHoliday: async (calendarId, data) => {
     const batch = writeBatch(db);
     const holidayRef = doc(collection(db, 'dp_calendars', calendarId, 'holidays'));
-    batch.set(holidayRef, { ...data, createdAt: serverTimestamp() });
+    batch.set(holidayRef, stripUndefinedForCreate({ ...data, createdAt: serverTimestamp() }) as Record<string, unknown>);
     batch.update(doc(db, 'dp_calendars', calendarId), { holidayCount: increment(1) });
     await batch.commit();
   },

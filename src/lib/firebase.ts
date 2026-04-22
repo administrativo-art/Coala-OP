@@ -11,7 +11,13 @@ assertFirebaseClientConfig();
 const app = !getApps().length ? initializeApp(firebaseClientConfig) : getApp();
 
 // Connect to the specific "coala" database using Firestore defaults.
-const db = initializeFirestore(app, {}, "coala");
+const db = initializeFirestore(
+  app,
+  {
+    experimentalAutoDetectLongPolling: true,
+  },
+  "coala"
+);
 const storage = getStorage(app);
 const auth = getAuth(app);
 const functions = getFunctions(app);

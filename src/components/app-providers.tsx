@@ -35,7 +35,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const isStandaloneEscala = pathname === '/escala';
   const isPlayerRoute = pathname?.startsWith('/player');
   const isSignageRoute = pathname?.startsWith('/signage');
-  const needsDPProvider = pathname?.startsWith('/dashboard/dp') || pathname === '/dashboard/settings/units';
+  const needsDPProvider =
+    pathname?.startsWith('/dashboard/dp') ||
+    pathname?.startsWith('/dashboard/settings');
   const appChildren = needsDPProvider ? <DPProvider>{children}</DPProvider> : children;
 
   if (isStandaloneEscala || isPlayerRoute) {

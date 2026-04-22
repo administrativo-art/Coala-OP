@@ -5,7 +5,7 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth, functions } from '@/lib/firebase';
-import { collection, onSnapshot, doc, query, getDoc, updateDoc, deleteDoc, deleteField } from "firebase/firestore";
+import { collection, onSnapshot, doc, query, getDoc, getDocFromCache, updateDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
@@ -88,15 +88,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const userDocRef = doc(db, 'users', user.uid);
-        let userDocSnap = await getDoc(userDocRef);
-        
-        if (!userDocSnap.exists()) {
-          // Aguarda documento ser criado pela Cloud Function
-          await new Promise(resolve => setTimeout(resolve, 3000));
+        let userDocSnap;
+
+        try {
           userDocSnap = await getDoc(userDocRef);
+
+          if (!userDocSnap.exists()) {
+            // Aguarda documento ser criado pela Cloud Function
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            userDocSnap = await getDoc(userDocRef);
+          }
+        } catch (error) {
+          console.error("[AuthProvider] Failed to fetch user document from Firestore.", error);
+
+          try {
+            userDocSnap = await getDocFromCache(userDocRef);
+          } catch (cacheError) {
+            console.error("[AuthProvider] Cached user document is unavailable.", cacheError);
+          }
         }
 
-        if (userDocSnap.exists()) {
+        if (userDocSnap?.exists()) {
           // Força refresh do token para garantir claims atualizados (profileId, isDefaultAdmin)
           await user.getIdToken(true);
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
@@ -116,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (profilesLoading) return; 
     const q = query(collection(db, "users"));
     const unsubscribeUsers = onSnapshot(q, (snapshot) => {
-        const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        const usersData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
         setUsers(usersData);
     });
     return () => unsubscribeUsers();

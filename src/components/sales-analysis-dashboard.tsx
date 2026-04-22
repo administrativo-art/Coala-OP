@@ -713,7 +713,7 @@ function SalesAnalysisDashboardInner() {
         const monthRevenue = Object.values(dailyRev).reduce((s, v) => s + v, 0);
         const u = (users as { id: string; username: string }[]).find(u => u.id === employeeId);
         const kiosk = kiosks.find(k => k.id === kioskId);
-        return { employeeId, userName: u?.username ?? employeeId, kioskId, kioskName: kiosk?.name || kioskId, monthRevenue, targetValue, upValue };
+        return { employeeId, userName: u?.username ?? "Colaborador removido", kioskId, kioskName: kiosk?.name || kioskId, monthRevenue, targetValue, upValue };
       })
       .filter(c => c.monthRevenue > 0)
       .sort((a, b) => b.monthRevenue - a.monthRevenue);

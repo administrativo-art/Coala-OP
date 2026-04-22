@@ -57,40 +57,17 @@ function normalizeVacation(doc: { id: string; data: () => Record<string, unknown
   return { id: doc.id, ...doc.data() } as DPVacationRecord;
 }
 
-function normalizeScheduleRecord(data: any): DPSchedule {
-  return {
-    ...data,
-    month: Number(data.month),
-    year: Number(data.year),
-    shiftCount: Number(data.shiftCount ?? 0),
-  } as DPSchedule;
-}
-
-async function fetchDPBootstrap(user: NonNullable<typeof auth.currentUser>) {
-  const token = await user.getIdToken();
-  const res = await fetch('/api/dp/bootstrap', {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) {
-    let detail = '';
-    try {
-      const data = await res.json();
-      detail = data?.error ? ` - ${data.error}` : '';
-    } catch {}
-    throw new Error(`DP bootstrap failed: ${res.status}${detail}`);
-  }
-
-  return res.json();
-}
-
 // ─── Lifecycle Manager (Refactored DPProvider) ───────────────────────────────
 
 export function DPProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isDPRoute = pathname?.startsWith('/dashboard/dp') || pathname === '/dashboard/settings/units';
+  const isDPRoute =
+    pathname?.startsWith('/dashboard/dp') ||
+    pathname?.startsWith('/dashboard/settings');
+  const isSettingsLikeRoute =
+    pathname?.startsWith('/dashboard/settings') ||
+    pathname?.startsWith('/dashboard/dp/settings') ||
+    pathname === '/dashboard/dp/collaborators';
 
   useEffect(() => {
     const store = useDPStore.getState();
@@ -154,63 +131,52 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
 
       store.setUnitsLoading(true);
       store.setShiftDefsLoading(true);
-      store.setSchedulesLoading(true);
-      store.setVacationsLoading(true);
+      store.setSchedulesLoading(!isSettingsLikeRoute);
+      store.setVacationsLoading(!isSettingsLikeRoute);
       store.setCalendarsLoading(true);
       store.setBootstrapError(null);
 
-      fetchDPBootstrap(user).then((payload) => {
-        store.setUnits((payload.units ?? []) as DPUnit[]);
-        store.setUnitGroups((payload.unitGroups ?? []) as DPUnitGroup[]);
-        store.setShiftDefinitions((payload.shiftDefinitions ?? []).map((item: any) => ({
-          ...item,
-          daysOfWeek: normalizeDaysOfWeek(item.daysOfWeek),
-        })) as DPShiftDefinition[]);
-        store.setSchedules((payload.schedules ?? []).map(normalizeScheduleRecord).sort((a: DPSchedule, b: DPSchedule) => b.year - a.year || b.month - a.month));
-        store.setVacations((payload.vacations ?? []) as DPVacationRecord[]);
-        store.setCalendars((payload.calendars ?? []) as DPCalendar[]);
-        store.setUnitsLoading(false);
-        store.setShiftDefsLoading(false);
+      if (isSettingsLikeRoute) {
+        store.setSchedules([]);
+        store.setVacations([]);
         store.setSchedulesLoading(false);
         store.setVacationsLoading(false);
-        store.setCalendarsLoading(false);
-      }).catch((error) => {
-        console.error('[DPProvider] Bootstrap fetch failed.', error);
-        store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar bootstrap do DP.');
-      });
+      }
 
       let schedulesResolved = false;
       let vacationsResolved = false;
       const schedulesQuery = query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc'));
       const vacationsQuery = query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc'));
-      schedulesFallbackTimeout = window.setTimeout(async () => {
-        if (schedulesResolved) return;
+      if (!isSettingsLikeRoute) {
+        schedulesFallbackTimeout = window.setTimeout(async () => {
+          if (schedulesResolved) return;
 
-        try {
-          const snap = await getDocs(schedulesQuery);
-          const list = snap.docs.map(normalizeSchedule);
-          list.sort((a, b) => b.year - a.year || b.month - a.month);
-          store.setSchedules(list);
-        } catch (error) {
-          console.error('[DPProvider] Fallback fetch for dp_schedules failed.', error);
-        } finally {
-          schedulesResolved = true;
-          store.setSchedulesLoading(false);
-        }
-      }, 4000);
-      vacationsFallbackTimeout = window.setTimeout(async () => {
-        if (vacationsResolved) return;
+          try {
+            const snap = await getDocs(schedulesQuery);
+            const list = snap.docs.map(normalizeSchedule);
+            list.sort((a, b) => b.year - a.year || b.month - a.month);
+            store.setSchedules(list);
+          } catch (error) {
+            console.error('[DPProvider] Fallback fetch for dp_schedules failed.', error);
+          } finally {
+            schedulesResolved = true;
+            store.setSchedulesLoading(false);
+          }
+        }, 4000);
+        vacationsFallbackTimeout = window.setTimeout(async () => {
+          if (vacationsResolved) return;
 
-        try {
-          const snap = await getDocs(vacationsQuery);
-          store.setVacations(snap.docs.map(normalizeVacation));
-        } catch (error) {
-          console.error('[DPProvider] Fallback fetch for dp_vacations failed.', error);
-        } finally {
-          vacationsResolved = true;
-          store.setVacationsLoading(false);
-        }
-      }, 4000);
+          try {
+            const snap = await getDocs(vacationsQuery);
+            store.setVacations(snap.docs.map(normalizeVacation));
+          } catch (error) {
+            console.error('[DPProvider] Fallback fetch for dp_vacations failed.', error);
+          } finally {
+            vacationsResolved = true;
+            store.setVacationsLoading(false);
+          }
+        }, 4000);
+      }
 
       unsubUnits = onSnapshot(
         query(collection(db, 'dp_units'), orderBy('name')),
@@ -218,7 +184,10 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
           store.setUnits(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit))); 
           store.setUnitsLoading(false); 
         },
-        (error) => logSubscriptionError('dp_units', error, () => store.setUnitsLoading(false))
+        (error) => {
+          store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar unidades do DP.');
+          logSubscriptionError('dp_units', error, () => store.setUnitsLoading(false));
+        }
       );
 
       unsubGroups = onSnapshot(
@@ -226,7 +195,10 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         (snap) => { 
           store.setUnitGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnitGroup))); 
         },
-        (error) => logSubscriptionError('dp_unitGroups', error)
+        (error) => {
+          store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar grupos do DP.');
+          logSubscriptionError('dp_unitGroups', error);
+        }
       );
 
       unsubShifts = onSnapshot(
@@ -238,40 +210,47 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
           }));
           store.setShiftDefsLoading(false);
         },
-        (error) => logSubscriptionError('dp_shiftDefinitions', error, () => store.setShiftDefsLoading(false))
-      );
-
-      unsubSchedules = onSnapshot(
-        schedulesQuery,
-        (snap) => {
-          schedulesResolved = true;
-          if (schedulesFallbackTimeout !== undefined) window.clearTimeout(schedulesFallbackTimeout);
-          const list = snap.docs.map(normalizeSchedule);
-          list.sort((a, b) => b.year - a.year || b.month - a.month);
-          store.setSchedules(list);
-          store.setSchedulesLoading(false);
-        },
         (error) => {
-          schedulesResolved = true;
-          if (schedulesFallbackTimeout !== undefined) window.clearTimeout(schedulesFallbackTimeout);
-          logSubscriptionError('dp_schedules', error, () => store.setSchedulesLoading(false));
+          store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar turnos do DP.');
+          logSubscriptionError('dp_shiftDefinitions', error, () => store.setShiftDefsLoading(false));
         }
       );
 
-      unsubVacations = onSnapshot(
-        vacationsQuery,
-        (snap) => { 
-          vacationsResolved = true;
-          if (vacationsFallbackTimeout !== undefined) window.clearTimeout(vacationsFallbackTimeout);
-          store.setVacations(snap.docs.map(normalizeVacation)); 
-          store.setVacationsLoading(false); 
-        },
-        (error) => {
-          vacationsResolved = true;
-          if (vacationsFallbackTimeout !== undefined) window.clearTimeout(vacationsFallbackTimeout);
-          logSubscriptionError('dp_vacations', error, () => store.setVacationsLoading(false));
-        }
-      );
+      if (!isSettingsLikeRoute) {
+        unsubSchedules = onSnapshot(
+          schedulesQuery,
+          (snap) => {
+            schedulesResolved = true;
+            if (schedulesFallbackTimeout !== undefined) window.clearTimeout(schedulesFallbackTimeout);
+            const list = snap.docs.map(normalizeSchedule);
+            list.sort((a, b) => b.year - a.year || b.month - a.month);
+            store.setSchedules(list);
+            store.setSchedulesLoading(false);
+          },
+          (error) => {
+            schedulesResolved = true;
+            if (schedulesFallbackTimeout !== undefined) window.clearTimeout(schedulesFallbackTimeout);
+            store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar escalas do DP.');
+            logSubscriptionError('dp_schedules', error, () => store.setSchedulesLoading(false));
+          }
+        );
+
+        unsubVacations = onSnapshot(
+          vacationsQuery,
+          (snap) => { 
+            vacationsResolved = true;
+            if (vacationsFallbackTimeout !== undefined) window.clearTimeout(vacationsFallbackTimeout);
+            store.setVacations(snap.docs.map(normalizeVacation)); 
+            store.setVacationsLoading(false); 
+          },
+          (error) => {
+            vacationsResolved = true;
+            if (vacationsFallbackTimeout !== undefined) window.clearTimeout(vacationsFallbackTimeout);
+            store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar férias do DP.');
+            logSubscriptionError('dp_vacations', error, () => store.setVacationsLoading(false));
+          }
+        );
+      }
 
       unsubCalendars = onSnapshot(
         query(collection(db, 'dp_calendars'), orderBy('createdAt', 'desc')),
@@ -279,7 +258,10 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
           store.setCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPCalendar))); 
           store.setCalendarsLoading(false); 
         },
-        (error) => logSubscriptionError('dp_calendars', error, () => store.setCalendarsLoading(false))
+        (error) => {
+          store.setBootstrapError(error instanceof Error ? error.message : 'Falha ao carregar calendários do DP.');
+          logSubscriptionError('dp_calendars', error, () => store.setCalendarsLoading(false));
+        }
       );
     });
 
@@ -287,7 +269,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       cleanupSubscriptions();
       unsubAuth();
     };
-  }, [isDPRoute]);
+  }, [isDPRoute, isSettingsLikeRoute]);
 
   return <>{children}</>;
 }

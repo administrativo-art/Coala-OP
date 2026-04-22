@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
+import { useDP } from '@/components/dp-context';
 import type { DPShiftDefinition, User } from '@/types';
 
 import { Input } from '@/components/ui/input';
@@ -123,10 +123,10 @@ function CollaboratorList({ users, emptyMessage, shiftDefinitions }: { users: Us
 
 export function DPCollaboratorsDirectory() {
   const { activeUsers, terminatedUsers } = useAuth();
-  const { shiftDefinitions, loading, error } = useDPBootstrap();
+  const { shiftDefinitions, shiftDefsLoading, bootstrapError } = useDP();
 
-  if (loading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
-  if (error) return <p className="text-sm text-destructive">Erro ao carregar turnos: {error}</p>;
+  if (shiftDefsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (bootstrapError) return <p className="text-sm text-destructive">Erro ao carregar turnos: {bootstrapError}</p>;
 
   return (
     <Tabs defaultValue="active">

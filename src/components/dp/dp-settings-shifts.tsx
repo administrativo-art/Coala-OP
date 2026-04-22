@@ -6,14 +6,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 import { useDP } from '@/components/dp-context';
-import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import type { DPShiftDefinition } from '@/types';
+import {
+  getShiftDefinitionUnitIds,
+  getShiftDefinitionUnitNames,
+} from '@/lib/dp-shift-definitions';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -40,20 +41,62 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { MultiSelect } from '@/components/ui/multi-select';
+import { Plus, Pencil, Trash2, Clock3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DOW_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+function getShiftAccent(name: string) {
+  const normalized = name.toLowerCase();
+
+  if (normalized.includes('intermedi')) {
+    return {
+      label: 'Intermediário',
+      className:
+        'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200',
+    };
+  }
+
+  if (normalized.includes('manhã') || normalized.includes('manha')) {
+    return {
+      label: 'Manhã',
+      className:
+        'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200',
+    };
+  }
+
+  if (normalized.includes('tarde')) {
+    return {
+      label: 'Tarde',
+      className:
+        'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200',
+    };
+  }
+
+  if (normalized.includes('noite')) {
+    return {
+      label: 'Noite',
+      className:
+        'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200',
+    };
+  }
+
+  return {
+    label: 'Turno',
+    className:
+      'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-200',
+  };
+}
+
+function getDisplayCode(def: DPShiftDefinition) {
+  const raw = String(def.code ?? '').trim();
+  if (!raw) return '—';
+  return /^\d+$/.test(raw) ? `#${raw}` : raw;
+}
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -64,7 +107,7 @@ const shiftDefSchema = z.object({
   endTime: z.string().min(1, 'Informe o horário de fim.'),
   breakStart: z.string().optional(),
   breakEnd: z.string().optional(),
-  unitId: z.string().optional(),
+  unitIds: z.array(z.string()).optional(),
   daysOfWeek: z.array(z.number()).min(1, 'Selecione ao menos um dia.'),
   bizneoTemplateId: z.string().optional(),
 });
@@ -91,7 +134,7 @@ function ShiftDefDialog({ def, open, onOpenChange, units }: {
       endTime: def?.endTime ?? '',
       breakStart: def?.breakStart ?? '',
       breakEnd: def?.breakEnd ?? '',
-      unitId: def?.unitId ?? '',
+      unitIds: getShiftDefinitionUnitIds(def),
       daysOfWeek: def?.daysOfWeek ?? [1, 2, 3, 4, 5],
       bizneoTemplateId: def?.bizneoTemplateId ?? '',
     },
@@ -106,7 +149,7 @@ function ShiftDefDialog({ def, open, onOpenChange, units }: {
         endTime: def?.endTime ?? '',
         breakStart: def?.breakStart ?? '',
         breakEnd: def?.breakEnd ?? '',
-        unitId: def?.unitId ?? '',
+        unitIds: getShiftDefinitionUnitIds(def),
         daysOfWeek: def?.daysOfWeek ?? [1, 2, 3, 4, 5],
         bizneoTemplateId: def?.bizneoTemplateId ?? '',
       });
@@ -115,10 +158,15 @@ function ShiftDefDialog({ def, open, onOpenChange, units }: {
 
   async function onSubmit(values: ShiftDefForm) {
     try {
+      const selectedUnits = units.filter(u => (values.unitIds ?? []).includes(u.id));
+      const selectedUnitIds = selectedUnits.map(u => u.id);
+      const selectedUnitNames = selectedUnits.map(u => u.name);
       const data = {
         ...values,
-        unitId: values.unitId || undefined,
-        unitName: units.find(u => u.id === values.unitId)?.name,
+        unitIds: selectedUnitIds.length > 0 ? selectedUnitIds : undefined,
+        unitNames: selectedUnitNames.length > 0 ? selectedUnitNames : undefined,
+        unitId: selectedUnitIds[0],
+        unitName: selectedUnitNames[0],
         bizneoTemplateId: values.bizneoTemplateId || undefined,
         breakStart: values.breakStart || undefined,
         breakEnd: values.breakEnd || undefined,
@@ -145,7 +193,7 @@ function ShiftDefDialog({ def, open, onOpenChange, units }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{def ? 'Editar turno' : 'Novo turno'}</DialogTitle>
           <DialogDescription>
@@ -205,21 +253,17 @@ function ShiftDefDialog({ def, open, onOpenChange, units }: {
               )} />
             </div>
 
-            <FormField control={form.control} name="unitId" render={({ field }) => (
+            <FormField control={form.control} name="unitIds" render={({ field }) => (
               <FormItem>
-                <FormLabel>Unidade padrão (opcional)</FormLabel>
-                <Select
-                  value={field.value || '__none__'}
-                  onValueChange={v => field.onChange(v === '__none__' ? '' : v)}
-                >
-                  <FormControl>
-                    <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="__none__">— Nenhuma —</SelectItem>
-                    {units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <FormLabel>Unidades vinculadas (opcional)</FormLabel>
+                <FormControl>
+                  <MultiSelect
+                    options={units.map(unit => ({ value: unit.id, label: unit.name }))}
+                    selected={field.value ?? []}
+                    onChange={field.onChange}
+                    placeholder="Selecione uma ou mais unidades"
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )} />
@@ -271,14 +315,28 @@ function ShiftDefDialog({ def, open, onOpenChange, units }: {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPSettingsShifts() {
-  const { deleteShiftDefinition } = useDP();
-  const { shiftDefinitions, units, loading: shiftDefsLoading, error } = useDPBootstrap();
+  const {
+    deleteShiftDefinition,
+    shiftDefinitions,
+    shiftDefsLoading,
+    units,
+    bootstrapError,
+  } = useDP();
   const { toast } = useToast();
 
   const [open, setOpen] = useState(false);
   const [editDef, setEditDef] = useState<DPShiftDefinition | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPShiftDefinition | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const resolveUnitLabels = (def: DPShiftDefinition) => {
+    const linkedUnitIds = getShiftDefinitionUnitIds(def);
+    const linkedUnitNames = getShiftDefinitionUnitNames(def);
+
+    if (linkedUnitIds.length === 0) return linkedUnitNames;
+
+    return linkedUnitIds.map((unitId, index) => units.find(unit => unit.id === unitId)?.name ?? linkedUnitNames[index] ?? unitId);
+  };
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -295,59 +353,104 @@ export function DPSettingsShifts() {
   }
 
   if (shiftDefsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
-  if (error) return <p className="text-sm text-destructive">Erro ao carregar turnos: {error}</p>;
+  if (bootstrapError) return <p className="text-sm text-destructive">Erro ao carregar turnos: {bootstrapError}</p>;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="font-medium text-sm">Definições de turno</h3>
           <Badge variant="secondary">{shiftDefinitions.length}</Badge>
         </div>
-        <Button size="sm" variant="outline" onClick={() => { setEditDef(null); setOpen(true); }}>
+        <Button size="sm" variant="outline" className="rounded-xl" onClick={() => { setEditDef(null); setOpen(true); }}>
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           Novo
         </Button>
       </div>
 
-      <ScrollArea className="h-[320px] rounded-md border">
-        {shiftDefinitions.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">Nenhum turno cadastrado.</p>
-        ) : (
-          <div className="divide-y">
-            {shiftDefinitions.map(def => (
-              <div key={def.id} className="flex items-center gap-3 px-3 py-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="font-mono text-xs">{def.code}</Badge>
-                    <p className="text-sm font-medium truncate">{def.name}</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {def.startTime}–{def.endTime}
-                    {' · '}
-                    {def.daysOfWeek.map(d => DOW_LABELS[d]).join(', ')}
-                  </p>
+      {shiftDefinitions.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">Nenhum turno cadastrado.</p>
+      ) : (
+        <div className="space-y-3">
+          {shiftDefinitions.map(def => (
+            <div
+              key={def.id}
+              className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-muted/30 px-5 py-4 shadow-sm transition-colors hover:bg-muted/40 md:flex-row md:items-center md:justify-between"
+            >
+              <div className="flex min-w-0 flex-1 items-start gap-4">
+                <div
+                  className={cn(
+                    'inline-flex min-h-10 min-w-[112px] items-center justify-center rounded-2xl border px-4 py-2 text-sm font-semibold',
+                    getShiftAccent(def.name).className
+                  )}
+                >
+                  {getShiftAccent(def.name).label}
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                      <MoreHorizontal className="h-3.5 w-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => { setEditDef(def); setOpen(true); }}>
-                      <Pencil className="mr-2 h-3.5 w-3.5" />Editar
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setDeleteTarget(def)} className="text-destructive focus:text-destructive">
-                      <Trash2 className="mr-2 h-3.5 w-3.5" />Excluir
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-mono text-base font-semibold tracking-tight text-muted-foreground/70">
+                      {getDisplayCode(def)}
+                    </span>
+                    <p className="truncate text-lg font-semibold leading-none tracking-tight">
+                      {def.name}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5 font-medium">
+                      <Clock3 className="h-4 w-4" />
+                      {def.startTime}–{def.endTime}
+                    </span>
+                    <span className="hidden text-muted-foreground/50 sm:inline">·</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {def.daysOfWeek.map((day) => (
+                        <span
+                          key={`${def.id}-${day}`}
+                          className="rounded-lg border border-border/60 bg-background/70 px-2 py-1 text-xs font-medium text-muted-foreground"
+                        >
+                          {DOW_LABELS[day]}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {resolveUnitLabels(def).length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Unidades vinculadas: {resolveUnitLabels(def).join(', ')}
+                    </p>
+                  )}
+                </div>
               </div>
-            ))}
-          </div>
-        )}
-      </ScrollArea>
+
+              <div className="flex items-center gap-2 self-end md:self-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 rounded-2xl border-border/70 bg-background/80"
+                  onClick={() => { setEditDef(def); setOpen(true); }}
+                  aria-label={`Editar turno ${def.name}`}
+                  title="Editar turno"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 rounded-2xl border-border/70 bg-background/80 text-destructive hover:text-destructive"
+                  onClick={() => setDeleteTarget(def)}
+                  aria-label={`Excluir turno ${def.name}`}
+                  title="Excluir turno"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <ShiftDefDialog def={editDef} open={open} onOpenChange={setOpen} units={units} />
 

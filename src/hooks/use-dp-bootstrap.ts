@@ -1,8 +1,15 @@
 "use client";
 
 import React from 'react';
-import type { DPCalendar, DPSchedule, DPShiftDefinition, DPUnit, DPUnitGroup, DPVacationRecord } from '@/types';
-import { useAuth } from '@/hooks/use-auth';
+import type {
+  DPCalendar,
+  DPSchedule,
+  DPShiftDefinition,
+  DPUnit,
+  DPUnitGroup,
+  DPVacationRecord,
+} from '@/types';
+import { useDP } from '@/components/dp-context';
 
 export type DPBootstrapPayload = {
   units: DPUnit[];
@@ -13,64 +20,43 @@ export type DPBootstrapPayload = {
   calendars: DPCalendar[];
 };
 
-function normalizeSchedule(data: any): DPSchedule {
-  return {
-    ...data,
-    month: Number(data.month),
-    year: Number(data.year),
-    shiftCount: Number(data.shiftCount ?? 0),
-  } as DPSchedule;
-}
-
 export function useDPBootstrap() {
-  const { firebaseUser } = useAuth();
-  const [data, setData] = React.useState<DPBootstrapPayload>({
-    units: [],
-    unitGroups: [],
-    shiftDefinitions: [],
-    schedules: [],
-    vacations: [],
-    calendars: [],
-  });
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const {
+    units,
+    unitGroups,
+    shiftDefinitions,
+    schedules,
+    vacations,
+    calendars,
+    unitsLoading,
+    shiftDefsLoading,
+    schedulesLoading,
+    vacationsLoading,
+    calendarsLoading,
+    bootstrapError,
+  } = useDP();
 
-  const load = React.useCallback(async () => {
-    if (!firebaseUser) return;
-    setLoading(true);
-    setError(null);
+  const loading =
+    unitsLoading ||
+    shiftDefsLoading ||
+    schedulesLoading ||
+    vacationsLoading ||
+    calendarsLoading;
 
-    try {
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch('/api/dp/bootstrap', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(payload?.error ? `${res.status} - ${payload.error}` : `Falha ${res.status}`);
-      }
+  const refresh = React.useCallback(async () => {
+    // Kept for backwards compatibility with older callers.
+    // DP data now comes from the shared client store subscriptions.
+  }, []);
 
-      const schedules = ((payload.schedules ?? []) as any[]).map(normalizeSchedule);
-      schedules.sort((a, b) => b.year - a.year || b.month - a.month);
-
-      setData({
-        units: (payload.units ?? []) as DPUnit[],
-        unitGroups: (payload.unitGroups ?? []) as DPUnitGroup[],
-        shiftDefinitions: (payload.shiftDefinitions ?? []) as DPShiftDefinition[],
-        schedules,
-        vacations: (payload.vacations ?? []) as DPVacationRecord[],
-        calendars: (payload.calendars ?? []) as DPCalendar[],
-      });
-    } catch (err: any) {
-      setError(err?.message ?? 'Falha ao carregar dados do DP.');
-    } finally {
-      setLoading(false);
-    }
-  }, [firebaseUser]);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
-  return { ...data, loading, error, refresh: load };
+  return {
+    units,
+    unitGroups,
+    shiftDefinitions,
+    schedules,
+    vacations,
+    calendars,
+    loading,
+    error: bootstrapError,
+    refresh,
+  };
 }

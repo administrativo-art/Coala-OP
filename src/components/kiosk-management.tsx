@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,8 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import Link from 'next/link';
-import { PlusCircle, Trash2, Save, Building2, Clock, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, Save, Store, Clock3 } from 'lucide-react';
 
 // ─── Name normalizer for Kiosk ↔ DPUnit matching ─────────────────────────────
 
@@ -73,7 +74,27 @@ function matchUnit(kioskName: string, units: DPUnit[]): DPUnit | undefined {
 
 // ─── KioskRow ─────────────────────────────────────────────────────────────────
 
-const DOW_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+function getShiftAccent(name: string) {
+  const normalized = name.toLowerCase();
+
+  if (normalized.includes('intermedi')) {
+    return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200';
+  }
+
+  if (normalized.includes('manhã') || normalized.includes('manha')) {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200';
+  }
+
+  if (normalized.includes('tarde')) {
+    return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200';
+  }
+
+  if (normalized.includes('noite')) {
+    return 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200';
+  }
+
+  return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-200';
+}
 
 function KioskRow({
   kiosk,
@@ -81,12 +102,14 @@ function KioskRow({
   onSave,
   onDelete,
   shifts,
+  compact = false,
 }: {
   kiosk: Kiosk;
   canEdit: boolean;
   onSave: (updated: Kiosk) => Promise<void>;
   onDelete: () => void;
   shifts: DPShiftDefinition[];
+  compact?: boolean;
 }) {
   const [pdv, setPdv] = useState(kiosk.pdvFilialId ?? '');
   const [bizneo, setBizneo] = useState(kiosk.bizneoId ?? '');
@@ -113,93 +136,104 @@ function KioskRow({
   }
 
   return (
-    <div className="rounded-lg border p-4 space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span className="font-medium text-sm">{kiosk.name}</span>
-          {kiosk.id === 'matriz' && (
-            <Badge variant="secondary" className="text-xs">Matriz</Badge>
-          )}
+    <div
+      className={cn(
+        'rounded-2xl border border-border/70 bg-card/40 shadow-sm transition-colors hover:bg-card/55',
+        compact ? 'px-5 py-4' : 'px-6 py-5'
+      )}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <Store className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-lg font-semibold">{kiosk.name}</span>
+              {kiosk.id === 'matriz' && (
+                <Badge
+                  variant="outline"
+                  className="rounded-full border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200"
+                >
+                  Matriz
+                </Badge>
+              )}
+            </div>
+          </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-          disabled={!canEdit || kiosk.id === 'matriz'}
-          title={kiosk.id === 'matriz' ? 'A Matriz não pode ser excluída' : 'Excluir unidade'}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        {kiosk.id !== 'matriz' ? (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-11 w-11 shrink-0 rounded-2xl border-border/70 bg-background/80 text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+            disabled={!canEdit}
+            title="Excluir unidade"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        ) : (
+          <div className="h-11 w-11 shrink-0" />
+        )}
       </div>
 
-      {/* Integration IDs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-            ID PDV Legal
+      <div className={cn('mt-4', compact ? 'space-y-3' : 'space-y-4')}>
+        <div className="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto_auto_minmax(0,1fr)] lg:items-center">
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            PDV
           </Label>
           <Input
             placeholder="ex: 17343"
             value={pdv}
             onChange={e => setPdv(e.target.value)}
             disabled={!canEdit}
-            className="h-8 text-sm"
+            className={cn(
+              'rounded-xl border-border/70 bg-background/70 text-base shadow-none',
+              compact ? 'h-14 px-4' : 'h-12'
+            )}
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-            ID Bizneo
+          <span className="hidden text-lg text-muted-foreground/40 lg:inline">·</span>
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Bizneo
           </Label>
           <Input
             placeholder="ex: 42"
             value={bizneo}
             onChange={e => setBizneo(e.target.value)}
             disabled={!canEdit}
-            className="h-8 text-sm"
+            className={cn(
+              'rounded-xl border-border/70 bg-background/70 text-base shadow-none',
+              compact ? 'h-14 px-4' : 'h-12'
+            )}
           />
         </div>
-      </div>
 
-      {/* Shifts from DP */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-            <Clock className="h-3 w-3" /> Turnos (DP)
-          </p>
-          <Link
-            href="/dashboard/dp/settings/shifts"
-            className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Gerenciar <ExternalLink className="h-2.5 w-2.5" />
-          </Link>
-        </div>
         {shifts.length > 0 ? (
-          <div className="w-full flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-2">
             {shifts.map(s => (
-              <div key={s.id} className="rounded border bg-muted/50 px-1.5 py-0.5 flex items-center gap-1 text-[10px]">
-                <span className="font-mono font-bold bg-primary/10 text-primary rounded px-0.5">{s.code}</span>
-                <span className="text-muted-foreground">{s.name.trim()}</span>
-                <span className="text-muted-foreground/70">{s.startTime}–{s.endTime}</span>
-              </div>
+              <span
+                key={s.id}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium',
+                  getShiftAccent(s.name)
+                )}
+              >
+                <Clock3 className="h-3.5 w-3.5" />
+                <span>{s.name.trim()}</span>
+                <span className="opacity-75">{s.startTime}–{s.endTime}</span>
+              </span>
             ))}
           </div>
         ) : (
-          <p className="text-[11px] text-muted-foreground">
-            Nenhum turno vinculado. Vincule a unidade DP nos{' '}
-            <Link href="/dashboard/dp/settings/shifts" className="underline hover:text-foreground">
-              turnos do DP
-            </Link>
-            .
+          <p className="text-sm italic text-muted-foreground">
+            Nenhum turno vinculado
           </p>
         )}
       </div>
 
       {isDirty && (
-        <div className="flex justify-end">
-          <Button size="sm" onClick={handleSave} disabled={saving || !canEdit}>
+        <div className="mt-4 flex justify-end">
+          <Button size="sm" className="rounded-xl" onClick={handleSave} disabled={saving || !canEdit}>
             <Save className="mr-1.5 h-3.5 w-3.5" />
             {saving ? 'Salvando...' : 'Salvar'}
           </Button>
@@ -211,7 +245,7 @@ function KioskRow({
 
 // ─── KioskManagement (main export) ───────────────────────────────────────────
 
-export function KioskManagement() {
+export function KioskManagement({ compact = false }: { compact?: boolean } = {}) {
   const { kiosks, loading, addKiosk, updateKiosk, deleteKiosk } = useKiosks();
   const { units, shiftDefinitions } = useDP();
   const { permissions } = useAuth();
@@ -240,7 +274,7 @@ export function KioskManagement() {
     sorted.forEach(kiosk => {
       const dpUnit = matchUnit(kiosk.name, units);
       const shifts = dpUnit
-        ? shiftDefinitions.filter(s => s.unitId === dpUnit.id)
+        ? shiftDefinitions.filter(s => shiftDefinitionMatchesUnit(s, dpUnit.id))
         : [];
       result.set(kiosk.id, shifts);
     });
@@ -278,46 +312,65 @@ export function KioskManagement() {
 
   if (loading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 
+  const listContent = (
+    <div className={compact ? "space-y-2 pb-8" : "space-y-3 pr-3 pb-6"}>
+      {sorted.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">
+          Nenhuma unidade cadastrada.
+        </p>
+      ) : (
+        sorted.map(kiosk => (
+          <KioskRow
+            key={kiosk.id}
+            kiosk={kiosk}
+            canEdit={canEdit}
+            onSave={updateKiosk}
+            onDelete={() => setKioskToDelete(kiosk)}
+            shifts={kioskShifts.get(kiosk.id) ?? []}
+            compact={compact}
+          />
+        ))
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {/* Add new */}
       {canEdit && (
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <Input
             placeholder="Nome do novo quiosque / unidade"
             value={newName}
             onChange={e => setNewName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAdd()}
             disabled={adding}
+            className={cn(
+              'rounded-2xl border-border/70 bg-background/70 text-base shadow-none',
+              compact ? 'h-14 px-5' : 'h-12'
+            )}
           />
-          <Button onClick={handleAdd} disabled={adding || !newName.trim()}>
-            <PlusCircle className="mr-1.5 h-4 w-4" />
+          <Button
+            size={compact ? "sm" : "default"}
+            variant="outline"
+            className={cn('rounded-2xl px-5', compact ? 'h-14 text-base' : '')}
+            onClick={handleAdd}
+            disabled={adding || !newName.trim()}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
             Adicionar
           </Button>
         </div>
       )}
 
       {/* List */}
-      <ScrollArea className="h-[calc(100vh-280px)]">
-        <div className="space-y-3 pr-3">
-          {sorted.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              Nenhuma unidade cadastrada.
-            </p>
-          ) : (
-            sorted.map(kiosk => (
-              <KioskRow
-                key={kiosk.id}
-                kiosk={kiosk}
-                canEdit={canEdit}
-                onSave={updateKiosk}
-                onDelete={() => setKioskToDelete(kiosk)}
-                shifts={kioskShifts.get(kiosk.id) ?? []}
-              />
-            ))
-          )}
-        </div>
-      </ScrollArea>
+      {compact ? (
+        listContent
+      ) : (
+        <ScrollArea className="h-[calc(100vh-280px)]">
+          {listContent}
+        </ScrollArea>
+      )}
 
       <AlertDialog
         open={!!kioskToDelete}
