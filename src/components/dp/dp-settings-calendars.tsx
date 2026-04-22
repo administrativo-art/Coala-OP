@@ -161,7 +161,7 @@ function CalendarDialog({ calendar, open, onOpenChange, onCreated }: { calendar?
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPSettingsCalendars({ onSelect }: { onSelect?: (id: string) => void } = {}) {
-  const { calendars, calendarsLoading, bootstrapError, deleteCalendar } = useDP();
+  const { calendars, calendarsLoading, calendarsError, deleteCalendar } = useDP();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -199,8 +199,8 @@ export function DPSettingsCalendars({ onSelect }: { onSelect?: (id: string) => v
   })();
 
   if (calendarsLoading && calendars.length === 0) return <p className="text-sm text-muted-foreground">Carregando...</p>;
-  if (bootstrapError) {
-    return <p className="text-sm text-destructive">Erro ao carregar calendários: {bootstrapError}</p>;
+  if (calendarsError && calendars.length === 0) {
+    return <p className="text-sm text-destructive">Erro ao carregar calendários: {calendarsError}</p>;
   }
 
   return (

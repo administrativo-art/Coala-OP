@@ -6,13 +6,13 @@ import { DPSettingsCalendars } from '@/components/dp/dp-settings-calendars';
 import { DPCalendarHolidays } from '@/components/dp/dp-calendar-holidays';
 
 export function CalendarManagement() {
-  const { calendars, calendarsLoading, bootstrapError } = useDP();
+  const { calendars, calendarsLoading, calendarsError } = useDP();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const selected = selectedId ? calendars.find(c => c.id === selectedId) ?? null : null;
 
   if (calendarsLoading && calendars.length === 0) return <p className="text-sm text-muted-foreground">Carregando...</p>;
-  if (bootstrapError) return <p className="text-sm text-destructive">Erro ao carregar calendários: {bootstrapError}</p>;
+  if (calendarsError && calendars.length === 0) return <p className="text-sm text-destructive">Erro ao carregar calendários: {calendarsError}</p>;
 
   if (selected) {
     return (

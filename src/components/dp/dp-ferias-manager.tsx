@@ -214,7 +214,7 @@ function CardSkeleton() {
 
 export function DPFeriasManager() {
   const { activeUsers } = useAuth();
-  const { vacations, units, loading: vacationsLoading, error } = useDPBootstrap();
+  const { vacations, units, vacationsLoading, vacationsError, unitsError } = useDPBootstrap();
   const router = useRouter();
 
   const [search, setSearch] = useState('');
@@ -297,7 +297,8 @@ export function DPFeriasManager() {
     [filtered]
   );
 
-  const isLoading = vacationsLoading;
+  const isLoading = vacationsLoading && vacations.length === 0;
+  const warningError = vacationsError ?? unitsError;
 
   // Approved gozo vacations for timeline
   const approvedVacations = useMemo(() =>
@@ -307,10 +308,10 @@ export function DPFeriasManager() {
 
   return (
     <div className="space-y-8">
-      {error && (
+      {warningError && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
           <p className="font-medium text-destructive">Falha ao carregar férias.</p>
-          <p className="mt-1 text-muted-foreground">{error}</p>
+          <p className="mt-1 text-muted-foreground">{warningError}</p>
         </div>
       )}
 

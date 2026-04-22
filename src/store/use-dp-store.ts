@@ -9,34 +9,59 @@ import type {
   DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
 } from '@/types';
 
+export type DPResourceKey = 'units' | 'shiftDefs' | 'schedules' | 'vacations' | 'calendars';
+export type DPResourceSource = 'idle' | 'snapshot' | 'fallback' | 'error';
+
+export type DPResourceMeta = Record<
+  DPResourceKey,
+  {
+    source: DPResourceSource;
+    lastResolvedAt: number | null;
+  }
+>;
+
 export interface DPStoreState {
   // Dados
   units: DPUnit[];
   unitGroups: DPUnitGroup[];
   unitsLoading: boolean;
+  unitsError: string | null;
   shiftDefinitions: DPShiftDefinition[];
   shiftDefsLoading: boolean;
+  shiftDefsError: string | null;
   schedules: DPSchedule[];
   schedulesLoading: boolean;
-  bootstrapError: string | null;
+  schedulesError: string | null;
   vacations: DPVacationRecord[];
   vacationsLoading: boolean;
+  vacationsError: string | null;
   calendars: DPCalendar[];
   calendarsLoading: boolean;
+  calendarsError: string | null;
+  bootstrapError: string | null;
+  resourceMeta: DPResourceMeta;
 
   // Actions (Setters para uso interno dos listeners)
   setUnits: (units: DPUnit[]) => void;
   setUnitGroups: (groups: DPUnitGroup[]) => void;
   setUnitsLoading: (loading: boolean) => void;
+  setUnitsError: (error: string | null) => void;
   setShiftDefinitions: (defs: DPShiftDefinition[]) => void;
   setShiftDefsLoading: (loading: boolean) => void;
+  setShiftDefsError: (error: string | null) => void;
   setSchedules: (schedules: DPSchedule[]) => void;
   setSchedulesLoading: (loading: boolean) => void;
-  setBootstrapError: (error: string | null) => void;
+  setSchedulesError: (error: string | null) => void;
   setVacations: (vacations: DPVacationRecord[]) => void;
   setVacationsLoading: (loading: boolean) => void;
+  setVacationsError: (error: string | null) => void;
   setCalendars: (calendars: DPCalendar[]) => void;
   setCalendarsLoading: (loading: boolean) => void;
+  setCalendarsError: (error: string | null) => void;
+  setBootstrapError: (error: string | null) => void;
+  setResourceError: (resource: DPResourceKey, error: string | null) => void;
+  markResourceResolved: (resource: DPResourceKey, source: DPResourceSource) => void;
+  resetResourceMeta: () => void;
 
   // CRUD Actions (Acessíveis pelos componentes)
   addUnit: (data: Omit<DPUnit, 'id' | 'createdAt'>) => Promise<void>;
@@ -63,20 +88,48 @@ export interface DPStoreState {
   resetStore: () => void;
 }
 
+const initialResourceMeta: DPResourceMeta = {
+  units: { source: 'idle', lastResolvedAt: null },
+  shiftDefs: { source: 'idle', lastResolvedAt: null },
+  schedules: { source: 'idle', lastResolvedAt: null },
+  vacations: { source: 'idle', lastResolvedAt: null },
+  calendars: { source: 'idle', lastResolvedAt: null },
+};
+
 const initialState = {
   units: [],
   unitGroups: [],
   unitsLoading: true,
+  unitsError: null,
   shiftDefinitions: [],
   shiftDefsLoading: true,
+  shiftDefsError: null,
   schedules: [],
   schedulesLoading: true,
-  bootstrapError: null,
+  schedulesError: null,
   vacations: [],
   vacationsLoading: true,
+  vacationsError: null,
   calendars: [],
   calendarsLoading: true,
+  calendarsError: null,
+  bootstrapError: null,
+  resourceMeta: initialResourceMeta,
 };
+
+function selectBootstrapError(state: Pick<
+  DPStoreState,
+  'unitsError' | 'shiftDefsError' | 'schedulesError' | 'vacationsError' | 'calendarsError'
+>) {
+  return (
+    state.unitsError ??
+    state.shiftDefsError ??
+    state.schedulesError ??
+    state.vacationsError ??
+    state.calendarsError ??
+    null
+  );
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
@@ -130,17 +183,56 @@ export const useDPStore = create<DPStoreState>((set) => ({
   setUnits: (units) => set({ units }),
   setUnitGroups: (unitGroups) => set({ unitGroups }),
   setUnitsLoading: (unitsLoading) => set({ unitsLoading }),
+  setUnitsError: (unitsError) => set((state) => ({ unitsError, bootstrapError: selectBootstrapError({ ...state, unitsError }) })),
   setShiftDefinitions: (shiftDefinitions) => set({ shiftDefinitions }),
   setShiftDefsLoading: (shiftDefsLoading) => set({ shiftDefsLoading }),
+  setShiftDefsError: (shiftDefsError) => set((state) => ({ shiftDefsError, bootstrapError: selectBootstrapError({ ...state, shiftDefsError }) })),
   setSchedules: (schedules) => set({ schedules }),
   setSchedulesLoading: (schedulesLoading) => set({ schedulesLoading }),
-  setBootstrapError: (bootstrapError) => set({ bootstrapError }),
+  setSchedulesError: (schedulesError) => set((state) => ({ schedulesError, bootstrapError: selectBootstrapError({ ...state, schedulesError }) })),
   setVacations: (vacations) => set({ vacations }),
   setVacationsLoading: (vacationsLoading) => set({ vacationsLoading }),
+  setVacationsError: (vacationsError) => set((state) => ({ vacationsError, bootstrapError: selectBootstrapError({ ...state, vacationsError }) })),
   setCalendars: (calendars) => set({ calendars }),
   setCalendarsLoading: (calendarsLoading) => set({ calendarsLoading }),
+  setCalendarsError: (calendarsError) => set((state) => ({ calendarsError, bootstrapError: selectBootstrapError({ ...state, calendarsError }) })),
+  setBootstrapError: (bootstrapError) => set({ bootstrapError }),
+  setResourceError: (resource, error) => set((state) => {
+    const nextState = {
+      unitsError: resource === 'units' ? error : state.unitsError,
+      shiftDefsError: resource === 'shiftDefs' ? error : state.shiftDefsError,
+      schedulesError: resource === 'schedules' ? error : state.schedulesError,
+      vacationsError: resource === 'vacations' ? error : state.vacationsError,
+      calendarsError: resource === 'calendars' ? error : state.calendarsError,
+    };
 
-  resetStore: () => set(initialState),
+    return {
+      ...nextState,
+      bootstrapError: selectBootstrapError(nextState),
+      resourceMeta: {
+        ...state.resourceMeta,
+        [resource]: {
+          source: error ? 'error' : state.resourceMeta[resource].source,
+          lastResolvedAt: error ? Date.now() : state.resourceMeta[resource].lastResolvedAt,
+        },
+      },
+    };
+  }),
+  markResourceResolved: (resource, source) => set((state) => ({
+    resourceMeta: {
+      ...state.resourceMeta,
+      [resource]: {
+        source,
+        lastResolvedAt: Date.now(),
+      },
+    },
+  })),
+  resetResourceMeta: () => set({ resourceMeta: initialResourceMeta }),
+
+  resetStore: () => set({
+    ...initialState,
+    resourceMeta: initialResourceMeta,
+  }),
 
   // CRUD Implementation
   addUnit: async (data) => {

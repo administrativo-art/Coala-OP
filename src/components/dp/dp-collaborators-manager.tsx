@@ -541,7 +541,7 @@ function CollaboratorRow({ user, onEdit, onTerminate, canEdit, canTerminate, shi
 
 export function DPCollaboratorsManager() {
   const { activeUsers, permissions, updateUser } = useAuth();
-  const { shiftDefinitions, shiftDefsLoading, bootstrapError } = useDP();
+  const { shiftDefinitions, shiftDefsLoading, shiftDefsError } = useDP();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [editUser, setEditUser] = useState<User | null>(null);
@@ -600,12 +600,12 @@ export function DPCollaboratorsManager() {
     );
   }, [activeUsers, search]);
 
-  if (shiftDefsLoading) {
+  if (shiftDefsLoading && shiftDefinitions.length === 0) {
     return <p className="text-sm text-muted-foreground">Carregando...</p>;
   }
 
-  if (bootstrapError) {
-    return <p className="text-sm text-destructive">Erro ao carregar dados do DP: {bootstrapError}</p>;
+  if (shiftDefsError && shiftDefinitions.length === 0) {
+    return <p className="text-sm text-destructive">Erro ao carregar dados do DP: {shiftDefsError}</p>;
   }
 
   return (

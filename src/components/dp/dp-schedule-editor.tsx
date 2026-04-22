@@ -482,14 +482,18 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     schedules,
     calendars,
     unitsLoading,
+    unitsError,
     shiftDefsLoading,
+    shiftDefsError,
     schedulesLoading,
+    schedulesError,
     calendarsLoading,
-    bootstrapError,
+    calendarsError,
   } = useDP();
   const {
     shifts,
     loading,
+    error: shiftsError,
     addShiftsBatch,
     updateShiftsBatch,
     deleteShift: doDelete,
@@ -497,10 +501,12 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   } = useDPShifts(schedule.id);
   const { toast } = useToast();
   const bootstrapLoading =
-    unitsLoading ||
-    shiftDefsLoading ||
-    schedulesLoading ||
-    calendarsLoading;
+    (unitsLoading && units.length === 0) ||
+    (shiftDefsLoading && shiftDefinitions.length === 0);
+  const blockingBootstrapError =
+    (unitsError && units.length === 0 ? unitsError : null) ??
+    (shiftDefsError && shiftDefinitions.length === 0 ? shiftDefsError : null);
+  const ancillaryBootstrapError = schedulesError ?? calendarsError;
 
   // Calendar for holidays
   const { holidays } = useDPHolidays(schedule.calendarId ?? null);
@@ -947,14 +953,8 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     );
   }
 
-  if (
-    bootstrapError &&
-    !bootstrapLoading &&
-    units.length === 0 &&
-    shiftDefinitions.length === 0 &&
-    calendars.length === 0
-  ) {
-    return <p className="text-sm text-destructive">Erro ao carregar dados da escala: {bootstrapError}</p>;
+  if (blockingBootstrapError && !bootstrapLoading) {
+    return <p className="text-sm text-destructive">Erro ao carregar dados da escala: {blockingBootstrapError}</p>;
   }
 
   async function confirmDelete() {
@@ -983,6 +983,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         </div>
       </div>
     );
+  }
+
+  if (shiftsError && shifts.length === 0) {
+    return <p className="text-sm text-destructive">Erro ao carregar os turnos da escala: {shiftsError}</p>;
   }
 
   return (
@@ -1035,6 +1039,12 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
           <Lock className="h-3.5 w-3.5 shrink-0" />
           Escala trancada — dados de colaboradores e vale-transporte estão congelados.
+        </div>
+      )}
+      {ancillaryBootstrapError && (
+        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          Alguns dados auxiliares da escala não carregaram: {ancillaryBootstrapError}
         </div>
       )}
       {canEdit && bulkSelectionActive && (

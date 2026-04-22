@@ -211,7 +211,7 @@ function GroupDialog({ group, open, onOpenChange }: { group?: DPUnitGroup | null
 
 export function DPSettingsUnits() {
   const { deleteUnit, deleteUnitGroup } = useDP();
-  const { units, unitGroups, loading: unitsLoading, error } = useDPBootstrap();
+  const { units, unitGroups, unitsLoading, unitsError } = useDPBootstrap();
   const { toast } = useToast();
 
   const [unitDialog, setUnitDialog] = useState<DPUnit | null | 'new'>('new' as any);
@@ -254,8 +254,8 @@ export function DPSettingsUnits() {
     }
   }
 
-  if (unitsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
-  if (error) return <p className="text-sm text-destructive">Erro ao carregar unidades: {error}</p>;
+  if (unitsLoading && units.length === 0) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (unitsError && units.length === 0) return <p className="text-sm text-destructive">Erro ao carregar unidades: {unitsError}</p>;
 
   return (
     <div className="space-y-8">

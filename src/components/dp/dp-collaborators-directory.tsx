@@ -123,10 +123,10 @@ function CollaboratorList({ users, emptyMessage, shiftDefinitions }: { users: Us
 
 export function DPCollaboratorsDirectory() {
   const { activeUsers, terminatedUsers } = useAuth();
-  const { shiftDefinitions, shiftDefsLoading, bootstrapError } = useDP();
+  const { shiftDefinitions, shiftDefsLoading, shiftDefsError } = useDP();
 
-  if (shiftDefsLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
-  if (bootstrapError) return <p className="text-sm text-destructive">Erro ao carregar turnos: {bootstrapError}</p>;
+  if (shiftDefsLoading && shiftDefinitions.length === 0) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (shiftDefsError && shiftDefinitions.length === 0) return <p className="text-sm text-destructive">Erro ao carregar turnos: {shiftDefsError}</p>;
 
   return (
     <Tabs defaultValue="active">

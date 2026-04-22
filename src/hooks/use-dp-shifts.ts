@@ -4,13 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/lib/firebase';
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc,
-  doc, query, orderBy, serverTimestamp, writeBatch, increment,
+  doc, query, orderBy, serverTimestamp, writeBatch, increment, getDocs,
 } from 'firebase/firestore';
 import type { DPShift } from '@/types';
 
 export interface DPShiftsHookResult {
   shifts: DPShift[];
   loading: boolean;
+  error: string | null;
   addShift: (data: Omit<DPShift, 'id' | 'createdAt'>) => Promise<void>;
   addShiftsBatch: (data: Omit<DPShift, 'id' | 'createdAt'>[]) => Promise<void>;
   updateShift: (shift: DPShift) => Promise<void>;
@@ -23,6 +24,7 @@ export interface DPShiftsHookResult {
 export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
   const [shifts, setShifts] = useState<DPShift[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const countWorkItems = useCallback(
     (items: Array<Pick<DPShift, 'type'>>) => items.filter((item) => item.type !== 'day_off').length,
@@ -30,20 +32,52 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
   );
 
   useEffect(() => {
-    if (!scheduleId) { setShifts([]); setLoading(false); return; }
+    if (!scheduleId) { setShifts([]); setLoading(false); setError(null); return; }
 
     setLoading(true);
-    return onSnapshot(
-      query(
-        collection(db, 'dp_schedules', scheduleId, 'shifts'),
-        orderBy('date'),
-      ),
-      (snap) => {
+    setError(null);
+
+    const shiftsQuery = query(
+      collection(db, 'dp_schedules', scheduleId, 'shifts'),
+      orderBy('date'),
+    );
+
+    let resolved = false;
+    const fallbackTimeoutId = window.setTimeout(async () => {
+      if (resolved) return;
+      try {
+        const snap = await getDocs(shiftsQuery);
+        resolved = true;
         setShifts(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPShift)));
         setLoading(false);
+      } catch (fallbackError) {
+        console.error('[useDPShifts] Fallback fetch failed.', fallbackError);
+        setError('Falha ao carregar os turnos da escala.');
+        setLoading(false);
+      }
+    }, 4000);
+
+    const unsubscribe = onSnapshot(
+      shiftsQuery,
+      (snap) => {
+        resolved = true;
+        window.clearTimeout(fallbackTimeoutId);
+        setShifts(snap.docs.map(d => ({ id: d.id, ...d.data() } as DPShift)));
+        setError(null);
+        setLoading(false);
       },
-      () => setLoading(false)
+      (snapshotError) => {
+        window.clearTimeout(fallbackTimeoutId);
+        console.error('[useDPShifts] Subscription failed.', snapshotError);
+        setError('Falha ao carregar os turnos da escala.');
+        setLoading(false);
+      }
     );
+
+    return () => {
+      window.clearTimeout(fallbackTimeoutId);
+      unsubscribe();
+    };
   }, [scheduleId]);
 
   const addShift = useCallback(async (data: Omit<DPShift, 'id' | 'createdAt'>) => {
@@ -138,6 +172,7 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
   return {
     shifts,
     loading,
+    error,
     addShift,
     addShiftsBatch,
     updateShift,

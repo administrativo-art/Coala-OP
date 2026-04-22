@@ -320,7 +320,7 @@ export function DPSettingsShifts() {
     shiftDefinitions,
     shiftDefsLoading,
     units,
-    bootstrapError,
+    shiftDefsError,
   } = useDP();
   const { toast } = useToast();
 
@@ -353,7 +353,7 @@ export function DPSettingsShifts() {
   }
 
   if (shiftDefsLoading && shiftDefinitions.length === 0) return <p className="text-sm text-muted-foreground">Carregando...</p>;
-  if (bootstrapError) return <p className="text-sm text-destructive">Erro ao carregar turnos: {bootstrapError}</p>;
+  if (shiftDefsError && shiftDefinitions.length === 0) return <p className="text-sm text-destructive">Erro ao carregar turnos: {shiftDefsError}</p>;
 
   return (
     <div className="space-y-4">

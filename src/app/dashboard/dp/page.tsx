@@ -433,7 +433,20 @@ function TodayShiftsCard({ todayShifts }: {
 
 export default function DPDashboardPage() {
   const { permissions, users } = useAuth();
-  const { vacations, schedules, units, shiftDefinitions, loading, error } = useDPBootstrap();
+  const {
+    vacations,
+    schedules,
+    units,
+    shiftDefinitions,
+    unitsLoading,
+    unitsError,
+    shiftDefsLoading,
+    shiftDefinitionsError,
+    schedulesLoading,
+    schedulesError,
+    vacationsLoading,
+    vacationsError,
+  } = useDPBootstrap();
 
   // Encontra a escala do mês atual (ou o mais recente)
   const now = new Date();
@@ -520,16 +533,29 @@ export default function DPDashboardPage() {
     return <p className="text-muted-foreground p-6">Sem permissão para acessar o Departamento Pessoal.</p>;
   }
 
-  if (loading) {
+  const dashboardLoading =
+    (unitsLoading && units.length === 0) ||
+    (shiftDefsLoading && shiftDefinitions.length === 0) ||
+    (schedulesLoading && schedules.length === 0) ||
+    (vacationsLoading && vacations.length === 0);
+  const dashboardErrors = [unitsError, shiftDefinitionsError, schedulesError, vacationsError].filter(Boolean);
+
+  if (dashboardLoading) {
     return <p className="text-muted-foreground p-6 text-sm">Carregando...</p>;
   }
 
-  if (error) {
-    return <p className="text-destructive p-6 text-sm">Erro ao carregar dashboard do DP: {error}</p>;
+  if (dashboardErrors.length > 0 && units.length === 0 && shiftDefinitions.length === 0 && schedules.length === 0 && vacations.length === 0) {
+    return <p className="text-destructive p-6 text-sm">Erro ao carregar dashboard do DP: {dashboardErrors[0]}</p>;
   }
 
   return (
     <div className="space-y-8">
+      {dashboardErrors.length > 0 && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+          <p className="font-medium text-destructive">Alguns dados do DP não foram carregados.</p>
+          <p className="mt-1 text-muted-foreground">{dashboardErrors[0]}</p>
+        </div>
+      )}
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 xl:grid-cols-4">
 
         {/* ── Coluna principal ── */}

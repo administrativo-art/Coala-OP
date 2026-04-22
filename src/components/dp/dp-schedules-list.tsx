@@ -559,13 +559,16 @@ export function DPSchedulesList() {
     deleteSchedule,
     schedules,
     schedulesLoading,
+    schedulesError,
     units,
     unitsLoading,
+    unitsError,
     calendars,
     calendarsLoading,
+    calendarsError,
     shiftDefinitions,
     shiftDefsLoading,
-    bootstrapError,
+    shiftDefsError,
   } = useDP();
   const { permissions } = useAuth();
   const { toast } = useToast();
@@ -576,6 +579,9 @@ export function DPSchedulesList() {
   const [deleteTarget, setDeleteTarget] = useState<DPSchedule | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const createDependenciesReady = !unitsLoading && !calendarsLoading && !unitsError && !calendarsError;
+  const exportDependenciesReady = !shiftDefsLoading && !unitsLoading && !shiftDefsError && !unitsError;
+  const ancillaryErrors = [unitsError, calendarsError, shiftDefsError].filter(Boolean);
 
   const canCreate = permissions.dp?.schedules?.create ?? false;
   const canDelete = permissions.dp?.schedules?.delete ?? false;
@@ -646,7 +652,7 @@ export function DPSchedulesList() {
     }
   }
 
-  if (schedulesLoading || unitsLoading || calendarsLoading || shiftDefsLoading) {
+  if (schedulesLoading && schedules.length === 0) {
     return (
       <div className="space-y-6">
         {[1, 2].map(i => (
@@ -661,23 +667,29 @@ export function DPSchedulesList() {
     );
   }
 
-  if (bootstrapError && schedules.length === 0) {
+  if (schedulesError && schedules.length === 0) {
     return (
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
         <p className="font-medium text-destructive">Falha ao carregar o módulo de Escalas.</p>
-        <p className="mt-1 text-muted-foreground">{bootstrapError}</p>
+        <p className="mt-1 text-muted-foreground">{schedulesError}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
+      {ancillaryErrors.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
+          <p className="font-medium">Alguns dados auxiliares de Escalas não carregaram.</p>
+          <p className="mt-1 text-amber-800/80">{ancillaryErrors[0]}</p>
+        </div>
+      )}
       {schedules.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <CalendarDays className="h-12 w-12 opacity-30" />
           <p className="text-sm">Nenhuma escala cadastrada.</p>
           {canCreate && (
-            <Button onClick={() => openCreate()} className="mt-2">
+            <Button onClick={() => openCreate()} className="mt-2" disabled={!createDependenciesReady}>
               <Plus className="mr-2 h-4 w-4" />
               Criar primeira escala
             </Button>
@@ -697,6 +709,7 @@ export function DPSchedulesList() {
                   variant="ghost"
                   className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                   onClick={() => openCreate(unitId)}
+                  disabled={!createDependenciesReady}
                 >
                   <Plus className="h-3 w-3 mr-1" />
                   Criar
@@ -756,6 +769,7 @@ export function DPSchedulesList() {
             onClick={() => setExportBizneoOpen(true)}
             variant="outline"
             className="rounded-full shadow-lg h-10 px-4 gap-2 bg-background"
+            disabled={!exportDependenciesReady}
           >
             <Download className="h-4 w-4" />
             Exportar Bizneo
@@ -766,6 +780,7 @@ export function DPSchedulesList() {
             onClick={() => openCreate()}
             className="rounded-full shadow-lg h-12 px-5 gap-2"
             size="lg"
+            disabled={!createDependenciesReady}
           >
             <Plus className="h-5 w-5" />
             Criar Escala

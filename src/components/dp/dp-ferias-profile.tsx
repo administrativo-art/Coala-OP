@@ -494,7 +494,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   const router = useRouter();
   const { users, permissions } = useAuth();
   const { updateVacation, deleteVacation } = useDP();
-  const { vacations, loading: vacationsLoading, error } = useDPBootstrap();
+  const { vacations, vacationsLoading, vacationsError } = useDPBootstrap();
   const { toast } = useToast();
 
   const canEdit    = permissions.dp?.vacation?.request ?? false;
@@ -558,10 +558,18 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     );
   }
 
-  if (error) {
+  if (vacationsLoading && vacations.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <p className="text-sm text-destructive">Erro ao carregar férias: {error}</p>
+        <p className="text-sm text-muted-foreground">Carregando férias...</p>
+      </div>
+    );
+  }
+
+  if (vacationsError && vacations.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <p className="text-sm text-destructive">Erro ao carregar férias: {vacationsError}</p>
         <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/dp/ferias')}>
           <ArrowLeft className="mr-2 h-4 w-4" />Voltar
         </Button>

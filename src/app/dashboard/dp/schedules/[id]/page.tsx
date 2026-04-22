@@ -7,19 +7,19 @@ import { DPScheduleEditor } from '@/components/dp/dp-schedule-editor';
 
 export default function DPScheduleEditorPage() {
   const { permissions } = useAuth();
-  const { schedules, schedulesLoading, bootstrapError } = useDP();
+  const { schedules, schedulesLoading, schedulesError } = useDP();
   const { id } = useParams<{ id: string }>();
 
   if (!permissions.dp?.schedules?.view) {
     return <p className="text-muted-foreground p-6">Sem permissão para acessar Escalas.</p>;
   }
 
-  if (schedulesLoading) {
+  if (schedulesLoading && schedules.length === 0) {
     return <p className="text-muted-foreground p-6 text-sm">Carregando...</p>;
   }
 
-  if (bootstrapError && schedules.length === 0) {
-    return <p className="text-destructive p-6 text-sm">Erro ao carregar escala: {bootstrapError}</p>;
+  if (schedulesError && schedules.length === 0) {
+    return <p className="text-destructive p-6 text-sm">Erro ao carregar escala: {schedulesError}</p>;
   }
 
   const schedule = schedules.find(s => s.id === id);
