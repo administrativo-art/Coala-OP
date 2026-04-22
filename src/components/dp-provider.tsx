@@ -143,7 +143,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    if (authLoading) {
+    if (!firebaseUser && authLoading) {
       return () => {
         cleanup();
       };
@@ -392,7 +392,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cleanup();
     };
-  }, [authLoading, firebaseUser?.uid, scope]);
+  }, [firebaseUser?.uid, scope]);
 
   return <>{children}</>;
 }
