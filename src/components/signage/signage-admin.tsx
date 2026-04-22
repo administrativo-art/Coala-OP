@@ -839,7 +839,7 @@ export function SignageAdmin() {
                     </Button>
                   </div>
                   <div className="mt-3 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                    Player: <span className="font-mono text-foreground">/player?kiosk={selectedKiosk.id}</span>
+                    TV URL: <span className="font-mono text-foreground">/tv/{selectedKiosk.id}</span>
                   </div>
                 </div>
 
