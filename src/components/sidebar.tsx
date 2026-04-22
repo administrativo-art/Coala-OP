@@ -66,7 +66,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
     const all: NavSection[] = [
       {
         key: "ops",
-        label: "Departamento Operacional",
+        label: "Operacional",
         color: SECTION_COLORS.ops,
         items: [
           { label: "Painel de Operações", href: "/dashboard/operations", icon: LayoutGrid, show: permissions.dashboard.operational },
@@ -76,7 +76,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       },
       {
         key: "com",
-        label: "Departamento Comercial",
+        label: "Comercial",
         color: SECTION_COLORS.com,
         items: [
           { label: "Painel Comercial", href: "/dashboard/commercial", icon: LayoutGrid, show: permissions.dashboard.pricing || permissions.dashboard.technicalSheets },
@@ -86,17 +86,29 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       },
       {
         key: "dp",
-        label: "Departamento Pessoal",
+        label: "Pessoal",
         color: SECTION_COLORS.dp,
         items: [
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
           { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
           { label: "Férias da equipe", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
+          {
+            label: "Configurações",
+            href: "/dashboard/dp/settings",
+            icon: Settings,
+            show: !!(
+              permissions.dp?.collaborators?.edit ||
+              permissions.dp?.collaborators?.terminate ||
+              permissions.dp?.settings?.manageUnits ||
+              permissions.dp?.settings?.manageShifts ||
+              permissions.dp?.settings?.manageCalendars
+            ),
+          },
         ],
       },
       {
         key: "midia",
-        label: "Departamento de Marketing",
+        label: "Marketing",
         color: SECTION_COLORS.midia,
         items: [
           { label: "Coala Signage", href: "/signage", icon: MonitorPlay, show: permissions.signage?.view || permissions.signage?.manage },
@@ -104,7 +116,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       },
       {
         key: "fin",
-        label: "Departamento Financeiro",
+        label: "Financeiro",
         color: SECTION_COLORS.fin,
         items: [
           { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
@@ -142,10 +154,21 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
     });
   }
 
+  const activeHref = useMemo(() => {
+    const matches = navSections
+      .flatMap(section => section.items)
+      .filter((item) =>
+        item.href === "/dashboard"
+          ? pathname === "/dashboard"
+          : pathname === item.href || pathname.startsWith(`${item.href}/`)
+      )
+      .sort((a, b) => b.href.length - a.href.length);
+
+    return matches[0]?.href ?? null;
+  }, [navSections, pathname]);
+
   function isItemActive(item: NavItem) {
-    return item.href === "/dashboard"
-      ? pathname === "/dashboard"
-      : pathname.startsWith(item.href);
+    return item.href === activeHref;
   }
 
   // Keyboard: close drawer on Escape

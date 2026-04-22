@@ -1031,8 +1031,10 @@ export type DPShiftDefinition = {
   endTime: string;     // HH:mm — fim do último range
   breakStart?: string; // HH:mm — início do intervalo (opcional); gera dois time_ranges no Bizneo
   breakEnd?: string;   // HH:mm — fim do intervalo
-  unitId?: string;
-  unitName?: string;
+  unitId?: string;     // legado: primeira unidade vinculada
+  unitName?: string;   // legado: nome da primeira unidade vinculada
+  unitIds?: string[];
+  unitNames?: string[];
   daysOfWeek: number[]; // 0=Dom, 1=Seg, ...
   bizneoTemplateId?: string; // ID numérico do modelo no Bizneo (usado no shift_id do export)
   createdAt: Timestamp;
@@ -1064,7 +1066,7 @@ export type DPShift = {
   date: string; // YYYY-MM-DD
   startTime: string;
   endTime: string;
-  type: 'work';
+  type: 'work' | 'day_off';
   hasConflict?: boolean;
   consecutiveDayCount?: number;
   createdAt: Timestamp;

@@ -14,13 +14,20 @@ export interface DPShiftsHookResult {
   addShift: (data: Omit<DPShift, 'id' | 'createdAt'>) => Promise<void>;
   addShiftsBatch: (data: Omit<DPShift, 'id' | 'createdAt'>[]) => Promise<void>;
   updateShift: (shift: DPShift) => Promise<void>;
-  deleteShift: (shiftId: string) => Promise<void>;
+  updateShiftsBatch: (shifts: DPShift[]) => Promise<void>;
+  deleteShift: (shift: Pick<DPShift, 'id' | 'type'> | string) => Promise<void>;
+  deleteShiftsBatch: (shifts: Pick<DPShift, 'id' | 'type'>[]) => Promise<void>;
   clearAllShifts: () => Promise<void>;
 }
 
 export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
   const [shifts, setShifts] = useState<DPShift[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const countWorkItems = useCallback(
+    (items: Array<Pick<DPShift, 'type'>>) => items.filter((item) => item.type !== 'day_off').length,
+    []
+  );
 
   useEffect(() => {
     if (!scheduleId) { setShifts([]); setLoading(false); return; }
@@ -44,9 +51,12 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
     const batch = writeBatch(db);
     const shiftRef = doc(collection(db, 'dp_schedules', scheduleId, 'shifts'));
     batch.set(shiftRef, { ...data, createdAt: serverTimestamp() });
-    batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(1) });
+    const workCount = countWorkItems([data]);
+    if (workCount > 0) {
+      batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(workCount) });
+    }
     await batch.commit();
-  }, [scheduleId]);
+  }, [countWorkItems, scheduleId]);
 
   const addShiftsBatch = useCallback(async (data: Omit<DPShift, 'id' | 'createdAt'>[]) => {
     if (!scheduleId || data.length === 0) return;
@@ -59,23 +69,57 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
         const ref = doc(collection(db, 'dp_schedules', scheduleId, 'shifts'));
         batch.set(ref, { ...item, createdAt: serverTimestamp() });
       });
-      batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(chunk.length) });
+      const workCount = countWorkItems(chunk);
+      if (workCount > 0) {
+        batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(workCount) });
+      }
       await batch.commit();
     }
-  }, [scheduleId]);
+  }, [countWorkItems, scheduleId]);
 
   const updateShift = useCallback(async ({ id, ...data }: DPShift) => {
     if (!scheduleId) return;
     await updateDoc(doc(db, 'dp_schedules', scheduleId, 'shifts', id), data as any);
   }, [scheduleId]);
 
-  const deleteShift = useCallback(async (shiftId: string) => {
+  const updateShiftsBatch = useCallback(async (items: DPShift[]) => {
+    if (!scheduleId || items.length === 0) return;
+    const chunks = [];
+    for (let i = 0; i < items.length; i += 500) chunks.push(items.slice(i, i + 500));
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      chunk.forEach(({ id, ...data }) => {
+        batch.update(doc(db, 'dp_schedules', scheduleId, 'shifts', id), data as any);
+      });
+      await batch.commit();
+    }
+  }, [scheduleId]);
+
+  const deleteShift = useCallback(async (shift: Pick<DPShift, 'id' | 'type'> | string) => {
     if (!scheduleId) return;
     const batch = writeBatch(db);
+    const shiftId = typeof shift === 'string' ? shift : shift.id;
     batch.delete(doc(db, 'dp_schedules', scheduleId, 'shifts', shiftId));
-    batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(-1) });
+    if (typeof shift !== 'string' && shift.type !== 'day_off') {
+      batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(-1) });
+    }
     await batch.commit();
   }, [scheduleId]);
+
+  const deleteShiftsBatch = useCallback(async (items: Pick<DPShift, 'id' | 'type'>[]) => {
+    if (!scheduleId || items.length === 0) return;
+    const chunks = [];
+    for (let i = 0; i < items.length; i += 499) chunks.push(items.slice(i, i + 499));
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      chunk.forEach((shift) => batch.delete(doc(db, 'dp_schedules', scheduleId, 'shifts', shift.id)));
+      const workCount = countWorkItems(chunk as DPShift[]);
+      if (workCount > 0) {
+        batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(-workCount) });
+      }
+      await batch.commit();
+    }
+  }, [countWorkItems, scheduleId]);
 
   const clearAllShifts = useCallback(async () => {
     if (!scheduleId || shifts.length === 0) return;
@@ -91,5 +135,15 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
     }
   }, [scheduleId, shifts]);
 
-  return { shifts, loading, addShift, addShiftsBatch, updateShift, deleteShift, clearAllShifts };
+  return {
+    shifts,
+    loading,
+    addShift,
+    addShiftsBatch,
+    updateShift,
+    updateShiftsBatch,
+    deleteShift,
+    deleteShiftsBatch,
+    clearAllShifts,
+  };
 }

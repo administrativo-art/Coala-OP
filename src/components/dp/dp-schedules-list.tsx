@@ -10,8 +10,12 @@ import { db } from '@/lib/firebase';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
-import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
-import type { DPSchedule, DPShift } from '@/types';
+import type { DPSchedule, DPShift, DPShiftDefinition } from '@/types';
+import {
+  getShiftDefinitionUnitIds,
+  shiftDefinitionMatchesUnit,
+} from '@/lib/dp-shift-definitions';
+import { isWorkShift } from '@/lib/dp-shift-rules';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -62,6 +66,64 @@ const MONTHS = [
 
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 4 }, (_, i) => currentYear - 1 + i);
+
+function resolveBizneoShiftId(def?: { bizneoTemplateId?: string; code?: string }) {
+  const explicitId = String(def?.bizneoTemplateId ?? '').trim();
+  if (explicitId) return explicitId.replace(/^#/, '');
+
+  const rawCode = String(def?.code ?? '').trim();
+  const numericCode = rawCode.match(/^#?(\d+)$/);
+  return numericCode?.[1] ?? '';
+}
+
+function getShiftWeekday(date: string) {
+  return new Date(`${date}T12:00:00`).getDay();
+}
+
+function formatShiftDate(date: string) {
+  const [year, month, day] = date.split('-');
+  if (!year || !month || !day) return date;
+  return `${day}/${month}/${year}`;
+}
+
+function resolveShiftDefinitionForExport(
+  shift: DPShift,
+  unitId: string | undefined,
+  shiftDefinitions: DPShiftDefinition[],
+  defMap: Map<string, DPShiftDefinition>
+) {
+  if (shift.shiftDefinitionId) {
+    const direct = defMap.get(shift.shiftDefinitionId);
+    if (direct) return direct;
+  }
+
+  const weekday = getShiftWeekday(shift.date);
+  const timeMatches = shiftDefinitions.filter((def) => {
+    if (def.startTime !== shift.startTime || def.endTime !== shift.endTime) return false;
+    return !def.daysOfWeek?.length || def.daysOfWeek.includes(weekday);
+  });
+
+  if (timeMatches.length === 0) return undefined;
+
+  if (unitId) {
+    const exactUnitMatches = timeMatches.filter((def) => {
+      const linkedUnitIds = getShiftDefinitionUnitIds(def);
+      return linkedUnitIds.length > 0 && linkedUnitIds.includes(unitId);
+    });
+    if (exactUnitMatches.length === 1) return exactUnitMatches[0];
+  }
+
+  const globalMatches = timeMatches.filter((def) => getShiftDefinitionUnitIds(def).length === 0);
+  if (globalMatches.length === 1) return globalMatches[0];
+
+  const compatibleMatches = unitId
+    ? timeMatches.filter((def) => shiftDefinitionMatchesUnit(def, unitId))
+    : timeMatches;
+
+  if (compatibleMatches.length === 1) return compatibleMatches[0];
+
+  return undefined;
+}
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -310,15 +372,18 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
         })
       );
 
-      if (allShifts.length === 0) {
+      const exportableShifts = allShifts.filter(isWorkShift);
+
+      if (exportableShifts.length === 0) {
         toast({ title: 'Nenhum turno nas escalas selecionadas.' });
         return;
       }
 
       const defMap = new Map(shiftDefinitions.map(d => [d.id, d]));
       const userMap = new Map(activeUsers.map(u => [u.id, u]));
+      const unresolvedShiftDetails = new Set<string>();
 
-      const rows = allShifts
+      const rows = exportableShifts
         .sort((a, b) => {
           const dateCompare = a.date.localeCompare(b.date);
           if (dateCompare !== 0) return dateCompare;
@@ -328,20 +393,40 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
         })
         .map(s => {
           const user = userMap.get(s.userId);
-          const def = s.shiftDefinitionId ? defMap.get(s.shiftDefinitionId) : undefined;
           const unitId = s.unitId ?? s.scheduleUnitId;
           const unitName = units.find(u => u.id === unitId)?.name ?? '';
+          const def = resolveShiftDefinitionForExport(s, unitId, shiftDefinitions, defMap);
+          const shiftId = resolveBizneoShiftId(def);
+
+          if (!shiftId) {
+            unresolvedShiftDetails.add(
+              `${formatShiftDate(s.date)} · ${unitName || 'Sem unidade'} · ${user?.username ?? 'Sem colaborador'} · ${def?.name ?? `${s.startTime}–${s.endTime}`}`
+            );
+          }
+
           return {
             date: s.date,
             action: 'overwrite',
             state: 'draft',
             employee_id: user?.registrationIdBizneo ?? s.userId,
             employee: user?.username ?? '',
-            shift_id: def?.bizneoTemplateId ?? def?.name ?? '',
+            shift_id: shiftId,
             shift: def?.name ?? `${s.startTime}–${s.endTime}`,
             unit: unitName,
           };
         });
+
+      if (unresolvedShiftDetails.size > 0) {
+        const unresolvedList = Array.from(unresolvedShiftDetails);
+        const preview = unresolvedList.slice(0, 4).join('; ');
+        const remainder = unresolvedList.length > 4 ? `; +${unresolvedList.length - 4} registro(s)` : '';
+        toast({
+          title: 'Turnos sem ID Bizneo.',
+          description: `Registros pendentes: ${preview}${remainder}.`,
+          variant: 'destructive',
+        });
+        return;
+      }
 
       const XLSX = await import('xlsx');
       const ws = XLSX.utils.json_to_sheet(rows);
@@ -470,9 +555,19 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPSchedulesList() {
-  const { deleteSchedule } = useDP();
+  const {
+    deleteSchedule,
+    schedules,
+    schedulesLoading,
+    units,
+    unitsLoading,
+    calendars,
+    calendarsLoading,
+    shiftDefinitions,
+    shiftDefsLoading,
+    bootstrapError,
+  } = useDP();
   const { permissions } = useAuth();
-  const { schedules, units, calendars, shiftDefinitions, loading, error: loadError } = useDPBootstrap();
   const { toast } = useToast();
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -551,7 +646,7 @@ export function DPSchedulesList() {
     }
   }
 
-  if (loading) {
+  if (schedulesLoading || unitsLoading || calendarsLoading || shiftDefsLoading) {
     return (
       <div className="space-y-6">
         {[1, 2].map(i => (
@@ -566,11 +661,11 @@ export function DPSchedulesList() {
     );
   }
 
-  if (loadError && schedules.length === 0) {
+  if (bootstrapError && schedules.length === 0) {
     return (
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
         <p className="font-medium text-destructive">Falha ao carregar o módulo de Escalas.</p>
-        <p className="mt-1 text-muted-foreground">{loadError}</p>
+        <p className="mt-1 text-muted-foreground">{bootstrapError}</p>
       </div>
     );
   }
