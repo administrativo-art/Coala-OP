@@ -10,6 +10,10 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordRe
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
+import {
+  fetchHrLoginAccess,
+  type HrLoginAccessPayload,
+} from '@/features/hr/lib/client';
 
 export interface TerminateUserPayload {
   uid: string;
@@ -28,7 +32,11 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   permissions: PermissionSet;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{
+    success: boolean;
+    error?: string;
+    loginAccessGate?: HrLoginAccessPayload | null;
+  }>;
   logout: () => void;
   addUser: (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => Promise<string | null>;
   updateUser: (user: User) => Promise<void>;
@@ -39,6 +47,21 @@ export interface AuthContextType {
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+function buildBlockedLoginMessage(payload: HrLoginAccessPayload) {
+  switch (payload.evaluation.reason) {
+    case 'before_shift_too_early':
+      return payload.evaluation.nextAllowedAtLocal
+        ? `Seu acesso será liberado a partir de ${payload.evaluation.nextAllowedAtLocal}.`
+        : 'Seu turno ainda não está dentro da janela permitida de acesso.';
+    case 'day_off':
+      return 'Este colaborador está em folga na escala atual. O acesso permanece bloqueado.';
+    case 'after_shift_extension_limit_reached':
+      return 'O turno atual já consumiu as 2 extensões automáticas disponíveis. Aguarde a próxima janela permitida.';
+    default:
+      return 'Seu acesso está bloqueado pela política de escala.';
+  }
+}
 
 function sanitizeFirestoreUpdate(value: unknown): unknown {
   if (value === undefined) {
@@ -198,19 +221,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPermissionsReady(true);
   }, [appUser, profiles, loading, profilesLoading, adminProfileId, mergeRecursive]);
 
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string) => {
     try {
       setLoading(true);
       setPermissionsReady(false);
       const credential = await signInWithEmailAndPassword(auth, email, password);
       // Força refresh do token para pegar os custom claims mais recentes
       await credential.user.getIdToken(true);
-      return true;
+
+      try {
+        const loginAccess = await fetchHrLoginAccess(credential.user, {});
+
+        if (
+          loginAccess.user.loginRestrictionEnabled &&
+          loginAccess.evaluation.status === 'blocked' &&
+          loginAccess.evaluation.reason !== 'no_schedule_assigned'
+        ) {
+          if (loginAccess.evaluation.reason === 'after_shift_requires_justification') {
+            setLoading(false);
+            return {
+              success: true,
+              loginAccessGate: loginAccess,
+            };
+          }
+
+          await signOut(auth);
+          return {
+            success: false,
+            error: buildBlockedLoginMessage(loginAccess),
+          };
+        }
+      } catch (loginAccessError) {
+        console.warn('[AuthProvider] Falha ao validar acesso por escala no login. Mantendo fluxo atual.', loginAccessError);
+      }
+
+      return { success: true };
     } catch (error) {
       console.error("Login error:", error);
       setLoading(false);
       setPermissionsReady(true);
-      return false;
+      return {
+        success: false,
+        error: 'E-mail ou senha inválidos. Verifique seus dados e tente novamente.',
+      };
     }
   }, []);
 

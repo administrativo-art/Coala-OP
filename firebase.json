@@ -17,6 +17,16 @@
       "database": "coala-financeiro",
       "rules": "firestore.financial.rules",
       "indexes": "firestore.financial.indexes.json"
+    },
+    {
+      "database": "coala-rh",
+      "rules": "firestore.rh.rules",
+      "indexes": "firestore.rh.indexes.json"
+    },
+    {
+      "database": "coala-checklist",
+      "rules": "firestore.checklist.rules",
+      "indexes": "firestore.checklist.indexes.json"
     }
   ],
   "functions": [

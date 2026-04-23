@@ -387,10 +387,16 @@ export type User = {
   // Departamento Pessoal (RH)
   registrationIdBizneo?: string;   // matrícula no Bizneo HR
   registrationIdPdv?: string;      // código no PDV
+  jobRoleId?: string;
+  jobRoleName?: string;
+  jobFunctionIds?: string[];
+  jobFunctionNames?: string[];
+  jobRoleProfileSyncDisabled?: boolean;
   unitIds?: string[];               // unidade(s) de trabalho
   admissionDate?: Timestamp;
   birthDate?: Timestamp;
   shiftDefinitionId?: string;
+  loginRestrictionEnabled?: boolean;
   needsTransportVoucher?: boolean;
   transportVoucherValue?: number;
   isActive?: boolean;
@@ -398,6 +404,80 @@ export type User = {
   terminationReason?: 'Sem Justa Causa' | 'Pedido de Demissão' | 'Acordo' | 'Justa Causa';
   terminationCause?: string;
   terminationNotes?: string;
+};
+
+export type HrQuestionType =
+  | "text"
+  | "yes_no"
+  | "select"
+  | "multi_select"
+  | "number_range"
+  | "date"
+  | "location"
+  | "file_upload";
+
+export type HrQuestionWeight = "low" | "medium" | "high";
+
+export type HrFormQuestion = {
+  id: string;
+  text: string;
+  type: HrQuestionType;
+  required: boolean;
+  scored: boolean;
+  weight: HrQuestionWeight;
+  eliminatory: boolean;
+  expectedAnswer?: unknown;
+  tags?: string[];
+  config?: Record<string, unknown>;
+};
+
+export type JobRoleSalaryRange = {
+  min?: number;
+  max?: number;
+  currency: string;
+  visible?: boolean;
+};
+
+export type JobRole = {
+  id: string;
+  name: string;
+  publicTitle: string;
+  slug: string;
+  reportsTo?: string | null;
+  description?: string;
+  publicDescription?: string;
+  responsibilities?: string[];
+  publicResponsibilities?: string[];
+  requirements?: string[];
+  publicRequirements?: string[];
+  competencies?: string[];
+  benefits?: string[];
+  workSchedule?: string;
+  salaryRange?: JobRoleSalaryRange;
+  publicSalaryRange?: JobRoleSalaryRange;
+  defaultProfileId?: string;
+  loginRestricted?: boolean;
+  formQuestions?: HrFormQuestion[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type JobFunction = {
+  id: string;
+  name: string;
+  publicTitle: string;
+  slug: string;
+  description?: string;
+  publicDescription?: string;
+  responsibilities?: string[];
+  publicResponsibilities?: string[];
+  requirements?: string[];
+  compatibleRoleIds?: string[];
+  formQuestions?: HrFormQuestion[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type SignageSlideType = 'image' | 'video' | 'text';
@@ -1108,4 +1188,113 @@ export type DPVacationRecord = {
   returnDate?: string;
   warnings: string[];
   createdAt: Timestamp;
+};
+
+export type DPChecklistItemType =
+  | "checkbox"
+  | "text"
+  | "number"
+  | "temperature"
+  | "select"
+  | "photo"
+  | "signature";
+
+export type DPChecklistItemConfig = {
+  min?: number;
+  max?: number;
+  unit?: string;
+  alertOutOfRange?: boolean;
+  options?: string[];
+  minPhotos?: number;
+  maxPhotos?: number;
+};
+
+export type DPChecklistTemplateItem = {
+  id: string;
+  order: number;
+  title: string;
+  description?: string;
+  type: DPChecklistItemType;
+  required: boolean;
+  weight: number;
+  config?: DPChecklistItemConfig;
+};
+
+export type DPChecklistSection = {
+  id: string;
+  title: string;
+  order: number;
+  items: DPChecklistTemplateItem[];
+};
+
+export type DPChecklistTemplate = {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  unitIds?: string[];
+  unitNames?: string[];
+  shiftDefinitionIds?: string[];
+  shiftDefinitionNames?: string[];
+  isActive: boolean;
+  sections: DPChecklistSection[];
+  createdAt: Timestamp | string;
+  updatedAt?: Timestamp | string;
+  createdBy?: { userId: string; username: string; };
+  updatedBy?: { userId: string; username: string; };
+};
+
+export type DPChecklistExecutionStatus = "pending" | "claimed" | "completed" | "overdue";
+
+export type DPChecklistExecutionItem = {
+  templateItemId: string;
+  sectionId: string;
+  sectionTitle: string;
+  order: number;
+  title: string;
+  description?: string;
+  type: DPChecklistItemType;
+  required: boolean;
+  weight: number;
+  config?: DPChecklistItemConfig;
+  checked?: boolean;
+  textValue?: string;
+  numberValue?: number;
+  photoUrls?: string[];
+  signatureUrl?: string;
+  isLate?: boolean;
+  isOutOfRange?: boolean;
+  completedAt?: string | null;
+  completedByUserId?: string | null;
+};
+
+export type DPChecklistExecution = {
+  id: string;
+  checklistDate: string;
+  templateId: string;
+  templateName: string;
+  scheduleId: string;
+  shiftId: string;
+  unitId: string;
+  unitName?: string;
+  shiftDefinitionId?: string;
+  shiftDefinitionName?: string;
+  assignedUserId: string;
+  assignedUsername: string;
+  shiftStartTime: string;
+  shiftEndTime: string;
+  shiftEndDate: string;
+  status: DPChecklistExecutionStatus;
+  score?: number;
+  items: DPChecklistExecutionItem[];
+  claimedByUserId?: string | null;
+  claimedByUsername?: string | null;
+  claimedAt?: string | null;
+  completedByUserId?: string | null;
+  completedByUsername?: string | null;
+  completedAt?: string | null;
+  reviewedBy?: string | null;
+  reviewNotes?: string | null;
+  createdAt: Timestamp | string;
+  updatedAt?: Timestamp | string;
 };

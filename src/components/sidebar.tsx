@@ -72,6 +72,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           { label: "Painel de Operações", href: "/dashboard/operations", icon: LayoutGrid, show: permissions.dashboard.operational },
           { label: "Tarefas gerais", href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, badge: legacyTasks.length > 0 ? { count: legacyTasks.length, variant: "warn" } : undefined },
           { label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package, show: permissions.stock.view },
+          { label: "Checklists", href: "/dashboard/dp/checklists", icon: ListChecks, show: permissions.dp?.schedules?.view || permissions.dp?.schedules?.edit || permissions.dp?.collaborators?.view || permissions.dp?.collaborators?.edit },
         ],
       },
       {

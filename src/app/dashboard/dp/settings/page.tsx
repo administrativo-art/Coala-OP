@@ -14,6 +14,8 @@ export default function DPSettingsIndexPage() {
     const target =
       (permissions.dp?.collaborators?.edit || permissions.dp?.collaborators?.terminate)
         ? '/dashboard/dp/settings/collaborators'
+        : (permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit)
+          ? '/dashboard/dp/settings/roles'
         : permissions.dp?.settings?.manageUnits
           ? '/dashboard/dp/settings/units'
           : permissions.dp?.settings?.manageShifts

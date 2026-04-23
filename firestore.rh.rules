@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuth() && request.auth.token.isDefaultAdmin == true;
+    }
+
+    // O banco de RH nasce em modo server-first para não depender da árvore de
+    // permissões do banco principal enquanto a camada de bootstrap ainda não existe.
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

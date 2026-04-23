@@ -1,0 +1,29 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "checklistExecutions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "checklistDate", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checklistExecutions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "checklistDate", "order": "ASCENDING" },
+        { "fieldPath": "unitId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checklistExecutions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "shiftEndDate", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

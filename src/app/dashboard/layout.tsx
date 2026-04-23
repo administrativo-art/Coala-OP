@@ -1,13 +1,70 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { GlassSidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DebugPanel } from '@/components/debug-panel';
+import { LoginAccessGateOverlay } from '@/components/login-access-gate-overlay';
 import { useAllTasks } from '@/hooks/use-all-tasks';
+import { useToast } from '@/hooks/use-toast';
+import {
+  fetchHrLoginAccess,
+  submitHrLoginJustification,
+  type HrLoginAccessPayload,
+} from '@/features/hr/lib/client';
+import { LockKeyhole, ShieldAlert } from 'lucide-react';
+
+function shouldSurfaceLoginAccessNotice(payload: HrLoginAccessPayload) {
+  return (
+    payload.user.loginRestrictionEnabled &&
+    (payload.evaluation.reason === 'no_schedule_assigned' ||
+      payload.evaluation.reason === 'after_shift_extension_active')
+  );
+}
+
+function buildLoginAccessMessage(payload: HrLoginAccessPayload) {
+  if (payload.evaluation.reason === 'no_schedule_assigned') {
+    return {
+      title: 'Limitador de login ativo sem escala atribuída',
+      description:
+        'O acesso segue liberado em modo seguro, mas este colaborador ainda não tem escala vinculada para validação.',
+      variant: 'default' as const,
+    };
+  }
+
+  if (payload.evaluation.reason === 'after_shift_extension_active') {
+    return {
+      title: 'Acesso liberado por justificativa',
+      description: payload.evaluation.allowedUntilLocal
+        ? `A extensão atual permanece válida até ${payload.evaluation.allowedUntilLocal}.`
+        : 'Existe uma extensão ativa decorrente de justificativa fora do turno.',
+      variant: 'default' as const,
+    };
+  }
+
+  return {
+    title: 'Horário fora da janela da escala',
+    description:
+      'O acesso foi bloqueado pela política de escala deste colaborador.',
+    variant: 'destructive' as const,
+  };
+}
+
+function shouldOpenLoginAccessGate(payload: HrLoginAccessPayload | null) {
+  if (!payload) {
+    return false;
+  }
+
+  return (
+    payload.user.loginRestrictionEnabled &&
+    payload.evaluation.status === 'blocked' &&
+    payload.evaluation.reason !== 'no_schedule_assigned'
+  );
+}
 
 function LoadingSkeleton() {
     return (
@@ -32,12 +89,15 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { firebaseUser, user, isAuthenticated, loading: authLoading, logout } = useAuth();
   const { legacyTasks } = useAllTasks();
+  const { toast } = useToast();
   const router = useRouter();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [loginAccessState, setLoginAccessState] = useState<HrLoginAccessPayload | null>(null);
+  const [submittingJustification, setSubmittingJustification] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -53,6 +113,116 @@ export default function DashboardLayout({
       }
     }
   }, [isAuthenticated, authLoading, router]);
+
+  const refreshLoginAccessState = useCallback(async () => {
+    if (!firebaseUser || !user?.id || !user.loginRestrictionEnabled) {
+      setLoginAccessState(null);
+      return;
+    }
+
+    const payload = await fetchHrLoginAccess(firebaseUser, {});
+    setLoginAccessState(payload);
+
+    if (!shouldSurfaceLoginAccessNotice(payload) || typeof window === 'undefined') {
+      return;
+    }
+
+    const storageKey = [
+      'login-access-notice',
+      payload.user.id,
+      payload.evaluation.reason,
+      payload.evaluation.localDate,
+      payload.evaluation.activeExtension?.sequence ?? '0',
+    ].join(':');
+
+    if (window.sessionStorage.getItem(storageKey)) {
+      return;
+    }
+
+    window.sessionStorage.setItem(storageKey, '1');
+    const message = buildLoginAccessMessage(payload);
+
+    toast({
+      title: message.title,
+      description: message.description,
+      variant: message.variant,
+    });
+  }, [firebaseUser, toast, user?.id, user?.loginRestrictionEnabled]);
+
+  useEffect(() => {
+    if (!isMounted || authLoading || !isAuthenticated || !firebaseUser || !user?.id) {
+      return;
+    }
+
+    if (!user.loginRestrictionEnabled) {
+      setLoginAccessState(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        await refreshLoginAccessState();
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[DashboardLayout] Falha ao avaliar acesso por escala.', error);
+        }
+      }
+    };
+
+    void run();
+
+    const intervalId = window.setInterval(() => {
+      void run();
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    authLoading,
+    firebaseUser,
+    isAuthenticated,
+    isMounted,
+    refreshLoginAccessState,
+    user?.id,
+    user?.loginRestrictionEnabled,
+  ]);
+
+  const handleSubmitJustification = useCallback(async (text: string) => {
+    if (!firebaseUser || !user?.id) {
+      return;
+    }
+
+    setSubmittingJustification(true);
+
+    try {
+      const payload = await submitHrLoginJustification(firebaseUser, {
+        justificationText: text,
+      });
+      setLoginAccessState(payload);
+
+      toast({
+        title: 'Justificativa registrada',
+        description: payload.evaluation.allowedUntilLocal
+          ? `Acesso liberado até ${payload.evaluation.allowedUntilLocal}.`
+          : 'A extensão foi registrada com sucesso.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Falha ao registrar justificativa',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível registrar a justificativa agora.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingJustification(false);
+    }
+  }, [firebaseUser, toast, user?.id]);
   
   if (!isMounted || authLoading || !isAuthenticated) {
     return <LoadingSkeleton />;
@@ -65,10 +235,31 @@ export default function DashboardLayout({
       <div className="flex flex-col flex-1 lg:pl-64">
         <Header tasks={legacyTasks} onMenuClick={() => setIsSidebarOpen(true)} />
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+          {loginAccessState && shouldSurfaceLoginAccessNotice(loginAccessState) && (
+            <Alert variant={loginAccessState.evaluation.status === 'blocked' ? 'destructive' : 'default'}>
+              {loginAccessState.evaluation.status === 'blocked' ? (
+                <ShieldAlert className="h-4 w-4" />
+              ) : (
+                <LockKeyhole className="h-4 w-4" />
+              )}
+              <AlertTitle>{buildLoginAccessMessage(loginAccessState).title}</AlertTitle>
+              <AlertDescription>
+                {buildLoginAccessMessage(loginAccessState).description}
+              </AlertDescription>
+            </Alert>
+          )}
           {children}
         </main>
         {process.env.NODE_ENV === 'development' && <DebugPanel dataLoadTime={dataLoadTime} />}
       </div>
+      {shouldOpenLoginAccessGate(loginAccessState) && loginAccessState && (
+        <LoginAccessGateOverlay
+          payload={loginAccessState}
+          submitting={submittingJustification}
+          onSubmitJustification={handleSubmitJustification}
+          onLogout={logout}
+        />
+      )}
     </div>
   )
 }

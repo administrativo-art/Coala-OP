@@ -6,11 +6,16 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { brand } from "@/config/brand";
+import { LoginAccessGateOverlay } from "@/components/login-access-gate-overlay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, LogIn, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  submitHrLoginJustification,
+  type HrLoginAccessPayload,
+} from "@/features/hr/lib/client";
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido"),
@@ -21,9 +26,11 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isAuthenticated, loading } = useAuth();
+  const { login, isAuthenticated, loading, firebaseUser, logout } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [loginAccessGate, setLoginAccessGate] = useState<HrLoginAccessPayload | null>(null);
+  const [submittingJustification, setSubmittingJustification] = useState(false);
 
   const {
     register,
@@ -34,20 +41,64 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (!loading && isAuthenticated) {
+    if (!loading && isAuthenticated && !loginAccessGate) {
       router.push("/dashboard");
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, loginAccessGate, router]);
 
   async function onSubmit(data: LoginFormData) {
     setError(null);
-    const success = await login(data.email, data.password);
-    if (!success) {
-      setError("E-mail ou senha inválidos. Verifique seus dados e tente novamente.");
+    setLoginAccessGate(null);
+
+    const result = await login(data.email, data.password);
+    if (!result.success) {
+      setError(
+        result.error ??
+          "E-mail ou senha inválidos. Verifique seus dados e tente novamente."
+      );
+      return;
+    }
+
+    if (result.loginAccessGate) {
+      setLoginAccessGate(result.loginAccessGate);
     }
   }
 
-  if (loading || isAuthenticated) {
+  async function handleSubmitJustification(text: string) {
+    if (!firebaseUser) {
+      return;
+    }
+
+    setSubmittingJustification(true);
+
+    try {
+      const payload = await submitHrLoginJustification(firebaseUser, {
+        justificationText: text,
+      });
+
+      setLoginAccessGate(null);
+
+      if (
+        payload.evaluation.status === "allowed" ||
+        payload.evaluation.reason === "after_shift_extension_active"
+      ) {
+        router.push("/dashboard");
+        return;
+      }
+
+      setLoginAccessGate(payload);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Não foi possível registrar a justificativa de acesso."
+      );
+    } finally {
+      setSubmittingJustification(false);
+    }
+  }
+
+  if (loading || (isAuthenticated && !loginAccessGate)) {
     return <div className="flex h-screen items-center justify-center">Carregando...</div>;
   }
 
@@ -161,6 +212,15 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {loginAccessGate && (
+        <LoginAccessGateOverlay
+          payload={loginAccessGate}
+          submitting={submittingJustification}
+          onSubmitJustification={handleSubmitJustification}
+          onLogout={logout}
+        />
+      )}
     </div>
   );
 }
