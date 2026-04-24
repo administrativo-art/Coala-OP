@@ -53,7 +53,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, Lock, LockOpen, Sparkles } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ArrowLeft, Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { useToast } from '@/hooks/use-toast';
 import type { DPShiftDefinition } from '@/types';
@@ -909,24 +910,51 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const conflictCount = useMemo(() => workShifts.filter(s => s.hasConflict).length, [workShifts]);
   const uniqueCollaborators = useMemo(() => new Set(workShifts.map(s => s.userId)).size, [workShifts]);
 
+  // Dias por colaborador (para popover do card Pessoas)
+  const pessoasBreakdown = useMemo(() => {
+    const byUser = new Map<string, { name: string; uniqueDates: Set<string> }>();
+    workShifts.forEach(shift => {
+      const shiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
+      if (shiftDate.getMonth() !== schedule.month - 1 || shiftDate.getFullYear() !== schedule.year) return;
+      let userName = '';
+      if (schedule.locked && schedule.snapshot?.users) {
+        userName = schedule.snapshot.users[shift.userId]?.username ?? shift.userId;
+      } else {
+        userName = operationalUsers.find(u => u.id === shift.userId)?.username ?? shift.userId;
+      }
+      if (!byUser.has(shift.userId)) byUser.set(shift.userId, { name: userName, uniqueDates: new Set() });
+      byUser.get(shift.userId)!.uniqueDates.add(shift.date);
+    });
+    return [...byUser.values()]
+      .map(u => ({ name: u.name, days: u.uniqueDates.size }))
+      .sort((a, b) => b.days - a.days);
+  }, [workShifts, operationalUsers, schedule]);
+
   // Vale Transporte: usa snapshot quando trancado, dados ao vivo caso contrário
-  const vtTotal = useMemo(() => {
+  // siblingTotal acumula VT do colaborador nas outras escalas do mesmo mês (cross-quiosque)
+  const vtStats = useMemo(() => {
     const workedDays = new Set<string>();
+    const byUser = new Map<string, { name: string; days: number; total: number; siblingTotal: number }>();
     let total = 0;
+
     workShifts.forEach(shift => {
       const shiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
       if (shiftDate.getMonth() !== schedule.month - 1 || shiftDate.getFullYear() !== schedule.year) return;
 
       let needsVT = false;
       let vtValue = 0;
+      let userName = '';
+
       if (schedule.locked && schedule.snapshot?.users) {
         const snap = schedule.snapshot.users[shift.userId];
         needsVT = snap?.needsTransportVoucher ?? false;
         vtValue = snap?.transportVoucherValue ?? 0;
+        userName = snap?.username ?? shift.userId;
       } else {
         const user = operationalUsers.find(u => u.id === shift.userId);
         needsVT = user?.needsTransportVoucher ?? false;
         vtValue = user?.transportVoucherValue ?? 0;
+        userName = user?.username ?? shift.userId;
       }
 
       if (!needsVT || !vtValue) return;
@@ -934,10 +962,35 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       if (!workedDays.has(dayKey)) {
         workedDays.add(dayKey);
         total += vtValue;
+        const entry = byUser.get(shift.userId) ?? { name: userName, days: 0, total: 0, siblingTotal: 0 };
+        entry.days += 1;
+        entry.total += vtValue;
+        byUser.set(shift.userId, entry);
       }
     });
-    return total;
-  }, [workShifts, operationalUsers, schedule]);
+
+    // Acumula VT das escalas-irmãs (outros quiosques) para colaboradores compartilhados
+    if (isPerUnit) {
+      const siblingWorkedDays = new Set<string>();
+      siblingWorkShifts.forEach(shift => {
+        const shiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
+        if (shiftDate.getMonth() !== schedule.month - 1 || shiftDate.getFullYear() !== schedule.year) return;
+        if (!byUser.has(shift.userId)) return;
+        const user = operationalUsers.find(u => u.id === shift.userId);
+        if (!user?.needsTransportVoucher || !user?.transportVoucherValue) return;
+        const dayKey = `${shift.userId}_${shift.date}`;
+        if (!siblingWorkedDays.has(dayKey)) {
+          siblingWorkedDays.add(dayKey);
+          byUser.get(shift.userId)!.siblingTotal += user.transportVoucherValue;
+        }
+      });
+    }
+
+    return {
+      total,
+      breakdown: [...byUser.values()].sort((a, b) => b.total - a.total),
+    };
+  }, [workShifts, siblingWorkShifts, operationalUsers, schedule, isPerUnit]);
 
   if (bootstrapLoading) {
     return (
@@ -1064,13 +1117,33 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
 
       {/* Stats boxes */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-xl border bg-card px-4 py-3">
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <Users className="h-3.5 w-3.5" />
-            <span>Pessoas</span>
-          </div>
-          <p className="text-2xl font-bold">{uniqueCollaborators}</p>
-        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <div className="rounded-xl border bg-card px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                <Users className="h-3.5 w-3.5" />
+                <span>Pessoas</span>
+                <ChevronRight className="h-3 w-3 ml-auto" />
+              </div>
+              <p className="text-2xl font-bold">{uniqueCollaborators}</p>
+            </div>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-3" align="start">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Por colaborador</p>
+            {pessoasBreakdown.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum colaborador na escala.</p>
+            ) : (
+              <div className="space-y-1">
+                {pessoasBreakdown.map(row => (
+                  <div key={row.name} className="flex items-center justify-between">
+                    <span className="truncate text-xs">{row.name}</span>
+                    <span className="text-xs text-muted-foreground ml-2 shrink-0">{row.days}d</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
         <div className={`rounded-xl border px-4 py-3 ${conflictCount > 0 ? 'bg-destructive/5 border-destructive/30' : 'bg-card'}`}>
           <div className={`flex items-center gap-2 text-xs mb-1 ${conflictCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
             <AlertTriangle className="h-3.5 w-3.5" />
@@ -1085,15 +1158,44 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
           </div>
           <p className="text-2xl font-bold">{workShifts.length}</p>
         </div>
-        <div className="rounded-xl border bg-card px-4 py-3">
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <Bus className="h-3.5 w-3.5" />
-            <span>Vale Transporte</span>
-          </div>
-          <p className="text-2xl font-bold">
-            {vtTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </p>
-        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <div className="rounded-xl border bg-card px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                <Bus className="h-3.5 w-3.5" />
+                <span>Vale Transporte</span>
+                <ChevronRight className="h-3 w-3 ml-auto" />
+              </div>
+              <p className="text-2xl font-bold">
+                {vtStats.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </p>
+            </div>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-3" align="end">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Por colaborador</p>
+            {vtStats.breakdown.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum colaborador com VT.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {vtStats.breakdown.map(row => (
+                  <div key={row.name} className="flex items-start justify-between gap-2">
+                    <span className="truncate text-xs pt-px">{row.name}</span>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs text-muted-foreground">
+                        {row.days}d · {row.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </p>
+                      {row.siblingTotal > 0 && (
+                        <p className="text-[10px] text-destructive/70 leading-tight font-bold">
+                          total: {(row.total + row.siblingTotal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Filter bar */}
