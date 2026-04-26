@@ -6,9 +6,10 @@ import { ptBR } from "date-fns/locale";
 import { addDoc, getDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarIcon, Loader2, PlusCircle, Trash2 } from "lucide-react";
+import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, PlusCircle, Trash2, UserRound } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
+import { useEntities } from "@/hooks/use-entities";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -19,10 +20,13 @@ import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency } from "@/features/financial/lib/utils";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -86,8 +90,87 @@ function DatePickerField({
   );
 }
 
+function QuickAddEntityDialog({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (name: string) => void;
+}) {
+  const { addEntity } = useEntities();
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"pessoa_fisica" | "pessoa_juridica">("pessoa_juridica");
+
+  async function handleSave() {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await addEntity({
+        name: name.trim(),
+        type,
+        document: "",
+        address: { street: "", number: "", neighborhood: "", city: "", state: "", zipCode: "" },
+      });
+      onCreated(name.trim());
+      setName("");
+      setType("pessoa_juridica");
+      onClose();
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao criar entidade." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Adicionar fornecedor</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="space-y-1.5">
+            <FormLabel>Nome</FormLabel>
+            <Input
+              autoFocus
+              placeholder="Razão social ou nome"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSave(); } }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <FormLabel>Tipo</FormLabel>
+            <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pessoa_juridica">Pessoa jurídica</SelectItem>
+                <SelectItem value="pessoa_fisica">Pessoa física</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" type="button" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button type="button" onClick={() => void handleSave()} disabled={saving || !name.trim()}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ExpenseForm() {
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, users } = useAuth();
+  const { entities } = useEntities();
   const { kiosks, loading: unitsLoading } = useKiosks();
   const { toast } = useToast();
   const router = useRouter();
@@ -95,6 +178,8 @@ export function ExpenseForm() {
   const editId = searchParams.get("edit");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingExpense, setIsLoadingExpense] = useState(false);
+  const [supplierOpen, setSupplierOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const { data: accountPlans, loading: accountPlansLoading } = useFinancialCollection<any>(
     financialCollection("accountPlans")
@@ -788,12 +873,101 @@ export function ExpenseForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Fornecedor</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Fornecedor ou beneficiário" {...field} />
-                    </FormControl>
+                    <div className="flex gap-2">
+                      <Popover open={supplierOpen} onOpenChange={setSupplierOpen}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={supplierOpen}
+                              className={cn("flex-1 justify-between font-normal", !field.value && "text-muted-foreground")}
+                            >
+                              {field.value || "Fornecedor ou beneficiário"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[340px] p-0" align="start">
+                          <Command>
+                            <CommandInput
+                              placeholder="Buscar ou digitar..."
+                              value={field.value ?? ""}
+                              onValueChange={(v) => field.onChange(v)}
+                            />
+                            <CommandList>
+                              <CommandEmpty>
+                                <span className="text-sm text-muted-foreground">
+                                  Nenhum cadastro encontrado. Use o texto digitado ou adicione via +.
+                                </span>
+                              </CommandEmpty>
+                              {entities.length > 0 && (
+                                <CommandGroup heading="Entidades">
+                                  {entities.map((entity) => {
+                                    const label = entity.fantasyName || entity.name;
+                                    return (
+                                      <CommandItem
+                                        key={entity.id}
+                                        value={label}
+                                        onSelect={() => {
+                                          field.onChange(label);
+                                          setSupplierOpen(false);
+                                        }}
+                                      >
+                                        <Check className={cn("mr-2 h-4 w-4", field.value === label ? "opacity-100" : "opacity-0")} />
+                                        {label}
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              )}
+                              {users && users.length > 0 && (
+                                <CommandGroup heading="Usuários">
+                                  {users.map((user) => {
+                                    const label = user.username || user.email;
+                                    return (
+                                      <CommandItem
+                                        key={user.id}
+                                        value={label}
+                                        onSelect={() => {
+                                          field.onChange(label);
+                                          setSupplierOpen(false);
+                                        }}
+                                      >
+                                        <Check className={cn("mr-2 h-4 w-4", field.value === label ? "opacity-100" : "opacity-0")} />
+                                        {label}
+                                        <Badge variant="secondary" className="ml-auto text-[10px] py-0">
+                                          <UserRound className="mr-1 h-2.5 w-2.5" />
+                                          Usuário
+                                        </Badge>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              )}
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0"
+                        title="Adicionar novo fornecedor"
+                        onClick={() => setQuickAddOpen(true)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+              <QuickAddEntityDialog
+                open={quickAddOpen}
+                onClose={() => setQuickAddOpen(false)}
+                onCreated={(name) => form.setValue("supplier", name)}
               />
               <FormField
                 control={form.control}

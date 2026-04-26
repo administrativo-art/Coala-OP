@@ -50,6 +50,22 @@ export async function POST(
           throw new Error("Esse checklist já foi assumido por outro colaborador.");
         }
 
+        const assignedUserId =
+          typeof data.assignedUserId === "string" ? data.assignedUserId : null;
+        const collaboratorUserIds = Array.isArray(data.collaboratorUserIds)
+          ? (data.collaboratorUserIds.filter(
+              (id) => typeof id === "string"
+            ) as string[])
+          : [];
+        const allowedUserIds = new Set<string>();
+        if (assignedUserId) allowedUserIds.add(assignedUserId);
+        collaboratorUserIds.forEach((id) => allowedUserIds.add(id));
+        if (allowedUserIds.size > 0 && !allowedUserIds.has(actor.userId)) {
+          throw new Error(
+            "Você não está autorizado a assumir esse checklist. Apenas o responsável e os colaboradores designados podem preenchê-lo."
+          );
+        }
+
         const nextData: Record<string, unknown> = {
           ...data,
           status: "claimed",

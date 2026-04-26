@@ -1,13 +1,15 @@
+import { addDays, format, parseISO } from "date-fns";
 import { NextRequest, NextResponse } from "next/server";
-import { addDays, format } from "date-fns";
 
 import { getChecklistExecutionMetrics } from "@/features/dp-checklists/lib/core";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   checklistDbAdmin,
+  loadChecklistReferenceData,
   normalizeChecklistExecutionForApi,
+  normalizeOperationalTaskForApi,
 } from "@/features/dp-checklists/lib/server";
-import type { DPChecklistExecution } from "@/types";
+import type { DPChecklistExecution, OperationalTask } from "@/types";
 import { DEFAULT_LOGIN_ACCESS_TIMEZONE } from "@/features/hr/lib/login-access";
 
 export const runtime = "nodejs";
@@ -41,6 +43,18 @@ function average(values: number[]) {
   return roundMetric(values.reduce((sum, item) => sum + item, 0) / values.length);
 }
 
+function getTaskCounts(tasks: OperationalTask[]) {
+  return tasks.reduce(
+    (accumulator, task) => {
+      if (task.status === "open") accumulator.open += 1;
+      if (task.status === "in_progress") accumulator.inProgress += 1;
+      if (task.status === "escalated") accumulator.escalated += 1;
+      return accumulator;
+    },
+    { open: 0, inProgress: 0, escalated: 0 }
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
     await assertDPChecklistAccess(request, "view");
@@ -50,6 +64,7 @@ export async function GET(request: NextRequest) {
     const dateTo = searchParams.get("dateTo")?.trim() || defaultDateTo();
     const unitId = searchParams.get("unitId")?.trim() || null;
     const templateId = searchParams.get("templateId")?.trim() || null;
+    const typeId = searchParams.get("typeId")?.trim() || null;
     const rawStatus = searchParams.get("status")?.trim() || "all";
     const status = isExecutionStatus(rawStatus) ? rawStatus : "all";
     const timeZone =
@@ -69,17 +84,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const executionSnaps = await checklistDbAdmin
-      .collection("checklistExecutions")
-      .where("checklistDate", ">=", dateFrom)
-      .where("checklistDate", "<=", dateTo)
-      .get();
+    const [executionSnaps, tasksSnap, references] = await Promise.all([
+      checklistDbAdmin
+        .collection("checklistExecutions")
+        .where("checklistDate", ">=", dateFrom)
+        .where("checklistDate", "<=", dateTo)
+        .get(),
+      checklistDbAdmin.collection("operationalTasks").get(),
+      loadChecklistReferenceData(),
+    ]);
+
+    const unitThresholdById = new Map<string, number>(
+      references.units.map((unit) => {
+        const threshold =
+          typeof (unit as Record<string, unknown>).auditChecklistThreshold === "number"
+            ? Number((unit as Record<string, unknown>).auditChecklistThreshold)
+            : 85;
+        return [String((unit as Record<string, unknown>).id), threshold];
+      })
+    );
 
     const now = new Date();
     const executions = executionSnaps.docs
       .map((doc) => normalizeChecklistExecutionForApi(doc.id, doc.data() ?? {}))
       .filter((execution) => (unitId ? execution.unitId === unitId : true))
       .filter((execution) => (templateId ? execution.templateId === templateId : true))
+      .filter((execution) => (typeId ? execution.templateType === typeId : true))
       .filter((execution) => (status === "all" ? true : execution.status === status));
 
     const evaluatedExecutions = executions.map((execution) => ({
@@ -99,6 +129,10 @@ export async function GET(request: NextRequest) {
     const overdueExecutions = evaluatedExecutions.filter(
       ({ metrics }) => metrics.isOverdue
     );
+    const tasks = tasksSnap.docs.map((doc) =>
+      normalizeOperationalTaskForApi(doc.id, doc.data() ?? {})
+    );
+    const taskSummary = getTaskCounts(tasks);
 
     const summary = {
       totalExecutions: evaluatedExecutions.length,
@@ -122,6 +156,13 @@ export async function GET(request: NextRequest) {
       uniqueUsers: new Set(
         evaluatedExecutions.map(({ execution }) => execution.assignedUserId)
       ).size,
+      openOperationalTasks: taskSummary.open,
+      inProgressOperationalTasks: taskSummary.inProgress,
+      escalatedOperationalTasks: taskSummary.escalated,
+      criticalAlerts: evaluatedExecutions.reduce(
+        (sum, { metrics }) => sum + metrics.criticalAlerts,
+        0
+      ),
     };
 
     const dailyTrend = Array.from(
@@ -188,6 +229,7 @@ export async function GET(request: NextRequest) {
         const current = map.get(key) ?? {
           templateId: entry.execution.templateId,
           templateName: entry.execution.templateName,
+          templateType: entry.execution.templateType,
           totalExecutions: 0,
           completedExecutions: 0,
           overdueExecutions: 0,
@@ -200,11 +242,12 @@ export async function GET(request: NextRequest) {
         current.scores.push(entry.metrics.score);
         map.set(key, current);
         return map;
-      }, new Map<string, { templateId: string; templateName: string; totalExecutions: number; completedExecutions: number; overdueExecutions: number; scores: number[] }>())
+      }, new Map<string, { templateId: string; templateName: string; templateType: string; totalExecutions: number; completedExecutions: number; overdueExecutions: number; scores: number[] }>())
     )
       .map(([, value]) => ({
         templateId: value.templateId,
         templateName: value.templateName,
+        templateType: value.templateType,
         totalExecutions: value.totalExecutions,
         completedExecutions: value.completedExecutions,
         overdueExecutions: value.overdueExecutions,
@@ -242,12 +285,79 @@ export async function GET(request: NextRequest) {
       }))
       .sort((left, right) => right.totalExecutions - left.totalExecutions);
 
+    const auditExecutions = evaluatedExecutions.filter(
+      ({ execution }) => execution.templateType === "audit"
+    );
+
+    const auditByUnit = Array.from(
+      auditExecutions.reduce((map, entry) => {
+        const key = entry.execution.unitId || "__none__";
+        const current = map.get(key) ?? {
+          unitId: entry.execution.unitId,
+          unitName: entry.execution.unitName ?? "Sem unidade",
+          totalExecutions: 0,
+          scores: [] as number[],
+        };
+        current.totalExecutions += 1;
+        current.scores.push(entry.metrics.score);
+        map.set(key, current);
+        return map;
+      }, new Map<string, { unitId: string; unitName: string; totalExecutions: number; scores: number[] }>())
+    )
+      .map(([, value]) => {
+        const averageScore = average(value.scores);
+        const threshold = unitThresholdById.get(value.unitId) ?? 85;
+        return {
+          unitId: value.unitId,
+          unitName: value.unitName,
+          totalExecutions: value.totalExecutions,
+          averageScore,
+          threshold,
+          belowThreshold: averageScore < threshold,
+        };
+      })
+      .sort((left, right) => right.averageScore - left.averageScore);
+
+    const auditMonthlyTrend = Array.from(
+      auditExecutions.reduce((map, entry) => {
+        const month = entry.execution.checklistDate.slice(0, 7);
+        const key = `${month}__${entry.execution.unitId}`;
+        const current = map.get(key) ?? {
+          month,
+          unitId: entry.execution.unitId,
+          unitName: entry.execution.unitName ?? "Sem unidade",
+          totalExecutions: 0,
+          scores: [] as number[],
+        };
+        current.totalExecutions += 1;
+        current.scores.push(entry.metrics.score);
+        map.set(key, current);
+        return map;
+      }, new Map<string, { month: string; unitId: string; unitName: string; totalExecutions: number; scores: number[] }>())
+    )
+      .map(([, value]) => ({
+        month: value.month,
+        unitId: value.unitId,
+        unitName: value.unitName,
+        totalExecutions: value.totalExecutions,
+        averageScore: average(value.scores),
+      }))
+      .sort((left, right) => {
+        if (left.month !== right.month) {
+          return left.month.localeCompare(right.month);
+        }
+        return left.unitName.localeCompare(right.unitName, "pt-BR");
+      });
+
+    const auditAlerts = auditByUnit.filter((entry) => entry.belowThreshold);
+
     const overdueItems = overdueExecutions
       .map(({ execution, metrics }) => ({
         id: execution.id,
         checklistDate: execution.checklistDate,
         templateId: execution.templateId,
         templateName: execution.templateName,
+        templateType: execution.templateType,
         unitId: execution.unitId,
         unitName: execution.unitName ?? "Sem unidade",
         assignedUserId: execution.assignedUserId,
@@ -278,6 +388,11 @@ export async function GET(request: NextRequest) {
       byUnit,
       byTemplate,
       byUser,
+      audit: {
+        byUnit: auditByUnit,
+        monthlyTrend: auditMonthlyTrend,
+        alerts: auditAlerts,
+      },
       overdueExecutions: overdueItems,
     });
   } catch (error) {

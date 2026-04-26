@@ -2,6 +2,10 @@ import type {
   DPChecklistExecution,
   DPChecklistExecutionItem,
   DPChecklistTemplate,
+  DPChecklistType,
+  JobFunction,
+  JobRole,
+  OperationalTask,
 } from "@/types";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 
@@ -13,6 +17,15 @@ export type DPChecklistBootstrapPayload = {
   date: string;
   templates: DPChecklistTemplate[];
   executions: DPChecklistExecution[];
+  checklistTypes: DPChecklistType[];
+  roles: JobRole[];
+  functions: JobFunction[];
+  tasks: OperationalTask[];
+  taskSummary: {
+    open: number;
+    inProgress: number;
+    escalated: number;
+  };
   access: {
     canView: boolean;
     canOperate: boolean;
@@ -47,6 +60,10 @@ export type DPChecklistAnalyticsPayload = {
     averageRequiredScore: number;
     uniqueTemplates: number;
     uniqueUsers: number;
+    openOperationalTasks: number;
+    inProgressOperationalTasks: number;
+    escalatedOperationalTasks: number;
+    criticalAlerts: number;
   };
   dailyTrend: Array<{
     date: string;
@@ -66,6 +83,7 @@ export type DPChecklistAnalyticsPayload = {
   byTemplate: Array<{
     templateId: string;
     templateName: string;
+    templateType: DPChecklistTemplate["templateType"];
     totalExecutions: number;
     completedExecutions: number;
     overdueExecutions: number;
@@ -84,6 +102,7 @@ export type DPChecklistAnalyticsPayload = {
     checklistDate: string;
     templateId: string;
     templateName: string;
+    templateType: DPChecklistTemplate["templateType"];
     unitId: string;
     unitName: string;
     assignedUserId: string;
@@ -97,6 +116,31 @@ export type DPChecklistAnalyticsPayload = {
     requiredCompletionPercent: number;
     overdueSinceLocal: string | null;
   }>;
+  audit: {
+    byUnit: Array<{
+      unitId: string;
+      unitName: string;
+      totalExecutions: number;
+      averageScore: number;
+      threshold: number;
+      belowThreshold: boolean;
+    }>;
+    monthlyTrend: Array<{
+      month: string;
+      unitId: string;
+      unitName: string;
+      totalExecutions: number;
+      averageScore: number;
+    }>;
+    alerts: Array<{
+      unitId: string;
+      unitName: string;
+      totalExecutions: number;
+      averageScore: number;
+      threshold: number;
+      belowThreshold: boolean;
+    }>;
+  };
 };
 
 async function parseError(response: Response, fallback: string) {
@@ -127,6 +171,33 @@ async function authorizedJsonRequest<T>(
       cache: "no-store",
     },
     20000
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, fallbackError));
+  }
+
+  return (await response.json()) as T;
+}
+
+async function authorizedFormDataRequest<T>(
+  path: string,
+  firebaseUser: FirebaseUserLike,
+  body: FormData,
+  fallbackError: string
+) {
+  const token = await firebaseUser.getIdToken();
+  const response = await fetchWithTimeout(
+    path,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body,
+      cache: "no-store",
+    },
+    30000
   );
 
   if (!response.ok) {
@@ -196,6 +267,33 @@ export async function generateDPChecklistExecutions(
   );
 }
 
+export async function createManualDPChecklistExecution(
+  firebaseUser: FirebaseUserLike,
+  payload: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ execution: DPChecklistExecution }>(
+    "/api/dp/checklists/manual",
+    firebaseUser,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    "Falha ao criar o checklist manual."
+  );
+}
+
+export async function fetchDPChecklistExecution(
+  firebaseUser: FirebaseUserLike,
+  executionId: string
+) {
+  return authorizedJsonRequest<{ execution: DPChecklistExecution }>(
+    `/api/dp/checklists/executions/${executionId}`,
+    firebaseUser,
+    { method: "GET" },
+    "Falha ao carregar o checklist."
+  );
+}
+
 export async function claimDPChecklistExecution(
   firebaseUser: FirebaseUserLike,
   executionId: string
@@ -221,11 +319,14 @@ export async function updateDPChecklistExecution(
         | "templateItemId"
         | "sectionId"
         | "checked"
+        | "yesNoValue"
         | "textValue"
         | "numberValue"
+        | "multiValues"
+        | "dateValue"
         | "photoUrls"
         | "signatureUrl"
-      >
+      > & { value?: unknown }
     >;
   }
 ) {
@@ -249,6 +350,7 @@ export async function fetchDPChecklistAnalytics(
     dateTo: string;
     unitId?: string;
     templateId?: string;
+    typeId?: string;
     status?: "all" | DPChecklistExecution["status"];
     timeZone?: string;
   }
@@ -260,6 +362,7 @@ export async function fetchDPChecklistAnalytics(
 
   if (params.unitId) searchParams.set("unitId", params.unitId);
   if (params.templateId) searchParams.set("templateId", params.templateId);
+  if (params.typeId) searchParams.set("typeId", params.typeId);
   if (params.status && params.status !== "all") {
     searchParams.set("status", params.status);
   }
@@ -270,5 +373,114 @@ export async function fetchDPChecklistAnalytics(
     firebaseUser,
     { method: "GET" },
     "Falha ao carregar o painel gerencial dos checklists."
+  );
+}
+
+export async function updateDPChecklistTask(
+  firebaseUser: FirebaseUserLike,
+  taskId: string,
+  payload: {
+    status: OperationalTask["status"];
+    resolutionNotes?: string;
+  }
+) {
+  return authorizedJsonRequest<{ task: OperationalTask }>(
+    `/api/dp/checklists/tasks/${taskId}`,
+    firebaseUser,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    "Falha ao atualizar a tarefa operacional."
+  );
+}
+
+export async function createDPChecklistType(
+  firebaseUser: FirebaseUserLike,
+  payload: Omit<DPChecklistType, "id" | "createdAt" | "updatedAt">
+) {
+  return authorizedJsonRequest<{ checklistType: DPChecklistType }>(
+    "/api/dp/checklists/types",
+    firebaseUser,
+    { method: "POST", body: JSON.stringify(payload) },
+    "Falha ao criar o tipo de checklist."
+  );
+}
+
+export async function updateDPChecklistType(
+  firebaseUser: FirebaseUserLike,
+  typeId: string,
+  payload: Partial<Omit<DPChecklistType, "id" | "createdAt" | "updatedAt">>
+) {
+  return authorizedJsonRequest<{ checklistType: DPChecklistType }>(
+    `/api/dp/checklists/types/${typeId}`,
+    firebaseUser,
+    { method: "PUT", body: JSON.stringify(payload) },
+    "Falha ao atualizar o tipo de checklist."
+  );
+}
+
+export async function deleteDPChecklistType(
+  firebaseUser: FirebaseUserLike,
+  typeId: string
+) {
+  return authorizedJsonRequest<{ success: boolean }>(
+    `/api/dp/checklists/types/${typeId}`,
+    firebaseUser,
+    { method: "DELETE" },
+    "Falha ao excluir o tipo de checklist."
+  );
+}
+
+export async function fetchDPChecklistTasks(
+  firebaseUser: FirebaseUserLike,
+  params?: {
+    unitId?: string;
+    status?: Array<OperationalTask["status"]>;
+  }
+) {
+  const searchParams = new URLSearchParams();
+  if (params?.unitId) searchParams.set("unitId", params.unitId);
+  if (params?.status?.length) searchParams.set("status", params.status.join(","));
+
+  const path = searchParams.toString()
+    ? `/api/dp/checklists/tasks?${searchParams.toString()}`
+    : "/api/dp/checklists/tasks";
+
+  return authorizedJsonRequest<{
+    tasks: OperationalTask[];
+    summary: {
+      open: number;
+      inProgress: number;
+      escalated: number;
+    };
+  }>(
+    path,
+    firebaseUser,
+    { method: "GET" },
+    "Falha ao carregar as tarefas operacionais."
+  );
+}
+
+export async function uploadDPChecklistAsset(
+  firebaseUser: FirebaseUserLike,
+  params: {
+    file: File;
+    kind: "photo" | "signature";
+  }
+) {
+  const body = new FormData();
+  body.set("file", params.file);
+  body.set("kind", params.kind);
+
+  return authorizedFormDataRequest<{
+    assetUrl: string;
+    assetPath: string;
+    kind: "photo" | "signature";
+  }>(
+    "/api/dp/checklists/upload",
+    firebaseUser,
+    body,
+    "Falha ao enviar o arquivo do checklist."
   );
 }

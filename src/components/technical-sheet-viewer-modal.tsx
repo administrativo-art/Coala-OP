@@ -10,7 +10,8 @@ import Image from 'next/image';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
-import { Video, Info, Utensils, Award, Clock, Download, FileText, Check } from 'lucide-react';
+import { Video, Info, Utensils, Award, Clock, Download, FileText, Check, LayoutDashboard } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
 
 const PDFDownloadLink = dynamic(
@@ -58,7 +59,7 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
         if (!simulation) return null;
         return {
             ...simulation,
-            grossCost: simulation.totalCmv,
+            totalCmv: simulation.totalCmv,
             ingredients: ingredients
         };
     }, [simulation, ingredients]);
@@ -67,147 +68,158 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
-                <DialogHeader>
-                    <DialogTitle>{simulation.name}</DialogTitle>
-                    <DialogDescription>Ficha Técnica de Produção</DialogDescription>
-                </DialogHeader>
-                <ScrollArea className="flex-1 pr-6 -mr-6">
-                    <div className="space-y-6 py-4">
-                        <div className="rounded-lg overflow-hidden border-2 border-primary/10 shadow-sm">
-                            <PDFViewer style={{ width: '100%', height: '400px' }} showToolbar={false}>
-                                <FichaTecnicaDocument data={pdfData} />
-                            </PDFViewer>
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                            <div className="p-3 border rounded-lg bg-card">
-                                <p className="text-xs text-muted-foreground">Preço Venda</p>
-                                <p className="text-lg font-bold">{formatCurrency(simulation.salePrice)}</p>
-                            </div>
-                            <div className="p-3 border rounded-lg bg-card">
-                                <p className="text-xs text-muted-foreground">Custo Bruto</p>
-                                <p className="text-lg font-bold">{formatCurrency(simulation.totalCmv)}</p>
-                            </div>
-                            <div className="p-3 border rounded-lg bg-card">
-                                <p className="text-xs text-muted-foreground">Lucro %</p>
-                                <p className="text-lg font-bold">{simulation.profitPercentage.toFixed(2)}%</p>
-                            </div>
-                            <div className="p-3 border rounded-lg bg-card">
-                                <p className="text-xs text-muted-foreground">Markup</p>
-                                <p className="text-lg font-bold">{simulation.markup.toFixed(1)}x</p>
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <h3 className="font-semibold text-lg mb-2 flex items-center gap-2"><FileText className="h-5 w-5" /> Composição detalhada</h3>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Ingrediente</TableHead>
-                                        <TableHead className="text-right">Quantidade</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {ingredients.map(ing => (
-                                        <TableRow key={ing.name}>
-                                            <TableCell className="font-medium">{ing.name}</TableCell>
-                                            <TableCell className="text-right">{ing.quantity} {ing.unit}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                        
-                        {simulation.ppo?.assemblyInstructions && simulation.ppo.assemblyInstructions.length > 0 && (
-                            <div className="p-4 border rounded-lg bg-muted/30">
-                                <h3 className="font-semibold text-lg mb-4">Modo de Montagem</h3>
-                                <div className="space-y-6">
-                                {simulation.ppo.assemblyInstructions.map(phase => (
-                                    <div key={phase.id} className="space-y-3">
-                                        <h4 className="font-bold text-primary border-b pb-1">{phase.name}</h4>
-                                        <ol className="space-y-4">
-                                            {phase.etapas.map((etapa, index) => (
-                                                <li key={etapa.id} className="grid grid-cols-[auto_1fr_auto] gap-4 items-start">
-                                                    <span className="font-bold text-primary pt-1">{index + 1}.</span>
-                                                    <div>
-                                                        <p className="font-medium">{etapa.text}</p>
-                                                        {etapa.quantity && etapa.unit && <span className="text-muted-foreground text-sm"> ({etapa.quantity} {etapa.unit})</span>}
-                                                    </div>
-                                                    {etapa.imageUrl && <Image src={etapa.imageUrl} alt={`Etapa: ${etapa.text}`} width={80} height={80} className="rounded-md object-cover shadow-sm" />}
-                                                </li>
-                                            ))}
-                                        </ol>
+            <DialogContent className="max-w-[1000px] sm:max-w-[1000px] w-[95vw] h-[92vh] flex flex-col p-0 overflow-hidden rounded-2xl">
+                <div className="px-8 pt-6 pb-2 flex-shrink-0">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-black text-gray-900 tracking-tight">{simulation.name}</DialogTitle>
+                        <DialogDescription className="text-sm text-muted-foreground">Ficha Técnica de Instrução</DialogDescription>
+                    </DialogHeader>
+                </div>
+                <ScrollArea className="flex-1 px-8">
+                    <div className="space-y-8 py-6">
+                        {simulation.ppo?.referenceImageUrl ? (
+                            <div className="rounded-2xl overflow-hidden border shadow-sm bg-white aspect-video relative">
+                                <img 
+                                    src={simulation.ppo.referenceImageUrl} 
+                                    alt={simulation.name}
+                                    className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
+                                    <div className="text-white">
+                                        <p className="text-xs font-bold uppercase tracking-wider opacity-80">Foto de Referência</p>
+                                        <h2 className="text-xl font-black">{simulation.name}</h2>
                                     </div>
-                                ))}
                                 </div>
+                            </div>
+                        ) : (
+                            <div className="rounded-2xl border-2 border-dashed border-gray-200 h-48 flex flex-col items-center justify-center bg-gray-50 text-gray-400">
+                                <Utensils className="h-8 w-8 mb-2 opacity-20" />
+                                <p className="text-sm font-medium">Sem foto de referência</p>
                             </div>
                         )}
-                        
-                         {simulation.ppo?.assemblyVideoUrl && (
-                            <div className="p-4 border rounded-lg bg-blue-500/5 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <Video className="text-primary h-6 w-6" />
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="p-4 border rounded-xl bg-white shadow-sm flex flex-col items-center justify-center gap-1">
+                                <Clock className="h-5 w-5 text-blue-500" />
+                                <p className="text-[10px] font-bold text-gray-400 uppercase">Tempo de Montagem</p>
+                                <p className="text-sm font-black text-gray-900">{simulation.ppo?.preparationTime || 0}s</p>
+                            </div>
+                            <div className="p-4 border rounded-xl bg-white shadow-sm flex flex-col items-center justify-center gap-1">
+                                <Utensils className="h-5 w-5 text-pink-500" />
+                                <p className="text-[10px] font-bold text-gray-400 uppercase">Peso</p>
+                                <p className="text-sm font-black text-gray-900">{simulation.ppo?.portionWeight || 0}g</p>
+                            </div>
+                            <div className="p-4 border rounded-xl bg-white shadow-sm flex flex-col items-center justify-center gap-1">
+                                <Award className="h-5 w-5 text-orange-500" />
+                                <p className="text-[10px] font-bold text-gray-400 uppercase">Tolerância</p>
+                                <p className="text-sm font-black text-gray-900">±{simulation.ppo?.portionTolerance || 0}g</p>
+                            </div>
+                            <div className="p-4 border rounded-xl bg-orange-50/50 border-orange-100 flex flex-col items-center justify-center gap-1">
+                                <Info className="h-5 w-5 text-orange-600" />
+                                <p className="text-[10px] font-bold text-orange-700 uppercase">Alergênicos</p>
+                                <p className="text-[10px] font-bold text-orange-900 text-center leading-tight">
+                                    {simulation.ppo?.allergens && simulation.ppo.allergens.length > 0 
+                                        ? simulation.ppo.allergens.map((a: any) => typeof a === 'string' ? a : a.text).join(', ')
+                                        : 'Nenhum'}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* MODO DE MONTAGEM - ELEMENTO CENTRAL */}
+                        {simulation.ppo?.assemblyInstructions && simulation.ppo.assemblyInstructions.length > 0 ? (
+                            <div className="space-y-6">
+                                <div className="flex items-center justify-between border-b-2 border-blue-500 pb-2">
+                                    <h3 className="font-black text-gray-900 text-xl flex items-center gap-2">
+                                        <LayoutDashboard className="h-6 w-6 text-blue-600" />
+                                        PASSO A PASSO DE MONTAGEM
+                                    </h3>
+                                    <Badge className="bg-blue-600 text-white font-bold px-3 py-1">OPERACIONAL</Badge>
+                                </div>
+                                
+                                <div className="space-y-8">
+                                    {simulation.ppo.assemblyInstructions.map(phase => (
+                                        <div key={phase.id} className="space-y-6">
+                                            <div className="bg-blue-50 px-4 py-2 rounded-lg inline-block">
+                                                <h4 className="font-black text-blue-700 text-sm uppercase tracking-widest">{phase.name}</h4>
+                                            </div>
+                                            
+                                            <div className="grid gap-6">
+                                                {phase.etapas.map((etapa, index) => (
+                                                    <div key={etapa.id} className="flex gap-8 items-start bg-white p-6 rounded-3xl border-2 border-gray-50 shadow-sm hover:border-blue-100 transition-colors">
+                                                        <div className="flex-shrink-0 w-14 h-14 flex items-center justify-center rounded-2xl bg-blue-600 text-white font-black text-2xl shadow-lg shadow-blue-200">
+                                                            {index + 1}
+                                                        </div>
+                                                        <div className="flex-1 space-y-4">
+                                                            <div className="flex justify-between items-start gap-6">
+                                                                <p className="text-lg text-gray-800 font-bold leading-tight">{etapa.text}</p>
+                                                                {etapa.imageUrl && (
+                                                                    <div className="flex-shrink-0 border-4 border-white rounded-2xl overflow-hidden shadow-xl rotate-1">
+                                                                        <img src={etapa.imageUrl} alt={`Etapa ${index + 1}`} className="w-32 h-32 object-cover" />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            {etapa.quantity && etapa.unit && (
+                                                                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-black text-xs uppercase">
+                                                                    <Utensils className="h-3 w-3" />
+                                                                    Usar: {etapa.quantity} {etapa.unit}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="p-12 border-4 border-dashed border-gray-100 rounded-3xl text-center space-y-4">
+                                <LayoutDashboard className="h-12 w-12 text-gray-200 mx-auto" />
+                                <p className="text-gray-400 font-bold">Nenhuma instrução de montagem cadastrada para esta mercadoria.</p>
+                            </div>
+                        )}
+
+                        {/* VÍDEO TUTORIAL */}
+                        {simulation.ppo?.assemblyVideoUrl && (
+                            <div className="p-6 border-4 border-blue-50 rounded-3xl bg-blue-50/30 flex items-center justify-between">
+                                <div className="flex items-center gap-5">
+                                    <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-xl">
+                                        <Video className="h-7 w-7" />
+                                    </div>
                                     <div>
-                                        <h4 className="font-semibold">Vídeo de Montagem</h4>
-                                        <p className="text-sm text-muted-foreground">Assista ao tutorial passo a passo.</p>
+                                        <h4 className="font-black text-blue-900 text-lg">VÍDEO DE MONTAGEM</h4>
+                                        <p className="text-sm text-blue-600 font-bold">Assista ao processo real em vídeo</p>
                                     </div>
                                 </div>
-                                <Button variant="link" asChild>
+                                <Button className="bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl px-8 h-12 shadow-lg shadow-blue-200" asChild>
                                     <a href={simulation.ppo.assemblyVideoUrl} target="_blank" rel="noopener noreferrer">
-                                        Abrir vídeo
+                                        ABRIR VÍDEO
                                     </a>
                                 </Button>
                             </div>
                         )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {simulation.ppo?.preparationTime && (
-                                <div className="p-4 border rounded-lg bg-card flex items-center gap-3">
-                                    <Clock className="h-6 w-6 text-primary" />
-                                    <div>
-                                        <p className="text-xs text-muted-foreground">Tempo de Preparo</p>
-                                        <p className="font-bold">{simulation.ppo.preparationTime} segundos</p>
+                        {/* INGREDIENTES - ABAIXO DA MONTAGEM */}
+                        <div className="bg-gray-50 p-8 rounded-3xl space-y-6">
+                            <h3 className="font-black text-gray-800 text-sm uppercase tracking-widest flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-gray-400" /> 
+                                Checklist de Ingredientes
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {ingredients.map(ing => (
+                                    <div key={ing.name} className="bg-white p-4 rounded-2xl border flex justify-between items-center shadow-sm">
+                                        <span className="font-bold text-gray-700">{ing.name}</span>
+                                        <Badge variant="outline" className="font-black text-blue-600 border-blue-100 bg-blue-50">
+                                            {ing.quantity} {ing.unit}
+                                        </Badge>
                                     </div>
-                                </div>
-                            )}
-                            {simulation.ppo?.portionWeight && (
-                                <div className="p-4 border rounded-lg bg-card flex items-center gap-3">
-                                    <Utensils className="h-6 w-6 text-primary" />
-                                    <div>
-                                        <p className="text-xs text-muted-foreground">Peso da Porção</p>
-                                        <p className="font-bold">{simulation.ppo.portionWeight}g <span className="font-normal text-muted-foreground">(±{simulation.ppo.portionTolerance || 0}g)</span></p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        
-                        {(simulation.ppo?.qualityStandard?.length || (simulation.ppo?.allergens && simulation.ppo?.allergens.length > 0)) && (
-                            <div className="p-4 border rounded-lg space-y-4 bg-muted/30">
-                                {simulation.ppo.qualityStandard && simulation.ppo.qualityStandard.length > 0 && (
-                                    <div>
-                                        <h4 className="font-semibold flex items-center gap-2 mb-2"><Award className="h-4 w-4 text-primary" />Padrão de Qualidade</h4>
-                                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                                            {simulation.ppo.qualityStandard.map(item => (
-                                                <li key={item.id} className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                    <Check className="h-3 w-3 text-green-600" /> {item.text}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                                 {simulation.ppo.allergens && simulation.ppo.allergens.length > 0 && (
-                                    <div className="pt-2 border-t border-muted">
-                                        <h4 className="font-semibold flex items-center gap-2 mb-1"><Info className="h-4 w-4 text-primary" /> Alergênicos</h4>
-                                        <p className="text-sm text-muted-foreground">{simulation.ppo.allergens.map(a => a.text).join(', ')}</p>
-                                    </div>
-                                )}
+                                ))}
                             </div>
-                        )}
+                        </div>
 
                     </div>
                 </ScrollArea>
-                <DialogFooter className="pt-4 border-t flex justify-between w-full">
+                <DialogFooter className="px-8 py-4 border-t flex justify-between w-full bg-gray-50 flex-shrink-0">
                     <PDFDownloadLink
                         document={<FichaTecnicaDocument data={pdfData} />}
                         fileName={`ficha_tecnica_${simulation.name.replace(/ /g, '_')}.pdf`}

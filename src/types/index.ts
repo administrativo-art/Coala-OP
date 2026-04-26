@@ -297,6 +297,7 @@ export type ProductSimulation = {
   notes?: string;
   ppo?: Partial<PPO>;
   historicoAlteracoes?: SimulationChangeHistory[];
+  isArchived?: boolean;
   createdAt: string; // ISO String
   updatedAt: string; // ISO String
   updatedBy?: {
@@ -352,7 +353,8 @@ export type PermissionSet = {
     schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
     collaborators: { view: boolean; add: boolean; edit: boolean; terminate: boolean; };
-    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; };
+    checklists: { view: boolean; operate: boolean; create: boolean; manageTemplates: boolean; viewAnalytics: boolean; };
+    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageChecklistTypes: boolean; };
   };
   financial: {
     view: boolean;
@@ -862,7 +864,8 @@ export const defaultGuestPermissions: PermissionSet = {
       schedules: { view: false, create: false, edit: false, delete: false, export: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
       collaborators: { view: false, add: false, edit: false, terminate: false },
-      settings: { manageUnits: false, manageShifts: false, manageCalendars: false },
+      checklists: { view: false, operate: false, create: false, manageTemplates: false, viewAnalytics: false },
+      settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageChecklistTypes: false },
     },
     financial: {
       view: false,
@@ -893,7 +896,8 @@ export const defaultAdminPermissions: PermissionSet = {
       schedules: { view: true, create: true, edit: true, delete: true, export: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
       collaborators: { view: true, add: true, edit: true, terminate: true },
-      settings: { manageUnits: true, manageShifts: true, manageCalendars: true },
+      checklists: { view: true, operate: true, create: true, manageTemplates: true, viewAnalytics: true },
+      settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageChecklistTypes: true },
     },
     financial: {
       view: true,
@@ -1093,6 +1097,7 @@ export type DPUnit = {
   name: string;
   groupId?: string;
   bizneoTaxonId?: number; // ID do taxon (local) no Bizneo
+  auditChecklistThreshold?: number;
   createdAt: Timestamp;
 };
 
@@ -1197,7 +1202,83 @@ export type DPChecklistItemType =
   | "temperature"
   | "select"
   | "photo"
-  | "signature";
+  | "signature"
+  | "yes_no"
+  | "multi_select"
+  | "date";
+
+export type DPChecklistTemplateType = string;
+
+export type DPChecklistTypeColorScheme =
+  | "emerald"
+  | "indigo"
+  | "amber"
+  | "violet"
+  | "blue"
+  | "orange"
+  | "red"
+  | "gray";
+
+export type DPChecklistType = {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  examples: string;
+  behavior: string;
+  configBanner: string;
+  isSchedulable: boolean;
+  colorScheme: DPChecklistTypeColorScheme;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type DPChecklistOccurrenceType =
+  | "manual"
+  | "daily"
+  | "weekly"
+  | "biweekly"
+  | "monthly"
+  | "annual"
+  | "custom";
+
+export type CustomScheduleMode = "weekdays" | "monthdays" | "interval" | "once";
+
+export type CustomSchedule = {
+  modes: CustomScheduleMode[];
+  weekdays?: number[]; // 0=Dom..6=Sáb
+  monthdays?: number[]; // 1..31
+  intervalDays?: number;
+  onceDates?: string[]; // YYYY-MM-DD
+};
+
+export type DPChecklistCriticality = "low" | "medium" | "high" | "critical";
+
+export type DPChecklistConditionalOperator =
+  | "equals"
+  | "not_equals"
+  | "gt"
+  | "lt"
+  | "contains";
+
+export type DPChecklistConditionalRule = {
+  itemId: string;
+  operator: DPChecklistConditionalOperator;
+  value?: unknown;
+};
+
+export type DPChecklistVersionHistoryEntry = {
+  version: number;
+  updatedBy: string;
+  updatedAt: Timestamp | string;
+  changeNotes?: string;
+};
+
+export type DPChecklistBranchPathEntry = {
+  parentItemId: string;
+  triggerValue?: unknown;
+};
 
 export type DPChecklistItemConfig = {
   min?: number;
@@ -1217,6 +1298,19 @@ export type DPChecklistTemplateItem = {
   type: DPChecklistItemType;
   required: boolean;
   weight: number;
+  blockNext: boolean;
+  criticality: DPChecklistCriticality;
+  referenceValue?: number;
+  tolerancePercent?: number;
+  actionRequired?: boolean;
+  notifyRoleIds?: string[];
+  escalationMinutes?: number;
+  showIf?: DPChecklistConditionalRule;
+  conditionalBranches?: Array<{
+    value?: unknown;
+    label: string;
+    items: DPChecklistTemplateItem[];
+  }>;
   config?: DPChecklistItemConfig;
 };
 
@@ -1224,6 +1318,9 @@ export type DPChecklistSection = {
   id: string;
   title: string;
   order: number;
+  showIf?: DPChecklistConditionalRule;
+  requirePhoto?: boolean;
+  requireSignature?: boolean;
   items: DPChecklistTemplateItem[];
 };
 
@@ -1232,11 +1329,22 @@ export type DPChecklistTemplate = {
   name: string;
   description?: string;
   category?: string;
+  templateType: DPChecklistTemplateType;
+  occurrenceType?: DPChecklistOccurrenceType;
+  annualSchedule?: { month: number; day: number };
+  customSchedule?: CustomSchedule;
   unitIds?: string[];
   unitNames?: string[];
+  jobRoleIds?: string[];
+  jobRoleNames?: string[];
+  jobFunctionIds?: string[];
+  jobFunctionNames?: string[];
   shiftDefinitionIds?: string[];
   shiftDefinitionNames?: string[];
   isActive: boolean;
+  version: number;
+  versionHistory?: DPChecklistVersionHistoryEntry[];
+  lastExecutionAt?: string | null;
   sections: DPChecklistSection[];
   createdAt: Timestamp | string;
   updatedAt?: Timestamp | string;
@@ -1256,16 +1364,39 @@ export type DPChecklistExecutionItem = {
   type: DPChecklistItemType;
   required: boolean;
   weight: number;
+  blockNext: boolean;
+  criticality: DPChecklistCriticality;
+  referenceValue?: number;
+  tolerancePercent?: number;
+  actionRequired?: boolean;
+  notifyRoleIds?: string[];
+  escalationMinutes?: number;
+  branchPath?: DPChecklistBranchPathEntry[];
+  showIf?: DPChecklistConditionalRule;
+  sectionShowIf?: DPChecklistConditionalRule;
   config?: DPChecklistItemConfig;
-  checked?: boolean;
+  checked?: boolean | null;
+  yesNoValue?: boolean | null;
   textValue?: string;
   numberValue?: number;
+  multiValues?: string[];
+  dateValue?: string;
   photoUrls?: string[];
   signatureUrl?: string;
   isLate?: boolean;
   isOutOfRange?: boolean;
   completedAt?: string | null;
   completedByUserId?: string | null;
+  linkedTaskId?: string | null;
+};
+
+export type DPChecklistExecutionSection = {
+  id: string;
+  title: string;
+  order: number;
+  showIf?: DPChecklistConditionalRule;
+  requirePhoto?: boolean;
+  requireSignature?: boolean;
 };
 
 export type DPChecklistExecution = {
@@ -1273,6 +1404,9 @@ export type DPChecklistExecution = {
   checklistDate: string;
   templateId: string;
   templateName: string;
+  templateType: DPChecklistTemplateType;
+  templateVersion: number;
+  occurrenceType?: DPChecklistOccurrenceType;
   scheduleId: string;
   shiftId: string;
   unitId: string;
@@ -1281,12 +1415,21 @@ export type DPChecklistExecution = {
   shiftDefinitionName?: string;
   assignedUserId: string;
   assignedUsername: string;
+  collaboratorUserIds?: string[];
+  collaboratorUsernames?: string[];
+  createdByUserId?: string;
+  createdByUsername?: string;
+  sections: DPChecklistExecutionSection[];
   shiftStartTime: string;
   shiftEndTime: string;
   shiftEndDate: string;
   status: DPChecklistExecutionStatus;
   score?: number;
   items: DPChecklistExecutionItem[];
+  incidentContext?: string | null;
+  supplierName?: string | null;
+  invoiceNumber?: string | null;
+  scheduledDate?: string | null;
   claimedByUserId?: string | null;
   claimedByUsername?: string | null;
   claimedAt?: string | null;
@@ -1297,4 +1440,34 @@ export type DPChecklistExecution = {
   reviewNotes?: string | null;
   createdAt: Timestamp | string;
   updatedAt?: Timestamp | string;
+};
+
+export type OperationalTaskStatus =
+  | "open"
+  | "in_progress"
+  | "resolved"
+  | "escalated"
+  | "closed";
+
+export type OperationalTask = {
+  id: string;
+  executionId: string;
+  sectionId: string;
+  itemId: string;
+  itemTitle: string;
+  unitId: string;
+  unitName: string;
+  description: string;
+  status: OperationalTaskStatus;
+  assignedToRoleIds: string[];
+  assignedToUserId?: string;
+  assignedToUserName?: string;
+  slaMinutes: number;
+  slaDeadlineAt: Timestamp | string;
+  escalatedAt?: Timestamp | string;
+  resolvedAt?: Timestamp | string;
+  resolvedBy?: string;
+  resolutionNotes?: string;
+  createdAt: Timestamp | string;
+  updatedAt: Timestamp | string;
 };

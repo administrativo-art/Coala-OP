@@ -1,9 +1,14 @@
 import type {
-  DPChecklistTemplate,
   DPChecklistExecution,
+  DPChecklistTemplate,
+  DPChecklistType,
+  JobFunction,
+  JobRole,
+  OperationalTask,
 } from "@/types";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
+import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { serializeChecklistValue } from "@/features/dp-checklists/lib/server-access";
 
 export type ChecklistActor = {
@@ -27,9 +32,11 @@ export async function loadChecklistActor(userId: string): Promise<ChecklistActor
 }
 
 export async function loadChecklistReferenceData() {
-  const [unitsSnap, shiftDefsSnap] = await Promise.all([
+  const [unitsSnap, shiftDefsSnap, rolesSnap, functionsSnap] = await Promise.all([
     dbAdmin.collection("dp_units").orderBy("name").get(),
     dbAdmin.collection("dp_shiftDefinitions").orderBy("name").get(),
+    hrDbAdmin.collection("jobRoles").orderBy("name").get(),
+    hrDbAdmin.collection("jobFunctions").orderBy("name").get(),
   ]);
 
   const unitNameById = new Map<string, string>();
@@ -50,9 +57,29 @@ export async function loadChecklistReferenceData() {
     );
   });
 
+  const roleNameById = new Map<string, string>();
+  rolesSnap.docs.forEach((doc) => {
+    const data = doc.data() ?? {};
+    roleNameById.set(
+      doc.id,
+      typeof data.name === "string" && data.name.trim() ? data.name : doc.id
+    );
+  });
+
+  const functionNameById = new Map<string, string>();
+  functionsSnap.docs.forEach((doc) => {
+    const data = doc.data() ?? {};
+    functionNameById.set(
+      doc.id,
+      typeof data.name === "string" && data.name.trim() ? data.name : doc.id
+    );
+  });
+
   return {
     unitNameById,
     shiftDefinitionNameById,
+    roleNameById,
+    functionNameById,
     units: unitsSnap.docs.map((doc) => ({
       id: doc.id,
       ...((serializeChecklistValue(doc.data()) as Record<string, unknown>) ?? {}),
@@ -61,6 +88,14 @@ export async function loadChecklistReferenceData() {
       id: doc.id,
       ...((serializeChecklistValue(doc.data()) as Record<string, unknown>) ?? {}),
     })),
+    roles: rolesSnap.docs.map((doc) => ({
+      id: doc.id,
+      ...((serializeChecklistValue(doc.data()) as Record<string, unknown>) ?? {}),
+    })) as JobRole[],
+    functions: functionsSnap.docs.map((doc) => ({
+      id: doc.id,
+      ...((serializeChecklistValue(doc.data()) as Record<string, unknown>) ?? {}),
+    })) as JobFunction[],
   };
 }
 
@@ -82,6 +117,26 @@ export function normalizeChecklistExecutionForApi(
     id,
     ...((serializeChecklistValue(data) as Record<string, unknown>) ?? {}),
   } as DPChecklistExecution;
+}
+
+export function normalizeOperationalTaskForApi(
+  id: string,
+  data: Record<string, unknown>
+) {
+  return {
+    id,
+    ...((serializeChecklistValue(data) as Record<string, unknown>) ?? {}),
+  } as OperationalTask;
+}
+
+export function normalizeChecklistTypeForApi(
+  id: string,
+  data: Record<string, unknown>
+) {
+  return {
+    id,
+    ...((serializeChecklistValue(data) as Record<string, unknown>) ?? {}),
+  } as DPChecklistType;
 }
 
 export async function appendChecklistAudit(

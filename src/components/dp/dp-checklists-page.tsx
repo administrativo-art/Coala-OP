@@ -162,6 +162,9 @@ const ITEM_TYPE_LABELS: Record<DPChecklistItemType, string> = {
   select: "Seleção",
   photo: "Foto",
   signature: "Assinatura",
+  yes_no: "Sim ou não",
+  multi_select: "Múltipla escolha",
+  date: "Data",
 };
 
 // ---------------------------------------------------------------------------
@@ -1233,10 +1236,6 @@ export function DPChecklistsPage() {
   const [unitFilter, setUnitFilter] = React.useState("all");
   const [search, setSearch] = React.useState("");
   const [generateLoading, setGenerateLoading] = React.useState(false);
-  const [templateDialogOpen, setTemplateDialogOpen] = React.useState(false);
-  const [selectedTemplate, setSelectedTemplate] =
-    React.useState<DPChecklistTemplate | null>(null);
-  const [templateSaving, setTemplateSaving] = React.useState(false);
   const [selectedExecutionId, setSelectedExecutionId] = React.useState<string | null>(
     null
   );
@@ -1265,7 +1264,6 @@ export function DPChecklistsPage() {
 
   const executions = payload?.executions ?? [];
   const templates = payload?.templates ?? [];
-  const canManageTemplates = payload?.access.canManageTemplates ?? false;
   const canOperate = payload?.access.canOperate ?? false;
 
   const filteredExecutions = executions.filter((execution) => {
@@ -1319,47 +1317,6 @@ export function DPChecklistsPage() {
       });
     } finally {
       setGenerateLoading(false);
-    }
-  }
-
-  async function handleTemplateSubmit(values: TemplateEditorValues) {
-    if (!firebaseUser) return;
-    setTemplateSaving(true);
-    try {
-      const body = {
-        ...values,
-        sections: values.sections.map((section, sIdx) => ({
-          ...section,
-          order: sIdx,
-          items: section.items.map((item, iIdx) => ({
-            ...item,
-            order: iIdx,
-            description: item.description?.trim() || undefined,
-            config:
-              Object.keys(item.config ?? {}).length > 0 ? item.config : undefined,
-          })),
-        })),
-      };
-
-      if (selectedTemplate) {
-        await updateDPChecklistTemplate(firebaseUser, selectedTemplate.id, body);
-        toast({ title: "Template atualizado" });
-      } else {
-        await createDPChecklistTemplate(firebaseUser, body);
-        toast({ title: "Template criado" });
-      }
-
-      setTemplateDialogOpen(false);
-      setSelectedTemplate(null);
-      await loadData(selectedDate);
-    } catch (err) {
-      toast({
-        title: "Falha ao salvar template",
-        description: err instanceof Error ? err.message : "Não foi possível salvar.",
-        variant: "destructive",
-      });
-    } finally {
-      setTemplateSaving(false);
     }
   }
 
@@ -1495,7 +1452,6 @@ export function DPChecklistsPage() {
             <TabsList>
               <TabsTrigger value="daily">Checklist do dia</TabsTrigger>
               <TabsTrigger value="analytics">Painel gerencial</TabsTrigger>
-              <TabsTrigger value="templates">Templates</TabsTrigger>
             </TabsList>
 
             {/* Daily */}
@@ -1655,136 +1611,9 @@ export function DPChecklistsPage() {
               <DPChecklistsAnalytics units={units} templates={templates} />
             </TabsContent>
 
-            {/* Templates */}
-            <TabsContent value="templates" className="space-y-4">
-              <Card>
-                <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <CardTitle>Catálogo de templates</CardTitle>
-                    <CardDescription>
-                      Controle quais checklists entram na geração diária e em quais
-                      turnos se aplicam.
-                    </CardDescription>
-                  </div>
-                  {canManageTemplates && (
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        setSelectedTemplate(null);
-                        setTemplateDialogOpen(true);
-                      }}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Novo template
-                    </Button>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  {templates.length === 0 ? (
-                    <div className="flex flex-col items-center gap-3 py-10 text-center">
-                      <ClipboardList className="h-10 w-10 text-muted-foreground" />
-                      <div className="space-y-1">
-                        <p className="font-medium">Nenhum template cadastrado</p>
-                        <p className="text-sm text-muted-foreground">
-                          Cadastre o primeiro template para começar a gerar os
-                          checklists do dia.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Template</TableHead>
-                          <TableHead>Escopo</TableHead>
-                          <TableHead>Seções / Itens</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Atualização</TableHead>
-                          <TableHead className="text-right">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {templates.map((template) => (
-                          <TableRow key={template.id}>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <p className="font-medium">{template.name}</p>
-                                {template.description && (
-                                  <p className="max-w-[360px] text-xs text-muted-foreground">
-                                    {template.description}
-                                  </p>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {formatScopeLabel(template)}
-                            </TableCell>
-                            <TableCell>
-                              {template.sections?.length ?? 0} seções /{" "}
-                              {countTemplateItems(template)} itens
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  template.isActive
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"
-                                    : "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300"
-                                }
-                              >
-                                {template.isActive ? "Ativo" : "Inativo"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {formatTimestamp(
-                                typeof template.updatedAt === "string"
-                                  ? template.updatedAt
-                                  : null
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {canManageTemplates ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedTemplate(template);
-                                    setTemplateDialogOpen(true);
-                                  }}
-                                >
-                                  Editar
-                                </Button>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">
-                                  Somente leitura
-                                </span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
         </>
       )}
-
-      <TemplateDialog
-        open={templateDialogOpen}
-        onOpenChange={(open) => {
-          setTemplateDialogOpen(open);
-          if (!open) setSelectedTemplate(null);
-        }}
-        template={selectedTemplate}
-        units={units}
-        shiftDefinitions={shiftDefinitions}
-        onSubmit={handleTemplateSubmit}
-        saving={templateSaving}
-      />
 
       <ExecutionDialog
         open={!!selectedExecution}

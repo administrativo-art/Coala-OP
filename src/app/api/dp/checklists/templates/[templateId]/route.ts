@@ -13,6 +13,13 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function resolveOccurrenceType(
+  templateType: string,
+  occurrenceType?: string
+) {
+  return occurrenceType ?? "manual";
+}
+
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ templateId: string }> }
@@ -43,24 +50,60 @@ export async function PATCH(
 
     const rawBody = await request.json();
     const parsed = checklistTemplateSchema.parse(rawBody);
-    const { unitNameById, shiftDefinitionNameById } =
+    const currentData = (existingSnap.data() ?? {}) as Record<string, unknown>;
+    const currentVersion =
+      typeof currentData.version === "number" && Number.isFinite(currentData.version)
+        ? currentData.version
+        : 1;
+    const {
+      unitNameById,
+      shiftDefinitionNameById,
+      roleNameById,
+      functionNameById,
+    } =
       await loadChecklistReferenceData();
+    const occurrenceType = resolveOccurrenceType(
+      parsed.templateType,
+      parsed.occurrenceType
+    );
+    const currentHistory = Array.isArray(currentData.versionHistory)
+      ? currentData.versionHistory
+      : [];
+    const historyEntry = {
+      version: currentVersion,
+      updatedBy: actor.username,
+      updatedAt: new Date().toISOString(),
+      changeNotes: parsed.changeNotes || undefined,
+    };
 
     const updateData = {
       name: parsed.name,
       description: parsed.description || null,
       category: parsed.category || null,
+      templateType: parsed.templateType,
+      occurrenceType,
       unitIds: parsed.unitIds,
       unitNames: parsed.unitIds.map((id) => unitNameById.get(id) ?? id),
+      jobRoleIds: parsed.jobRoleIds,
+      jobRoleNames: parsed.jobRoleIds.map((id) => roleNameById.get(id) ?? id),
+      jobFunctionIds: parsed.jobFunctionIds,
+      jobFunctionNames: parsed.jobFunctionIds.map(
+        (id) => functionNameById.get(id) ?? id
+      ),
       shiftDefinitionIds: parsed.shiftDefinitionIds,
       shiftDefinitionNames: parsed.shiftDefinitionIds.map(
         (id) => shiftDefinitionNameById.get(id) ?? id
       ),
       isActive: parsed.isActive,
+      version: currentVersion + 1,
+      versionHistory: [...currentHistory, historyEntry],
       sections: parsed.sections.map((section, sIdx) => ({
         id: section.id,
         title: section.title,
         order: sIdx,
+        showIf: section.showIf ?? null,
+        requirePhoto: section.requirePhoto ?? false,
+        requireSignature: section.requireSignature ?? false,
         items: section.items.map((item, iIdx) => ({
           id: item.id,
           order: iIdx,
@@ -69,6 +112,15 @@ export async function PATCH(
           type: item.type,
           required: item.required,
           weight: item.weight,
+          blockNext: item.blockNext,
+          criticality: item.criticality,
+          referenceValue: item.referenceValue ?? null,
+          tolerancePercent: item.tolerancePercent ?? null,
+          actionRequired: item.actionRequired ?? false,
+          notifyRoleIds: item.notifyRoleIds ?? [],
+          escalationMinutes: item.escalationMinutes ?? null,
+          showIf: item.showIf ?? null,
+          conditionalBranches: item.conditionalBranches ?? [],
           config: item.config ?? null,
         })),
       })),
@@ -88,7 +140,12 @@ export async function PATCH(
       actorUsername: actor.username,
       templateId,
       templateName: parsed.name,
+      templateType: parsed.templateType,
+      occurrenceType,
+      version: currentVersion + 1,
       unitIds: parsed.unitIds,
+      jobRoleIds: parsed.jobRoleIds,
+      jobFunctionIds: parsed.jobFunctionIds,
       shiftDefinitionIds: parsed.shiftDefinitionIds,
       sectionCount: parsed.sections.length,
       itemCount,
@@ -96,7 +153,7 @@ export async function PATCH(
 
     return NextResponse.json({
       template: normalizeChecklistTemplateForApi(templateId, {
-        ...(existingSnap.data() ?? {}),
+        ...currentData,
         ...updateData,
       }),
     });

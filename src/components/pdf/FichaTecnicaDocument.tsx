@@ -108,41 +108,63 @@ const formatCurrency = (value: number | undefined | null) => {
 };
 
 interface DocumentProps {
+  type?: 'instrucao' | 'completa';
   data: {
     name: string;
-    ppo?: { sku?: string };
+    ppo?: { 
+      sku?: string;
+      assemblyInstructions?: { id: string; name: string; etapas: { id: string; text: string; quantity?: number; unit?: string }[] }[];
+      preparationTime?: number;
+      portionWeight?: number;
+      portionTolerance?: number;
+      allergens?: { id: string; text: string }[];
+    };
     salePrice: number;
-    grossCost: number;
+    totalCmv: number;
     profitPercentage: number;
     markup: number;
     ingredients: { name: string; quantity: number; unit: string }[];
   }
 }
 
-export const FichaTecnicaDocument = ({ data }: DocumentProps) => (
+export const FichaTecnicaDocument = ({ data, type = 'instrucao' }: DocumentProps) => (
   <Document>
     <Page size="A4" style={styles.page}>
+      <Text style={{ fontSize: 10, color: '#3B82F6', fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>Sistema - Coala</Text>
       <Text style={styles.header}>{data.name}</Text>
       <Text style={styles.subHeader}>SKU: {data.ppo?.sku || 'N/A'}</Text>
       
+      {type === 'completa' && (
+        <View style={styles.cardGrid}>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoCardLabel}>Preço de Venda</Text>
+            <Text style={styles.infoCardValue}>{formatCurrency(data.salePrice)}</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoCardLabel}>Custo (CMV)</Text>
+            <Text style={styles.infoCardValue}>{formatCurrency(data.totalCmv)}</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoCardLabel}>Margem Bruta (R$)</Text>
+            <Text style={styles.infoCardValue}>{formatCurrency((data.salePrice || 0) - (data.totalCmv || 0))}</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoCardLabel}>M. Contribuição</Text>
+            <Text style={styles.infoCardValue}>{data.profitPercentage?.toFixed(1) || 0}%</Text>
+          </View>
+        </View>
+      )}
+      
       <View style={styles.cardGrid}>
         <View style={styles.infoCard}>
-          <Text style={styles.infoCardLabel}>Preço de Venda</Text>
-          <Text style={styles.infoCardValue}>{formatCurrency(data.salePrice)}</Text>
+          <Text style={styles.infoCardLabel}>Tempo de Montagem</Text>
+          <Text style={styles.infoCardValue}>{data.ppo?.preparationTime || 0}s</Text>
         </View>
         <View style={styles.infoCard}>
-          <Text style={styles.infoCardLabel}>Custo Bruto</Text>
-          <Text style={styles.infoCardValue}>{formatCurrency(data.grossCost)}</Text>
-        </View>
-      </View>
-       <View style={styles.cardGrid}>
-        <View style={styles.infoCard}>
-          <Text style={styles.infoCardLabel}>Lucro %</Text>
-          <Text style={styles.infoCardValue}>{data.profitPercentage.toFixed(2)}%</Text>
-        </View>
-        <View style={styles.infoCard}>
-          <Text style={styles.infoCardLabel}>Markup</Text>
-          <Text style={styles.infoCardValue}>{data.markup.toFixed(1)}x</Text>
+          <Text style={styles.infoCardLabel}>Peso</Text>
+          <Text style={styles.infoCardValue}>
+            {data.ppo?.portionWeight || 0}g {data.ppo?.portionTolerance ? `(±${data.ppo.portionTolerance}g)` : ''}
+          </Text>
         </View>
       </View>
 
@@ -167,6 +189,34 @@ export const FichaTecnicaDocument = ({ data }: DocumentProps) => (
           </View>
         ))}
       </View>
+
+      {data.ppo?.assemblyInstructions && data.ppo.assemblyInstructions.length > 0 && (
+        <>
+          <Text style={styles.sectionTitle}>Modo de Montagem</Text>
+          {data.ppo.assemblyInstructions.map((phase) => (
+            <View key={phase.id} style={{ marginTop: 10, marginBottom: 5 }}>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#EF4444', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingBottom: 2, marginBottom: 5 }}>
+                {phase.name}
+              </Text>
+              {phase.etapas.map((etapa, index) => (
+                <View key={etapa.id} style={{ flexDirection: 'row', marginBottom: 3 }}>
+                  <Text style={{ width: 15, fontSize: 9, fontFamily: 'Helvetica-Bold' }}>{index + 1}.</Text>
+                  <Text style={{ flex: 1, fontSize: 9 }}>{etapa.text}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.ppo?.allergens && data.ppo.allergens.length > 0 && (
+        <View style={{ marginTop: 20, padding: 8, backgroundColor: '#FFF7ED', borderRadius: 3, borderLeftWidth: 3, borderLeftColor: '#F97316' }}>
+          <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#9A3412', marginBottom: 2 }}>Alergênicos:</Text>
+          <Text style={{ fontSize: 9, color: '#C2410C' }}>
+            {data.ppo.allergens.map((a: any) => typeof a === 'string' ? a : a.text).join(', ')}
+          </Text>
+        </View>
+      )}
 
       <Text style={styles.footer} render={({ pageNumber, totalPages }) => (
         `Página ${pageNumber} de ${totalPages}`

@@ -57,6 +57,17 @@ const unitSchema = z.object({
   name: z.string().min(1, 'Informe o nome da unidade.'),
   groupId: z.string().optional(),
   bizneoTaxonId: z.string().optional(),
+  auditChecklistThreshold: z
+    .string()
+    .optional()
+    .refine(
+      (value) =>
+        !value ||
+        (!Number.isNaN(Number(value)) &&
+          Number(value) >= 0 &&
+          Number(value) <= 100),
+      'Informe um percentual entre 0 e 100.'
+    ),
 });
 type UnitForm = z.infer<typeof unitSchema>;
 
@@ -70,20 +81,52 @@ function UnitDialog({ unit, open, onOpenChange, unitGroups }: {
   const { toast } = useToast();
   const form = useForm<UnitForm>({
     resolver: zodResolver(unitSchema),
-    defaultValues: { name: unit?.name ?? '', groupId: unit?.groupId ?? '', bizneoTaxonId: unit?.bizneoTaxonId ? String(unit.bizneoTaxonId) : '' },
+    defaultValues: {
+      name: unit?.name ?? '',
+      groupId: unit?.groupId ?? '',
+      bizneoTaxonId: unit?.bizneoTaxonId ? String(unit.bizneoTaxonId) : '',
+      auditChecklistThreshold:
+        typeof unit?.auditChecklistThreshold === 'number'
+          ? String(unit.auditChecklistThreshold)
+          : '85',
+    },
   });
 
   React.useEffect(() => {
-    if (open) form.reset({ name: unit?.name ?? '', groupId: unit?.groupId ?? '', bizneoTaxonId: unit?.bizneoTaxonId ? String(unit.bizneoTaxonId) : '' });
+    if (open) {
+      form.reset({
+        name: unit?.name ?? '',
+        groupId: unit?.groupId ?? '',
+        bizneoTaxonId: unit?.bizneoTaxonId ? String(unit.bizneoTaxonId) : '',
+        auditChecklistThreshold:
+          typeof unit?.auditChecklistThreshold === 'number'
+            ? String(unit.auditChecklistThreshold)
+            : '85',
+      });
+    }
   }, [open, unit]);
 
   async function onSubmit(values: UnitForm) {
     try {
       const bizneoTaxonId = values.bizneoTaxonId ? Number(values.bizneoTaxonId) : undefined;
+      const auditChecklistThreshold = values.auditChecklistThreshold
+        ? Number(values.auditChecklistThreshold)
+        : undefined;
       if (unit) {
-        await updateUnit({ ...unit, name: values.name, groupId: values.groupId || undefined, bizneoTaxonId });
+        await updateUnit({
+          ...unit,
+          name: values.name,
+          groupId: values.groupId || undefined,
+          bizneoTaxonId,
+          auditChecklistThreshold,
+        });
       } else {
-        await addUnit({ name: values.name, groupId: values.groupId || undefined, bizneoTaxonId });
+        await addUnit({
+          name: values.name,
+          groupId: values.groupId || undefined,
+          bizneoTaxonId,
+          auditChecklistThreshold,
+        });
       }
       toast({ title: unit ? 'Unidade atualizada.' : 'Unidade criada.' });
       onOpenChange(false);
@@ -132,6 +175,16 @@ function UnitDialog({ unit, open, onOpenChange, unitGroups }: {
               <FormItem>
                 <FormLabel>ID Bizneo (taxon)</FormLabel>
                 <FormControl><Input placeholder="Ex: 16098415" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="auditChecklistThreshold" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Threshold de auditoria (%)</FormLabel>
+                <FormControl><Input type="number" min={0} max={100} step="1" placeholder="Ex: 85" {...field} /></FormControl>
+                <p className="text-xs text-muted-foreground">
+                  Usado no painel gerencial para alertar unidades abaixo da meta de auditoria.
+                </p>
                 <FormMessage />
               </FormItem>
             )} />
@@ -282,7 +335,12 @@ export function DPSettingsUnits() {
                 const group = unitGroups.find(g => g.id === unit.groupId);
                 return (
                   <div key={unit.id} className="flex items-center gap-3 px-3 py-2.5">
-                    <p className="flex-1 text-sm truncate">{unit.name}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">{unit.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Threshold auditoria: {typeof unit.auditChecklistThreshold === 'number' ? `${unit.auditChecklistThreshold}%` : '85%'}
+                      </p>
+                    </div>
                     {group && <Badge variant="outline" className="text-xs font-normal">{group.name}</Badge>}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

@@ -21,6 +21,7 @@ import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useKiosks } from '@/hooks/use-kiosks';
+import { cn } from '@/lib/utils';
 
 
 const batchEditSchema = z.object({
@@ -120,7 +121,10 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
     const { bulkUpdateSimulations } = useProductSimulation();
     const { kiosks } = useKiosks();
     const { toast } = useToast();
+    
+    const [step, setStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
     
     const form = useForm<BatchEditFormValues>({
         resolver: zodResolver(batchEditSchema),
@@ -144,18 +148,15 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
     const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
     const groups = useMemo(() => categories.filter(c => c.type === 'group'), [categories]);
 
-    const statusAction = form.watch('statusAction');
     const kioskAction = form.watch('kioskAction');
-    const lineAction = form.watch('lineAction');
-    const categoryAction = form.watch('categoryAction');
-    const groupAction = form.watch('groupAction');
-    const priceAction = form.watch('priceAction');
-    const ncmAction = form.watch('ncmAction');
-    const cestAction = form.watch('cestAction');
-    const cfopAction = form.watch('cfopAction');
     const priceAdjustmentType = form.watch('priceAdjustmentType');
 
     const onSubmit = async (values: BatchEditFormValues) => {
+        if (step < 3) {
+            setStep(step + 1);
+            return;
+        }
+
         setIsSubmitting(true);
         
         const targetSimulations = values.target === 'selected'
@@ -170,18 +171,20 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
 
         try {
             await bulkUpdateSimulations(targetSimulations, {
-                status: { action: values.statusAction, value: values.statusValue },
-                kiosk: { action: values.kioskAction, ids: values.kioskIds || [] },
-                line: { action: values.lineAction, id: values.lineId },
-                category: { action: values.categoryAction, id: values.categoryId },
-                group: { action: values.groupAction, id: values.groupId },
-                price: { action: values.priceAction, type: values.priceAdjustmentType, value: values.priceValue || 0 },
-                ncm: { action: values.ncmAction, value: values.ncm },
-                cest: { action: values.cestAction, value: values.cest },
-                cfop: { action: values.cfopAction, value: values.cfop },
+                status: { action: selectedFields.has('status') ? 'set' : 'keep', value: values.statusValue },
+                kiosk: { action: selectedFields.has('kiosks') ? values.kioskAction : 'keep', ids: values.kioskIds || [] },
+                line: { action: selectedFields.has('line') ? values.lineAction : 'keep', id: values.lineId },
+                category: { action: selectedFields.has('category') ? values.categoryAction : 'keep', id: values.categoryId },
+                group: { action: selectedFields.has('group') ? values.groupAction : 'keep', id: values.groupId },
+                price: { action: selectedFields.has('price') ? 'change' : 'keep', type: values.priceAdjustmentType, value: values.priceValue || 0 },
+                ncm: { action: selectedFields.has('fiscal') ? 'set' : 'keep', value: values.ncm },
+                cest: { action: selectedFields.has('fiscal') ? 'set' : 'keep', value: values.cest },
+                cfop: { action: selectedFields.has('fiscal') ? 'set' : 'keep', value: values.cfop },
             });
             toast({ title: "Sucesso!", description: `${targetSimulations.length} mercadorias foram atualizadas.` });
             onOpenChange(false);
+            setStep(1);
+            setSelectedFields(new Set());
         } catch (error) {
             toast({ variant: 'destructive', title: 'Erro ao atualizar', description: 'Não foi possível completar a operação.' });
         } finally {
@@ -189,120 +192,173 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
         }
     };
 
+    const toggleField = (field: string) => {
+        const newFields = new Set(selectedFields);
+        if (newFields.has(field)) newFields.delete(field);
+        else newFields.add(field);
+        setSelectedFields(newFields);
+    };
+
+    const fieldOptions = [
+        { id: 'status', label: 'Status (Ativo/Inativo)' },
+        { id: 'kiosks', label: 'Quiosques' },
+        { id: 'line', label: 'Linha' },
+        { id: 'category', label: 'Categoria' },
+        { id: 'group', label: 'Grupo por Insumo' },
+        { id: 'fiscal', label: 'Informações Fiscais (NCM/CEST/CFOP)' },
+        { id: 'price', label: 'Preço de Venda' },
+    ];
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-xl h-[90vh] flex flex-col">
-                <DialogHeader>
-                    <DialogTitle>Alterar mercadorias em lote</DialogTitle>
-                    <DialogDescription>
-                        Aplique alterações a múltiplas mercadorias de uma só vez.
-                    </DialogDescription>
-                </DialogHeader>
+        <Dialog open={open} onOpenChange={(v) => { if(!v) { setStep(1); setSelectedFields(new Set()); } onOpenChange(v); }}>
+            <DialogContent className="max-w-xl h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+                <div className="bg-pink-600 p-8 text-white">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-black tracking-tight">Alterar em lote</DialogTitle>
+                        <DialogDescription className="text-pink-100 font-medium">
+                            Passo {step} de 3: {step === 1 ? 'Selecionar itens' : step === 2 ? 'Escolher campos' : 'Definir valores'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {/* Step Progress Bar */}
+                    <div className="flex gap-2 mt-6">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className={cn("h-1.5 flex-1 rounded-full transition-all", i <= step ? "bg-white" : "bg-white/30")} />
+                        ))}
+                    </div>
+                </div>
+
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
-                        <ScrollArea className="flex-1 pr-6 -mr-6">
-                            <div className="space-y-6 pt-4">
-                                <FormField
-                                    control={form.control}
-                                    name="target"
-                                    render={({ field }) => (
-                                        <FormItem className="space-y-3">
-                                            <FormLabel>Quais itens você quer alterar?</FormLabel>
-                                            <FormControl>
-                                                <RadioGroup
-                                                    onValueChange={field.onChange}
-                                                    value={field.value}
-                                                    className="flex gap-4"
-                                                >
-                                                    <FormItem className="flex items-center space-x-2 space-y-0">
-                                                        <FormControl><RadioGroupItem value="selected" disabled={selectedSimulationIds.size === 0} /></FormControl>
-                                                        <FormLabel className="font-normal">Itens selecionados ({selectedSimulationIds.size})</FormLabel>
-                                                    </FormItem>
-                                                    <FormItem className="flex items-center space-x-2 space-y-0">
-                                                        <FormControl><RadioGroupItem value="filtered" /></FormControl>
-                                                        <FormLabel className="font-normal">Resultado filtrado ({filteredSimulations.length})</FormLabel>
-                                                    </FormItem>
-                                                </RadioGroup>
-                                            </FormControl>
-                                        </FormItem>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+                        <ScrollArea className="flex-1 px-8 py-6">
+                            {step === 1 && (
+                                <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                                    <FormField
+                                        control={form.control}
+                                        name="target"
+                                        render={({ field }) => (
+                                            <FormItem className="space-y-4">
+                                                <FormLabel className="text-base font-black text-gray-900">Quais itens você quer alterar?</FormLabel>
+                                                <FormControl>
+                                                    <RadioGroup
+                                                        onValueChange={field.onChange}
+                                                        value={field.value}
+                                                        className="grid grid-cols-1 gap-3"
+                                                    >
+                                                        <div className={cn(
+                                                            "flex items-center space-x-3 space-y-0 p-4 rounded-xl border-2 transition-all cursor-pointer",
+                                                            field.value === 'selected' ? "border-pink-500 bg-white shadow-md" : "border-gray-200 bg-white/50 grayscale opacity-70"
+                                                        )} onClick={() => selectedSimulationIds.size > 0 && field.onChange('selected')}>
+                                                            <FormControl><RadioGroupItem value="selected" disabled={selectedSimulationIds.size === 0} /></FormControl>
+                                                            <div>
+                                                                <FormLabel className="font-bold text-gray-900 block">Itens selecionados</FormLabel>
+                                                                <span className="text-xs text-muted-foreground font-medium">{selectedSimulationIds.size} mercadorias marcadas na lista</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className={cn(
+                                                            "flex items-center space-x-3 space-y-0 p-4 rounded-xl border-2 transition-all cursor-pointer",
+                                                            field.value === 'filtered' ? "border-pink-500 bg-white shadow-md" : "border-gray-200 bg-white/50"
+                                                        )} onClick={() => field.onChange('filtered')}>
+                                                            <FormControl><RadioGroupItem value="filtered" /></FormControl>
+                                                            <div>
+                                                                <FormLabel className="font-bold text-gray-900 block">Resultado filtrado</FormLabel>
+                                                                <span className="text-xs text-muted-foreground font-medium">{filteredSimulations.length} mercadorias baseadas nos filtros atuais</span>
+                                                            </div>
+                                                        </div>
+                                                    </RadioGroup>
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            )}
+
+                            {step === 2 && (
+                                <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                                    <h3 className="text-base font-black text-gray-900">Quais campos deseja alterar?</h3>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {fieldOptions.map(opt => (
+                                            <div 
+                                                key={opt.id}
+                                                className={cn(
+                                                    "flex items-center p-4 rounded-xl border-2 transition-all cursor-pointer",
+                                                    selectedFields.has(opt.id) ? "border-pink-500 bg-white shadow-md" : "border-gray-200 bg-white/50 hover:border-pink-200"
+                                                )}
+                                                onClick={() => toggleField(opt.id)}
+                                            >
+                                                <div className={cn(
+                                                    "w-5 h-5 rounded-md border-2 mr-3 flex items-center justify-center transition-colors",
+                                                    selectedFields.has(opt.id) ? "bg-pink-500 border-pink-500 text-white" : "border-gray-300"
+                                                )}>
+                                                    {selectedFields.has(opt.id) && <Loader2 className="w-3 h-3 animate-none" />}
+                                                </div>
+                                                <span className={cn("font-bold text-sm", selectedFields.has(opt.id) ? "text-gray-900" : "text-gray-500")}>
+                                                    {opt.label}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {selectedFields.size === 0 && (
+                                        <p className="text-xs text-red-500 font-bold text-center">Selecione pelo menos um campo para continuar.</p>
                                     )}
-                                />
+                                </div>
+                            )}
 
-                                <Separator />
-
-                                <div className="space-y-4">
-                                    <h3 className="font-medium">Alterações</h3>
-                                    {/* Status */}
-                                    <div className="p-4 border rounded-lg space-y-4">
-                                        <FormLabel>Status</FormLabel>
-                                        <FormField control={form.control} name="statusAction" render={({ field }) => (
-                                            <FormItem><FormControl>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="keep">Não alterar</SelectItem>
-                                                        <SelectItem value="set">Definir como:</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormControl></FormItem>
-                                        )}/>
-                                        {statusAction === 'set' && (
+                            {step === 3 && (
+                                <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                                    <h3 className="text-base font-black text-gray-900">Defina os novos valores</h3>
+                                    
+                                    {selectedFields.has('status') && (
+                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                            <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Status</FormLabel>
                                             <FormField control={form.control} name="statusValue" render={({ field }) => (
                                                 <FormItem><FormControl>
                                                     <Select onValueChange={field.onChange} value={field.value}>
-                                                        <SelectTrigger><SelectValue placeholder="Selecione um status..." /></SelectTrigger>
+                                                        <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Selecione um status..." /></SelectTrigger>
                                                         <SelectContent>
-                                                          <SelectItem value="active">Ativo</SelectItem>
-                                                          <SelectItem value="archived">Inativo</SelectItem>
+                                                            <SelectItem value="active">Ativo</SelectItem>
+                                                            <SelectItem value="archived">Inativo</SelectItem>
                                                         </SelectContent>
                                                     </Select>
                                                 </FormControl><FormMessage /></FormItem>
                                             )}/>
-                                        )}
-                                    </div>
-                                    {/* Kiosks */}
-                                    <div className="p-4 border rounded-lg space-y-4">
-                                        <FormLabel>Quiosques</FormLabel>
-                                        <FormField control={form.control} name="kioskAction" render={({ field }) => (
-                                            <FormItem><FormControl>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="keep">Não alterar</SelectItem>
-                                                        <SelectItem value="add">Adicionar quiosques</SelectItem>
-                                                        <SelectItem value="remove">Remover quiosques</SelectItem>
-                                                        <SelectItem value="set">Substituir por:</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormControl></FormItem>
-                                        )}/>
-                                        {kioskAction !== 'keep' && (
-                                            <FormField
-                                                control={form.control}
-                                                name="kioskIds"
-                                                render={({ field }) => (
-                                                    <FormItem>
+                                        </div>
+                                    )}
+
+                                    {selectedFields.has('kiosks') && (
+                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                            <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Quiosques</FormLabel>
+                                            <FormField control={form.control} name="kioskAction" render={({ field }) => (
+                                                <FormItem><FormControl>
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <SelectTrigger className="h-12 rounded-xl"><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="add">Adicionar aos selecionados</SelectItem>
+                                                            <SelectItem value="remove">Remover os selecionados</SelectItem>
+                                                            <SelectItem value="set">Substituir por estes:</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormControl></FormItem>
+                                            )}/>
+                                            <FormField control={form.control} name="kioskIds" render={({ field }) => (
+                                                <FormItem>
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild>
                                                             <FormControl>
-                                                                <Button variant="outline" className="w-full justify-between font-normal">
-                                                                    {(field.value?.length ?? 0) > 0 ? `${field.value?.length} quiosque(s) selecionado(s)` : "Selecione quiosques"}
+                                                                <Button variant="outline" className="w-full justify-between h-12 rounded-xl font-bold text-gray-700">
+                                                                    {(field.value?.length ?? 0) > 0 ? `${field.value?.length} selecionado(s)` : "Selecione..."}
                                                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                                 </Button>
                                                             </FormControl>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                                                            <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
-                                                            <DropdownMenuSeparator />
                                                             {kiosks.map((k) => (
                                                                 <DropdownMenuCheckboxItem
                                                                     key={k.id}
                                                                     checked={field.value?.includes(k.id)}
                                                                     onCheckedChange={(checked) => {
-                                                                        const currentSelection = field.value || [];
-                                                                        return checked
-                                                                            ? field.onChange([...currentSelection, k.id])
-                                                                            : field.onChange(currentSelection.filter((id) => id !== k.id));
+                                                                        const current = field.value || [];
+                                                                        return checked ? field.onChange([...current, k.id]) : field.onChange(current.filter(id => id !== k.id));
                                                                     }}
                                                                     onSelect={(e) => e.preventDefault()}
                                                                 >
@@ -312,175 +368,137 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                     <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                        )}
-                                    </div>
-                                    {/* Linha */}
-                                    <div className="p-4 border rounded-lg space-y-4">
-                                        <FormLabel>Linha</FormLabel>
-                                        <FormField control={form.control} name="lineAction" render={({ field }) => (
-                                            <FormItem><FormControl>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="keep">Não alterar</SelectItem>
-                                                        <SelectItem value="set">Definir como:</SelectItem>
-                                                        <SelectItem value="clear">Limpar valor</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormControl></FormItem>
-                                        )}/>
-                                        {lineAction === 'set' && (
-                                            <FormField control={form.control} name="lineId" render={({ field }) => (
-                                                <FormItem><FormControl>
-                                                    <Select onValueChange={field.onChange} value={field.value}>
-                                                        <SelectTrigger><SelectValue placeholder="Selecione uma linha..." /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormControl><FormMessage /></FormItem>
-                                            )}/>
-                                        )}
-                                    </div>
-                                    {/* Categoria */}
-                                    <div className="p-4 border rounded-lg space-y-4">
-                                        <FormLabel>Categoria</FormLabel>
-                                        <FormField control={form.control} name="categoryAction" render={({ field }) => (
-                                            <FormItem><FormControl>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="keep">Não alterar</SelectItem>
-                                                        <SelectItem value="set">Definir como:</SelectItem>
-                                                        <SelectItem value="clear">Limpar valor</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormControl></FormItem>
-                                        )}/>
-                                        {categoryAction === 'set' && (
-                                            <FormField control={form.control} name="categoryId" render={({ field }) => (
-                                                <FormItem><FormControl>
-                                                    <Select onValueChange={field.onChange} value={field.value}>
-                                                        <SelectTrigger><SelectValue placeholder="Selecione uma categoria..." /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormControl><FormMessage /></FormItem>
-                                            )}/>
-                                        )}
-                                    </div>
-                                    {/* Grupo */}
-                                    <div className="p-4 border rounded-lg space-y-4">
-                                        <FormLabel>Grupo por Insumo</FormLabel>
-                                        <FormField control={form.control} name="groupAction" render={({ field }) => (
-                                            <FormItem><FormControl>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="keep">Não alterar</SelectItem>
-                                                        <SelectItem value="add">Adicionar grupo</SelectItem>
-                                                        <SelectItem value="remove">Remover grupo</SelectItem>
-                                                        <SelectItem value="set">Substituir por:</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormControl></FormItem>
-                                        )}/>
-                                        {groupAction !== 'keep' && (
-                                            <FormField control={form.control} name="groupId" render={({ field }) => (
-                                                <FormItem><FormControl>
-                                                    <Select onValueChange={field.onChange} value={field.value}>
-                                                        <SelectTrigger><SelectValue placeholder="Selecione um grupo..." /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormControl><FormMessage /></FormItem>
-                                            )}/>
-                                        )}
-                                    </div>
+                                                </FormItem>
+                                            )} />
+                                        </div>
+                                    )}
 
-                                    {/* Fiscal Fields */}
-                                    <div className="p-4 border rounded-lg space-y-4">
-                                        <FormLabel>Informações Fiscais</FormLabel>
-                                        {/* NCM */}
-                                        <div className="flex gap-2 items-end">
-                                            <FormField control={form.control} name="ncmAction" render={({ field }) => (
-                                                <FormItem className="w-1/3"><FormLabel className="text-xs">NCM</FormLabel><FormControl>
-                                                    <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="keep">Não alterar</SelectItem><SelectItem value="set">Definir</SelectItem></SelectContent></Select>
-                                                </FormControl></FormItem>
-                                            )}/>
-                                            <FormField control={form.control} name="ncm" render={({ field }) => (
-                                                <FormItem className="flex-grow"><FormControl><Input placeholder="Novo NCM" {...field} value={field.value ?? ''} disabled={ncmAction !== 'set'} /></FormControl><FormMessage /></FormItem>
-                                            )}/>
-                                        </div>
-                                        {/* CEST */}
-                                         <div className="flex gap-2 items-end">
-                                            <FormField control={form.control} name="cestAction" render={({ field }) => (
-                                                <FormItem className="w-1/3"><FormLabel className="text-xs">CEST</FormLabel><FormControl>
-                                                    <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="keep">Não alterar</SelectItem><SelectItem value="set">Definir</SelectItem></SelectContent></Select>
-                                                </FormControl></FormItem>
-                                            )}/>
-                                            <FormField control={form.control} name="cest" render={({ field }) => (
-                                                <FormItem className="flex-grow"><FormControl><Input placeholder="Novo CEST" {...field} value={field.value ?? ''} disabled={cestAction !== 'set'} /></FormControl><FormMessage /></FormItem>
-                                            )}/>
-                                        </div>
-                                        {/* CFOP */}
-                                         <div className="flex gap-2 items-end">
-                                            <FormField control={form.control} name="cfopAction" render={({ field }) => (
-                                                <FormItem className="w-1/3"><FormLabel className="text-xs">CFOP</FormLabel><FormControl>
-                                                    <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="keep">Não alterar</SelectItem><SelectItem value="set">Definir</SelectItem></SelectContent></Select>
-                                                </FormControl></FormItem>
-                                            )}/>
-                                            <FormField control={form.control} name="cfop" render={({ field }) => (
-                                                <FormItem className="flex-grow"><FormControl><Input placeholder="Novo CFOP" {...field} value={field.value ?? ''} disabled={cfopAction !== 'set'} /></FormControl><FormMessage /></FormItem>
-                                            )}/>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Preço de Venda */}
-                                    <div className="p-4 border rounded-lg space-y-4">
-                                        <FormLabel>Preço de Venda</FormLabel>
-                                        <FormField control={form.control} name="priceAction" render={({ field }) => (
-                                            <FormItem><FormControl>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="keep">Não alterar</SelectItem>
-                                                        <SelectItem value="change">Alterar valor</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormControl></FormItem>
-                                        )}/>
-                                        {priceAction !== 'keep' && (
-                                            <div className="flex gap-4 items-center">
-                                                <FormField control={form.control} name="priceAdjustmentType" render={({ field }) => (
-                                                    <FormItem className="flex-grow"><FormControl>
-                                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="flex gap-4">
-                                                            <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="percentage" /></FormControl><FormLabel className="font-normal">Percentual (%)</FormLabel></FormItem>
-                                                            <FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="fixed" /></FormControl><FormLabel className="font-normal">Fixo (R$)</FormLabel></FormItem>
-                                                        </RadioGroup>
-                                                    </FormControl></FormItem>
+                                    {selectedFields.has('line') && (
+                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                            <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Linha</FormLabel>
+                                            <div className="flex gap-2">
+                                                <FormField control={form.control} name="lineAction" render={({ field }) => (
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <SelectTrigger className="w-[140px] h-12 rounded-xl"><SelectValue /></SelectTrigger>
+                                                        <SelectContent><SelectItem value="set">Definir</SelectItem><SelectItem value="clear">Limpar</SelectItem></SelectContent>
+                                                    </Select>
                                                 )}/>
-                                                <FormField control={form.control} name="priceValue" render={({ field }) => (
-                                                    <FormItem className="w-32"><FormControl><Input type="number" step="0.01" {...field} value={field.value || ''} placeholder="Valor" /></FormControl><FormMessage /></FormItem>
+                                                <FormField control={form.control} name="lineId" render={({ field }) => (
+                                                    <FormItem className="flex-grow"><FormControl>
+                                                        <Select onValueChange={field.onChange} value={field.value} disabled={form.watch('lineAction') === 'clear'}>
+                                                            <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                                                            <SelectContent>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
+                                                        </Select>
+                                                    </FormControl><FormMessage /></FormItem>
                                                 )}/>
                                             </div>
-                                        )}
-                                    </div>
+                                        </div>
+                                    )}
+
+                                    {selectedFields.has('category') && (
+                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                            <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Categoria</FormLabel>
+                                            <div className="flex gap-2">
+                                                <FormField control={form.control} name="categoryAction" render={({ field }) => (
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <SelectTrigger className="w-[140px] h-12 rounded-xl"><SelectValue /></SelectTrigger>
+                                                        <SelectContent><SelectItem value="set">Definir</SelectItem><SelectItem value="clear">Limpar</SelectItem></SelectContent>
+                                                    </Select>
+                                                )}/>
+                                                <FormField control={form.control} name="categoryId" render={({ field }) => (
+                                                    <FormItem className="flex-grow"><FormControl>
+                                                        <Select onValueChange={field.onChange} value={field.value} disabled={form.watch('categoryAction') === 'clear'}>
+                                                            <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                                                            <SelectContent>{mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                                                        </Select>
+                                                    </FormControl><FormMessage /></FormItem>
+                                                )}/>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedFields.has('group') && (
+                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                            <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Grupo por Insumo</FormLabel>
+                                            <div className="flex gap-2">
+                                                <FormField control={form.control} name="groupAction" render={({ field }) => (
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <SelectTrigger className="w-[140px] h-12 rounded-xl"><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="add">Adicionar</SelectItem>
+                                                            <SelectItem value="remove">Remover</SelectItem>
+                                                            <SelectItem value="set">Substituir</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                )}/>
+                                                <FormField control={form.control} name="groupId" render={({ field }) => (
+                                                    <FormItem className="flex-grow"><FormControl>
+                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                            <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                                                            <SelectContent>{groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+                                                        </Select>
+                                                    </FormControl><FormMessage /></FormItem>
+                                                )}/>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedFields.has('fiscal') && (
+                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                            <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Informações Fiscais</FormLabel>
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <FormField control={form.control} name="ncm" render={({ field }) => (
+                                                    <FormItem><FormLabel className="text-[10px] font-bold text-gray-400">NCM</FormLabel><FormControl><Input className="h-10 rounded-lg" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                                                )}/>
+                                                <FormField control={form.control} name="cest" render={({ field }) => (
+                                                    <FormItem><FormLabel className="text-[10px] font-bold text-gray-400">CEST</FormLabel><FormControl><Input className="h-10 rounded-lg" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                                                )}/>
+                                                <FormField control={form.control} name="cfop" render={({ field }) => (
+                                                    <FormItem><FormLabel className="text-[10px] font-bold text-gray-400">CFOP</FormLabel><FormControl><Input className="h-10 rounded-lg" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                                                )}/>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedFields.has('price') && (
+                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                            <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Preço de Venda</FormLabel>
+                                            <div className="flex flex-col gap-4">
+                                                <FormField control={form.control} name="priceAdjustmentType" render={({ field }) => (
+                                                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex gap-6">
+                                                        <div className="flex items-center space-x-2"><RadioGroupItem value="percentage" id="pct" /><label htmlFor="pct" className="text-sm font-bold">Percentual (%)</label></div>
+                                                        <div className="flex items-center space-x-2"><RadioGroupItem value="fixed" id="fix" /><label htmlFor="fix" className="text-sm font-bold">Fixo (R$)</label></div>
+                                                    </RadioGroup>
+                                                )}/>
+                                                <FormField control={form.control} name="priceValue" render={({ field }) => (
+                                                    <FormItem><FormControl><Input type="number" step="0.01" className="h-12 rounded-xl text-lg font-black" {...field} value={field.value || ''} placeholder={priceAdjustmentType === 'percentage' ? "Ex: 10 para +10%" : "Novo valor em R$"} /></FormControl><FormMessage /></FormItem>
+                                                )}/>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
+                            )}
                         </ScrollArea>
-                        <DialogFooter className="pt-4 border-t mt-auto">
-                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                            <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Aplicar alterações
+
+                        <div className="px-8 py-6 bg-white border-t flex justify-between items-center mt-auto">
+                            <Button 
+                                type="button" 
+                                variant="ghost" 
+                                className="font-bold text-gray-400 hover:text-gray-900"
+                                onClick={() => step > 1 ? setStep(step - 1) : onOpenChange(false)}
+                            >
+                                {step === 1 ? 'Cancelar' : 'Voltar'}
                             </Button>
-                        </DialogFooter>
+                            
+                            <Button 
+                                type="submit" 
+                                className="bg-pink-600 hover:bg-pink-700 text-white font-black px-8 h-12 rounded-xl"
+                                disabled={isSubmitting || (step === 2 && selectedFields.size === 0)}
+                            >
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {step === 3 ? 'Aplicar Alterações' : 'Próximo Passo'}
+                            </Button>
+                        </div>
                     </form>
                 </Form>
             </DialogContent>

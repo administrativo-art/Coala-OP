@@ -13,16 +13,16 @@ export default function RegistrationEntitiesPage() {
         <div className="space-y-4">
              <div className="flex items-center gap-4 mb-2">
                 <Button 
-                    onClick={() => router.push('/dashboard/registration')}
+                    onClick={() => router.push('/dashboard/settings?department=operacional&tab=cadastros')}
                     variant="ghost"
                     className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                    aria-label="Voltar para cadastros"
+                    aria-label="Voltar para configurações"
                 >
                     <ArrowLeft className="w-6 h-6" />
                 </Button>
                 <div>
                     <h1 className="text-3xl font-bold">Pessoas e empresas</h1>
-                    <p className="text-sm text-muted-foreground">Voltar para cadastros</p>
+                    <p className="text-sm text-muted-foreground">Voltar para configurações</p>
                 </div>
             </div>
             <EntityManagement />

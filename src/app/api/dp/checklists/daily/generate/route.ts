@@ -1,9 +1,12 @@
+import { differenceInCalendarDays, format, getDate, lastDayOfMonth, parseISO } from "date-fns";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
   buildChecklistExecutionId,
   buildChecklistExecutionItems,
+  buildChecklistExecutionSections,
   doesTemplateMatchShift,
+  doesTemplateSupportAutomaticGeneration,
   resolveShiftEndDate,
 } from "@/features/dp-checklists/lib/core";
 import { checklistDateSchema } from "@/features/dp-checklists/lib/schemas";
@@ -13,8 +16,9 @@ import {
   checklistDbAdmin,
   loadChecklistActor,
   loadChecklistReferenceData,
+  normalizeChecklistTemplateForApi,
 } from "@/features/dp-checklists/lib/server";
-import type { DPChecklistTemplate, DPShift } from "@/types";
+import type { DPChecklistTemplate, DPShift, User } from "@/types";
 import { dbAdmin } from "@/lib/firebase-admin";
 
 export const runtime = "nodejs";
@@ -31,100 +35,78 @@ type ShiftCandidate = Pick<
   | "startTime"
   | "endTime"
   | "type"
-> & { assignedUsername: string };
+> & {
+  assignedUsername: string;
+  userJobRoleId?: string | null;
+  userJobFunctionIds?: string[];
+};
 
-function asChecklistTemplate(
-  id: string,
-  data: Record<string, unknown>
-): DPChecklistTemplate | null {
-  if (
-    typeof data.name !== "string" ||
-    !Array.isArray(data.sections) ||
-    typeof data.isActive !== "boolean"
-  ) {
+function getTemplateAnchorDate(template: Pick<DPChecklistTemplate, "createdAt">) {
+  const raw =
+    typeof template.createdAt === "string"
+      ? template.createdAt
+      : typeof (template.createdAt as { toDate?: () => Date })?.toDate === "function"
+        ? (template.createdAt as { toDate: () => Date }).toDate().toISOString()
+        : null;
+
+  if (!raw) return null;
+  try {
+    return format(parseISO(raw), "yyyy-MM-dd");
+  } catch {
     return null;
   }
-
-  return {
-    id,
-    name: data.name,
-    description: typeof data.description === "string" ? data.description : undefined,
-    unitIds: Array.isArray(data.unitIds)
-      ? data.unitIds.filter((item): item is string => typeof item === "string")
-      : [],
-    unitNames: Array.isArray(data.unitNames)
-      ? data.unitNames.filter((item): item is string => typeof item === "string")
-      : [],
-    shiftDefinitionIds: Array.isArray(data.shiftDefinitionIds)
-      ? data.shiftDefinitionIds.filter((item): item is string => typeof item === "string")
-      : [],
-    shiftDefinitionNames: Array.isArray(data.shiftDefinitionNames)
-      ? data.shiftDefinitionNames.filter((item): item is string => typeof item === "string")
-      : [],
-    isActive: data.isActive,
-    sections: (data.sections as unknown[])
-      .map((rawSection) => {
-        if (!rawSection || typeof rawSection !== "object") return null;
-        const section = rawSection as Record<string, unknown>;
-        if (typeof section.id !== "string" || typeof section.title !== "string") {
-          return null;
-        }
-        return {
-          id: section.id,
-          title: section.title,
-          order: typeof section.order === "number" ? section.order : 0,
-          items: Array.isArray(section.items)
-            ? (section.items as unknown[])
-                .map((rawItem) => {
-                  if (!rawItem || typeof rawItem !== "object") return null;
-                  const item = rawItem as Record<string, unknown>;
-                  if (
-                    typeof item.id !== "string" ||
-                    typeof item.title !== "string" ||
-                    typeof item.type !== "string" ||
-                    typeof item.required !== "boolean"
-                  ) {
-                    return null;
-                  }
-                  return {
-                    id: item.id,
-                    order: typeof item.order === "number" ? item.order : 0,
-                    title: item.title,
-                    description:
-                      typeof item.description === "string" ? item.description : undefined,
-                    type: item.type as DPChecklistTemplate["sections"][0]["items"][0]["type"],
-                    required: item.required,
-                    weight: typeof item.weight === "number" ? item.weight : 1,
-                    config:
-                      item.config && typeof item.config === "object"
-                        ? (item.config as DPChecklistTemplate["sections"][0]["items"][0]["config"])
-                        : undefined,
-                  };
-                })
-                .filter(<T>(x: T | null): x is T => x !== null)
-            : [],
-        };
-      })
-      .filter(<T>(x: T | null): x is T => x !== null),
-    createdAt: "",
-  };
 }
 
-async function loadUsernames(userIds: string[]) {
+function matchesTemplateOccurrence(
+  template: Pick<DPChecklistTemplate, "occurrenceType" | "createdAt">,
+  date: string
+) {
+  const occurrenceType = template.occurrenceType ?? "manual";
+  if (occurrenceType === "daily") return true;
+  if (occurrenceType === "manual") return false;
+
+  const anchorDate = getTemplateAnchorDate(template);
+  if (!anchorDate) return false;
+
+  const target = parseISO(`${date}T12:00:00.000Z`);
+  const anchor = parseISO(`${anchorDate}T12:00:00.000Z`);
+
+  if (occurrenceType === "weekly") {
+    const delta = differenceInCalendarDays(target, anchor);
+    return delta >= 0 && delta % 7 === 0;
+  }
+
+  if (occurrenceType === "biweekly") {
+    const delta = differenceInCalendarDays(target, anchor);
+    return delta >= 0 && delta % 14 === 0;
+  }
+
+  if (occurrenceType === "monthly") {
+    if (target < anchor) return false;
+    const anchorDay = getDate(anchor);
+    const monthLastDay = getDate(lastDayOfMonth(target));
+    return getDate(target) === Math.min(anchorDay, monthLastDay);
+  }
+
+  return false;
+}
+
+async function loadUsers(userIds: string[]) {
   const uniqueIds = [...new Set(userIds)];
   const userSnaps = await Promise.all(
     uniqueIds.map((userId) => dbAdmin.collection("users").doc(userId).get())
   );
 
-  return new Map<string, string>(
-    userSnaps.map((snap) => {
-      const data = snap.data() ?? {};
-      const username =
-        typeof data.username === "string" && data.username.trim()
-          ? data.username
-          : snap.id;
-      return [snap.id, username];
-    })
+  return new Map<string, User>(
+    userSnaps
+      .filter((snap) => snap.exists)
+      .map((snap) => [
+        snap.id,
+        {
+          id: snap.id,
+          ...(snap.data() as Omit<User, "id">),
+        } as User,
+      ])
   );
 }
 
@@ -150,15 +132,16 @@ export async function POST(request: NextRequest) {
       ]);
 
     const templates = templatesSnap.docs
-      .map((doc) => asChecklistTemplate(doc.id, doc.data() ?? {}))
-      .filter((item): item is DPChecklistTemplate => item !== null);
+      .map((doc) => normalizeChecklistTemplateForApi(doc.id, doc.data() ?? {}))
+      .filter((template) => doesTemplateSupportAutomaticGeneration(template))
+      .filter((template) => matchesTemplateOccurrence(template, parsed.date));
 
     const workShiftDocs = shiftsSnap.docs.filter((doc) => {
       const data = doc.data() ?? {};
       return data.type === "work";
     });
 
-    const usernameById = await loadUsernames(
+    const userById = await loadUsers(
       workShiftDocs
         .map((doc) => doc.data()?.userId)
         .filter((item): item is string => typeof item === "string")
@@ -177,6 +160,11 @@ export async function POST(request: NextRequest) {
         return accumulator;
       }
 
+      const user = userById.get(data.userId);
+      if (!user || user.isActive === false) {
+        return accumulator;
+      }
+
       accumulator.push({
         id: doc.id,
         scheduleId: data.scheduleId,
@@ -190,7 +178,15 @@ export async function POST(request: NextRequest) {
         startTime: data.startTime,
         endTime: data.endTime,
         type: "work",
-        assignedUsername: usernameById.get(data.userId) ?? data.userId,
+        assignedUsername:
+          typeof user.username === "string" && user.username.trim()
+            ? user.username
+            : data.userId,
+        userJobRoleId:
+          typeof user.jobRoleId === "string" ? user.jobRoleId : undefined,
+        userJobFunctionIds: Array.isArray(user.jobFunctionIds)
+          ? user.jobFunctionIds
+          : [],
       });
 
       return accumulator;
@@ -203,6 +199,8 @@ export async function POST(request: NextRequest) {
           doesTemplateMatchShift(template, {
             unitId: shift.unitId,
             shiftDefinitionId: shift.shiftDefinitionId,
+            userJobRoleId: shift.userJobRoleId,
+            userJobFunctionIds: shift.userJobFunctionIds,
           })
         )
         .map((template) => ({ shift, template }))
@@ -236,6 +234,9 @@ export async function POST(request: NextRequest) {
           checklistDate: parsed.date,
           templateId: template.id,
           templateName: template.name,
+          templateType: template.templateType,
+          templateVersion: template.version ?? 1,
+          occurrenceType: template.occurrenceType ?? null,
           scheduleId: shift.scheduleId,
           shiftId: shift.id,
           unitId: shift.unitId,
@@ -247,6 +248,7 @@ export async function POST(request: NextRequest) {
             : null,
           assignedUserId: shift.userId,
           assignedUsername: shift.assignedUsername,
+          sections: buildChecklistExecutionSections(template.sections),
           shiftStartTime: shift.startTime,
           shiftEndTime: shift.endTime,
           shiftEndDate: resolveShiftEndDate(
@@ -257,6 +259,10 @@ export async function POST(request: NextRequest) {
           status: "pending",
           score: null,
           items: buildChecklistExecutionItems(template.sections),
+          incidentContext: null,
+          supplierName: null,
+          invoiceNumber: null,
+          scheduledDate: null,
           claimedByUserId: null,
           claimedByUsername: null,
           claimedAt: null,

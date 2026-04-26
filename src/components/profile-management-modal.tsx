@@ -286,6 +286,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
   const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
   const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
+  const dpChecklistsViewWatch = form.watch('permissions.dp.checklists.view' as any);
 
   return (
     <>
@@ -578,12 +579,25 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                   </div>
                                 </div>
 
+                                {/* Checklists */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><ClipboardCheck className="h-4 w-4" /> Checklists Operacionais</h4>
+                                  {renderPermissionSwitch("permissions.dp.checklists.view" as any, "Visualizar Checklists", "Permite ver a lista de execuções e abrir checklists em modo leitura.", !dpViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.dp.checklists.operate" as any, "Preencher Checklists", "Permite assumir e responder checklists atribuídos.", !dpChecklistsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.checklists.create" as any, "Criar Checklist Manual", "Permite criar execuções manuais a partir de templates ou em branco.", !dpChecklistsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.checklists.manageTemplates" as any, "Gerenciar Templates", "Permite criar, editar e desativar templates de checklist.", !dpChecklistsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.checklists.viewAnalytics" as any, "Ver Análises", "Permite acessar a aba analítica e os dashboards por tipo.", !dpChecklistsViewWatch, true)}
+                                  </div>
+                                </div>
+
                                 {/* Configurações DP */}
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Settings className="h-4 w-4" /> Configurações do DP</h4>
                                   {renderPermissionSwitch("permissions.dp.settings.manageUnits" as any, "Gerenciar Unidades", "Permite criar e editar unidades (quiosques) no DP.", !dpViewWatch)}
                                   {renderPermissionSwitch("permissions.dp.settings.manageShifts" as any, "Gerenciar Turnos", "Permite criar e editar definições de turnos.", !dpViewWatch)}
                                   {renderPermissionSwitch("permissions.dp.settings.manageCalendars" as any, "Gerenciar Calendários", "Permite criar e editar calendários de feriados.", !dpViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.settings.manageChecklistTypes" as any, "Gerenciar Tipos de Checklist", "Permite criar/editar tipos de checklist personalizados.", !dpViewWatch)}
                                 </div>
                               </AccordionContent>
                             </AccordionItem>

@@ -12,6 +12,7 @@ setGlobalOptions({ maxInstances: 10 });
 
 const db = getFirestore('coala');
 const checklistDb = getFirestore('coala-checklist');
+const hrDb = getFirestore('coala-rh');
 const auth = getAuth();
 
 const BRT = 'America/Sao_Paulo';
@@ -48,6 +49,167 @@ function resolveShiftEndDate(date: string, startTime: string, endTime: string): 
   return date;
 }
 
+function normalizeIsoDateFromUnknown(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+  }
+  if (typeof (value as any)?.toDate === 'function') {
+    const parsed = (value as any).toDate();
+    return parsed instanceof Date && !Number.isNaN(parsed.getTime())
+      ? parsed.toISOString().slice(0, 10)
+      : null;
+  }
+  if (value instanceof Date) {
+    return !Number.isNaN(value.getTime()) ? value.toISOString().slice(0, 10) : null;
+  }
+  return null;
+}
+
+function diffCalendarDays(left: string, right: string): number {
+  const leftDate = new Date(`${left}T12:00:00Z`);
+  const rightDate = new Date(`${right}T12:00:00Z`);
+  return Math.round((leftDate.getTime() - rightDate.getTime()) / 86400000);
+}
+
+function monthLastDay(date: string): number {
+  const [year, month] = date.split('-').map(Number);
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function shouldGenerateChecklistTemplate(template: any, date: string): boolean {
+  if (template?.isActive !== true) return false;
+  if (!['routine', 'audit', 'maintenance'].includes(String(template?.templateType))) {
+    return false;
+  }
+
+  const occurrenceType = typeof template?.occurrenceType === 'string' ? template.occurrenceType : 'manual';
+  if (occurrenceType === 'manual') return false;
+  if (occurrenceType === 'daily') return true;
+
+  const anchorDate = normalizeIsoDateFromUnknown(template?.createdAt);
+  if (!anchorDate) return false;
+
+  if (occurrenceType === 'weekly') {
+    const delta = diffCalendarDays(date, anchorDate);
+    return delta >= 0 && delta % 7 === 0;
+  }
+
+  if (occurrenceType === 'biweekly') {
+    const delta = diffCalendarDays(date, anchorDate);
+    return delta >= 0 && delta % 14 === 0;
+  }
+
+  if (occurrenceType === 'monthly') {
+    const anchorDay = Number(anchorDate.slice(-2));
+    const currentDay = Number(date.slice(-2));
+    return currentDay === Math.min(anchorDay, monthLastDay(date));
+  }
+
+  return false;
+}
+
+function buildChecklistExecutionSections(sections: any[]) {
+  return [...(sections ?? [])]
+    .sort((a, b) => (a?.order ?? 0) - (b?.order ?? 0))
+    .map((section, index) => ({
+      id: section.id,
+      title: section.title,
+      order: typeof section.order === 'number' ? section.order : index,
+      showIf: section.showIf ?? null,
+      requirePhoto: section.requirePhoto === true,
+      requireSignature: section.requireSignature === true,
+    }));
+}
+
+function flattenChecklistItems(items: any[], section: any, branchPath: any[] = [], depth = 1): any[] {
+  const sorted = [...(items ?? [])].sort((a, b) => (a?.order ?? 0) - (b?.order ?? 0));
+  const result: any[] = [];
+
+  for (const item of sorted) {
+    result.push({
+      templateItemId: item.id,
+      sectionId: section.id,
+      sectionTitle: section.title,
+      order: item.order ?? 0,
+      title: item.title,
+      description: item.description ?? null,
+      type: item.type,
+      required: item.required === true,
+      weight: item.weight ?? 1,
+      blockNext: item.blockNext === true,
+      criticality: item.criticality ?? 'low',
+      referenceValue: typeof item.referenceValue === 'number' ? item.referenceValue : null,
+      tolerancePercent: typeof item.tolerancePercent === 'number' ? item.tolerancePercent : null,
+      actionRequired: item.actionRequired === true,
+      notifyRoleIds: Array.isArray(item.notifyRoleIds) ? item.notifyRoleIds : [],
+      escalationMinutes: typeof item.escalationMinutes === 'number' ? item.escalationMinutes : null,
+      branchPath: [...branchPath],
+      showIf: item.showIf ?? null,
+      sectionShowIf: section.showIf ?? null,
+      config: item.config ?? null,
+      checked: item.type === 'checkbox' ? null : null,
+      yesNoValue: item.type === 'yes_no' ? null : null,
+      textValue: item.type === 'text' || item.type === 'select' ? '' : null,
+      numberValue: null,
+      multiValues: item.type === 'multi_select' ? [] : null,
+      dateValue: item.type === 'date' ? '' : null,
+      photoUrls: item.type === 'photo' ? [] : null,
+      signatureUrl: item.type === 'signature' ? null : null,
+      isLate: false,
+      isOutOfRange: false,
+      completedAt: null,
+      completedByUserId: null,
+      linkedTaskId: null,
+    });
+
+    if (depth >= 4 || !Array.isArray(item.conditionalBranches)) continue;
+    for (const branch of item.conditionalBranches) {
+      result.push(
+        ...flattenChecklistItems(branch.items ?? [], section, [
+          ...branchPath,
+          { parentItemId: item.id, triggerValue: branch?.value ?? null },
+        ], depth + 1)
+      );
+    }
+  }
+
+  return result;
+}
+
+function userMatchesChecklistTemplate(template: any, userData: any): boolean {
+  const roleIds = Array.isArray(template?.jobRoleIds) ? template.jobRoleIds : [];
+  const functionIds = Array.isArray(template?.jobFunctionIds) ? template.jobFunctionIds : [];
+  const userRoleId = typeof userData?.jobRoleId === 'string' ? userData.jobRoleId : null;
+  const userFunctionIds = Array.isArray(userData?.jobFunctionIds) ? userData.jobFunctionIds : [];
+
+  if (roleIds.length > 0 && (!userRoleId || !roleIds.includes(userRoleId))) {
+    return false;
+  }
+
+  if (functionIds.length > 0 && !functionIds.some((id: string) => userFunctionIds.includes(id))) {
+    return false;
+  }
+
+  return true;
+}
+
+async function resolveEscalationRoleIds(roleIds: string[]): Promise<string[]> {
+  const uniqueRoleIds = [...new Set(roleIds.filter(Boolean))];
+  if (uniqueRoleIds.length === 0) return [];
+
+  const roleSnaps = await Promise.all(
+    uniqueRoleIds.map((roleId) => hrDb.collection('jobRoles').doc(roleId).get())
+  );
+
+  const escalated = roleSnaps
+    .map((snap) => snap.data()?.reportsTo)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+
+  return escalated.length > 0 ? [...new Set(escalated)] : uniqueRoleIds;
+}
+
 function isShiftEnded(shiftEndDate: string, shiftEndTime: string, now: Date): boolean {
   const endMinutes = parseHhmm(shiftEndTime);
   if (endMinutes === null) return false;
@@ -66,22 +228,39 @@ export const hourlyPdvSync = onSchedule({
   timeZone: "America/Sao_Paulo",
   retryCount: 2
 }, async () => {
-  console.log("Iniciando sincronização horária (hoje)...");
+  // Compute BRT date using proper offset (UTC-3)
+  const nowUtc = new Date();
+  const brtMs = nowUtc.getTime() - 3 * 60 * 60 * 1000;
+  const dateStr = new Date(brtMs).toISOString().split('T')[0];
+  console.log(`[hourlyPdvSync] Iniciando para data BRT: ${dateStr}`);
+
   try {
-    const now = new Date();
-    now.setHours(now.getHours() - 3); // BRT
-    const dateStr = now.toISOString().split('T')[0];
     const kiosksSnap = await db.collection('kiosks').get();
-    
+    console.log(`[hourlyPdvSync] ${kiosksSnap.size} quiosques encontrados na coleção.`);
+
+    let synced = 0;
+    let skipped = 0;
+
     for (const doc of kiosksSnap.docs) {
       const kiosk = doc.data();
-      if (!kiosk.pdvFilialId) continue;
-      
-      console.log(`Sincronizando hoje (${dateStr}) para ${kiosk.name}...`);
-      await syncDayAdmin(dateStr, doc.id, kiosk.pdvFilialId, db);
+      if (!kiosk.pdvFilialId) {
+        console.log(`[hourlyPdvSync] Quiosque ${doc.id} (${kiosk.name ?? '?'}) sem pdvFilialId — ignorado.`);
+        skipped++;
+        continue;
+      }
+
+      console.log(`[hourlyPdvSync] Sincronizando ${doc.id} (filial ${kiosk.pdvFilialId}) para ${dateStr}...`);
+      try {
+        await syncDayAdmin(dateStr, doc.id, kiosk.pdvFilialId, db);
+        synced++;
+      } catch (kioskError) {
+        console.error(`[hourlyPdvSync] Erro no quiosque ${doc.id}:`, kioskError);
+      }
     }
+
+    console.log(`[hourlyPdvSync] Concluído. Sincronizados: ${synced}, ignorados: ${skipped}.`);
   } catch (e) {
-    console.error("Erro na rotina horária:", e);
+    console.error("[hourlyPdvSync] Erro geral:", e);
   }
 });
 
@@ -343,8 +522,10 @@ export const checklistDailyGenerate = onSchedule(
         .filter(Boolean)
     )];
     const userDocs = await Promise.all(userIds.map((uid) => db.collection('users').doc(uid).get()));
-    const usernames = new Map<string, string>(
-      userDocs.map((d) => [d.id, d.data()?.username || d.id])
+    const usersById = new Map<string, any>(
+      userDocs
+        .filter((doc) => doc.exists)
+        .map((doc) => [doc.id, doc.data() ?? {}])
     );
 
     let created = 0;
@@ -353,7 +534,7 @@ export const checklistDailyGenerate = onSchedule(
 
     for (const tDoc of templatesSnap.docs) {
       const t = tDoc.data();
-      if (!t.name || !Array.isArray(t.sections) || t.isActive !== true) continue;
+      if (!t.name || !Array.isArray(t.sections) || !shouldGenerateChecklistTemplate(t, today)) continue;
 
       const tUnitIds: string[] = Array.isArray(t.unitIds) ? t.unitIds : [];
       const tShiftDefIds: string[] = Array.isArray(t.shiftDefinitionIds) ? t.shiftDefinitionIds : [];
@@ -362,43 +543,24 @@ export const checklistDailyGenerate = onSchedule(
         const s = sDoc.data();
         if (s?.type !== 'work') continue;
         if (!s.scheduleId || !s.unitId || !s.userId || !s.startTime || !s.endTime) continue;
+        const userData = usersById.get(s.userId);
+        if (!userData || userData.isActive === false) continue;
 
         if (tUnitIds.length > 0 && !tUnitIds.includes(s.unitId)) continue;
         if (tShiftDefIds.length > 0) {
           if (!s.shiftDefinitionId || !tShiftDefIds.includes(s.shiftDefinitionId)) continue;
         }
+        if (!userMatchesChecklistTemplate(t, userData)) continue;
 
         const execId = `${today}__${s.scheduleId}__${sDoc.id}__${tDoc.id}`;
         if (existingIds.has(execId)) { skipped++; continue; }
         existingIds.add(execId);
         created++;
 
-        const items: Record<string, unknown>[] = [];
-        for (const section of (t.sections as any[])) {
-          for (const item of (section.items as any[] ?? [])) {
-            items.push({
-              templateItemId: item.id,
-              sectionId: section.id,
-              sectionTitle: section.title,
-              order: item.order ?? 0,
-              title: item.title,
-              description: item.description ?? null,
-              type: item.type,
-              required: item.required,
-              weight: item.weight ?? 1,
-              config: item.config ?? null,
-              checked: item.type === 'checkbox' ? false : null,
-              textValue: (item.type === 'text' || item.type === 'select') ? '' : null,
-              numberValue: null,
-              photoUrls: item.type === 'photo' ? [] : null,
-              signatureUrl: null,
-              isLate: false,
-              isOutOfRange: false,
-              completedAt: null,
-              completedByUserId: null,
-            });
-          }
-        }
+        const sections = buildChecklistExecutionSections(t.sections as any[]);
+        const items = (t.sections as any[]).flatMap((section) =>
+          flattenChecklistItems(section.items ?? [], section)
+        );
 
         batchItems.push({
           id: execId,
@@ -406,6 +568,9 @@ export const checklistDailyGenerate = onSchedule(
             checklistDate: today,
             templateId: tDoc.id,
             templateName: t.name,
+            templateType: t.templateType ?? 'routine',
+            templateVersion: typeof t.version === 'number' ? t.version : 1,
+            occurrenceType: typeof t.occurrenceType === 'string' ? t.occurrenceType : null,
             scheduleId: s.scheduleId,
             shiftId: sDoc.id,
             unitId: s.unitId,
@@ -413,13 +578,18 @@ export const checklistDailyGenerate = onSchedule(
             shiftDefinitionId: s.shiftDefinitionId ?? null,
             shiftDefinitionName: s.shiftDefinitionId ? shiftDefNames.get(s.shiftDefinitionId) ?? s.shiftDefinitionId : null,
             assignedUserId: s.userId,
-            assignedUsername: usernames.get(s.userId) ?? s.userId,
+            assignedUsername: userData.username || s.userId,
+            sections,
             shiftStartTime: s.startTime,
             shiftEndTime: s.endTime,
             shiftEndDate: resolveShiftEndDate(today, s.startTime, s.endTime),
             status: 'pending',
             score: null,
             items,
+            incidentContext: null,
+            supplierName: null,
+            invoiceNumber: null,
+            scheduledDate: null,
             claimedByUserId: null,
             claimedByUsername: null,
             claimedAt: null,
@@ -444,6 +614,53 @@ export const checklistDailyGenerate = onSchedule(
     }
 
     console.log(`[checklistDailyGenerate] Criadas: ${created}, já existentes: ${skipped}`);
+  }
+);
+
+// --- Escalonamento automático de tarefas operacionais ---
+export const checklistEscalateTasks = onSchedule(
+  { schedule: '*/15 * * * *', timeZone: BRT, retryCount: 1, memory: '256MiB' },
+  async () => {
+    const now = new Date();
+    const dueSnap = await checklistDb
+      .collection('operationalTasks')
+      .where('slaDeadlineAt', '<=', now)
+      .get();
+
+    const candidates = dueSnap.docs.filter((doc) => {
+      const status = doc.data()?.status;
+      return status === 'open' || status === 'in_progress';
+    });
+
+    if (candidates.length === 0) {
+      console.log('[checklistEscalateTasks] Nenhuma tarefa vencida.');
+      return;
+    }
+
+    for (let i = 0; i < candidates.length; i += 100) {
+      const chunk = candidates.slice(i, i + 100);
+      const nextRoleIds = await Promise.all(
+        chunk.map(async (doc) => {
+          const data = doc.data() ?? {};
+          return resolveEscalationRoleIds(
+            Array.isArray(data.assignedToRoleIds) ? data.assignedToRoleIds : []
+          );
+        })
+      );
+
+      const batch = checklistDb.batch();
+      chunk.forEach((doc, index) => {
+        batch.update(doc.ref, {
+          status: 'escalated',
+          assignedToRoleIds: nextRoleIds[index],
+          escalatedAt: now,
+          updatedAt: now,
+        });
+      });
+      await batch.commit();
+    }
+
+    console.log(`[checklistEscalateTasks] ${candidates.length} tarefa(s) escalada(s).`);
   }
 );
 

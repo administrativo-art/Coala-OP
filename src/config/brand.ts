@@ -4,7 +4,7 @@
 // ============================================================
 
 export const brand = {
-  name: 'Coala Operação | Estoque',
+  name: 'Sistema - Coala',
   shortName: 'Coala Operação',
   logo: '/logosidebar.png',
   loginBg: '/loginfundo.png',

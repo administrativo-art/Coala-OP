@@ -5,10 +5,17 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, Search, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserProfile } from "./user-profile";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { type LegacyTask, NotificationCenter } from "./notification-center";
 import { GlobalBarcodeScanner } from "./global-barcode-scanner";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
+import {
+  fetchDPChecklistTasks,
+  updateDPChecklistTask,
+} from "@/features/dp-checklists/lib/client";
 import { cn } from "@/lib/utils";
+import type { OperationalTask } from "@/types";
 
 // ── Route label map (mirrors sidebar) ────────────────────────────────────────
 
@@ -30,7 +37,7 @@ const SECTION_MAP: Record<string, string> = {
   "/dashboard/dp/checklists": "Departamento Pessoal",
   "/dashboard/dp/ferias": "Departamento Pessoal",
   "/dashboard/dp/settings": "Departamento Pessoal",
-  "/dashboard/registration": "Cadastros",
+  "/dashboard/registration": "Configurações",
   "/dashboard/settings": "Configurações",
   "/dashboard/help": "Ajuda",
 };
@@ -204,7 +211,7 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", section: "Departamento Financeiro" },
   { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", section: "Departamento Financeiro" },
   { label: "DRE", href: "/dashboard/financial/dre", section: "Departamento Financeiro" },
-  { label: "Cadastros", href: "/dashboard/registration", section: "Configurações" },
+  { label: "Cadastros", href: "/dashboard/settings?department=operacional&tab=cadastros", section: "Configurações" },
   { label: "Configurações", href: "/dashboard/settings", section: "Configurações" },
   { label: "Ajuda", href: "/dashboard/help", section: "Configurações" },
 ];
@@ -337,7 +344,91 @@ interface HeaderProps {
 
 export function Header({ onMenuClick, tasks }: HeaderProps) {
   const pathname = usePathname();
+  const { firebaseUser, permissions } = useAuth();
+  const { toast } = useToast();
   const { section, current } = getBreadcrumb(pathname ?? "");
+  const [checklistTasks, setChecklistTasks] = useState<OperationalTask[]>([]);
+  const [checklistLoading, setChecklistLoading] = useState(false);
+
+  const canViewChecklistAlerts =
+    permissions.dp?.view ||
+    permissions.dp?.schedules?.view ||
+    permissions.dp?.schedules?.edit ||
+    permissions.dp?.collaborators?.view ||
+    permissions.dp?.collaborators?.edit ||
+    permissions.settings?.manageUsers;
+
+  const refreshChecklistTasks = useCallback(async () => {
+    if (!firebaseUser || !canViewChecklistAlerts) {
+      setChecklistTasks([]);
+      return;
+    }
+
+    setChecklistLoading(true);
+
+    try {
+      const payload = await fetchDPChecklistTasks(firebaseUser, {
+        status: ["open", "in_progress", "escalated"],
+      });
+      setChecklistTasks(payload.tasks);
+    } catch (error) {
+      console.error("[Header] Falha ao carregar alertas operacionais.", error);
+    } finally {
+      setChecklistLoading(false);
+    }
+  }, [canViewChecklistAlerts, firebaseUser]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (cancelled) return;
+      await refreshChecklistTasks();
+    };
+
+    void run();
+
+    if (!firebaseUser || !canViewChecklistAlerts) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const intervalId = window.setInterval(() => {
+      void run();
+    }, 60000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [canViewChecklistAlerts, firebaseUser, refreshChecklistTasks]);
+
+  const handleResolveChecklistTask = useCallback(
+    async (taskId: string) => {
+      if (!firebaseUser) return;
+
+      try {
+        await updateDPChecklistTask(firebaseUser, taskId, { status: "resolved" });
+        await refreshChecklistTasks();
+
+        toast({
+          title: "Alerta resolvido",
+          description: "A tarefa operacional foi marcada como resolvida.",
+        });
+      } catch (error) {
+        toast({
+          title: "Falha ao resolver alerta",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Não foi possível atualizar a tarefa operacional agora.",
+          variant: "destructive",
+        });
+      }
+    },
+    [firebaseUser, refreshChecklistTasks, toast]
+  );
 
   return (
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-sm">
@@ -374,7 +465,12 @@ export function Header({ onMenuClick, tasks }: HeaderProps) {
 
         <div className="flex items-center gap-1.5">
           <GlobalBarcodeScanner />
-          <NotificationCenter tasks={tasks} />
+          <NotificationCenter
+            tasks={tasks}
+            checklistTasks={checklistTasks}
+            checklistLoading={checklistLoading}
+            onResolveChecklistTask={handleResolveChecklistTask}
+          />
           <UserProfile />
         </div>
       </div>

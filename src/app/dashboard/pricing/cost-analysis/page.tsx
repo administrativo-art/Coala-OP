@@ -28,21 +28,8 @@ export default function CostAnalysisPage() {
                 <h1 className="text-3xl font-bold">Ficha de custo e margem</h1>
                 <p className="text-sm text-muted-foreground">Voltar para gestão de preços e margens</p>
             </div>
-            </div>
-        <Card>
-            <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-                <DollarSign />
-                Ficha de custo e margem
-            </CardTitle>
-            <CardDescription>
-                Crie composições, analise o CMV e simule preços de venda para entender a lucratividade. Use a tabela abaixo para uma visão detalhada e ações.
-            </CardDescription>
-            </CardHeader>
-            <CardContent>
-            <PricingSimulator />
-            </CardContent>
-        </Card>
+        </div>
+        <PricingSimulator />
         </div>
     </PermissionGuard>
   );

@@ -27,12 +27,14 @@ import {
     Eye,
     MoreHorizontal,
     Trash2,
-    Warehouse
+    Warehouse,
+    LayoutDashboard,
+    ClipboardList,
+    Package
 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
 import { Skeleton } from "./ui/skeleton";
-import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { Input } from "./ui/input";
 import { cn } from "@/lib/utils";
 import { useProductSimulationCategories } from "@/hooks/use-product-simulation-categories";
@@ -43,10 +45,10 @@ import { useCompanySettings } from "@/hooks/use-company-settings";
 import { PriceHistoryModal } from "./price-history-modal";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Badge } from "./ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { PpoModal } from "./ppo-modal";
 import { BatchEditSimulationModal } from "./batch-edit-simulation-modal";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
@@ -62,6 +64,9 @@ import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
 import type { BlobProviderParams } from '@react-pdf/renderer';
 import { GerencialReportDocument } from './pdf/GerencialReportDocument';
 import { useToast } from "@/hooks/use-toast";
+import { ProductModal } from "./product-modal";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { PricingHistoryAnalysis } from "./pricing-history-analysis";
 
 
 const PDFDownloadLink = dynamic(
@@ -91,15 +96,16 @@ export function PricingSimulator() {
     const { toast } = useToast();
     
     const [selectedSimulations, setSelectedSimulations] = useState<Set<string>>(new Set());
-    const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
+    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+    const [initialTab, setInitialTab] = useState<'cost' | 'ficha'>('cost');
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-    const [isPpoModalOpen, setIsPpoModalOpen] = useState(false);
     const [isViewerModalOpen, setIsViewerModalOpen] = useState(false);
+    const [activeMainTab, setActiveMainTab] = useState<string>("inventory");
     const [isBatchEditModalOpen, setIsBatchEditModalOpen] = useState(false);
-    const [isArchivedModalOpen, setIsArchivedModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [simulationToView, setSimulationToView] = useState<ProductSimulation | null>(null);
+    const [simulationToDeactivate, setSimulationToDeactivate] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
@@ -107,20 +113,58 @@ export function PricingSimulator() {
     const [groupFilters, setGroupFilters] = useState<Set<string>>(new Set());
     const [kioskFilter, setKioskFilter] = useState<string>("all");
 
+    const [statusFilter, setStatusFilter] = useState<Set<'sem_meta' | 'na_meta' | 'abaixo'>>(new Set());
+
+    // Column visibility logic
+    const ALL_COLS = useMemo(() => [
+        { id: 'price', label: 'Preço', tip: 'Preço de venda ao cliente final.' },
+        { id: 'cmv', label: 'CMV', tip: 'Custo da Mercadoria Vendida — soma dos insumos.' },
+        { id: 'grossPct', label: 'M. Bruta %', tip: 'Margem Bruta = (Preço − CMV) ÷ Preço. Métrica principal de rentabilidade.' },
+        { id: 'grossVal', label: 'M. Bruta R$', tip: 'Margem Bruta em reais: Preço menos CMV.' },
+        { id: 'contribPct', label: 'M. Contrib %', tip: 'Margem de Contribuição = (Faturamento líquido − CMV) ÷ Preço. Desconta impostos e taxas.' },
+        { id: 'markup', label: 'Markup', tip: 'Preço ÷ CMV. Quantas vezes o preço de venda é maior que o custo.' },
+        { id: 'goal', label: 'Meta M.B.', tip: 'Meta de Margem Bruta definida para esta mercadoria.' },
+    ], []);
+
+    const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('pricing-cols');
+            return saved ? new Set(JSON.parse(saved)) : new Set(['price', 'cmv', 'grossPct', 'goal']);
+        }
+        return new Set(['price', 'cmv', 'grossPct', 'goal']);
+    });
+
+    useEffect(() => {
+        localStorage.setItem('pricing-cols', JSON.stringify(Array.from(visibleColumns)));
+    }, [visibleColumns]);
+
+    const toggleColumn = (id: string) => {
+        setVisibleColumns(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                if (next.size > 1) next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
 
     const handleAddNew = () => {
         setSimulationToEdit(null);
-        setIsAddEditModalOpen(true);
+        setInitialTab('cost');
+        setIsProductModalOpen(true);
     };
 
-    const handleEdit = (simulation: ProductSimulation) => {
+    const handleEdit = (simulation: ProductSimulation, tab: 'cost' | 'ficha' = 'cost') => {
         setSimulationToEdit(simulation);
-        setIsAddEditModalOpen(true);
+        setInitialTab(tab);
+        setIsProductModalOpen(true);
     };
 
     const handlePpoClick = (simulation: ProductSimulation) => {
-        setSimulationToEdit(simulation);
-        setIsPpoModalOpen(true);
+        handleEdit(simulation, 'ficha');
     };
     
     const handleViewTechnicalSheet = (simulation: ProductSimulation) => {
@@ -130,38 +174,85 @@ export function PricingSimulator() {
 
     const handleDelete = async (simulationId: string) => {
         await deleteSimulation(simulationId);
-        setIsAddEditModalOpen(false); 
+        setIsProductModalOpen(false); 
         setSimulationToEdit(null);
     };
 
     const baseProductMap = useMemo(() => {
-        const map = new Map<string, { name: string, unit: string }>();
+        const map = new Map<string, { name: string, unit: string, isArchived?: boolean }>();
         baseProducts.forEach(bp => {
-            map.set(bp.id, { name: bp.name, unit: bp.unit });
+            map.set(bp.id, { name: bp.name, unit: bp.unit, isArchived: bp.isArchived });
         });
         return map;
     }, [baseProducts]);
+
+    const archivedBaseProductIds = useMemo(() => {
+        return new Set(baseProducts.filter(bp => bp.isArchived).map(bp => bp.id));
+    }, [baseProducts]);
+
+    const simHasArchivedBase = useMemo(() => {
+        const map = new Map<string, boolean>();
+        simulations.forEach(sim => {
+            const hasArchived = simulationItems
+                .filter(i => i.simulationId === sim.id)
+                .some(i => archivedBaseProductIds.has(i.baseProductId));
+            map.set(sim.id, hasArchived);
+        });
+        return map;
+    }, [simulations, simulationItems, archivedBaseProductIds]);
+
+    const handleToggleSimulationActive = async (sim: ProductSimulation, activate: boolean) => {
+        if (!activate) {
+            setSimulationToDeactivate(sim);
+            return;
+        }
+        await updateSimulation({ id: sim.id, isArchived: false });
+    };
+
+    const handleConfirmDeactivate = async () => {
+        if (!simulationToDeactivate) return;
+        await updateSimulation({ id: simulationToDeactivate.id, isArchived: true });
+        setSimulationToDeactivate(null);
+    };
     
     const categoryMap = useMemo(() => {
         return new Map(categories.map(c => [c.id, c]));
     }, [categories]);
 
-    const filteredSimulations = useMemo(() => {
-        return simulations.filter(sim => {
+    const { filteredSimulations, archivedSimulations } = useMemo(() => {
+        const filterFn = (sim: ProductSimulation) => {
             const searchMatch = searchTerm ? (sim.name.toLowerCase().includes(searchTerm.toLowerCase()) || (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase())) : true;
             const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
             const groupMatch = groupFilters.size === 0 || (sim.groupIds || []).some(groupId => groupFilters.has(groupId));
             const kioskMatch = kioskFilter === 'all' || (sim.kioskIds || []).includes(kioskFilter);
-            
-            return searchMatch && categoryMatch && lineMatch && groupMatch && kioskMatch;
-        }).sort((a, b) => {
+
+            let statusMatch = true;
+            if (statusFilter.size > 0) {
+                const grossMarginPercentage = sim.salePrice > 0 ? ((sim.salePrice - sim.totalCmv) / sim.salePrice) * 100 : 0;
+                let simStatus: 'sem_meta' | 'na_meta' | 'abaixo' = 'sem_meta';
+                if (sim.profitGoal !== null && sim.profitGoal !== undefined) {
+                    simStatus = grossMarginPercentage >= sim.profitGoal ? 'na_meta' : 'abaixo';
+                }
+                statusMatch = statusFilter.has(simStatus);
+            }
+
+            return searchMatch && categoryMatch && lineMatch && groupMatch && kioskMatch && statusMatch;
+        };
+
+        const sortFn = (a: ProductSimulation, b: ProductSimulation) => {
             let aValue: any;
             let bValue: any;
 
             if (sortConfig.key === 'sku') {
                 aValue = a.ppo?.sku || '';
                 bValue = b.ppo?.sku || '';
+            } else if (sortConfig.key === 'grossVal' as any) {
+                aValue = a.salePrice - a.totalCmv;
+                bValue = b.salePrice - b.totalCmv;
+            } else if (sortConfig.key === 'grossPct' as any) {
+                aValue = a.salePrice > 0 ? ((a.salePrice - a.totalCmv) / a.salePrice) * 100 : 0;
+                bValue = b.salePrice > 0 ? ((b.salePrice - b.totalCmv) / b.salePrice) * 100 : 0;
             } else {
                 aValue = a[sortConfig.key as keyof ProductSimulation];
                 bValue = b[sortConfig.key as keyof ProductSimulation];
@@ -178,9 +269,13 @@ export function PricingSimulator() {
             }
 
             return sortConfig.direction === 'asc' ? comparison : -comparison;
-        });
+        };
 
-    }, [simulations, searchTerm, categoryFilters, lineFilters, groupFilters, sortConfig, kioskFilter]);
+        const active = simulations.filter(s => !s.isArchived && filterFn(s)).sort(sortFn);
+        const archived = simulations.filter(s => s.isArchived && filterFn(s)).sort(sortFn);
+        return { filteredSimulations: active, archivedSimulations: archived };
+
+    }, [simulations, searchTerm, categoryFilters, lineFilters, groupFilters, sortConfig, kioskFilter, statusFilter]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -352,9 +447,19 @@ export function PricingSimulator() {
     const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
     const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
     const groups = useMemo(() => categories.filter(c => c.type === 'group'), [categories]);
-    const totalActiveFilters = categoryFilters.size + lineFilters.size + groupFilters.size;
+    const totalActiveFilters = categoryFilters.size + lineFilters.size + groupFilters.size + statusFilter.size;
     
-    const handleFilterChange = (id: string, type: 'category' | 'line' | 'group') => {
+    const handleFilterChange = (id: string, type: 'category' | 'line' | 'group' | 'status') => {
+        if (type === 'status') {
+            setStatusFilter(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(id as any)) newSet.delete(id as any);
+                else newSet.add(id as any);
+                return newSet;
+            });
+            return;
+        }
+        
         const setter = type === 'category' ? setCategoryFilters : type === 'line' ? setLineFilters : setGroupFilters;
         setter(prev => {
             const newSet = new Set(prev);
@@ -371,6 +476,7 @@ export function PricingSimulator() {
         setCategoryFilters(new Set());
         setLineFilters(new Set());
         setGroupFilters(new Set());
+        setStatusFilter(new Set());
         setSearchTerm('');
         setKioskFilter('all');
     };
@@ -387,8 +493,8 @@ export function PricingSimulator() {
     const handleSelectAllChange = (isSelected: boolean) => {
         setSelectedSimulations(isSelected ? new Set(filteredSimulations.map(p => p.id)) : new Set());
     };
-    
-    const allFilteredSelected = filteredSimulations.length > 0 && selectedSimulations.size === filteredSimulations.length;
+
+    const allFilteredSelected = filteredSimulations.length > 0 && filteredSimulations.every(p => selectedSimulations.has(p.id));
 
     const singleFilteredSimulation = useMemo(() => {
         return filteredSimulations.length === 1 ? filteredSimulations[0] : null;
@@ -430,7 +536,8 @@ export function PricingSimulator() {
             );
         }
 
-        if (simulations.length === 0) {
+        const activeCount = simulations.filter(s => !s.isArchived).length;
+        if (activeCount === 0 && archivedSimulations.length === 0) {
             return (
                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                     <Inbox className="mx-auto h-12 w-12" />
@@ -439,8 +546,8 @@ export function PricingSimulator() {
                 </div>
             );
         }
-        
-        if (filteredSimulations.length === 0) {
+
+        if (filteredSimulations.length === 0 && archivedSimulations.length === 0) {
             return (
                 <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
                     <Inbox className="mx-auto h-12 w-12" />
@@ -468,89 +575,112 @@ export function PricingSimulator() {
 
                         const meetsGoal = sim.profitGoal !== undefined && sim.profitGoal !== null && grossMarginPercentage >= sim.profitGoal;
                         const profitColorClass = getProfitColorClass(grossMarginPercentage);
+                        const hasArchivedBase = simHasArchivedBase.get(sim.id) ?? false;
+
+                        let statusInfo = { label: 'Sem meta', color: 'gray', border: 'border-l-[4px] border-l-gray-300' };
+                        if (sim.profitGoal !== null && sim.profitGoal !== undefined) {
+                            statusInfo = meetsGoal
+                                ? { label: 'Na meta', color: 'green', border: 'border-l-[4px] border-l-green-600' }
+                                : { label: 'Abaixo', color: 'orange', border: 'border-l-[4px] border-l-orange-500' };
+                        }
 
                         return (
                              <AccordionItem value={sim.id} key={sim.id} className="border-b-0">
-                                <Card className="overflow-hidden">
+                                <Card className={cn("overflow-hidden group transition-all", statusInfo.border)}>
                                 <div className="flex items-center p-2 pr-4 bg-muted/30">
                                     <Checkbox className="mx-2" checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
-                                    <div className="flex-grow">
-                                        <p className="font-semibold">{sim.name}</p>
+                                    <div className="flex-grow min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <p className="font-semibold truncate">{sim.name}</p>
+                                            <Badge variant={statusInfo.color === 'green' ? 'default' : statusInfo.color === 'orange' ? 'secondary' : 'outline'} className={cn(
+                                                "text-[10px] h-4 px-1.5",
+                                                statusInfo.color === 'green' ? "bg-green-100 text-green-700 hover:bg-green-100 border-green-200" :
+                                                statusInfo.color === 'orange' ? "bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200" :
+                                                ""
+                                            )}>
+                                                {statusInfo.label}
+                                            </Badge>
+                                            {hasArchivedBase && (
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Badge variant="destructive" className="text-[10px] h-4 px-1.5 gap-1 cursor-default">
+                                                                <AlertTriangle className="h-2.5 w-2.5" />
+                                                                Insumo inativo
+                                                            </Badge>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            Um ou mais insumos base desta mercadoria estão desativados. Revise a composição.
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            )}
+                                        </div>
                                         <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo?.sku || 'N/A'}</p>
                                     </div>
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1 overflow-hidden">
                                         {line && (
-                                            <Badge variant="outline" style={{ borderColor: line.color, color: line.color }}>
+                                            <Badge variant="outline" className="text-[10px] truncate" style={{ borderColor: line.color, color: line.color }}>
                                                 {line.name}
                                             </Badge>
                                         )}
-                                        {simCategories.map(cat => (
-                                            <Badge key={cat.id} variant="secondary" style={{ backgroundColor: cat.color, color: 'white' }}>{cat.name}</Badge>
-                                        ))}
-                                        {simGroups.map(group => (
-                                            <Badge key={group.id} variant="outline">{group.name}</Badge>
+                                        {simCategories.slice(0, 1).map(cat => (
+                                            <Badge key={cat.id} variant="secondary" className="text-[10px] truncate" style={{ backgroundColor: cat.color, color: 'white' }}>{cat.name}</Badge>
                                         ))}
                                     </div>
                                     <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
                                 </div>
-                                <div className="grid grid-cols-10 items-center px-4 py-3">
-                                    <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">Preço</p>
-                                        <p className="font-bold">{formatCurrency(sim.salePrice)}</p>
+                                <div className="flex items-center justify-between px-4 py-3">
+                                    <div className="flex-1 flex justify-around gap-2 overflow-hidden">
+                                        <TooltipProvider>
+                                            {ALL_COLS.filter(c => visibleColumns.has(c.id)).map(col => (
+                                                <Tooltip key={col.id}>
+                                                    <TooltipTrigger asChild>
+                                                        <div className="text-center min-w-[60px] cursor-help">
+                                                            <p className="text-[10px] text-muted-foreground underline decoration-dotted decoration-muted-foreground/30">{col.label}</p>
+                                                            <div className="text-sm">
+                                                                {col.id === 'price' && <p className="font-bold">{formatCurrency(sim.salePrice)}</p>}
+                                                                {col.id === 'cmv' && <p className="font-medium text-gray-600">{formatCurrency(sim.totalCmv)}</p>}
+                                                                {col.id === 'grossPct' && <p className={cn("font-bold", profitColorClass)}>{grossMarginPercentage.toFixed(1)}%</p>}
+                                                                {col.id === 'grossVal' && <p className={cn("font-bold", profitColorClass)}>{formatCurrency(grossMarginValue)}</p>}
+                                                                {col.id === 'contribPct' && <p className="font-semibold">{sim.profitPercentage.toFixed(1)}%</p>}
+                                                                {col.id === 'markup' && <p className="font-medium">{sim.markup.toFixed(2)}x</p>}
+                                                                {col.id === 'goal' && <p className="font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</p>}
+                                                            </div>
+                                                        </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p className="text-xs">{col.tip}</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            ))}
+                                        </TooltipProvider>
                                     </div>
-                                    <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">CMV</p>
-                                        <p>{formatCurrency(sim.totalCmv)}</p>
-                                    </div>
-                                     <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">M. Contrib (R$)</p>
-                                        <p className="font-semibold">{sim.profitValue.toFixed(2)}</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">M Contrib (%)</p>
-                                        <p className="font-semibold">{sim.profitPercentage.toFixed(2)}</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">Markup</p>
-                                        <p>{sim.markup.toFixed(1)}x</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">Meta M.B.</p>
-                                        <p className="font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">M. Bruta (R$)</p>
-                                        <p className={cn("font-bold", profitColorClass)}>{formatCurrency(grossMarginValue)}</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-xs text-muted-foreground">M. Bruta (%)</p>
-                                        <p className={cn("font-bold", profitColorClass)}>{grossMarginPercentage.toFixed(2)}</p>
-                                    </div>
-                                    <div className="flex justify-center items-center gap-2">
-                                        {sim.profitGoal !== undefined && sim.profitGoal !== null ? (
-                                            meetsGoal ? <CheckCircle2 className="h-5 w-5 text-green-500"/> : <AlertTriangle className="h-5 w-5 text-orange-500"/>
-                                        ) : <div className="h-5 w-5"/>}
+                                    
+                                    <div className="flex items-center gap-2">
                                         <DropdownMenu>
-                                            <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                            <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0 text-muted-foreground"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" />Ver Ficha Técnica</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleEdit(sim)}><Edit className="mr-2 h-4 w-4" /> Editar Análise</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handlePpoClick(sim)}><FileText className="mr-2 h-4 w-4" /> Editar ficha</DropdownMenuItem>
-                                                <DropdownMenuItem onSelect={e => e.preventDefault()} disabled={filteredSimulations.length !== 1}>
-                                                  {singleFilteredSimulation && pdfDataForSingleSim ? (
-                                                      <PDFDownloadLink
-                                                          document={<FichaTecnicaDocument data={pdfDataForSingleSim} />}
-                                                          fileName={`ficha_completa_${singleFilteredSimulation.name.replace(/ /g, '_')}.pdf`}
-                                                          className="w-full text-left"
-                                                      >
-                                                          {({ loading }: BlobProviderParams) => loading ? 'Gerando...' : 'Ficha Completa (PDF)'}
-                                                      </PDFDownloadLink>
-                                                  ) : (
-                                                      <div className="flex justify-between w-full items-center">
-                                                          <span>Ficha Completa (PDF)</span>
-                                                          <span className="text-xs text-muted-foreground ml-2">(Filtre para 1 item)</span>
-                                                      </div>
-                                                  )}
+                                                <DropdownMenuItem onClick={() => handleToggleSimulationActive(sim, false)} className="text-orange-600 focus:text-orange-600"><CheckCircle2 className="mr-2 h-4 w-4" /> Desativar mercadoria</DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" />Ficha Técnica de Instrução</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleEdit(sim, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" /> Editar Ficha</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleEdit(sim, 'ficha')}><ClipboardList className="mr-2 h-4 w-4" /> Ficha Técnica Completa</DropdownMenuItem>
+                                                <DropdownMenuItem onSelect={e => e.preventDefault()}>
+                                                    <PDFDownloadLink
+                                                        document={<FichaTecnicaDocument type="completa" data={{
+                                                            ...sim,
+                                                            ingredients: simulationItems.filter(i => i.simulationId === sim.id).map(i => ({
+                                                                name: baseProductMap.get(i.baseProductId)?.name || 'Insumo não encontrado',
+                                                                quantity: i.quantity,
+                                                                unit: i.overrideUnit || baseProductMap.get(i.baseProductId)?.unit || ''
+                                                            }))
+                                                        }} />}
+                                                        fileName={`ficha_completa_${sim.name.replace(/ /g, '_')}.pdf`}
+                                                        className="w-full text-left"
+                                                    >
+                                                        {({ loading }: BlobProviderParams) => loading ? 'Gerando...' : 'Ficha Completa (PDF)'}
+                                                    </PDFDownloadLink>
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
@@ -602,6 +732,46 @@ export function PricingSimulator() {
                                                 })}
                                             </TableBody>
                                         </Table>
+
+                                        {(() => {
+                                            const simHistory = (priceHistory || []).filter((h: any) => h.simulationId === sim.id).sort((a: any, b: any) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
+                                            if (simHistory.length === 0) return null;
+                                            return (
+                                                <div className="mt-4">
+                                                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Histórico de Alterações de Preço</p>
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Data</TableHead>
+                                                                <TableHead className="text-right">Antes</TableHead>
+                                                                <TableHead className="text-right">Depois</TableHead>
+                                                                <TableHead className="text-right">Variação</TableHead>
+                                                                <TableHead>Usuário</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {simHistory.map((entry: any) => {
+                                                                const variation = entry.oldPrice > 0 ? ((entry.newPrice - entry.oldPrice) / entry.oldPrice) * 100 : 0;
+                                                                const isUp = variation > 0;
+                                                                return (
+                                                                    <TableRow key={entry.id}>
+                                                                        <TableCell className="text-xs text-muted-foreground">
+                                                                            {new Date(entry.changedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-mono text-xs">{formatCurrency(entry.oldPrice)}</TableCell>
+                                                                        <TableCell className="text-right font-mono text-xs font-semibold">{formatCurrency(entry.newPrice)}</TableCell>
+                                                                        <TableCell className={cn("text-right text-xs font-semibold", isUp ? "text-green-600" : "text-red-500")}>
+                                                                            {isUp ? '+' : ''}{variation.toFixed(1)}%
+                                                                        </TableCell>
+                                                                        <TableCell className="text-xs text-muted-foreground">{entry.changedBy?.username || '-'}</TableCell>
+                                                                    </TableRow>
+                                                                );
+                                                            })}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </AccordionContent>
                                 </Card>
@@ -610,202 +780,314 @@ export function PricingSimulator() {
                     })
                 }
             </Accordion>
+
+            {archivedSimulations.length > 0 && (
+                <div className="space-y-2 pt-2">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground px-1">
+                        Inativos ({archivedSimulations.length})
+                    </p>
+                    <div className="opacity-60">
+                        <Accordion type="multiple" className="space-y-2">
+                            {archivedSimulations.map(sim => {
+                                const grossMarginValue = sim.salePrice - sim.totalCmv;
+                                const grossMarginPercentage = sim.salePrice > 0 ? (grossMarginValue / sim.salePrice) * 100 : 0;
+                                const profitColorClass = getProfitColorClass(grossMarginPercentage);
+                                const hasArchivedBase = simHasArchivedBase.get(sim.id) ?? false;
+
+                                return (
+                                    <AccordionItem value={sim.id} key={sim.id} className="border-b-0">
+                                        <Card className="overflow-hidden border-dashed border-l-[4px] border-l-gray-300">
+                                            <div className="flex items-center p-2 pr-4 bg-muted/30">
+                                                <div className="mx-2 w-4" />
+                                                <div className="flex-grow min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <p className="font-semibold truncate text-muted-foreground">{sim.name}</p>
+                                                        {hasArchivedBase && (
+                                                            <Badge variant="destructive" className="text-[10px] h-4 px-1.5 gap-1">
+                                                                <AlertTriangle className="h-2.5 w-2.5" />
+                                                                Insumo inativo
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo?.sku || 'N/A'}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0 text-muted-foreground"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => handleToggleSimulationActive(sim, true)} className="text-green-700 focus:text-green-700 font-medium"><CheckCircle2 className="mr-2 h-4 w-4" /> Reativar mercadoria</DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem onClick={() => handleEdit(sim, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" /> Editar Ficha</DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </div>
+                                                <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
+                                            </div>
+                                            <div className="flex items-center px-4 py-3">
+                                                <div className="flex-1 flex justify-around gap-2">
+                                                    <TooltipProvider>
+                                                        {ALL_COLS.filter(c => visibleColumns.has(c.id)).map(col => (
+                                                            <div key={col.id} className="text-center min-w-[60px]">
+                                                                <p className="text-[10px] text-muted-foreground">{col.label}</p>
+                                                                <div className="text-sm">
+                                                                    {col.id === 'price' && <p className="font-bold">{formatCurrency(sim.salePrice)}</p>}
+                                                                    {col.id === 'cmv' && <p className="font-medium text-gray-600">{formatCurrency(sim.totalCmv)}</p>}
+                                                                    {col.id === 'grossPct' && <p className={cn("font-bold", profitColorClass)}>{grossMarginPercentage.toFixed(1)}%</p>}
+                                                                    {col.id === 'grossVal' && <p className={cn("font-bold", profitColorClass)}>{formatCurrency(grossMarginValue)}</p>}
+                                                                    {col.id === 'contribPct' && <p className="font-semibold">{sim.profitPercentage.toFixed(1)}%</p>}
+                                                                    {col.id === 'markup' && <p className="font-medium">{sim.markup.toFixed(2)}x</p>}
+                                                                    {col.id === 'goal' && <p className="font-medium text-muted-foreground">{sim.profitGoal ? `${sim.profitGoal}%` : '-'}</p>}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </TooltipProvider>
+                                                </div>
+                                            </div>
+                                        </Card>
+                                    </AccordionItem>
+                                );
+                            })}
+                        </Accordion>
+                    </div>
+                </div>
+            )}
         </div>
         );
     };
 
     return (
         <div className="space-y-6">
-            <div className="space-y-4">
-                <div className="space-y-2">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Button onClick={handleAddNew}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Mercadoria
-                            </Button>
-                            <Button variant="outline" onClick={() => setIsBatchEditModalOpen(true)}>
-                                Alterar em lote
-                            </Button>
-                            <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)}>
-                                <History className="mr-2 h-4 w-4" /> Histórico de ajustes
-                            </Button>
-                            {permissions.pricing.manageParameters && (
-                                <Button variant="outline" onClick={() => setIsParamsModalOpen(true)}>
-                                    <Settings className="mr-2 h-4 w-4" />
-                                    Parâmetros
-                                </Button>
-                            )}
-                             <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" disabled={filteredSimulations.length === 0}>
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Exportar
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                    <DropdownMenuItem onSelect={e => e.preventDefault()}>
-                                        <PDFDownloadLink
-                                            document={<GerencialReportDocument data={filteredSimulations} />}
-                                            fileName={`relatorio_gerencial_${new Date().toISOString().slice(0, 10)}.pdf`}
-                                            className="w-full text-left"
-                                        >
-                                            {({ loading }: BlobProviderParams) => (loading ? 'Gerando...' : 'Relatório Gerencial (PDF)')}
-                                        </PDFDownloadLink>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportGerencialCsv}>Relatório Gerencial (CSV)</DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportXlsx}>Relatório Gerencial (XLSX)</DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onSelect={handleExportPriceListPdf}>Lista de Preços (PDF)</DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportPriceListCsv}>Lista de Preços (CSV)</DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onSelect={e => e.preventDefault()} disabled={!singleFilteredSimulation}>
-                                        {singleFilteredSimulation && pdfDataForSingleSim ? (
-                                            <PDFDownloadLink
-                                                document={<FichaTecnicaDocument data={pdfDataForSingleSim} />}
-                                                fileName={`ficha_completa_${singleFilteredSimulation.name.replace(/ /g, '_')}.pdf`}
-                                                className="w-full text-left"
-                                            >
-                                                {({ loading }: BlobProviderParams) => loading ? 'Gerando...' : 'Ficha Completa (PDF)'}
-                                            </PDFDownloadLink>
-                                        ) : (
-                                            <div className="flex justify-between w-full items-center">
-                                                <span>Ficha Completa (PDF)</span>
-                                                <span className="text-xs text-muted-foreground ml-2">(Filtre para 1 item)</span>
-                                            </div>
-                                        )}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha técnica simplificada (PDF)</DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaCsv}>Ficha técnica simplificada (CSV)</DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
-                    </div>
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-2">
-                         <div className="relative flex-grow w-full md:w-auto">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Buscar por mercadoria ou SKU..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 w-full"
-                            />
-                        </div>
-                        <div className="flex gap-2 w-full md:w-auto">
-                            <Select value={kioskFilter} onValueChange={setKioskFilter}>
-                                <SelectTrigger className="w-full">
-                                <Warehouse className="mr-2 h-4 w-4 text-muted-foreground" />
-                                <SelectValue placeholder="Filtrar por quiosque" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                <SelectItem value="all">Todos os quiosques</SelectItem>
-                                {kiosks.map(k => (
-                                    <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
-                                ))}
-                                </SelectContent>
-                            </Select>
-
-                           <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" className="w-full justify-between">
-                                        <Filter className="mr-2 h-4 w-4" />
-                                        Filtros
-                                        {totalActiveFilters > 0 && <Badge variant="secondary" className="ml-2 rounded-full px-1.5">{totalActiveFilters}</Badge>}
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent className="w-56">
-                                    <ScrollArea className="h-64">
-                                        <DropdownMenuLabel>Categorias</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        {mainCategories.map(cat => (
-                                            <DropdownMenuCheckboxItem
-                                                key={cat.id}
-                                                checked={categoryFilters.has(cat.id)}
-                                                onCheckedChange={() => handleFilterChange(cat.id, 'category')}
-                                                onSelect={(e) => e.preventDefault()}
-                                            >
-                                                {cat.name}
-                                            </DropdownMenuCheckboxItem>
-                                        ))}
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuLabel>Linhas</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        {lines.map(line => (
-                                            <DropdownMenuCheckboxItem
-                                                key={line.id}
-                                                checked={lineFilters.has(line.id)}
-                                                onCheckedChange={() => handleFilterChange(line.id, 'line')}
-                                                onSelect={(e) => e.preventDefault()}
-                                            >
-                                                {line.name}
-                                            </DropdownMenuCheckboxItem>
-                                        ))}
-                                         <DropdownMenuSeparator />
-                                        <DropdownMenuLabel>Grupos</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        {groups.map(group => (
-                                            <DropdownMenuCheckboxItem
-                                                key={group.id}
-                                                checked={groupFilters.has(group.id)}
-                                                onCheckedChange={() => handleFilterChange(group.id, 'group')}
-                                                onSelect={(e) => e.preventDefault()}
-                                            >
-                                                {group.name}
-                                            </DropdownMenuCheckboxItem>
-                                        ))}
-                                    </ScrollArea>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                             <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" className="w-full justify-between">
-                                        <ArrowUpDown className="mr-2 h-4 w-4" />
-                                        Ordenar por
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent className="w-56">
-                                    <DropdownMenuRadioGroup value={`${sortConfig.key}-${sortConfig.direction}`} onValueChange={(v) => handleSort(v.split('-')[0] as SortKey)}>
-                                        <DropdownMenuRadioItem value="name-asc">Nome (A-Z)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="name-desc">Nome (Z-A)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="sku-asc">SKU (Crescente)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="sku-desc">SKU (Decrescente)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="salePrice-desc">Preço (Maior-Menor)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="salePrice-asc">Preço (Menor-Maior)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="totalCmv-desc">Custo (Maior-Menor)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="totalCmv-asc">Custo (Menor-Maior)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="profitGoal-desc">Meta (Maior-Menor)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="profitGoal-asc">Meta (Menor-Maior)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="profitPercentage-desc">Margem (Maior-Menor)</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="profitPercentage-asc">Margem (Menor-Maior)</DropdownMenuRadioItem>
-                                    </DropdownMenuRadioGroup>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                            {totalActiveFilters > 0 && (
-                                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                                    <Eraser className="mr-2 h-4 w-4" />
-                                    Limpar
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-                </div>
-                
-                <div className="mt-4">
-                    {renderTable()}
-                </div>
+            <div className="flex justify-end">
+                <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full md:w-auto">
+                    <TabsList className="bg-white border shadow-sm p-1 h-11 rounded-xl">
+                        <TabsTrigger 
+                            value="inventory" 
+                            className="rounded-lg px-6 font-bold text-xs uppercase data-[state=active]:bg-pink-50 data-[state=active]:text-pink-600 transition-all"
+                        >
+                            <Package className="mr-2 h-4 w-4" />
+                            Mercadorias
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="analysis" 
+                            className="rounded-lg px-6 font-bold text-xs uppercase data-[state=active]:bg-pink-50 data-[state=active]:text-pink-600 transition-all"
+                        >
+                            <History className="mr-2 h-4 w-4" />
+                            Histórico & Análise
+                        </TabsTrigger>
+                    </TabsList>
+                </Tabs>
             </div>
 
-            <AddEditSimulationModal 
-                open={isAddEditModalOpen}
-                onOpenChange={setIsAddEditModalOpen}
-                simulationToEdit={simulationToEdit}
-                onDelete={handleDelete}
-            />
-            
-             <PpoModal
-                open={isPpoModalOpen}
-                onOpenChange={setIsPpoModalOpen}
+            {activeMainTab === "inventory" ? (
+                <Card className="border-none shadow-xl bg-gray-50/50">
+                    <CardHeader className="pb-0 pt-6 px-8">
+                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pb-4">
+                            {/* Left side actions & filters */}
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button onClick={handleAddNew} className="bg-pink-600 hover:bg-pink-700 text-white gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                    <PlusCircle className="h-4 w-4" />
+                                    Mercadoria
+                                </Button>
+                                <Button variant="outline" onClick={() => setIsBatchEditModalOpen(true)} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                    Alterar em lote
+                                </Button>
+                                {permissions.pricing.manageParameters && (
+                                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                        <Settings className="h-4 w-4" />
+                                        Parâmetros
+                                    </Button>
+                                )}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" disabled={filteredSimulations.length === 0} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                            <Download className="h-4 w-4" />
+                                            Exportar
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        <DropdownMenuItem onSelect={e => e.preventDefault()}>
+                                            <PDFDownloadLink
+                                                document={<GerencialReportDocument data={filteredSimulations} />}
+                                                fileName={`relatorio_gerencial_${new Date().toISOString().slice(0, 10)}.pdf`}
+                                                className="w-full text-left"
+                                            >
+                                                {({ loading }: BlobProviderParams) => (loading ? 'Gerando...' : 'Relatório Gerencial (PDF)')}
+                                            </PDFDownloadLink>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={handleExportGerencialCsv}>Relatório Gerencial (CSV)</DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={handleExportXlsx}>Relatório Gerencial (XLSX)</DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onSelect={handleExportPriceListPdf}>Lista de Preços (PDF)</DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={handleExportPriceListCsv}>Lista de Preços (CSV)</DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onSelect={e => e.preventDefault()} disabled={!singleFilteredSimulation}>
+                                            {singleFilteredSimulation && (
+                                                <PDFDownloadLink
+                                                    document={<FichaTecnicaDocument type="completa" data={{...singleFilteredSimulation, ingredients: simulationItems.filter(i => i.simulationId === singleFilteredSimulation.id).map(i => ({ name: baseProductMap.get(i.baseProductId)?.name || '', quantity: i.quantity, unit: i.overrideUnit || baseProductMap.get(i.baseProductId)?.unit || '' })) }} />}
+                                                    fileName={`ficha_completa_${singleFilteredSimulation.name.replace(/ /g, '_')}.pdf`}
+                                                    className="w-full text-left"
+                                                >
+                                                    {({ loading }: BlobProviderParams) => (loading ? 'Gerando...' : 'Ficha de Instrução (PDF)')}
+                                                </PDFDownloadLink>
+                                            )}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha técnica simplificada (PDF)</DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaCsv}>Ficha técnica simplificada (CSV)</DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                            <TableIcon className="h-4 w-4" />
+                                            Colunas
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="w-64">
+                                        <DropdownMenuLabel>Colunas Visíveis</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {ALL_COLS.map(col => (
+                                            <DropdownMenuCheckboxItem
+                                                key={col.id}
+                                                checked={visibleColumns.has(col.id)}
+                                                onCheckedChange={() => toggleColumn(col.id)}
+                                                onSelect={(e) => e.preventDefault()}
+                                            >
+                                                <div className="flex flex-col">
+                                                    <span>{col.label}</span>
+                                                    <span className="text-[10px] text-muted-foreground">{col.tip}</span>
+                                                </div>
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+
+                                {totalActiveFilters > 0 && (
+                                    <Button variant="ghost" size="sm" onClick={clearFilters} className="text-pink-600 font-bold text-xs uppercase h-10 px-3">
+                                        <Eraser className="mr-2 h-4 w-4" />
+                                        Limpar Filtros
+                                    </Button>
+                                )}
+                            </div>
+                            
+                            {/* Right side search */}
+                            <div className="flex items-center gap-2 w-full xl:w-auto">
+                                <div className="relative w-full xl:w-72">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input placeholder="Filtrar mercadorias..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 h-10 rounded-xl" />
+                                </div>
+                                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-xl" onClick={clearFilters}><Eraser className="h-4 w-4" /></Button>
+
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                            <ArrowUpDown className="h-4 w-4" />
+                                            Ordenar por
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="w-56">
+                                        <DropdownMenuRadioGroup value={`${sortConfig.key}-${sortConfig.direction}`} onValueChange={(v) => handleSort(v.split('-')[0] as SortKey)}>
+                                            <DropdownMenuRadioItem value="name-asc">Nome (A-Z)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="name-desc">Nome (Z-A)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="sku-asc">SKU (Crescente)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="sku-desc">SKU (Decrescente)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="salePrice-desc">Preço (Maior-Menor)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="salePrice-asc">Preço (Menor-Maior)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="totalCmv-desc">Custo (Maior-Menor)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="totalCmv-asc">Custo (Menor-Maior)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="grossVal-desc">M. Bruta R$ (Maior-Menor)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="grossVal-asc">M. Bruta R$ (Menor-Maior)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="grossPct-desc">M. Bruta % (Maior-Menor)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="grossPct-asc">M. Bruta % (Menor-Maior)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="profitGoal-desc">Meta (Maior-Menor)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="profitGoal-asc">Meta (Menor-Maior)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="profitPercentage-desc">M. Contrib (Maior-Menor)</DropdownMenuRadioItem>
+                                            <DropdownMenuRadioItem value="profitPercentage-asc">M. Contrib (Menor-Maior)</DropdownMenuRadioItem>
+                                        </DropdownMenuRadioGroup>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                            <Filter className="h-4 w-4" />
+                                            Filtros
+                                            {(categoryFilters.size + lineFilters.size + statusFilter.size) > 0 && (
+                                                <Badge className="ml-1 h-5 w-5 p-0 flex items-center justify-center rounded-full bg-pink-600 text-[10px]">
+                                                    {categoryFilters.size + lineFilters.size + statusFilter.size}
+                                                </Badge>
+                                            )}
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="w-64 max-h-[400px] overflow-y-auto">
+                                        {lines.length > 0 && (
+                                            <>
+                                                <DropdownMenuLabel>Linhas</DropdownMenuLabel>
+                                                {lines.map(line => (
+                                                    <DropdownMenuCheckboxItem
+                                                        key={line.id}
+                                                        checked={lineFilters.has(line.id)}
+                                                        onCheckedChange={() => handleFilterChange(line.id, 'line')}
+                                                        onSelect={(e) => e.preventDefault()}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: line.color }} />
+                                                            {line.name}
+                                                        </div>
+                                                    </DropdownMenuCheckboxItem>
+                                                ))}
+                                                <DropdownMenuSeparator />
+                                            </>
+                                        )}
+                                        {mainCategories.length > 0 && (
+                                            <>
+                                                <DropdownMenuLabel>Categorias</DropdownMenuLabel>
+                                                {mainCategories.map(cat => (
+                                                    <DropdownMenuCheckboxItem
+                                                        key={cat.id}
+                                                        checked={categoryFilters.has(cat.id)}
+                                                        onCheckedChange={() => handleFilterChange(cat.id, 'category')}
+                                                        onSelect={(e) => e.preventDefault()}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
+                                                            {cat.name}
+                                                        </div>
+                                                    </DropdownMenuCheckboxItem>
+                                                ))}
+                                                <DropdownMenuSeparator />
+                                            </>
+                                        )}
+                                        <DropdownMenuLabel>Situação da Meta</DropdownMenuLabel>
+                                        <DropdownMenuCheckboxItem checked={statusFilter.has('na_meta')} onCheckedChange={() => handleFilterChange('na_meta', 'status')} onSelect={(e) => e.preventDefault()}>
+                                            Na Meta (Verde)
+                                        </DropdownMenuCheckboxItem>
+                                        <DropdownMenuCheckboxItem checked={statusFilter.has('abaixo')} onCheckedChange={() => handleFilterChange('abaixo', 'status')} onSelect={(e) => e.preventDefault()}>
+                                            Abaixo (Laranja)
+                                        </DropdownMenuCheckboxItem>
+                                        <DropdownMenuCheckboxItem checked={statusFilter.has('sem_meta')} onCheckedChange={() => handleFilterChange('sem_meta', 'status')} onSelect={(e) => e.preventDefault()}>
+                                            Sem Meta (Cinza)
+                                        </DropdownMenuCheckboxItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-8 pt-0">
+                        {renderTable()}
+                    </CardContent>
+                </Card>
+            ) : (
+                <PricingHistoryAnalysis simulations={simulations} priceHistory={priceHistory || []} />
+            )}
+
+            <ProductModal 
+                open={isProductModalOpen}
+                onOpenChange={setIsProductModalOpen}
                 simulation={simulationToEdit}
+                initialTab={initialTab}
             />
 
             <TechnicalSheetViewerModal
@@ -825,7 +1107,7 @@ export function PricingSimulator() {
                 history={priceHistory}
                 simulations={simulations}
             />
-            
+
             <BatchEditSimulationModal
                 open={isBatchEditModalOpen}
                 onOpenChange={setIsBatchEditModalOpen}
@@ -833,6 +1115,23 @@ export function PricingSimulator() {
                 filteredSimulations={filteredSimulations}
                 selectedSimulationIds={selectedSimulations}
             />
+
+            <AlertDialog open={!!simulationToDeactivate} onOpenChange={(open) => { if (!open) setSimulationToDeactivate(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Desativar mercadoria</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja desativar <strong>{simulationToDeactivate?.name}</strong>? Ela será movida para a seção de inativos e não aparecerá nos relatórios ativos.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmDeactivate} className="bg-destructive hover:bg-destructive/90">
+                            Desativar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ChevronRight, Settings2 } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
@@ -135,16 +135,22 @@ function SegmentedTabs<T extends { value: string; label: string; icon?: React.Re
 function DepartmentSubtabs({
   tabs,
   emptyLabel,
+  requestedValue,
 }: {
   tabs: NestedTab[];
   emptyLabel: string;
+  requestedValue?: string | null;
 }) {
   const defaultTab = tabs[0]?.value;
   const [activeSubTab, setActiveSubTab] = useState(defaultTab ?? "");
 
   useEffect(() => {
+    if (requestedValue && tabs.some((tab) => tab.value === requestedValue)) {
+      setActiveSubTab(requestedValue);
+      return;
+    }
     setActiveSubTab(defaultTab ?? "");
-  }, [defaultTab]);
+  }, [defaultTab, requestedValue, tabs]);
 
   if (!defaultTab) {
     return <EmptySection label={emptyLabel} />;
@@ -166,8 +172,57 @@ function DepartmentSubtabs({
 export default function SettingsPage() {
   const { permissions } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const operationalTabs: NestedTab[] = [
+    {
+      value: "checklists",
+      label: "Checklists",
+      title: "Checklists operacionais",
+      description: "Centralize o acesso às configurações operacionais dos formulários e ao catálogo de templates.",
+      content: (
+        <div className="space-y-4">
+          <SettingsLaunchPanel
+            title="Templates e formulário operacional"
+            description="Crie, edite e versione templates no módulo normal de checklists. O builder e a edição ficam centralizados lá."
+            href="/dashboard/dp/checklists?tab=templates"
+            actionLabel="Abrir templates"
+          />
+          <SettingsLaunchPanel
+            title="Operação e analytics"
+            description="Acompanhe execuções do dia, tarefas operacionais e visão gerencial sem sair do módulo de checklists."
+            href="/dashboard/dp/checklists?tab=operations"
+            actionLabel="Abrir módulo"
+          />
+        </div>
+      ),
+    },
+    {
+      value: "cadastros",
+      label: "Cadastros",
+      title: "Cadastros operacionais",
+      description: "Gerencie insumos, produtos base e entidades do sistema.",
+      content: (
+        <div className="space-y-4">
+          {(permissions.registration.items.add || permissions.registration.items.edit || permissions.registration.items.delete) && (
+            <SettingsLaunchPanel
+              title="Insumos e produtos base"
+              description="Cadastre produtos, agrupe-os em produtos base e defina metas de estoque por unidade."
+              href="/dashboard/registration/items"
+              actionLabel="Gerenciar insumos"
+            />
+          )}
+          {(permissions.registration.entities.add || permissions.registration.entities.edit || permissions.registration.entities.delete) && (
+            <SettingsLaunchPanel
+              title="Pessoas e empresas"
+              description="Gerencie contatos, clientes e fornecedores em um único lugar."
+              href="/dashboard/registration/entities"
+              actionLabel="Gerenciar entidades"
+            />
+          )}
+        </div>
+      ),
+    },
     {
       value: "units",
       label: "Unidades",
@@ -182,7 +237,10 @@ export default function SettingsPage() {
       description: "Reprocesse dados históricos e configure a rotina operacional ligada ao PDV.",
       content: <PdvSyncManagement />,
     },
-  ];
+  ].filter((tab) => {
+    if (tab.value === "cadastros") return !!permissions.registration.view;
+    return true;
+  });
 
   const commercialTabs: NestedTab[] = [
     {
@@ -340,13 +398,29 @@ export default function SettingsPage() {
     },
   ];
 
-  const [activeDepartment, setActiveDepartment] = useState("operacional");
+  const requestedDepartment = searchParams.get("department");
+  const requestedTab = searchParams.get("tab");
+
+  const [activeDepartment, setActiveDepartment] = useState(
+    requestedDepartment && departmentTabs.some((tab) => tab.value === requestedDepartment)
+      ? requestedDepartment
+      : "operacional"
+  );
 
   useEffect(() => {
     if (!departmentTabs.some((tab) => tab.value === activeDepartment)) {
       setActiveDepartment(departmentTabs[0]?.value ?? "operacional");
     }
   }, [activeDepartment, departmentTabs]);
+
+  useEffect(() => {
+    if (
+      requestedDepartment &&
+      departmentTabs.some((tab) => tab.value === requestedDepartment)
+    ) {
+      setActiveDepartment(requestedDepartment);
+    }
+  }, [requestedDepartment, departmentTabs]);
 
   const activeDepartmentTab =
     departmentTabs.find((tab) => tab.value === activeDepartment) ?? departmentTabs[0];
@@ -381,6 +455,7 @@ export default function SettingsPage() {
             <DepartmentSubtabs
               tabs={activeDepartmentTab.tabs}
               emptyLabel={activeDepartmentTab.emptyLabel}
+              requestedValue={requestedTab}
             />
           ) : null}
         </div>

@@ -71,8 +71,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         items: [
           { label: "Painel de Operações", href: "/dashboard/operations", icon: LayoutGrid, show: permissions.dashboard.operational },
           { label: "Tarefas gerais", href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, badge: legacyTasks.length > 0 ? { count: legacyTasks.length, variant: "warn" } : undefined },
+          { label: "Checklists", href: "/dashboard/dp/checklists", icon: ListChecks, show: permissions.dp?.checklists?.view || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.manageTemplates || permissions.dp?.view },
           { label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package, show: permissions.stock.view },
-          { label: "Checklists", href: "/dashboard/dp/checklists", icon: ListChecks, show: permissions.dp?.schedules?.view || permissions.dp?.schedules?.edit || permissions.dp?.collaborators?.view || permissions.dp?.collaborators?.edit },
         ],
       },
       {
@@ -132,7 +132,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         label: "Configurações",
         color: SECTION_COLORS.cfg,
         items: [
-          { label: "Cadastros", href: "/dashboard/registration", icon: ListChecks, show: permissions.registration.view },
           { label: "Configurações", href: "/dashboard/settings", icon: Settings, show: permissions.settings.view },
           { label: "Ajuda", href: "/dashboard/help", icon: HelpCircle, show: permissions.help.view },
         ],

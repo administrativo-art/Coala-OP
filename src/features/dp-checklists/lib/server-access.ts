@@ -62,11 +62,25 @@ function canViewChecklist(
 ) {
   return (
     isDefaultAdmin ||
+    permissions.dp.checklists?.view ||
+    permissions.dp.checklists?.operate ||
+    permissions.dp.checklists?.manageTemplates ||
+    // Compatibilidade retroativa: quem tem acesso amplo ao DP segue vendo
     permissions.dp.view ||
-    permissions.dp.schedules.view ||
-    permissions.dp.schedules.edit ||
-    permissions.dp.collaborators.view ||
-    permissions.dp.collaborators.edit ||
+    permissions.settings.manageUsers
+  );
+}
+
+function canOperateChecklist(
+  permissions: PermissionSet,
+  isDefaultAdmin: boolean
+) {
+  return (
+    isDefaultAdmin ||
+    permissions.dp.checklists?.operate ||
+    permissions.dp.checklists?.manageTemplates ||
+    // Compatibilidade retroativa
+    permissions.dp.view ||
     permissions.settings.manageUsers
   );
 }
@@ -77,8 +91,9 @@ function canManageChecklistTemplates(
 ) {
   return (
     isDefaultAdmin ||
+    permissions.dp.checklists?.manageTemplates ||
+    // Compatibilidade retroativa
     permissions.dp.schedules.edit ||
-    permissions.dp.collaborators.edit ||
     permissions.settings.manageUsers
   );
 }
@@ -156,6 +171,7 @@ export async function assertDPChecklistAccess(
 
   const permissions = buildPermissions(profilePermissions, isDefaultAdmin);
   const canView = canViewChecklist(permissions, isDefaultAdmin);
+  const canOperate = canOperateChecklist(permissions, isDefaultAdmin);
   const canManageTemplates = canManageChecklistTemplates(
     permissions,
     isDefaultAdmin
@@ -167,7 +183,7 @@ export async function assertDPChecklistAccess(
     profileId,
     permissions,
     canView,
-    canOperate: canView,
+    canOperate,
     canManageTemplates,
     lookupError,
   };
