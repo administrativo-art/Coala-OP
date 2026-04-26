@@ -46,5 +46,6 @@ firestore-debug.log
 
 # service accounts (nunca commitar)
 scripts/sa-*.json
+scripts/*firebase-adminsdk*.json
 scripts/dp-collaborator-mapping.json
 scripts/dp-id-map.json
