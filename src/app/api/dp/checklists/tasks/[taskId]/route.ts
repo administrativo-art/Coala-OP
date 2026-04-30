@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { assertLegacyChecklistWriteAllowed } from "@/features/dp-checklists/lib/rollout";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   appendChecklistAudit,
@@ -22,6 +23,7 @@ export async function PATCH(
   context: { params: Promise<{ taskId: string }> }
 ) {
   try {
+    await assertLegacyChecklistWriteAllowed();
     const access = await assertDPChecklistAccess(request, "operate");
     const actor = await loadChecklistActor(access.decoded.uid);
     const { taskId } = await context.params;

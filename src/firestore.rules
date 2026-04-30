@@ -216,11 +216,7 @@ service cloud.firestore {
 
     // Atividades de reposição
     match /repositionActivities/{activityId} {
-      allow read: if isAuth() && (isAdmin() || getPerms().stock.analysis.restock == true);
-      allow create, update: if isAuth() && (isAdmin() || getPerms().stock.analysis.restock == true)
-        && request.resource.data.keys().hasAll(['status'])
-        && request.resource.data.status is string;
-      allow delete: if isAuth() && (isAdmin() || getPerms().reposition.cancel == true);
+      allow read, create, update, delete: if false;
     }
 
     // Relatórios de consumo
@@ -270,12 +266,7 @@ service cloud.firestore {
 
     // Solicitações de devolução
     match /returnRequests/{reqId} {
-      allow read: if isAuth() && (isAdmin() || getPerms().stock.returns.view == true);
-      allow create: if isAuth() && (isAdmin() || getPerms().stock.returns.add == true)
-        && isValidReturnRequest(request.resource.data);
-      allow update: if isAuth() && (isAdmin() || getPerms().stock.returns.updateStatus == true)
-        && request.resource.data.status is string;
-      allow delete: if isAuth() && (isAdmin() || getPerms().stock.returns.delete == true);
+      allow read, create, update, delete: if false;
     }
 
     // Tarefas
@@ -326,6 +317,35 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(['simulationId'])
         && request.resource.data.simulationId is string;
       allow update, delete: if false;
+    }
+
+    match /channels/{channelId} {
+      allow read: if isAuth();
+      allow create, update: if isAuth() && (isAdmin() || getPerms().pricing.manageParameters == true)
+        && request.resource.data.keys().hasAll(['name', 'type', 'active'])
+        && request.resource.data.name is string
+        && request.resource.data.type is string
+        && request.resource.data.active is bool
+        && (
+          request.resource.data.defaultPriceRule == null ||
+          (
+            request.resource.data.defaultPriceRule.mode is string &&
+            request.resource.data.defaultPriceRule.value is number
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /priceOverrides/{overrideId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().pricing.view == true || getPerms().dashboard.technicalSheets == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true)
+        && request.resource.data.keys().hasAll(['simulationId', 'unitId', 'channelId', 'finalPrice', 'available'])
+        && request.resource.data.simulationId is string
+        && !(request.resource.data.unitId == null && request.resource.data.channelId == null)
+        && request.resource.data.available is bool
+        && (request.resource.data.finalPrice == null || request.resource.data.finalPrice is number)
+        && (!request.resource.data.available || (request.resource.data.finalPrice is number && request.resource.data.finalPrice > 0));
+      allow delete: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true);
     }
 
     // --- COLEÇÕES AUXILIARES / CONFIGURAÇÕES ---

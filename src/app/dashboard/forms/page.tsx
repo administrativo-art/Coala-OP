@@ -1,4 +1,5 @@
-// This page has been removed as per user request.
+import { FormsDashboardShell } from "@/components/forms/forms-dashboard-shell";
+
 export default function FormsPage() {
-    return null;
+  return <FormsDashboardShell />;
 }

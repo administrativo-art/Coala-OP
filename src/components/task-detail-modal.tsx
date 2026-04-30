@@ -14,10 +14,10 @@ import { useAuth } from '@/hooks/use-auth';
 import { useTasks } from '@/hooks/use-tasks';
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { useAuthorBoardDiary } from '@/hooks/use-author-board-diary';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useProfiles } from '@/hooks/use-profiles';
+import { useRouter } from 'next/navigation';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -45,8 +45,7 @@ const getStatusInfo = (status: Task['status']) => {
 function TaskOriginDetails({ origin }: { origin: TaskOrigin }) {
     const { baseProducts } = useBaseProducts();
     
-    // Check if origin is of type 'consumption-projection'
-    if (origin.type !== 'consumption-projection') {
+    if (origin.kind !== 'legacy' || origin.type !== 'consumption-projection') {
         return null;
     }
 
@@ -74,13 +73,13 @@ function TaskOriginDetails({ origin }: { origin: TaskOrigin }) {
 }
 
 export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
+  const router = useRouter();
   const { user, users } = useAuth();
   const { profiles } = useProfiles();
   const { updateTask, deleteTask } = useTasks();
   const [rejectionNotes, setRejectionNotes] = useState('');
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
-  const { todayLog, createOrGetDailyLog } = useAuthorBoardDiary();
 
   const handleClose = () => {
     setRejectionNotes('');
@@ -105,6 +104,17 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     }
     return false;
   }, [task, user, users, profiles]);
+
+  const originLink = useMemo(() => {
+    if (!task) return null;
+    if (task.origin.kind === 'form_trigger') {
+      return `/dashboard/forms/${task.origin.execution_id}/view`;
+    }
+    if (task.origin.kind === 'purchase_receipt') {
+      return '/dashboard/purchasing/receipts';
+    }
+    return task.legacyLink ?? null;
+  }, [task]);
 
   if (!task || !profiles) return null;
 
@@ -134,12 +144,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const handleApprove = async () => {
       const now = new Date().toISOString();
       const newHistory = [...task.history, addHistoryItem('approved')];
-      
-      if(task.origin.type === 'author_board_diary'){
-          const log = await createOrGetDailyLog();
-          if(log) await updateTask(log.id, {status: 'finalizado' as any});
-      }
-      
+
       await updateTask(task.id, { status: 'completed', history: newHistory, completedAt: now, updatedAt: now });
       handleClose();
   };
@@ -151,12 +156,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
       }
       const now = new Date().toISOString();
       const newHistory = [...task.history, addHistoryItem('rejected', rejectionNotes)];
-      
-       if(task.origin.type === 'author_board_diary'){
-          const log = await createOrGetDailyLog();
-          if(log) await updateTask(log.id, {status: 'aberto' as any});
-      }
-      
+
       await updateTask(task.id, { status: 'reopened', history: newHistory, completedAt: undefined, updatedAt: now });
       handleClose();
   };
@@ -258,6 +258,11 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
                   <Button variant="destructive" onClick={handleReject} disabled={!rejectionNotes}><X className="mr-2"/> Rejeitar</Button>
                   <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={handleApprove}><Check className="mr-2"/> Aprovar</Button>
                 </div>
+              ) : task.origin.kind !== 'manual' && task.origin.kind !== 'legacy' ? (
+                <Button variant="outline" onClick={() => originLink && router.push(originLink)}>
+                  <FileText className="mr-2" />
+                  Abrir origem
+                </Button>
               ) : (
                 <Button onClick={handleMarkAsComplete}>
                   <Send className="mr-2" />

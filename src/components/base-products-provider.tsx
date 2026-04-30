@@ -6,6 +6,7 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { type BaseProduct, type UnitCategory, unitCategories } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, serverTimestamp, deleteField } from 'firebase/firestore';
+import { useAuth } from '@/hooks/use-auth';
 
 export interface BaseProductsContextType {
   baseProducts: BaseProduct[];
@@ -20,10 +21,22 @@ export interface BaseProductsContextType {
 export const BaseProductsContext = createContext<BaseProductsContextType | undefined>(undefined);
 
 export function BaseProductsProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
   const [baseProducts, setBaseProducts] = useState<BaseProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
+    if (!user) {
+      setBaseProducts([]);
+      setLoading(false);
+      return;
+    }
+
     const q = query(collection(db, "baseProducts"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const productsData = querySnapshot.docs.map(doc => {
@@ -40,7 +53,7 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [authLoading, user]);
 
   const addBaseProduct = useCallback(async (product: Omit<BaseProduct, 'id'>) => {
     try {

@@ -10,6 +10,8 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { serializeChecklistValue } from "@/features/dp-checklists/lib/server-access";
+import { logAction } from "@/lib/log-action";
+import { WORKSPACE_ID } from "@/lib/workspace";
 
 export type ChecklistActor = {
   userId: string;
@@ -143,11 +145,14 @@ export async function appendChecklistAudit(
   event: string,
   payload: Record<string, unknown>
 ) {
-  await dbAdmin.collection("actionLogs").add({
+  await logAction({
+    workspace_id:
+      typeof payload.workspace_id === "string" ? payload.workspace_id : WORKSPACE_ID,
+    user_id: typeof payload.userId === "string" ? payload.userId : null,
+    username: typeof payload.username === "string" ? payload.username : null,
     module: "checklists",
-    event,
-    createdAt: new Date().toISOString(),
-    ...payload,
+    action: event,
+    metadata: payload,
   });
 }
 

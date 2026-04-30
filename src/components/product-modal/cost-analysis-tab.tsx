@@ -9,7 +9,9 @@ import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useKiosks } from '@/hooks/use-kiosks';
+import { useChannels } from '@/hooks/use-channels';
 import { useToast } from '@/hooks/use-toast';
+import { buildPriceOverrideId, calculateSimulationMetrics } from '@/lib/pricing-context';
 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -19,10 +21,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { ChevronsUpDown, Calculator, Info } from 'lucide-react';
+import { ChevronsUpDown, Calculator } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProductSheetTab } from './product-sheet-tab';
 import { cn } from '@/lib/utils';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
 
 const simulationSchema = z.object({
   name: z.string().min(1, 'O nome da mercadoria é obrigatório.'),
@@ -62,10 +67,11 @@ const fmtCEST = (v: string) => {
 };
 
 export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: ProductSimulation, onOpenChange: (open: boolean) => void }) {
-  const { updateSimulation } = useProductSimulation();
+  const { updateSimulation, getSimulationOverrides, resolveSimulationPrice, upsertPriceOverride, deletePriceOverride } = useProductSimulation();
   const { categories } = useProductSimulationCategories();
   const { pricingParameters } = useCompanySettings();
   const { kiosks } = useKiosks();
+  const { channels } = useChannels();
   const { toast } = useToast();
 
   const form = useForm<CostAnalysisFormValues>({
@@ -88,24 +94,46 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
   const watchedSalePrice = useWatch({ control: form.control, name: 'salePrice' }) || 0;
   const [simulatedPrice, setSimulatedPrice] = useState<number | null>(null);
   const [simulatedGoal, setSimulatedGoal] = useState<number | null>(null);
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('all');
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('all');
+  const [editingOverride, setEditingOverride] = useState<{ unitId: string | null; channelId: string | null } | null>(null);
+  const [overridePriceInput, setOverridePriceInput] = useState<string>('');
+  const [overrideAvailable, setOverrideAvailable] = useState(true);
+  const [overrideUpdatedAt, setOverrideUpdatedAt] = useState<string | undefined>(undefined);
 
   const cmv = simulation.totalCmv || 0;
+  const scopedKiosks = useMemo(() => kiosks.filter(kiosk => (simulation.kioskIds || []).includes(kiosk.id)), [kiosks, simulation.kioskIds]);
+  const activeChannels = useMemo(() => channels.filter(channel => channel.active), [channels]);
+  const overrides = useMemo(() => getSimulationOverrides(simulation.id), [getSimulationOverrides, simulation.id]);
+  const previewSimulation = useMemo(() => ({ ...simulation, salePrice: watchedSalePrice }), [simulation, watchedSalePrice]);
+  const selectedResolution = useMemo(() => {
+    return resolveSimulationPrice(
+      previewSimulation,
+      selectedUnitId === 'all' ? null : selectedUnitId,
+      selectedChannelId === 'all' ? null : selectedChannelId
+    );
+  }, [previewSimulation, resolveSimulationPrice, selectedUnitId, selectedChannelId]);
+  const effectiveSalePrice = (selectedUnitId !== 'all' || selectedChannelId !== 'all')
+    ? (selectedResolution.price ?? 0)
+    : watchedSalePrice;
   
   const results = useMemo(() => {
-    const price = watchedSalePrice;
+    const price = effectiveSalePrice;
     const tax = pricingParameters?.averageTaxPercentage || 0;
     const fee = pricingParameters?.averageCardFeePercentage || 0;
-    const taxVal = price * (tax / 100);
-    const feeVal = price * (fee / 100);
-    const netRev = price - taxVal - feeVal;
-    const margin = netRev - cmv;
-    const marginPct = price > 0 ? (margin / price) * 100 : 0;
-    const grossMargin = price - cmv;
-    const grossMarginPct = price > 0 ? (grossMargin / price) * 100 : 0;
-    const markup = cmv > 0 ? price / cmv : 0;
+    const metrics = calculateSimulationMetrics(price, cmv, tax, fee);
 
-    return { netRev, taxVal, feeVal, margin, marginPct, grossMargin, grossMarginPct, markup };
-  }, [watchedSalePrice, cmv, pricingParameters]);
+    return {
+      netRev: metrics.netRevenue,
+      taxVal: price * (tax / 100),
+      feeVal: price * (fee / 100),
+      margin: metrics.profitValue,
+      marginPct: metrics.profitPercentage,
+      grossMargin: metrics.grossMargin,
+      grossMarginPct: metrics.grossMarginPct,
+      markup: metrics.markup,
+    };
+  }, [effectiveSalePrice, cmv, pricingParameters]);
 
   const handleSimPriceChange = (val: string) => {
     const p = parseFloat(val);
@@ -141,15 +169,73 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
     toast({ title: "Simulação aplicada!" });
   };
 
+  const openOverrideEditor = (unitId: string | null, channelId: string | null) => {
+    if (unitId === null && channelId === null) {
+      return;
+    }
+
+    const existing = overrides.find(
+      override => override.unitId === unitId && override.channelId === channelId
+    );
+    const resolved = resolveSimulationPrice(previewSimulation, unitId, channelId);
+
+    setEditingOverride({ unitId, channelId });
+    setOverridePriceInput(existing?.finalPrice != null ? String(existing.finalPrice).replace('.', ',') : (resolved.price != null ? String(resolved.price).replace('.', ',') : ''));
+    setOverrideAvailable(existing?.available ?? true);
+    setOverrideUpdatedAt(existing?.updatedAt);
+  };
+
+  const handleSaveOverride = async () => {
+    if (!editingOverride) return;
+
+    try {
+      const trimmedPrice = overridePriceInput.trim();
+      const parsedPrice =
+        trimmedPrice === ''
+          ? null
+          : Number(trimmedPrice.replace(/\./g, '').replace(',', '.'));
+
+      await upsertPriceOverride({
+        simulationId: simulation.id,
+        unitId: editingOverride.unitId,
+        channelId: editingOverride.channelId,
+        finalPrice: parsedPrice,
+        available: overrideAvailable,
+        updatedAt: overrideUpdatedAt,
+      });
+      setEditingOverride(null);
+      toast({ title: 'Override salvo com sucesso.' });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao salvar override',
+        description: error instanceof Error ? error.message : 'Erro inesperado.',
+      });
+    }
+  };
+
+  const handleDeleteOverride = async () => {
+    if (!editingOverride) return;
+
+    try {
+      await deletePriceOverride(buildPriceOverrideId(simulation.id, editingOverride.unitId, editingOverride.channelId));
+      setEditingOverride(null);
+      toast({ title: 'Override removido. A herança foi restaurada.' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Erro ao remover override.' });
+    }
+  };
+
+  const handleApplyChannelRule = async () => {
+    if (!editingOverride?.channelId) return;
+    await handleDeleteOverride();
+  };
+
   const onSubmit = async (values: CostAnalysisFormValues) => {
     try {
       await updateSimulation({
         ...simulation,
         ...values,
-        totalCmv: cmv,
-        profitValue: results.margin,
-        profitPercentage: results.marginPct,
-        markup: results.markup,
         ppo: {
           ...simulation.ppo,
           ncm: values.ncm,
@@ -160,13 +246,40 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
       toast({ title: "Análise de custo salva com sucesso!" });
       onOpenChange(false);
     } catch (error) {
-      toast({ variant: "destructive", title: "Erro ao salvar", description: "Ocorreu um erro ao salvar as alterações." });
+      toast({
+        variant: "destructive",
+        title: "Erro ao salvar",
+        description: error instanceof Error ? error.message : "Ocorreu um erro ao salvar as alterações."
+      });
     }
   };
 
   const mainCategories = categories.filter(c => c.type === 'category');
   const lines = categories.filter(c => c.type === 'line');
   const groups = categories.filter(c => c.type === 'group');
+  const editingChannel = editingOverride?.channelId ? channels.find(channel => channel.id === editingOverride.channelId) ?? null : null;
+  const editingChannelRulePrice = useMemo(() => {
+    if (!editingChannel?.defaultPriceRule || editingChannel.defaultPriceRule.mode !== 'markup') {
+      return null;
+    }
+    return watchedSalePrice * (1 + editingChannel.defaultPriceRule.value);
+  }, [editingChannel, watchedSalePrice]);
+  const editingHasManualOverride = useMemo(() => {
+    if (!editingOverride) return false;
+    return overrides.some(
+      (override) => override.unitId === editingOverride.unitId && override.channelId === editingOverride.channelId
+    );
+  }, [editingOverride, overrides]);
+
+  const sourceLabels: Record<string, string> = {
+    'override:unit+channel': 'Override específico',
+    'override:unit': 'Override da unidade',
+    'override:channel': 'Override do canal',
+    'channel-default-rule': 'Regra do canal',
+    'global': 'Preço global',
+    'unit-disabled': 'Unidade desabilitada',
+    'channel-inactive': 'Canal inativo',
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -176,8 +289,11 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
             <TabsTrigger value="cost" className="data-[state=active]:bg-white data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-gray-200 px-3 py-1.5 text-xs font-bold rounded-lg transition-all">
               1. Precificação e Fiscal
             </TabsTrigger>
+            <TabsTrigger value="contexts" className="data-[state=active]:bg-white data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-gray-200 px-3 py-1.5 text-xs font-bold rounded-lg transition-all">
+              2. Preços por Contexto
+            </TabsTrigger>
             <TabsTrigger value="ficha" className="data-[state=active]:bg-white data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-gray-200 px-3 py-1.5 text-xs font-bold rounded-lg transition-all">
-              2. Composição e Preparo
+              3. Composição e Preparo
             </TabsTrigger>
           </TabsList>
         </div>
@@ -427,6 +543,49 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                     </p>
                   </div>
 
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-blue-700 uppercase">Unidade</label>
+                      <Select value={selectedUnitId} onValueChange={setSelectedUnitId}>
+                        <SelectTrigger className="bg-white border-blue-200 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas as unidades</SelectItem>
+                          {scopedKiosks.map((kiosk) => (
+                            <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-blue-700 uppercase">Canal</label>
+                      <Select value={selectedChannelId} onValueChange={setSelectedChannelId}>
+                        <SelectTrigger className="bg-white border-blue-200 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos os canais</SelectItem>
+                          {activeChannels.map((channel) => (
+                            <SelectItem key={channel.id} value={channel.id}>{channel.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="rounded-lg border border-blue-100 bg-white p-3 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Fonte</span>
+                        <span className="font-semibold text-blue-700">{selectedResolution.source}</span>
+                      </div>
+                      <div className="mt-2 flex justify-between">
+                        <span className="text-gray-500">Disponibilidade</span>
+                        <span className={cn("font-semibold", selectedResolution.available ? "text-emerald-600" : "text-rose-600")}>
+                          {selectedResolution.available ? 'Disponível' : 'Indisponível'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-blue-700 uppercase">Simular Preço (R$)</label>
@@ -507,10 +666,140 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
           </Form>
         </TabsContent>
 
+        <TabsContent value="contexts" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex">
+          <ScrollArea className="flex-1 p-6">
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900">Matriz de preços por contexto</h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Edite overrides por unidade, por canal ou por unidade + canal. A célula global continua sendo o `salePrice`.
+                </p>
+              </div>
+
+              <div className="rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[220px]">Unidade \\ Canal</TableHead>
+                      <TableHead className="min-w-[170px]">Todos os canais</TableHead>
+                      {activeChannels.map((channel) => (
+                        <TableHead key={channel.id} className="min-w-[170px]">{channel.name}</TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[{ id: null, name: 'Todas as unidades' }, ...scopedKiosks.map(kiosk => ({ id: kiosk.id, name: kiosk.name }))].map((row) => (
+                      <TableRow key={row.id ?? 'all-units'}>
+                        <TableCell className="font-medium">{row.name}</TableCell>
+                        {[null, ...activeChannels.map(channel => channel.id)].map((columnChannelId) => {
+                          const isGlobalCell = row.id === null && columnChannelId === null;
+                          const resolution = resolveSimulationPrice(previewSimulation, row.id, columnChannelId);
+                          const exactOverride = overrides.find(
+                            (override) => override.unitId === row.id && override.channelId === columnChannelId
+                          ) ?? null;
+
+                          return (
+                            <TableCell key={`${row.id ?? 'all'}:${columnChannelId ?? 'all'}`}>
+                              <button
+                                type="button"
+                                disabled={isGlobalCell}
+                                onClick={() => openOverrideEditor(row.id, columnChannelId)}
+                                className={cn(
+                                  "w-full rounded-lg border p-3 text-left transition-colors",
+                                  isGlobalCell ? "cursor-default bg-gray-50" : "hover:bg-gray-50"
+                                )}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-sm font-semibold">{resolution.price === null ? 'Indisponível' : formatCurrency(resolution.price)}</span>
+                                  <Badge variant={resolution.available ? 'outline' : 'destructive'}>
+                                    {resolution.available ? 'Disponível' : 'Indisponível'}
+                                  </Badge>
+                                </div>
+                                <p className="mt-2 text-[11px] text-muted-foreground">{sourceLabels[resolution.source] ?? resolution.source}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {exactOverride ? 'Override aplicado' : 'Herdado'}
+                                </p>
+                              </button>
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </ScrollArea>
+        </TabsContent>
+
         <TabsContent value="ficha" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex">
           <ProductSheetTab simulation={simulation} onOpenChange={onOpenChange} />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!editingOverride} onOpenChange={(open) => !open && setEditingOverride(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar override de preço</DialogTitle>
+            <DialogDescription>
+              Defina um preço final para este contexto ou marque-o como indisponível sem perder o valor salvo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Preço final</label>
+              <Input
+                inputMode="decimal"
+                placeholder="Deixe vazio para remover o override"
+                value={overridePriceInput}
+                onChange={(event) => setOverridePriceInput(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Campo vazio remove o override. `0` continua sendo uma tentativa explícita de preço zero e será rejeitado.
+              </p>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">Disponível para venda</p>
+                <p className="text-xs text-muted-foreground">Quando desligado, o contexto fica indisponível mesmo com fallback global.</p>
+              </div>
+              <Switch checked={overrideAvailable} onCheckedChange={setOverrideAvailable} />
+            </div>
+            {editingChannelRulePrice !== null && (
+              <div className="rounded-lg border p-3">
+                <p className="text-sm font-medium">Regra padrão do canal</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Regra padrão: {formatCurrency(editingChannelRulePrice)}. Você está em {overridePriceInput.trim() ? overridePriceInput : 'herança'}.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="justify-between">
+            <div className="flex gap-2">
+              {editingHasManualOverride && (
+                <Button type="button" variant="outline" onClick={handleDeleteOverride}>
+                  Remover override
+                </Button>
+              )}
+              {editingChannelRulePrice !== null && (
+                <Button type="button" variant="outline" onClick={handleApplyChannelRule}>
+                  Aplicar regra do canal
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditingOverride(null)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={handleSaveOverride}>
+                Salvar
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

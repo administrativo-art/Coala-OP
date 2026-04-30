@@ -1,18 +1,24 @@
 "use client"
 
 import { useState } from 'react';
-import { type Task } from '@/types';
+import { type LegacyTask, type Task } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Inbox, FileText, AlertCircle, History, CheckCircle2, ClipboardCheck, Truck, ShieldAlert, PackagePlus, Trash2 } from 'lucide-react';
+import { Inbox, AlertCircle, History, CheckCircle2, Trash2 } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { useRouter } from 'next/navigation';
 import { Button } from './ui/button';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useTasks } from '@/hooks/use-tasks';
 
+export type TaskListItem = Task | (LegacyTask & { legacy: true });
+
+function isLegacyTaskItem(task: TaskListItem): task is LegacyTask & { legacy: true } {
+  return 'legacy' in task && task.legacy === true;
+}
+
 interface TaskListProps {
-  tasks: Task[]; 
+  tasks: TaskListItem[];
   onTaskSelect: (task: Task) => void;
 }
 
@@ -40,12 +46,18 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
   const { deleteTask } = useTasks();
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
-  const handleTaskClick = (task: Task) => {
-    if (task.legacyLink) {
-        router.push(task.legacyLink);
-    } else {
-        onTaskSelect(task);
+  const handleTaskClick = (task: TaskListItem) => {
+    if (isLegacyTaskItem(task)) {
+      router.push(task.link);
+      return;
     }
+
+    if (task.legacyLink) {
+      router.push(task.legacyLink);
+      return;
+    }
+
+    onTaskSelect(task);
   };
   
   const handleDeleteConfirm = () => {
@@ -69,9 +81,11 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
     <>
     <div className="space-y-3">
       {tasks.map(task => {
-        const { icon: StatusIcon, color: statusColor, label: statusLabel } = getStatusInfo(task.status);
-        const createdAt = task.createdAt;
-        const LegacyIcon = task.legacyIcon;
+        const isLegacy = isLegacyTaskItem(task);
+        const LegacyIcon = isLegacy ? task.icon : task.legacyIcon;
+        const statusInfo = isLegacy ? null : getStatusInfo(task.status);
+        const createdAt = isLegacy ? null : task.createdAt;
+        const StatusIcon = statusInfo?.icon;
 
         return (
           <div
@@ -82,25 +96,29 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
             {LegacyIcon ? (
                  <LegacyIcon className={`h-6 w-6 mt-1 shrink-0 text-primary`} />
             ) : (
-                 <StatusIcon className={`h-6 w-6 mt-1 shrink-0 ${statusColor}`} />
+                 StatusIcon ? <StatusIcon className={`h-6 w-6 mt-1 shrink-0 ${statusInfo?.color}`} /> : null
             )}
             <div className="flex-grow">
               <p className="font-semibold">{task.title}</p>
-              <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                  <span>Criada em: {format(parseISO(createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</span>
-              </div>
+              {!isLegacy && createdAt ? (
+                <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:gap-4">
+                    <span>Criada em: {format(parseISO(createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</span>
+                </div>
+              ) : null}
               {task.description && <p className="text-xs text-muted-foreground mt-1">{task.description}</p>}
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline">{statusLabel}</Badge>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => { e.stopPropagation(); setTaskToDelete(task); }}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
+              <Badge variant="outline">{isLegacy ? task.type : statusInfo?.label}</Badge>
+              {!isLegacy ? (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => { e.stopPropagation(); if (!isLegacy) setTaskToDelete(task); }}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              ) : null}
             </div>
           </div>
         )

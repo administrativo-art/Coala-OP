@@ -89,7 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [permissionsReady, setPermissionsReady] = useState(false);
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
-  const router = useRouter();
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -106,10 +105,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (user) {
-        if (profilesLoading) {
-            return;
-        }
-
         const userDocRef = doc(db, 'users', user.uid);
         let userDocSnap;
 
@@ -145,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribeAuth();
-  }, [profilesLoading, adminProfileId]);
+  }, []);
 
   useEffect(() => {
     if (profilesLoading) return; 
@@ -200,8 +195,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     
     const userProfile = profiles.find(p => p.id === appUser.profileId);
-    
-    if (userProfile?.isDefaultAdmin) {
+    const isDefaultAdminProfile =
+      userProfile?.isDefaultAdmin === true ||
+      appUser.profileId === adminProfileId;
+
+    if (isDefaultAdminProfile) {
       setPermissions(defaultAdminPermissions);
       setPermissionsReady(true);
       return;

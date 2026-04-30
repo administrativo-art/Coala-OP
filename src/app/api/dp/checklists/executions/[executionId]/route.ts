@@ -11,6 +11,10 @@ import {
   validateSectionAssetRequirements,
 } from "@/features/dp-checklists/lib/core";
 import { checklistExecutionUpdateSchema } from "@/features/dp-checklists/lib/schemas";
+import {
+  assertLegacyChecklistReadAllowed,
+  assertLegacyChecklistWriteAllowed,
+} from "@/features/dp-checklists/lib/rollout";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   appendChecklistAudit,
@@ -29,6 +33,7 @@ export async function GET(
   context: { params: Promise<{ executionId: string }> }
 ) {
   try {
+    await assertLegacyChecklistReadAllowed();
     const access = await assertDPChecklistAccess(request, "operate");
     void access;
     const { executionId } = await context.params;
@@ -261,6 +266,7 @@ export async function PATCH(
   context: { params: Promise<{ executionId: string }> }
 ) {
   try {
+    await assertLegacyChecklistWriteAllowed();
     const access = await assertDPChecklistAccess(request, "operate");
     const actor = await loadChecklistActor(access.decoded.uid);
     const { executionId } = await context.params;

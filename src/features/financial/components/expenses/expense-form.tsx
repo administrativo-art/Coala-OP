@@ -20,6 +20,7 @@ import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency } from "@/features/financial/lib/utils";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
+import { fetchWithTimeout } from "@/lib/fetch-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -55,6 +56,15 @@ function flattenAccountTree(nodes: any[], level = 0): any[] {
     { ...node, level, isParent: node.children.length > 0 },
     ...flattenAccountTree(node.children, level + 1),
   ]);
+}
+
+async function parseFinancialApiError(response: Response) {
+  try {
+    const payload = await response.json();
+    return payload?.error || "Erro ao carregar despesa.";
+  } catch {
+    return "Erro ao carregar despesa.";
+  }
 }
 
 function DatePickerField({
@@ -284,10 +294,36 @@ export function ExpenseForm() {
       if (!editId) return;
       setIsLoadingExpense(true);
       try {
-        const snapshot = await getDoc(financialDoc("expenses", editId));
-        if (!snapshot.exists() || !active) return;
+        let data: any = null;
 
-        const data = snapshot.data();
+        try {
+          const snapshot = await getDoc(financialDoc("expenses", editId));
+          if (!snapshot.exists() || !active) return;
+          data = snapshot.data();
+        } catch (clientReadError) {
+          if (!firebaseUser) throw clientReadError;
+
+          const token = await firebaseUser.getIdToken();
+          const response = await fetchWithTimeout(
+            `/api/financial/data?path=${encodeURIComponent(`expenses/${editId}`)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+              cache: "no-store",
+            },
+            20000
+          );
+
+          if (!response.ok) {
+            throw new Error(await parseFinancialApiError(response));
+          }
+
+          const payload = await response.json();
+          data = payload?.doc ?? null;
+          if (!data || !active) return;
+        }
+
         const resetData: any = {
           accountPlan: data.accountPlan,
           description: data.description,
@@ -333,7 +369,7 @@ export function ExpenseForm() {
     return () => {
       active = false;
     };
-  }, [editId, form, toast]);
+  }, [editId, firebaseUser, form, toast]);
 
   const equalInstallments = useMemo<InstallmentPreview[]>(() => {
     if (

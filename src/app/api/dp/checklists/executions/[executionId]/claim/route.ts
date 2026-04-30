@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { assertLegacyChecklistWriteAllowed } from "@/features/dp-checklists/lib/rollout";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   appendChecklistAudit,
@@ -16,6 +17,7 @@ export async function POST(
   context: { params: Promise<{ executionId: string }> }
 ) {
   try {
+    await assertLegacyChecklistWriteAllowed();
     const access = await assertDPChecklistAccess(request, "operate");
     const actor = await loadChecklistActor(access.decoded.uid);
     const { executionId } = await context.params;

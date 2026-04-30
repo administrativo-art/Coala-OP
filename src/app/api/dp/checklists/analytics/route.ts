@@ -2,6 +2,7 @@ import { addDays, format, parseISO } from "date-fns";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getChecklistExecutionMetrics } from "@/features/dp-checklists/lib/core";
+import { assertLegacyChecklistReadAllowed } from "@/features/dp-checklists/lib/rollout";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   checklistDbAdmin,
@@ -57,6 +58,7 @@ function getTaskCounts(tasks: OperationalTask[]) {
 
 export async function GET(request: NextRequest) {
   try {
+    await assertLegacyChecklistReadAllowed();
     await assertDPChecklistAccess(request, "view");
 
     const { searchParams } = new URL(request.url);

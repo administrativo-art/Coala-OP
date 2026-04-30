@@ -27,7 +27,7 @@ export interface PurchaseContextType {
 export const PurchaseContext = createContext<PurchaseContextType | undefined>(undefined);
 
 export function PurchaseProvider({ children }: { children: React.ReactNode }) {
-    const { user } = useAuth();
+    const { user, permissions } = useAuth();
     const { products } = useProducts();
     const { baseProducts } = useBaseProducts();
     
@@ -60,6 +60,13 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
     }, [products, baseProducts]);
 
     useEffect(() => {
+        if (!(permissions?.stock?.purchasing?.view ?? false)) {
+            setSessions([]);
+            setItems([]);
+            setPriceHistory([]);
+            setLoading(false);
+            return;
+        }
         const qSessions = query(collection(db, "purchaseSessions"));
         const unsubscribeSessions = onSnapshot(qSessions, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseSession));
@@ -89,7 +96,7 @@ export function PurchaseProvider({ children }: { children: React.ReactNode }) {
             unsubscribeItems();
             unsubscribeHistory();
         };
-    }, []);
+    }, [permissions?.stock?.purchasing?.view]);
 
      const addSession = useCallback(async (data: Omit<PurchaseSession, 'id' | 'userId' | 'status' | 'createdAt' | 'closedAt' | 'entityId'>) => {
         if (!user) return null;

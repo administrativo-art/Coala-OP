@@ -1,163 +1,143 @@
-
-
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type ReturnRequest, type ReturnRequestHistoricoItem } from '@/types';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, runTransaction } from 'firebase/firestore';
-import { useAuth } from '@/hooks/use-auth';
-import { useProducts } from '@/hooks/use-products';
-import { format, addDays } from 'date-fns';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from "react";
+import { type ReturnRequest } from "@/types";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  createReturnRequest,
+  deleteReturnRequestRequest,
+  fetchReturnRequests,
+  updateReturnRequestRequest,
+} from "@/features/return-requests/lib/client";
 
 export interface ReturnRequestContextType {
   requests: ReturnRequest[];
   loading: boolean;
-  addReturnRequest: (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; }) => Promise<void>;
-  updateReturnRequest: (requestId: string, payload: Partial<ReturnRequest>) => Promise<void>;
+  addReturnRequest: (data: {
+    tipo: "devolucao" | "bonificacao";
+    insumoId: string;
+    lote: string;
+    quantidade: number;
+    motivo: string;
+  }) => Promise<void>;
+  updateReturnRequest: (
+    requestId: string,
+    payload: Partial<ReturnRequest>
+  ) => Promise<void>;
   deleteReturnRequest: (requestId: string) => Promise<void>;
 }
 
-export const ReturnRequestContext = createContext<ReturnRequestContextType | undefined>(undefined);
+export const ReturnRequestContext = createContext<
+  ReturnRequestContextType | undefined
+>(undefined);
 
 export function ReturnsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  const { products, getProductFullName } = useProducts();
+  const { permissions, firebaseUser } = useAuth();
   const [requests, setRequests] = useState<ReturnRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, "returnRequests"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ReturnRequest));
-      setRequests(data.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    if (!(permissions?.stock?.returns?.view ?? false) || !firebaseUser) {
+      setRequests([]);
       setLoading(false);
-    }, (error) => {
-        console.error("Error fetching return requests from Firestore: ", error);
-        setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const addReturnRequest = useCallback(async (data: { tipo: 'devolucao' | 'bonificacao'; insumoId: string; lote: string; quantidade: number; motivo: string; }) => {
-    if (!user) throw new Error("Usuário não autenticado.");
-    const product = products.find(p => p.id === data.insumoId);
-    if (!product) throw new Error("Produto não encontrado.");
-
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const counterRef = doc(db, 'counters', `returnRequests_${today}`);
-    const newRequestRef = doc(collection(db, 'returnRequests'));
-
-    try {
-        await runTransaction(db, async (transaction) => {
-            const counterDoc = await transaction.get(counterRef);
-            const newCount = (counterDoc.data()?.count || 0) + 1;
-            
-            const prefix = data.tipo === 'devolucao' ? 'DEV' : 'BON';
-            const dateStr = today.replace(/-/g, '');
-            const sequence = newCount.toString().padStart(4, '0');
-            const newNumero = `${prefix}-${dateStr}-${sequence}`;
-
-            const now = new Date();
-            const dataPrevisaoRetorno = addDays(now, 45);
-
-            const newRequest: Omit<ReturnRequest, 'id'> = {
-                ...data,
-                numero: newNumero,
-                insumoNome: getProductFullName(product),
-                status: 'em_andamento',
-                dataPrevisaoRetorno: dataPrevisaoRetorno.toISOString(),
-                historico: [{
-                    statusAnterior: 'em_andamento',
-                    statusNovo: 'em_andamento',
-                    changedBy: { userId: user.id, username: user.username },
-                    changedAt: now.toISOString(),
-                    detalhes: "Chamado criado."
-                }],
-                checklist: {},
-                createdAt: now.toISOString(),
-                updatedAt: now.toISOString(),
-                createdBy: { userId: user.id, username: user.username },
-            };
-            
-            transaction.set(newRequestRef, newRequest);
-            transaction.set(counterRef, { count: newCount }, { merge: true });
-        });
-
-    } catch (error) {
-        console.error("Error creating return request:", error);
-        throw error;
+      return;
     }
-  }, [user, products, getProductFullName]);
-  
-  const updateReturnRequest = useCallback(async (requestId: string, payload: Partial<ReturnRequest>) => {
-    if (!user) throw new Error("Usuário não autenticado.");
-    const requestRef = doc(db, "returnRequests", requestId);
-    
-    try {
-        await runTransaction(db, async (transaction) => {
-            const requestDoc = await transaction.get(requestRef);
-            if (!requestDoc.exists()) {
-                throw "Document does not exist!";
-            }
-            
-            const currentRequest = requestDoc.data() as ReturnRequest;
-            const now = new Date().toISOString();
-            
-            const updateData: Partial<ReturnRequest> = {
-                ...payload,
-                updatedAt: now,
-            };
 
-            if (payload.status && payload.status !== currentRequest.status) {
-                const historyItem: ReturnRequestHistoricoItem = {
-                    statusAnterior: currentRequest.status,
-                    statusNovo: payload.status,
-                    changedBy: { userId: user.id, username: user.username },
-                    changedAt: now,
-                };
-                
-                if (payload.detalhesResultado) {
-                    historyItem.detalhes = payload.detalhesResultado;
-                }
+    const currentFirebaseUser = firebaseUser;
 
-                updateData.historico = [...currentRequest.historico, historyItem];
-            } else if (currentRequest.historico) {
-                updateData.historico = currentRequest.historico;
-            }
+    let isMounted = true;
 
-            // Firestore does not allow `undefined` values. We need to clean them up.
-            Object.keys(updateData).forEach(keyStr => {
-              const key = keyStr as keyof typeof updateData;
-              if (updateData[key] === undefined) {
-                delete updateData[key];
-              }
-            });
-
-            transaction.update(requestRef, updateData);
-        });
-    } catch(error) {
-        console.error("Error updating return request:", error);
+    async function load() {
+      try {
+        const payload = await fetchReturnRequests(currentFirebaseUser);
+        if (isMounted) {
+          setRequests(payload.requests);
+        }
+      } catch (error) {
+        console.error("Error fetching return requests:", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     }
-  }, [user]);
 
-  const deleteReturnRequest = useCallback(async (requestId: string) => {
-    try {
-        await deleteDoc(doc(db, "returnRequests", requestId));
-    } catch (error) {
-        console.error("Error deleting return request:", error);
-        throw error;
-    }
-  }, []);
+    void load();
+    const intervalId = window.setInterval(() => {
+      void load();
+    }, 30000);
 
-  const value: ReturnRequestContextType = useMemo(() => ({
-    requests,
-    loading,
-    addReturnRequest,
-    updateReturnRequest,
-    deleteReturnRequest,
-  }), [requests, loading, addReturnRequest, updateReturnRequest, deleteReturnRequest]);
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [permissions?.stock?.returns?.view, firebaseUser]);
 
-  return <ReturnRequestContext.Provider value={value}>{children}</ReturnRequestContext.Provider>;
+  const addReturnRequest = useCallback(
+    async (data: {
+      tipo: "devolucao" | "bonificacao";
+      insumoId: string;
+      lote: string;
+      quantidade: number;
+      motivo: string;
+    }) => {
+      if (!firebaseUser) return;
+
+      const payload = await createReturnRequest(firebaseUser, data);
+      setRequests((current) =>
+        [payload.request, ...current].sort(
+          (left, right) =>
+            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+        )
+      );
+    },
+    [firebaseUser]
+  );
+
+  const updateReturnRequest = useCallback(
+    async (requestId: string, payload: Partial<ReturnRequest>) => {
+      if (!firebaseUser) return;
+
+      const response = await updateReturnRequestRequest(
+        firebaseUser,
+        requestId,
+        payload
+      );
+      setRequests((current) =>
+        current.map((request) =>
+          request.id === requestId ? response.request : request
+        )
+      );
+    },
+    [firebaseUser]
+  );
+
+  const deleteReturnRequest = useCallback(
+    async (requestId: string) => {
+      if (!firebaseUser) return;
+
+      await deleteReturnRequestRequest(firebaseUser, requestId);
+      setRequests((current) =>
+        current.filter((request) => request.id !== requestId)
+      );
+    },
+    [firebaseUser]
+  );
+
+  const value: ReturnRequestContextType = useMemo(
+    () => ({
+      requests,
+      loading,
+      addReturnRequest,
+      updateReturnRequest,
+      deleteReturnRequest,
+    }),
+    [requests, loading, addReturnRequest, updateReturnRequest, deleteReturnRequest]
+  );
+
+  return (
+    <ReturnRequestContext.Provider value={value}>
+      {children}
+    </ReturnRequestContext.Provider>
+  );
 }

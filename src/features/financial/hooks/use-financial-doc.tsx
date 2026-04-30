@@ -6,6 +6,43 @@ import {
   type DocumentData,
   type DocumentReference,
 } from "firebase/firestore";
+import { auth } from "@/lib/firebase";
+import { fetchWithTimeout } from "@/lib/fetch-utils";
+
+async function parseError(response: Response) {
+  try {
+    const payload = await response.json();
+    return payload?.error || "Falha ao carregar documento financeiro.";
+  } catch {
+    return "Falha ao carregar documento financeiro.";
+  }
+}
+
+async function loadFinancialDocFallback<T = DocumentData>(path: string) {
+  const firebaseUser = auth.currentUser;
+  if (!firebaseUser) {
+    throw new Error("Usuário não autenticado para consultar documento financeiro.");
+  }
+
+  const token = await firebaseUser.getIdToken();
+  const response = await fetchWithTimeout(
+    `/api/financial/data?path=${encodeURIComponent(path)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    },
+    20000
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const payload = await response.json();
+  return ((payload?.doc as (T & { id: string }) | null | undefined) ?? null);
+}
 
 export function useFinancialDoc<T = DocumentData>(
   reference: DocumentReference<T> | null
@@ -44,6 +81,26 @@ export function useFinancialDoc<T = DocumentData>(
         setData(snapshot.exists() ? ({ ...(snapshot.data() as T), id: snapshot.id }) : null);
         setError(null);
       } catch (snapshotError) {
+        if (ref.path) {
+          try {
+            const fallbackData = await loadFinancialDocFallback<T>(ref.path);
+            if (cancelled) return;
+            setData(fallbackData);
+            setError(null);
+            return;
+          } catch (fallbackError) {
+            if (cancelled) return;
+            setError(
+              fallbackError instanceof Error
+                ? fallbackError
+                : snapshotError instanceof Error
+                ? snapshotError
+                : new Error("Falha ao carregar documento financeiro.")
+            );
+            return;
+          }
+        }
+
         if (cancelled) return;
         setError(snapshotError instanceof Error ? snapshotError : new Error("Falha ao carregar documento financeiro."));
       } finally {

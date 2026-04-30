@@ -10,14 +10,26 @@ import { type PricingParameters } from '@/types';
 interface CompanySettings {
     labelSizeId?: string | null;
     pricingParameters?: PricingParameters;
+    purchasingDefaults?: {
+      goodsAccountPlanId?: string | null;
+      freightAccountPlanId?: string | null;
+    };
 }
 
 export interface CompanySettingsContextType {
   labelSizeId: string | null;
   pricingParameters: PricingParameters | null;
+  purchasingDefaults: {
+    goodsAccountPlanId: string | null;
+    freightAccountPlanId: string | null;
+  };
   loading: boolean;
   updateLabelSize: (sizeId: string | null) => Promise<void>;
   updatePricingParameters: (params: PricingParameters) => Promise<void>;
+  updatePurchasingDefaults: (defaults: {
+    goodsAccountPlanId: string | null;
+    freightAccountPlanId: string | null;
+  }) => Promise<void>;
 }
 
 export const CompanySettingsContext = createContext<CompanySettingsContextType | undefined>(undefined);
@@ -36,6 +48,10 @@ const defaultPricingParameters: PricingParameters = {
 export function CompanySettingsProvider({ children }: { children: React.ReactNode }) {
   const [labelSizeId, setLabelSizeId] = useState<string | null>('6080');
   const [pricingParameters, setPricingParameters] = useState<PricingParameters | null>(defaultPricingParameters);
+  const [purchasingDefaults, setPurchasingDefaults] = useState({
+    goodsAccountPlanId: null as string | null,
+    freightAccountPlanId: null as string | null,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -60,11 +76,19 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
                       : defaultPricingParameters.profitRanges,
               };
               setPricingParameters(validatedParams);
+              setPurchasingDefaults({
+                goodsAccountPlanId: data.purchasingDefaults?.goodsAccountPlanId ?? null,
+                freightAccountPlanId: data.purchasingDefaults?.freightAccountPlanId ?? null,
+              });
           } else {
               // If doc doesn't exist, create it with defaults
               setDoc(settingsRef, {
                   labelSizeId: '6080',
                   pricingParameters: defaultPricingParameters,
+                  purchasingDefaults: {
+                    goodsAccountPlanId: null,
+                    freightAccountPlanId: null,
+                  },
               });
           }
           setLoading(false);
@@ -99,14 +123,29 @@ export function CompanySettingsProvider({ children }: { children: React.ReactNod
         throw error;
     }
   }, []);
+
+  const updatePurchasingDefaults = useCallback(async (defaults: {
+    goodsAccountPlanId: string | null;
+    freightAccountPlanId: string | null;
+  }) => {
+    const settingsRef = doc(db, 'settings', 'company');
+    try {
+      await setDoc(settingsRef, { purchasingDefaults: defaults }, { merge: true });
+    } catch (error) {
+      console.error("Error updating purchasing defaults:", error);
+      throw error;
+    }
+  }, []);
   
   const value: CompanySettingsContextType = useMemo(() => ({
     labelSizeId,
     pricingParameters,
+    purchasingDefaults,
     loading,
     updateLabelSize,
     updatePricingParameters,
-  }), [labelSizeId, pricingParameters, loading, updateLabelSize, updatePricingParameters]);
+    updatePurchasingDefaults,
+  }), [labelSizeId, pricingParameters, purchasingDefaults, loading, updateLabelSize, updatePricingParameters, updatePurchasingDefaults]);
 
   return <CompanySettingsContext.Provider value={value}>{children}</CompanySettingsContext.Provider>;
 }

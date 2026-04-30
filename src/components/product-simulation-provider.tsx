@@ -2,13 +2,15 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type ProductSimulation, type ProductSimulationItem, type SimulationPriceHistory, type SimulationChangeHistory, type PricingParameters } from '@/types';
+import { type EffectivePriceResolution, type PriceOverride, type ProductSimulation, type ProductSimulationItem, type SimulationPriceHistory } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs, runTransaction } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
+import { useChannels } from '@/hooks/use-channels';
 import { convertValue } from '@/lib/conversion';
+import { buildPriceOverrideId, calculateSimulationMetrics, resolveEffectivePrice } from '@/lib/pricing-context';
 
 interface SimulationData {
     name: string;
@@ -30,6 +32,15 @@ interface SimulationData {
     ppo?: ProductSimulation['ppo'];
 }
 
+interface PriceOverrideInput {
+    simulationId: string;
+    unitId: string | null;
+    channelId: string | null;
+    finalPrice: number | null;
+    available: boolean;
+    updatedAt?: string;
+}
+
 interface BulkUpdatePayload {
     status: { action: 'keep' | 'set', value?: 'active' | 'archived' };
     kiosk: { action: 'keep' | 'add' | 'remove' | 'set', ids: string[] };
@@ -46,22 +57,29 @@ export interface ProductSimulationContextType {
   simulations: ProductSimulation[];
   simulationItems: ProductSimulationItem[];
   priceHistory: SimulationPriceHistory[];
+  priceOverrides: PriceOverride[];
   loading: boolean;
   addSimulation: (data: SimulationData) => Promise<void>;
   updateSimulation: (data: Partial<Omit<ProductSimulation, 'totalCmv' | 'profitValue' | 'profitPercentage' | 'markup'>> & { id: string, items?: SimulationData['items'] }) => Promise<void>;
   deleteSimulation: (simulationId: string) => Promise<void>;
   bulkUpdateSimulations: (simulations: ProductSimulation[], updates: BulkUpdatePayload) => Promise<void>;
+  upsertPriceOverride: (data: PriceOverrideInput) => Promise<void>;
+  deletePriceOverride: (overrideId: string) => Promise<void>;
+  getSimulationOverrides: (simulationId: string) => PriceOverride[];
+  resolveSimulationPrice: (simulation: ProductSimulation, unitId: string | null, channelId: string | null) => EffectivePriceResolution;
 }
 
 export const ProductSimulationContext = createContext<ProductSimulationContextType | undefined>(undefined);
 
 export function ProductSimulationProvider({ children }: { children: React.ReactNode }) {
-    const { user } = useAuth();
+    const { user, permissions } = useAuth();
     const { baseProducts, loading: loadingBases } = useBaseProducts();
     const { pricingParameters } = useCompanySettings();
+    const { channels } = useChannels();
     const [rawSimulations, setRawSimulations] = useState<ProductSimulation[]>([]);
     const [simulationItems, setSimulationItems] = useState<ProductSimulationItem[]>([]);
     const [priceHistory, setPriceHistory] = useState<SimulationPriceHistory[]>([]);
+    const [priceOverrides, setPriceOverrides] = useState<PriceOverride[]>([]);
     const [loading, setLoading] = useState(true);
 
     const simulations = useMemo(() => {
@@ -99,24 +117,29 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             const salePrice = sim.salePrice || 0;
             const taxPercent = pricingParameters?.averageTaxPercentage || 0;
             const feePercent = pricingParameters?.averageCardFeePercentage || 0;
-
-            const netRevenue = salePrice * (1 - (taxPercent / 100) - (feePercent / 100));
-            const profitValue = netRevenue - totalCmv;
-            const profitPercentage = salePrice > 0 ? (profitValue / salePrice) * 100 : 0;
-            const markup = totalCmv > 0 ? (salePrice / totalCmv) - 1 : 0;
+            const metrics = calculateSimulationMetrics(salePrice, totalCmv, taxPercent, feePercent);
             
             return {
                 ...sim,
                 totalCmv,
-                profitValue,
-                profitPercentage,
-                markup,
+                profitValue: metrics.profitValue,
+                profitPercentage: metrics.profitPercentage,
+                markup: metrics.markup,
             };
         });
 
     }, [rawSimulations, simulationItems, baseProducts, loading, pricingParameters]);
 
     useEffect(() => {
+        const canRead = permissions?.pricing?.view || permissions?.dashboard?.technicalSheets;
+        if (!canRead) {
+            setRawSimulations([]);
+            setSimulationItems([]);
+            setPriceHistory([]);
+            setPriceOverrides([]);
+            setLoading(false);
+            return;
+        }
         const qSims = query(collection(db, "productSimulations"));
         const unsubSims = onSnapshot(qSims, (snapshot) => {
             const data = snapshot.docs.map(doc => {
@@ -152,12 +175,106 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             console.error("Error fetching price history:", error);
         });
 
+        const qOverrides = query(collection(db, "priceOverrides"));
+        const unsubOverrides = onSnapshot(qOverrides, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PriceOverride));
+            setPriceOverrides(data.sort((a, b) => a.id.localeCompare(b.id)));
+        }, (error) => {
+            console.error("Error fetching price overrides:", error);
+        });
+
         return () => {
             unsubSims();
             unsubItems();
             unsubHistory();
+            unsubOverrides();
         };
-    }, [loadingBases]);
+    }, [loadingBases, permissions?.pricing?.view, permissions?.dashboard?.technicalSheets]);
+
+    const getSimulationOverrides = useCallback((simulationId: string) => {
+        return priceOverrides.filter(override => override.simulationId === simulationId);
+    }, [priceOverrides]);
+
+    const resolveSimulationPrice = useCallback((simulation: ProductSimulation, unitId: string | null, channelId: string | null) => {
+        return resolveEffectivePrice(simulation, unitId, channelId, channels, getSimulationOverrides(simulation.id));
+    }, [channels, getSimulationOverrides]);
+
+    const validateOverrideScope = useCallback((simulation: ProductSimulation, unitId: string | null, channelId: string | null) => {
+        if (unitId === null && channelId === null) {
+            throw new Error('Override global não é permitido. Edite o preço base da mercadoria.');
+        }
+
+        if (unitId && !(simulation.kioskIds || []).includes(unitId)) {
+            throw new Error('Habilite a mercadoria nesta unidade antes de criar o override.');
+        }
+
+        if (channelId) {
+            const channel = channels.find(item => item.id === channelId);
+            if (!channel || !channel.active) {
+                throw new Error('Não é possível criar override para canal inativo.');
+            }
+        }
+    }, [channels]);
+
+    const deletePriceOverride = useCallback(async (overrideId: string) => {
+        await deleteDoc(doc(db, 'priceOverrides', overrideId));
+    }, []);
+
+    const upsertPriceOverride = useCallback(async (data: PriceOverrideInput) => {
+        if (!user) return;
+
+        const simulation = rawSimulations.find(item => item.id === data.simulationId);
+        if (!simulation) {
+            throw new Error('Mercadoria não encontrada.');
+        }
+
+        validateOverrideScope(simulation, data.unitId, data.channelId);
+
+        if (data.finalPrice === null || data.finalPrice === undefined) {
+            await deletePriceOverride(buildPriceOverrideId(data.simulationId, data.unitId, data.channelId));
+            return;
+        }
+
+        if (data.available && data.finalPrice <= 0) {
+            throw new Error('Preço zero ou negativo não é permitido para override disponível. Deixe o campo vazio ou use "Remover override".');
+        }
+
+        const overrideId = buildPriceOverrideId(data.simulationId, data.unitId, data.channelId);
+        const overrideRef = doc(db, 'priceOverrides', overrideId);
+        const now = new Date().toISOString();
+
+        await runTransaction(db, async (transaction) => {
+            const currentSnap = await transaction.get(overrideRef);
+            const current = currentSnap.exists() ? (currentSnap.data() as PriceOverride) : null;
+
+            if (current && data.updatedAt && current.updatedAt !== data.updatedAt) {
+                const conflictError = new Error('Conflito de edição. Atualize a matriz e tente novamente.');
+                (conflictError as Error & { status?: number }).status = 409;
+                throw conflictError;
+            }
+
+            const basePayload = {
+                simulationId: data.simulationId,
+                unitId: data.unitId,
+                channelId: data.channelId,
+                finalPrice: data.finalPrice,
+                available: data.available,
+                updatedAt: now,
+                updatedBy: { userId: user.id, username: user.username },
+            };
+
+            if (current) {
+                transaction.update(overrideRef, basePayload);
+                return;
+            }
+
+            transaction.set(overrideRef, {
+                ...basePayload,
+                createdAt: now,
+                createdBy: { userId: user.id, username: user.username },
+            });
+        });
+    }, [deletePriceOverride, rawSimulations, user, validateOverrideScope]);
 
     const addSimulation = useCallback(async (data: SimulationData) => {
         if (!user) return;
@@ -223,7 +340,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
         try {
             const batch = writeBatch(db);
-            
+
             const { createdAt, userId, ...restOfData } = simulationData;
             const updatePayload: Record<string, any> = {
               ...restOfData,
@@ -290,7 +407,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         } catch (error) {
             console.error("Error updating simulation:", error);
         }
-    }, [user, simulations]);
+    }, [user, simulations, getSimulationOverrides]);
 
     const deleteSimulation = useCallback(async (simulationId: string) => {
         try {
@@ -305,6 +422,10 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             const historyQuery = query(collection(db, "simulationPriceHistory"), where("simulationId", "==", simulationId));
             const historySnapshot = await getDocs(historyQuery);
             historySnapshot.forEach(doc => batch.delete(doc.ref));
+
+            const overridesQuery = query(collection(db, "priceOverrides"), where("simulationId", "==", simulationId));
+            const overridesSnapshot = await getDocs(overridesQuery);
+            overridesSnapshot.forEach(doc => batch.delete(doc.ref));
 
             await batch.commit();
         } catch (error) {
@@ -385,16 +506,12 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                     const { totalCmv } = sim;
                     const taxPercent = pricingParameters?.averageTaxPercentage || 0;
                     const feePercent = pricingParameters?.averageCardFeePercentage || 0;
-        
-                    const netRevenue = newSalePrice * (1 - (taxPercent / 100) - (feePercent / 100));
-                    const profitValue = netRevenue - totalCmv;
-                    const profitPercentage = newSalePrice > 0 ? (profitValue / newSalePrice) * 100 : 0;
-                    const markup = totalCmv > 0 ? (newSalePrice / totalCmv) - 1 : 0;
+                    const metrics = calculateSimulationMetrics(newSalePrice, totalCmv, taxPercent, feePercent);
                     
                     updatePayload.salePrice = newSalePrice;
-                    updatePayload.profitValue = profitValue;
-                    updatePayload.profitPercentage = profitPercentage;
-                    updatePayload.markup = markup;
+                    updatePayload.profitValue = metrics.profitValue;
+                    updatePayload.profitPercentage = metrics.profitPercentage;
+                    updatePayload.markup = metrics.markup;
                     
                     const historyRef = doc(collection(db, "simulationPriceHistory"));
                     const historyEntry: Omit<SimulationPriceHistory, 'id'> = {
@@ -414,7 +531,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             console.error("Error performing bulk simulation update:", error);
             throw error;
         }
-    }, [user, simulations, pricingParameters]);
+    }, [user, pricingParameters]);
 
 
     const value = useMemo(() => {
@@ -422,13 +539,18 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             simulations,
             simulationItems,
             priceHistory,
+            priceOverrides,
             loading,
             addSimulation,
             updateSimulation,
             deleteSimulation,
             bulkUpdateSimulations,
+            upsertPriceOverride,
+            deletePriceOverride,
+            getSimulationOverrides,
+            resolveSimulationPrice,
         }
-    }, [simulations, simulationItems, priceHistory, loading, addSimulation, updateSimulation, deleteSimulation, bulkUpdateSimulations, baseProducts]);
+    }, [simulations, simulationItems, priceHistory, priceOverrides, loading, addSimulation, updateSimulation, deleteSimulation, bulkUpdateSimulations, upsertPriceOverride, deletePriceOverride, getSimulationOverrides, resolveSimulationPrice, baseProducts]);
     
     return <ProductSimulationContext.Provider value={value}>{children}</ProductSimulationContext.Provider>;
 }

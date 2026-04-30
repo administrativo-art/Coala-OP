@@ -5,6 +5,8 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { type Entity } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
+import { useAuth } from '@/hooks/use-auth';
+import { canViewPurchasing } from '@/lib/purchasing-permissions';
 
 export interface EntitiesContextType {
   entities: Entity[];
@@ -17,10 +19,25 @@ export interface EntitiesContextType {
 export const EntitiesContext = createContext<EntitiesContextType | undefined>(undefined);
 
 export function EntitiesProvider({ children }: { children: React.ReactNode }) {
+  const { user, permissions, loading: authLoading } = useAuth();
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
+  const canRead =
+    Boolean(permissions?.registration?.view) ||
+    canViewPurchasing(permissions);
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
+    if (!user || !canRead) {
+      setEntities([]);
+      setLoading(false);
+      return;
+    }
+
     const q = query(collection(db, "entities"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const entitiesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Entity));
@@ -32,7 +49,7 @@ export function EntitiesProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [authLoading, canRead, user]);
 
   const addEntity = useCallback(async (entity: Omit<Entity, 'id'>) => {
     try {

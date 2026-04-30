@@ -58,8 +58,10 @@ import { TechnicalSheetViewerModal } from "./technical-sheet-viewer-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { useKiosks } from "@/hooks/use-kiosks";
+import { useChannels } from "@/hooks/use-channels";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { convertValue } from "@/lib/conversion";
+import { calculateSimulationMetrics } from "@/lib/pricing-context";
 import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
 import type { BlobProviderParams } from '@react-pdf/renderer';
 import { GerencialReportDocument } from './pdf/GerencialReportDocument';
@@ -87,12 +89,13 @@ type SortDirection = 'asc' | 'desc';
 
 
 export function PricingSimulator() {
-    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdateSimulations, priceHistory, updateSimulation } = useProductSimulation();
+    const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdateSimulations, priceHistory, updateSimulation, resolveSimulationPrice } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
     const { pricingParameters, loading: loadingParams } = useCompanySettings();
     const { permissions } = useAuth();
     const { kiosks, loading: kiosksLoading } = useKiosks();
+    const { channels } = useChannels();
     const { toast } = useToast();
     
     const [selectedSimulations, setSelectedSimulations] = useState<Set<string>>(new Set());
@@ -112,6 +115,8 @@ export function PricingSimulator() {
     const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
     const [groupFilters, setGroupFilters] = useState<Set<string>>(new Set());
     const [kioskFilter, setKioskFilter] = useState<string>("all");
+    const [contextUnitId, setContextUnitId] = useState<string>("all");
+    const [contextChannelId, setContextChannelId] = useState<string>("all");
 
     const [statusFilter, setStatusFilter] = useState<Set<'sem_meta' | 'na_meta' | 'abaixo'>>(new Set());
 
@@ -219,6 +224,38 @@ export function PricingSimulator() {
         return new Map(categories.map(c => [c.id, c]));
     }, [categories]);
 
+    const activeChannels = useMemo(() => channels.filter(channel => channel.active), [channels]);
+
+    const contextualSimulations = useMemo(() => {
+        if (contextUnitId === 'all' && contextChannelId === 'all') {
+            return simulations;
+        }
+
+        return simulations.map((simulation) => {
+            const resolved = resolveSimulationPrice(
+                simulation,
+                contextUnitId === 'all' ? null : contextUnitId,
+                contextChannelId === 'all' ? null : contextChannelId
+            );
+            const metrics = calculateSimulationMetrics(
+                resolved.price ?? 0,
+                simulation.totalCmv || 0,
+                pricingParameters?.averageTaxPercentage || 0,
+                pricingParameters?.averageCardFeePercentage || 0
+            );
+
+            return {
+                ...simulation,
+                salePrice: resolved.price ?? 0,
+                profitValue: metrics.profitValue,
+                profitPercentage: metrics.profitPercentage,
+                markup: metrics.markup,
+                contextAvailable: resolved.available,
+                contextSource: resolved.source,
+            };
+        });
+    }, [contextUnitId, contextChannelId, simulations, resolveSimulationPrice, pricingParameters]);
+
     const { filteredSimulations, archivedSimulations } = useMemo(() => {
         const filterFn = (sim: ProductSimulation) => {
             const searchMatch = searchTerm ? (sim.name.toLowerCase().includes(searchTerm.toLowerCase()) || (sim.ppo?.sku || '').toLowerCase().includes(searchTerm.toLowerCase())) : true;
@@ -271,11 +308,11 @@ export function PricingSimulator() {
             return sortConfig.direction === 'asc' ? comparison : -comparison;
         };
 
-        const active = simulations.filter(s => !s.isArchived && filterFn(s)).sort(sortFn);
-        const archived = simulations.filter(s => s.isArchived && filterFn(s)).sort(sortFn);
+        const active = contextualSimulations.filter(s => !s.isArchived && filterFn(s)).sort(sortFn);
+        const archived = contextualSimulations.filter(s => s.isArchived && filterFn(s)).sort(sortFn);
         return { filteredSimulations: active, archivedSimulations: archived };
 
-    }, [simulations, searchTerm, categoryFilters, lineFilters, groupFilters, sortConfig, kioskFilter, statusFilter]);
+    }, [contextualSimulations, searchTerm, categoryFilters, lineFilters, groupFilters, sortConfig, kioskFilter, statusFilter]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -973,7 +1010,31 @@ export function PricingSimulator() {
                             </div>
                             
                             {/* Right side search */}
-                            <div className="flex items-center gap-2 w-full xl:w-auto">
+                            <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
+                                <Select value={contextUnitId} onValueChange={setContextUnitId}>
+                                    <SelectTrigger className="h-10 rounded-xl w-full sm:w-[220px]">
+                                        <SelectValue placeholder="Todas as unidades" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todas as unidades</SelectItem>
+                                        {kiosks.map((kiosk) => (
+                                            <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+
+                                <Select value={contextChannelId} onValueChange={setContextChannelId}>
+                                    <SelectTrigger className="h-10 rounded-xl w-full sm:w-[220px]">
+                                        <SelectValue placeholder="Todos os canais" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todos os canais</SelectItem>
+                                        {activeChannels.map((channel) => (
+                                            <SelectItem key={channel.id} value={channel.id}>{channel.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+
                                 <div className="relative w-full xl:w-72">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                     <Input placeholder="Filtrar mercadorias..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 h-10 rounded-xl" />

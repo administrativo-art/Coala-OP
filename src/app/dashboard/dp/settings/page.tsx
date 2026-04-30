@@ -13,15 +13,15 @@ export default function DPSettingsIndexPage() {
 
     const target =
       (permissions.dp?.collaborators?.edit || permissions.dp?.collaborators?.terminate)
-        ? '/dashboard/dp/settings/collaborators'
+        ? '/dashboard/settings?department=pessoal&tab=users'
         : (permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit)
-          ? '/dashboard/dp/settings/roles'
+          ? '/dashboard/settings?department=pessoal&tab=roles'
         : permissions.dp?.settings?.manageUnits
-          ? '/dashboard/dp/settings/units'
-          : permissions.dp?.settings?.manageShifts
-            ? '/dashboard/dp/settings/shifts'
+          ? '/dashboard/settings?department=operacional&tab=units'
+        : permissions.dp?.settings?.manageShifts
+            ? '/dashboard/settings?department=pessoal&tab=shifts'
             : permissions.dp?.settings?.manageCalendars
-              ? '/dashboard/dp/settings/calendars'
+              ? '/dashboard/settings?department=pessoal&tab=calendars'
               : null;
 
     if (target) {

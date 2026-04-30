@@ -24,7 +24,12 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubscribeProfiles: (() => void) | null = null;
+
     const unsubAuth = onAuthStateChanged(auth, (user) => {
+      unsubscribeProfiles?.();
+      unsubscribeProfiles = null;
+
       if (!user) {
         setProfiles([]);
         setAdminProfileId(null);
@@ -32,8 +37,9 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      setLoading(true);
       const q = query(collection(db, "profiles"));
-      const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+      unsubscribeProfiles = onSnapshot(q, async (querySnapshot) => {
         let profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
 
         if (querySnapshot.empty && !localStorage.getItem('profiles_seeded')) {
@@ -104,11 +110,12 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
           console.error("Error fetching profiles:", error);
           setLoading(false);
       });
-
-      return () => unsubscribe();
     });
 
-    return () => unsubAuth();
+    return () => {
+      unsubscribeProfiles?.();
+      unsubAuth();
+    };
   }, []);
 
   const addProfile = useCallback(async (profile: Omit<Profile, 'id'>) => {

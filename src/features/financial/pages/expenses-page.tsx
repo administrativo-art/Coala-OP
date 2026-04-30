@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { deleteDoc } from "firebase/firestore";
 import { format, isPast, startOfDay, addDays, endOfDay } from "date-fns";
+import { useSearchParams } from "next/navigation";
 import {
   CircleDollarSign,
   Clock,
@@ -46,6 +47,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 
 const STATUS_LABELS: Record<string, string> = {
+  pending_audit: "Pendente auditoria",
   paid: "Pago",
   cancelled: "Cancelado",
   overdue: "Vencido",
@@ -78,10 +80,12 @@ function KpiCard({
 export function ExpensesPage() {
   const { permissions } = useAuth();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
   const { data: expensesData, loading } = useFinancialCollection<any>(financialCollection("expenses"));
   const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accountPlans"));
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState(searchParams.get("search") ?? "");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") ?? "all");
+  const [originFilter, setOriginFilter] = useState(searchParams.get("origin") ?? "all");
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
@@ -103,6 +107,12 @@ export function ExpensesPage() {
     return map;
   }, [accountPlans]);
 
+  useEffect(() => {
+    setSearch(searchParams.get("search") ?? "");
+    setStatusFilter(searchParams.get("status") ?? "all");
+    setOriginFilter(searchParams.get("origin") ?? "all");
+  }, [searchParams]);
+
   const filtered = useMemo(() => {
     const now = startOfDay(new Date());
     return expenses
@@ -115,9 +125,17 @@ export function ExpensesPage() {
           planName.toLowerCase().includes(normalizedSearch) ||
           (expense.supplier || "").toLowerCase().includes(normalizedSearch);
 
+        const matchesOrigin =
+          originFilter === "all" ||
+          (originFilter === "purchasing" && expense.originModule === "purchasing") ||
+          (originFilter === "manual" && expense.originModule !== "purchasing");
+
         const due = toDate(expense.dueDate);
         let computedStatus = expense.status;
-        if (expense.status === "pending" && due) {
+        if (expense.originModule === "purchasing" && expense.originStatus === "pending_audit") {
+          computedStatus = "pending_audit";
+        }
+        if (computedStatus !== "pending_audit" && expense.status === "pending" && due) {
           if (isPast(due) && due < now) computedStatus = "overdue";
           else if (format(due, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")) computedStatus = "due_soon";
         }
@@ -125,12 +143,13 @@ export function ExpensesPage() {
         const matchesStatus =
           statusFilter === "all" ||
           (statusFilter === "pending" && ["pending", "due_soon", "overdue"].includes(computedStatus)) ||
+          computedStatus === "pending_audit" && statusFilter === "pending_audit" ||
           computedStatus === statusFilter;
 
-        return matchesSearch && matchesStatus;
+        return matchesSearch && matchesStatus && matchesOrigin;
       })
       .sort((a, b) => (toDate(b.createdAt)?.getTime() || 0) - (toDate(a.createdAt)?.getTime() || 0));
-  }, [accountPlanMap, expenses, search, statusFilter]);
+  }, [accountPlanMap, expenses, originFilter, search, statusFilter]);
 
   const kpis = useMemo(() => {
     const now = startOfDay(new Date());
@@ -241,9 +260,21 @@ export function ExpensesPage() {
               <SelectContent>
                 <SelectItem value="all">Todos os status</SelectItem>
                 <SelectItem value="pending">Em aberto</SelectItem>
+                <SelectItem value="pending_audit">Compras pendentes de auditoria</SelectItem>
                 <SelectItem value="overdue">Vencidos</SelectItem>
                 <SelectItem value="paid">Pagos</SelectItem>
                 <SelectItem value="cancelled">Cancelados</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={originFilter} onValueChange={setOriginFilter}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <CircleDollarSign className="mr-2 h-4 w-4 opacity-50" />
+                <SelectValue placeholder="Filtrar por origem" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as origens</SelectItem>
+                <SelectItem value="purchasing">Origem: Compras</SelectItem>
+                <SelectItem value="manual">Demais despesas</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length}>
@@ -285,7 +316,7 @@ export function ExpensesPage() {
                     const due = toDate(expense.dueDate);
                     const now = startOfDay(new Date());
                     let statusKey = expense.status;
-                    if (expense.status === "pending" && due) {
+                    if (statusKey !== "pending_audit" && expense.status === "pending" && due) {
                       if (due < now) statusKey = "overdue";
                       else if (format(due, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")) statusKey = "due_soon";
                     }
@@ -295,6 +326,19 @@ export function ExpensesPage() {
                         <td className="px-4 py-3">
                           <div>
                             <p className="font-medium">{expense.description}</p>
+                            {expense.originModule === "purchasing" && (
+                              <div className="mt-1 flex items-center gap-2">
+                                <span className="rounded-full border px-2 py-0.5 text-[11px]">Origem: Compras</span>
+                                {expense.purchaseOrderId && (
+                                  <Link
+                                    href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}`}
+                                    className="text-xs text-primary hover:underline"
+                                  >
+                                    Abrir pedido
+                                  </Link>
+                                )}
+                              </div>
+                            )}
                             {expense.notes && <p className="text-xs text-muted-foreground">{expense.notes}</p>}
                           </div>
                         </td>

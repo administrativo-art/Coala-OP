@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import {
+  assertLegacyChecklistReadAllowed,
+  assertLegacyChecklistWriteAllowed,
+} from "@/features/dp-checklists/lib/rollout";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   appendChecklistAudit,
@@ -37,6 +41,7 @@ const checklistTypeSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
+    await assertLegacyChecklistReadAllowed();
     await assertDPChecklistAccess(request, "view");
     const snap = await checklistDbAdmin
       .collection("checklistTypes")
@@ -56,6 +61,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await assertLegacyChecklistWriteAllowed();
     const access = await assertDPChecklistAccess(request, "manage");
     const actor = await loadChecklistActor(access.decoded.uid);
     const rawBody = await request.json();

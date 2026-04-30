@@ -34,7 +34,7 @@ export function ReportsDashboard() {
             
         // Pergunta que gerou mais tarefas (mantendo lógica, mas pode ser menos útil agora)
         const questionTaskCounts = tasks.reduce((acc, task) => {
-            if (task.origin.questionId) {
+            if ('questionId' in task.origin && task.origin.questionId) {
                 const questionId = task.origin.questionId;
                 acc[questionId] = (acc[questionId] || 0) + 1;
             }
@@ -48,7 +48,7 @@ export function ReportsDashboard() {
             
         // Formulário que gerou mais tarefas (mantendo lógica, mas pode ser menos útil agora)
         const formTaskCounts = tasks.reduce((acc, task) => {
-            if (task.origin.type === 'form') {
+            if (task.origin.kind === 'legacy' && task.origin.type === 'form') {
                 const templateId = task.origin.id;
                 acc[templateId] = (acc[templateId] || 0) + 1;
             }

@@ -219,6 +219,66 @@ export type SimulationCategory = {
   type: 'category' | 'line' | 'group';
 };
 
+export type SalesChannelType = 'balcao' | 'delivery_proprio' | 'ifood' | 'rappi' | 'custom';
+
+export type SalesChannelDefaultPriceRule = {
+  mode: 'none' | 'markup';
+  value: number;
+} | null;
+
+export type SalesChannel = {
+  id: string;
+  name: string;
+  type: SalesChannelType;
+  active: boolean;
+  defaultPriceRule: SalesChannelDefaultPriceRule;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: {
+    userId: string;
+    username: string;
+  };
+  updatedBy?: {
+    userId: string;
+    username: string;
+  };
+};
+
+export type PriceOverrideSource =
+  | 'override:unit+channel'
+  | 'override:unit'
+  | 'override:channel'
+  | 'channel-default-rule'
+  | 'global'
+  | 'unit-disabled'
+  | 'channel-inactive';
+
+export type PriceOverride = {
+  id: string;
+  simulationId: string;
+  unitId: string | null;
+  channelId: string | null;
+  finalPrice: number | null;
+  available: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: {
+    userId: string;
+    username: string;
+  };
+  updatedBy: {
+    userId: string;
+    username: string;
+  };
+};
+
+export type EffectivePriceResolution = {
+  price: number | null;
+  available: boolean;
+  source: PriceOverrideSource;
+  override: PriceOverride | null;
+};
+
 export type SimulationPriceHistory = {
   id: string;
   simulationId: string;
@@ -327,16 +387,16 @@ export type DailyLog = {
 export type PermissionSet = {
   dashboard: { view: boolean; operational: boolean; pricing: boolean; audit: boolean; technicalSheets: boolean; };
   registration: { view: boolean; items: { add: boolean; edit: boolean; delete: boolean; }; baseProducts: { add: boolean; edit: boolean; delete: boolean; }; entities: { add: boolean; edit: boolean; delete: boolean; }; };
-  stock: { 
-    view: boolean; 
-    inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; }; 
+  stock: {
+    view: boolean;
+    inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; };
     // `audit` permissions are now synced with `stockCount` for backward compatibility with Firestore rules, but UI uses `stockCount`.
-    stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; }; 
-    audit: { view: boolean; start: boolean; approve: boolean; }; 
-    analysis: { view: boolean, restock: boolean, consumption: boolean, projection: boolean, valuation: boolean }, 
-    purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; }; 
-    returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; }; 
-    conversions: { view: boolean }, 
+    stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; };
+    audit: { view: boolean; start: boolean; approve: boolean; };
+    analysis: { view: boolean, restock: boolean, consumption: boolean, projection: boolean, valuation: boolean },
+    purchasing: { view: boolean; suggest: boolean; approve: boolean; deleteHistory: boolean; };
+    returns: { view: boolean; add: boolean; updateStatus: boolean; delete: boolean; };
+    conversions: { view: boolean },
     predefinedLists: { view: true, manage: true }
   };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
@@ -364,6 +424,45 @@ export type PermissionSet = {
     dre: boolean;
     expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
     settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; };
+  };
+  purchasing: {
+    view: boolean;
+    createQuotation: boolean;
+    finalizeQuotation: boolean;
+    createPurchase: boolean;
+    receivePurchase: boolean;
+    cancelPurchase: boolean;
+    manageFinancialLink: boolean;
+    manageBaseItems: boolean;
+  };
+  // Conceptual groupers — granular fields defined in Plano Técnico de Formulários
+  hr: {
+    view: boolean;
+    employees: { view: boolean; manage: boolean };
+    org_chart: { view: boolean; manage: boolean };
+    roles: { view: boolean; manage: boolean; propagate: boolean };
+    functions: { view: boolean; manage: boolean };
+    navigation: { view: boolean };
+  };
+  recruitment: {
+    view: boolean;
+    manage: boolean;
+    pipeline: { view: boolean; manage: boolean };
+    templates: { view: boolean; manage: boolean };
+    talent_pool: { view: boolean; manage: boolean };
+    hire: boolean;
+  };
+  forms: {
+    global: {
+      view_all_projects: boolean;
+      create_projects: boolean;
+      manage_templates: boolean;
+      view_analytics: boolean;
+    };
+    projects: Record<
+      string,
+      { view: boolean; operate: boolean; manage: boolean }
+    >;
   };
 };
 
@@ -577,6 +676,8 @@ export type ProductDefinition = {
 export type BaseProduct = {
   id: string;
   name: string;
+  barcode?: string;
+  barcodes?: string[];
   classification?: string;
   category: UnitCategory;
   unit: string;
@@ -694,6 +795,7 @@ export type ReturnRequest = {
         userId: string;
         username: string;
     };
+    taskId?: string;
 };
 
 export type Entity = {
@@ -718,7 +820,7 @@ export type Entity = {
   responsible?: string; // Only for pessoa_juridica
 };
 
-// Purchase Module Types
+// Purchase Module Types (legacy — cotação v1)
 export type PurchaseItem = {
   id: string;
   sessionId: string;
@@ -743,6 +845,239 @@ export type PurchaseSession = {
   status: 'open' | 'closed';
   createdAt: string; // ISO String
   closedAt?: string; // ISO String
+};
+
+// ─── Purchasing v2 — Cotação ───────────────────────────────────────────────
+
+export type QuotationMode = 'remote' | 'in_loco';
+
+export type QuotationStatus =
+  | 'draft'
+  | 'quoted'
+  | 'partially_converted'
+  | 'converted'
+  | 'archived'
+  | 'expired'
+  | 'cancelled';
+
+export type Quotation = {
+  id: string;
+  workspaceId: string;
+  supplierId: string; // ref → entities collection
+  mode: QuotationMode;
+  status: QuotationStatus;
+  validUntil?: string; // ISO date
+  notes?: string;
+  createdAt: string;
+  createdBy: string; // userId
+  finalizedAt?: string;
+  archivedAt?: string;
+};
+
+export type QuotationItemConversionStatus = 'pending' | 'selected' | 'converted' | 'discarded';
+export type PurchaseUnitType = 'content' | 'logistic';
+
+export type QuotationItem = {
+  id: string;
+  quotationId: string;
+  baseItemId?: string; // ref → baseProducts; null = free item
+  productId?: string; // ref → products; used when the purchased derivative is known
+  freeText?: string;   // used when baseItemId is null
+  barcode?: string;    // EAN scanned in in_loco mode
+  unit: string;
+  purchaseUnitType?: PurchaseUnitType;
+  purchaseUnitLabel?: string;
+  quantity: number;
+  unitPrice: number;
+  discount?: number;
+  totalPrice: number;  // unitPrice * quantity
+  deliveryEstimateDays?: number;
+  observation?: string;
+  conversionStatus: QuotationItemConversionStatus;
+  convertedToPurchaseItemId?: string;
+};
+
+// ─── Purchasing v2 — Compra ────────────────────────────────────────────────
+
+export type PurchaseOrigin = 'quotation' | 'direct';
+export type PurchaseReceiptMode = 'future_delivery' | 'immediate_pickup';
+export type PaymentMethod = 'pix' | 'card_credit' | 'card_debit' | 'cash' | 'boleto' | 'term';
+export type PurchasePaymentCondition = 'cash' | 'installments';
+
+export type PurchaseOrderStatus = 'created' | 'confirmed' | 'cancelled';
+
+export type PurchaseOrder = {
+  id: string;
+  workspaceId: string;
+  origin: PurchaseOrigin;
+  quotationId?: string;
+  supplierId: string; // ref → entities collection
+  receiptMode: PurchaseReceiptMode;
+  status: PurchaseOrderStatus;
+  estimatedReceiptDate: string; // ISO date; equals createdAt for immediate_pickup
+  paymentDueDate: string;
+  paymentMethod: PaymentMethod;
+  paymentCondition?: PurchasePaymentCondition;
+  installmentsCount?: number;
+  accountPlanId?: string;
+  accountPlanName?: string;
+  freightAccountPlanId?: string;
+  freightAccountPlanName?: string;
+  resultCenterId?: string;
+  resultCenterName?: string;
+  deliveryFee?: number;
+  totalEstimated: number;
+  totalConfirmed?: number; // filled after receipt
+  notes?: string;
+  linkedExpenseId?: string;
+  createdAt: string;
+  createdBy: string; // userId
+  confirmedAt?: string;
+  confirmedBy?: string; // userId
+  receivedAt?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
+};
+
+export type PurchaseOrderItem = {
+  id: string;
+  purchaseOrderId: string;
+  baseItemId: string; // always required (item already normalized)
+  productId?: string; // ref → products; needed to confirm base-unit cost at purchase time
+  quotationItemId?: string; // null in direct purchases
+  unit: string;
+  purchaseUnitType?: PurchaseUnitType;
+  purchaseUnitLabel?: string;
+  quantityOrdered: number;
+  unitPriceOrdered: number;
+  discountOrdered?: number;
+  totalOrdered: number;
+  notes?: string;
+  // filled during receipt
+  quantityReceived?: number;
+  unitPriceConfirmed?: number;
+  totalConfirmed?: number;
+};
+
+// ─── Purchasing v2 — Recebimento ──────────────────────────────────────────
+
+export type PurchaseReceiptStatus =
+  | 'awaiting_delivery'       // future_delivery only
+  | 'in_conference'
+  | 'awaiting_stock'
+  | 'in_stock_entry'
+  | 'partially_stocked'
+  | 'stocked'
+  | 'stocked_with_divergence'
+  | 'cancelled';
+
+export type PurchaseReceipt = {
+  id: string;
+  workspaceId: string;
+  purchaseOrderId: string;
+  supplierId: string; // ref → entities collection
+  receiptMode: PurchaseReceiptMode;
+  status: PurchaseReceiptStatus;
+  expectedDate: string;
+  conferenceStartedAt?: string;
+  conferenceCompletedAt?: string;
+  stockEntryStartedAt?: string;
+  stockEnteredAt?: string;
+  receivedAt?: string;
+  totalExpected: number;
+  totalConfirmed?: number;
+  receiptProofUrl?: string;
+  receiptProofDescription?: string;
+  notes?: string;
+};
+
+export type PurchaseReceiptItemStatus = 'pending' | 'received' | 'partial' | 'divergent' | 'cancelled';
+
+export type PurchaseReceiptItem = {
+  id: string;
+  purchaseReceiptId: string;
+  purchaseOrderItemId: string;
+  baseItemId: string;
+  unit: string;
+  purchaseUnitType?: PurchaseUnitType;
+  purchaseUnitLabel?: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  unitPriceOrdered: number;
+  unitPriceConfirmed: number;
+  totalConfirmed: number;
+  status: PurchaseReceiptItemStatus;
+  divergenceReason?: string;
+  // subcollection lots are fetched separately; this array is used in-memory only
+  lots?: PurchaseReceiptLot[];
+};
+
+export type PurchaseReceiptLot = {
+  id: string;
+  purchaseReceiptItemId: string;
+  baseItemId: string;
+  lotCode: string; // e.g. MOR-2026-04-A
+  expiryDate?: string;
+  quantity: number; // quantidade recebida na unidade comprada
+  stockQuantity?: number; // quantidade convertida para a unidade de estoque
+  purchaseUnitType?: PurchaseUnitType;
+  purchaseUnitLabel?: string;
+  unitCost: number; // = unitPriceConfirmed
+  occurredAt?: string;
+};
+
+// ─── Purchasing v2 — Financeiro ───────────────────────────────────────────
+
+export type PurchaseFinancialStatus = 'forecasted' | 'confirmed' | 'divergent' | 'paid' | 'cancelled';
+
+export type PurchaseFinancial = {
+  id: string;
+  workspaceId: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  receiptMode: PurchaseReceiptMode;
+  status: PurchaseFinancialStatus;
+  accountPlanId?: string;
+  accountPlanName?: string;
+  freightAccountPlanId?: string;
+  freightAccountPlanName?: string;
+  resultCenterId?: string;
+  resultCenterName?: string;
+  deliveryFee?: number;
+  amountEstimated: number;
+  amountConfirmed?: number;
+  paymentMethod: PaymentMethod;
+  paymentDueDate: string;
+  paymentCondition?: PurchasePaymentCondition;
+  installmentsCount?: number;
+  linkedExpenseId?: string;
+  paidAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// ─── Purchasing v2 — Custo Efetivo ────────────────────────────────────────
+
+export type EffectiveCostEntry = {
+  id: string;
+  workspaceId: string;
+  baseItemId: string;   // ref → baseProducts
+  supplierId: string;   // ref → entities
+  unitCost: number; // custo por unidade base
+  quantity: number; // quantidade em unidade base
+  purchasePrice?: number; // preço pago na unidade comprada
+  purchaseQuantity?: number; // quantidade recebida na unidade comprada
+  purchaseUnitType?: PurchaseUnitType;
+  purchaseUnitLabel?: string;
+  stockProductId?: string;
+  stockProductQuantity?: number;
+  // full reverse traceability chain
+  purchaseReceiptId: string;
+  purchaseReceiptLotId: string;
+  purchaseOrderId: string;
+  quotationId?: string;
+  quotationItemId?: string;
+  occurredAt: string; // ISO date of receipt
 };
 
 
@@ -798,6 +1133,7 @@ export type SignatureData = {
 
 export type RepositionActivity = {
   id: string;
+  taskId?: string;
   status: RepositionActivityStatus;
   kioskOriginId: string;
   kioskOriginName: string;
@@ -876,6 +1212,41 @@ export const defaultGuestPermissions: PermissionSet = {
       expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
       settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false },
     },
+    purchasing: {
+      view: false,
+      createQuotation: false,
+      finalizeQuotation: false,
+      createPurchase: false,
+      receivePurchase: false,
+      cancelPurchase: false,
+      manageFinancialLink: false,
+      manageBaseItems: false,
+    },
+    hr: {
+      view: false,
+      employees: { view: false, manage: false },
+      org_chart: { view: false, manage: false },
+      roles: { view: false, manage: false, propagate: false },
+      functions: { view: false, manage: false },
+      navigation: { view: false },
+    },
+    recruitment: {
+      view: false,
+      manage: false,
+      pipeline: { view: false, manage: false },
+      templates: { view: false, manage: false },
+      talent_pool: { view: false, manage: false },
+      hire: false,
+    },
+    forms: {
+      global: {
+        view_all_projects: false,
+        create_projects: false,
+        manage_templates: false,
+        view_analytics: false,
+      },
+      projects: {},
+    },
 };
 
 
@@ -908,17 +1279,81 @@ export const defaultAdminPermissions: PermissionSet = {
       expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
       settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true },
     },
+    purchasing: {
+      view: true,
+      createQuotation: true,
+      finalizeQuotation: true,
+      createPurchase: true,
+      receivePurchase: true,
+      cancelPurchase: true,
+      manageFinancialLink: true,
+      manageBaseItems: true,
+    },
+    hr: {
+      view: true,
+      employees: { view: true, manage: true },
+      org_chart: { view: true, manage: true },
+      roles: { view: true, manage: true, propagate: true },
+      functions: { view: true, manage: true },
+      navigation: { view: true },
+    },
+    recruitment: {
+      view: true,
+      manage: true,
+      pipeline: { view: true, manage: true },
+      templates: { view: true, manage: true },
+      talent_pool: { view: true, manage: true },
+      hire: true,
+    },
+    forms: {
+      global: {
+        view_all_projects: true,
+        create_projects: true,
+        manage_templates: true,
+        view_analytics: true,
+      },
+      projects: {},
+    },
 };
 
 export const defaultUserPermissions: PermissionSet = { ...defaultGuestPermissions };
 
 
-export type TaskOrigin = {
-    type: 'form' | 'return_request' | 'stock_count_approval' | 'author_board_diary' | 'consumption-projection' | 'item_addition_request';
-    id: string; // ID of the originating document (e.g., submissionId, returnRequestId)
-    questionId?: string; // Optional: for tasks generated from specific form questions
-    details?: any;
-};
+export type LegacyTaskOriginType =
+  | 'form'
+  | 'return_request'
+  | 'reposition_activity'
+  | 'stock_count_approval'
+  | 'author_board_diary'
+  | 'consumption-projection'
+  | 'item_addition_request';
+
+export type TaskOrigin =
+  | {
+      kind: 'manual';
+      details?: any;
+    }
+  | {
+      kind: 'form_trigger';
+      execution_id: string;
+      template_item_id: string;
+      template_section_id: string;
+      questionId?: string;
+      details?: any;
+    }
+  | {
+      kind: 'purchase_receipt';
+      receipt_id: string;
+      purchase_order_id: string;
+      details?: any;
+    }
+  | {
+      kind: 'legacy';
+      type: LegacyTaskOriginType;
+      id: string; // ID do documento de origem legado
+      questionId?: string;
+      details?: any;
+    };
 
 export type TaskHistoryItem = {
     timestamp: string; // ISO string
@@ -941,6 +1376,8 @@ export interface LegacyTask {
 
 export type Task = {
     id: string;
+    projectId?: string;
+    statusId?: string;
     title: string;
     description?: string;
     status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
@@ -1470,4 +1907,69 @@ export type OperationalTask = {
   resolutionNotes?: string;
   createdAt: Timestamp | string;
   updatedAt: Timestamp | string;
+};
+
+// ─── New task motor — Etapa 8 (task_projects / task_statuses / tasks) ──────────
+
+export type TaskStatusCategory = 'not_started' | 'active' | 'done' | 'canceled';
+
+export type TaskStatusDoc = {
+  id: string;
+  project_id: string;
+  name: string;
+  slug: string;
+  category: TaskStatusCategory;
+  is_initial: boolean;
+  is_terminal: boolean;
+  order: number;
+  color?: string;
+};
+
+export type TaskProject = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description?: string;
+  members: { user_id: string; username: string; role: 'viewer' | 'operator' | 'manager' }[];
+  created_at: string;
+  updated_at: string;
+  created_by: { user_id: string; username: string };
+};
+
+// Origin data for tasks generated from a FormExecution
+export type FormOrigin = {
+  execution_id: string;
+  template_id: string;
+  form_project_id: string;
+  form_type_id: string;
+  form_subtype_id?: string;
+  // section_id: seção do FormExecution que originou a tarefa (rastreabilidade reversa)
+  section_id: string;
+  template_item_id: string;
+  trigger_id: string;
+};
+
+// Task in the project-based motor; id is deterministic SHA-256 via buildDeterministicTaskId()
+export type FormTask = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  status_id: string;
+  title: string;
+  description?: string;
+  assignee_type: 'user' | 'role';
+  assignee_id: string;
+  assignee_name?: string;
+  requires_approval: boolean;
+  approver_id?: string;
+  approver_name?: string;
+  form_origin: FormOrigin;
+  dedupe_key: string;
+  // section_id mirrors form_origin.section_id — kept at top level for Firestore indexing
+  section_id: string;
+  order: number;
+  due_date?: string;
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
 };

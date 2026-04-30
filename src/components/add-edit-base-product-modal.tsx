@@ -98,7 +98,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
         classification: productToEdit?.classification || 'none',
         category: productToEdit?.category ?? 'Massa',
         unit: productToEdit?.unit ?? 'g',
-        initialCostPerUnit: productToEdit?.initialCostPerUnit ?? 0,
+        initialCostPerUnit: productToEdit?.lastEffectivePrice?.pricePerUnit ?? productToEdit?.initialCostPerUnit ?? 0,
         stockLevels: stockLevelsObject,
         consumptionMonths: productToEdit?.consumptionMonths ?? 0,
       });
@@ -229,7 +229,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                               </div>
                               <FormMessage />
                               <FormDescription className="text-xs pt-1">
-                                O custo por unidade é definido automaticamente ao efetivar uma compra no módulo de cotações.
+                                O custo por unidade é definido automaticamente na confirmação da compra.
                               </FormDescription>
                           </FormItem>
                       )}

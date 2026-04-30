@@ -21,7 +21,7 @@ export function StockManagement() {
     const canViewInventoryControl = permissions.stock.inventoryControl.view;
     const canViewStockCount = permissions.stock.stockCount.view;
     const canViewAnalysis = permissions.stock.analysis.view;
-    const canViewPurchasing = permissions.stock.purchasing.view;
+    const canViewPurchasing = permissions.stock.purchasing.view || permissions.purchasing?.view;
     const canViewReturns = permissions.stock.returns.view;
     const canViewConversions = permissions.stock.conversions.view;
     const canViewReposition = permissions.stock.analysis.restock; // Assuming this permission governs reposition
@@ -103,24 +103,6 @@ export function StockManagement() {
                     </CardContent>
                 </Card>}
 
-                 {canViewPurchasing && (
-                    <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
-                        <CardHeader className="p-0 items-center">
-                            <div className="p-4 bg-primary/10 rounded-full mb-4">
-                                <ShoppingCart className="h-10 w-10 text-primary" />
-                            </div>
-                            <CardTitle className="text-2xl mb-2">Gestão de compras</CardTitle>
-                            <CardDescription>Pesquise preços, compare custos e efetive suas compras de insumos.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
-                            <Link href="/dashboard/stock/purchasing" className="w-full">
-                                <Button className="w-full text-lg py-6">
-                                    Acessar compras <ArrowRight className="ml-2" />
-                                </Button>
-                            </Link>
-                        </CardContent>
-                    </Card>
-                )}
                 {canViewReturns && <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
                     <CardHeader className="p-0 items-center">
                         <div className="p-4 bg-primary/10 rounded-full mb-4">

@@ -14,9 +14,14 @@ import { ReturnsProvider } from '@/components/return-request-provider';
 import { CompanySettingsProvider } from '@/components/company-settings-provider';
 import { EntitiesProvider } from '@/components/entities-provider';
 import { PurchaseProvider } from '@/components/purchase-provider';
+import { QuotationProvider } from '@/components/quotation-provider';
+import { PurchaseOrderProvider } from '@/components/purchase-order-provider';
+import { PurchaseReceiptProvider } from '@/components/purchase-receipt-provider';
+import { PurchaseFinancialProvider } from '@/components/purchase-financial-provider';
 import { ItemAdditionProvider } from '@/components/item-addition-provider';
 import { RepositionProvider } from '@/components/reposition-provider';
 import { ProductSimulationProvider } from '@/components/product-simulation-provider';
+import { ChannelsProvider } from '@/components/channels-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ProductSimulationCategoryProvider } from '@/components/product-simulation-category-provider';
 import { AllTasksProvider } from '@/hooks/use-all-tasks';
@@ -82,19 +87,29 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                                                     <RepositionProvider>
                                                         <StockAuditProvider>
                                                             <AuthorBoardDiaryProvider>
+                                                                <QuotationProvider>
+                                                                <PurchaseOrderProvider>
+                                                                <PurchaseReceiptProvider>
+                                                                <PurchaseFinancialProvider>
                                                                 <PurchaseProvider>
                                                                     <ProductSimulationCategoryProvider>
-                                                                        <ProductSimulationProvider>
-                                                                            <CompetitorProvider>
-                                                                                <AllTasksProvider>
-                                                                                    <DPProvider>
-                                                                                        {children}
-                                                                                    </DPProvider>
-                                                                                </AllTasksProvider>
-                                                                            </CompetitorProvider>
-                                                                        </ProductSimulationProvider>
+                                                                        <ChannelsProvider>
+                                                                            <ProductSimulationProvider>
+                                                                                <CompetitorProvider>
+                                                                                    <AllTasksProvider>
+                                                                                        <DPProvider>
+                                                                                            {children}
+                                                                                        </DPProvider>
+                                                                                    </AllTasksProvider>
+                                                                                </CompetitorProvider>
+                                                                            </ProductSimulationProvider>
+                                                                        </ChannelsProvider>
                                                                     </ProductSimulationCategoryProvider>
                                                                 </PurchaseProvider>
+                                                                </PurchaseFinancialProvider>
+                                                                </PurchaseReceiptProvider>
+                                                                </PurchaseOrderProvider>
+                                                                </QuotationProvider>
                                                             </AuthorBoardDiaryProvider>
                                                         </StockAuditProvider>
                                                     </RepositionProvider>

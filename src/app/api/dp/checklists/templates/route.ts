@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { checklistTemplateSchema } from "@/features/dp-checklists/lib/schemas";
+import { assertLegacyChecklistWriteAllowed } from "@/features/dp-checklists/lib/rollout";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   appendChecklistAudit,
@@ -23,6 +24,7 @@ function resolveOccurrenceType(
 
 export async function POST(request: NextRequest) {
   try {
+    await assertLegacyChecklistWriteAllowed();
     const access = await assertDPChecklistAccess(request, "manage");
     const actor = await loadChecklistActor(access.decoded.uid);
     const rawBody = await request.json();

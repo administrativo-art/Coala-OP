@@ -12,6 +12,7 @@ import {
 import { assertHrAccess } from "@/features/hr/lib/server-access";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { logAction } from "@/lib/log-action";
 import { verifyAuth } from "@/lib/verify-auth";
 
 export const runtime = "nodejs";
@@ -194,12 +195,11 @@ async function buildLoginAccessPayload(params: {
 }
 
 async function appendLoginAccessAudit(event: string, payload: Record<string, unknown>) {
-  const now = new Date().toISOString();
-  await dbAdmin.collection("actionLogs").add({
-    module: "login_access",
-    event,
-    createdAt: now,
-    ...payload,
+  await logAction({
+    user_id: typeof payload.actorUserId === "string" ? payload.actorUserId : null,
+    module: "auth",
+    action: event,
+    metadata: payload,
   });
 }
 
@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
       .add(justificationData);
 
     await Promise.all([
-      appendLoginAccessAudit("login_access.justification_submitted", {
+      appendLoginAccessAudit("overtime_justification", {
         actorUserId: decoded.uid,
         targetUserId: payload.user.id,
         scheduleId: shift.scheduleId,

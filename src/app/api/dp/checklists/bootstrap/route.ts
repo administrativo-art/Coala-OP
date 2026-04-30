@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
+import { assertLegacyChecklistReadAllowed } from "@/features/dp-checklists/lib/rollout";
 import {
   checklistDbAdmin,
   normalizeChecklistExecutionForApi,
@@ -19,6 +20,7 @@ function getDefaultDate() {
 
 export async function GET(request: NextRequest) {
   try {
+    await assertLegacyChecklistReadAllowed();
     const access = await assertDPChecklistAccess(request, "view");
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date")?.trim() || getDefaultDate();

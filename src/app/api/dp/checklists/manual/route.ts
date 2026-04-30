@@ -6,6 +6,7 @@ import {
   buildManualChecklistExecutionId,
 } from "@/features/dp-checklists/lib/core";
 import { checklistManualExecutionSchema } from "@/features/dp-checklists/lib/schemas";
+import { assertLegacyChecklistWriteAllowed } from "@/features/dp-checklists/lib/rollout";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   appendChecklistAudit,
@@ -66,6 +67,7 @@ async function loadUser(userId: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    await assertLegacyChecklistWriteAllowed();
     const access = await assertDPChecklistAccess(request, "operate");
     const actor = await loadChecklistActor(access.decoded.uid);
     const rawBody = await request.json();

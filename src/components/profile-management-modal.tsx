@@ -287,6 +287,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
   const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
   const dpChecklistsViewWatch = form.watch('permissions.dp.checklists.view' as any);
+  const purchasingModuleViewWatch = form.watch('permissions.purchasing.view' as any);
 
   return (
     <>
@@ -534,6 +535,23 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.financial.settings.manageImportAliases" as any, "Gerenciar aliases de importação", "Permite manter regras automáticas de classificação de extratos.", !financialSettingsViewWatch, true)}
                                   </div>
                                 </div>
+                              </AccordionContent>
+                            </AccordionItem>
+
+                            {/* ── MÓDULO DE COMPRAS ── */}
+                            <AccordionItem value="purchasing_v2">
+                              <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b">
+                                <div className="flex items-center"><ShoppingCart className="mr-2 h-5 w-5" /> Módulo de Compras</div>
+                              </AccordionTrigger>
+                              <AccordionContent className="space-y-2 pt-4 p-1">
+                                {renderModuleToggle("permissions.purchasing.view" as any, "Acessar Módulo de Compras", "Permite visualizar cotações, pedidos, recebimentos e financeiro de compras.")}
+                                {renderPermissionSwitch("permissions.purchasing.createQuotation" as any, "Criar e Gerenciar Cotações", "Permite abrir cotações, adicionar e editar itens.", !purchasingModuleViewWatch)}
+                                {renderPermissionSwitch("permissions.purchasing.finalizeQuotation" as any, "Finalizar Cotações", "Permite finalizar uma cotação e convertê-la em pedido.", !purchasingModuleViewWatch)}
+                                {renderPermissionSwitch("permissions.purchasing.createPurchase" as any, "Criar Pedidos de Compra", "Permite converter cotações em pedidos e criar pedidos diretos.", !purchasingModuleViewWatch)}
+                                {renderPermissionSwitch("permissions.purchasing.receivePurchase" as any, "Receber Compras", "Permite confirmar o recebimento, registrar lotes e dar entrada no estoque.", !purchasingModuleViewWatch)}
+                                {renderPermissionSwitch("permissions.purchasing.cancelPurchase" as any, "Cancelar Pedidos", "Permite cancelar pedidos de compra em aberto.", !purchasingModuleViewWatch)}
+                                {renderPermissionSwitch("permissions.purchasing.manageFinancialLink" as any, "Financeiro de Compras", "Permite visualizar contas a pagar e marcar pagamentos de pedidos.", !purchasingModuleViewWatch)}
+                                {renderPermissionSwitch("permissions.purchasing.manageBaseItems" as any, "Gerenciar Insumos (Compras)", "Permite criar e editar insumos base no contexto de compras.", !purchasingModuleViewWatch)}
                               </AccordionContent>
                             </AccordionItem>
 

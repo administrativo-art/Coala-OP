@@ -90,7 +90,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const { firebaseUser, user, isAuthenticated, loading: authLoading, logout } = useAuth();
-  const { legacyTasks } = useAllTasks();
+  const { taskNotifications } = useAllTasks();
   const { toast } = useToast();
   const router = useRouter();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
@@ -233,7 +233,7 @@ export default function DashboardLayout({
        <div className="fixed inset-0 bg-[radial-gradient(at_0%_0%,rgba(124,58,237,0.03)_0,transparent_50%),radial-gradient(at_100%_100%,rgba(236,72,153,0.03)_0,transparent_50%)] pointer-events-none" />
       <GlassSidebar open={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
       <div className="flex flex-col flex-1 lg:pl-64">
-        <Header tasks={legacyTasks} onMenuClick={() => setIsSidebarOpen(true)} />
+        <Header tasks={taskNotifications} onMenuClick={() => setIsSidebarOpen(true)} />
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
           {loginAccessState && shouldSurfaceLoginAccessNotice(loginAccessState) && (
             <Alert variant={loginAccessState.evaluation.status === 'blocked' ? 'destructive' : 'default'}>

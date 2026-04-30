@@ -1,26 +1,108 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ChevronRight, Settings2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Group, Menu, Settings2, SlidersHorizontal, Users2 } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { ChartLineUp, Storefront, Users, Wallet } from "@phosphor-icons/react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const UserManagement = dynamic(
   () => import("@/components/user-management").then((m) => m.UserManagement),
   { ssr: false }
 );
-const CalendarManagement = dynamic(
-  () => import("@/components/calendar-management").then((m) => m.CalendarManagement),
+const DPChecklistsV2Page = dynamic(
+  () => import("@/components/dp/dp-checklists-v2-page").then((m) => m.DPChecklistsV2Page),
+  { ssr: false }
+);
+const ItemManagement = dynamic(
+  () => import("@/components/item-management").then((m) => m.ItemManagement),
+  { ssr: false }
+);
+const BaseProductManagement = dynamic(
+  () => import("@/components/base-product-management").then((m) => m.BaseProductManagement),
+  { ssr: false }
+);
+const EntityManagement = dynamic(
+  () => import("@/components/entity-management").then((m) => m.EntityManagement),
   { ssr: false }
 );
 const DPSettingsShifts = dynamic(
   () => import("@/components/dp/dp-settings-shifts").then((m) => m.DPSettingsShifts),
+  { ssr: false }
+);
+const DPSettingsRoles = dynamic(
+  () => import("@/components/dp/dp-settings-roles").then((m) => m.DPSettingsRoles),
+  { ssr: false }
+);
+const DPOrgChart = dynamic(
+  () => import("@/components/dp/dp-org-chart").then((m) => m.DPOrgChart),
+  { ssr: false }
+);
+const DPLoginAccessDiagnostic = dynamic(
+  () => import("@/components/dp/dp-login-access-diagnostic").then((m) => m.DPLoginAccessDiagnostic),
+  { ssr: false }
+);
+const DPLoginAccessAudit = dynamic(
+  () => import("@/components/dp/dp-login-access-audit").then((m) => m.DPLoginAccessAudit),
+  { ssr: false }
+);
+const DPSettingsCalendars = dynamic(
+  () => import("@/components/dp/dp-settings-calendars").then((m) => m.DPSettingsCalendars),
+  { ssr: false }
+);
+const AccountPlansManagement = dynamic(
+  () => import("@/features/financial/components/settings/account-plans-management"),
+  { ssr: false }
+);
+const ResultCentersManagement = dynamic(
+  () => import("@/features/financial/components/settings/result-centers-management"),
+  { ssr: false }
+);
+const BankAccountsManagement = dynamic(
+  () => import("@/features/financial/components/settings/bank-accounts-management"),
+  { ssr: false }
+);
+const ImportAliasesManagement = dynamic(
+  () => import("@/features/financial/components/settings/import-aliases-management"),
+  { ssr: false }
+);
+const PricingSimulator = dynamic(
+  () => import("@/components/pricing-simulator").then((m) => m.PricingSimulator),
+  { ssr: false }
+);
+const PriceComparisonTable = dynamic(
+  () => import("@/components/price-comparison-table").then((m) => m.PriceComparisonTable),
+  { ssr: false }
+);
+const CompetitorManagementModal = dynamic(
+  () => import("@/components/competitor-management-modal").then((m) => m.CompetitorManagementModal),
+  { ssr: false }
+);
+const CompetitorProductManagementModal = dynamic(
+  () => import("@/components/competitor-product-management-modal").then((m) => m.CompetitorProductManagementModal),
+  { ssr: false }
+);
+const CompetitorSelectionModal = dynamic(
+  () => import("@/components/competitor-selection-modal").then((m) => m.CompetitorSelectionModal),
+  { ssr: false }
+);
+const GoalsTrackingDashboard = dynamic(
+  () => import("@/components/goals-tracking-dashboard").then((m) => m.GoalsTrackingDashboard),
+  { ssr: false }
+);
+const GoalsRegistrationDashboard = dynamic(
+  () => import("@/components/goals-registration-dashboard").then((m) => m.GoalsRegistrationDashboard),
+  { ssr: false }
+);
+const GoalsProvider = dynamic(
+  () => import("@/components/goals-provider").then((m) => m.GoalsProvider),
   { ssr: false }
 );
 const KioskManagement = dynamic(
@@ -29,6 +111,10 @@ const KioskManagement = dynamic(
 );
 const PdvSyncManagement = dynamic(
   () => import("@/components/pdv-sync-management").then((m) => m.PdvSyncManagement),
+  { ssr: false }
+);
+const PurchasingAccountingSettings = dynamic(
+  () => import("@/components/purchasing/purchasing-accounting-settings").then((m) => m.PurchasingAccountingSettings),
   { ssr: false }
 );
 
@@ -48,6 +134,87 @@ function EmptySection({ label }: { label: string }) {
       <p className="text-sm font-medium">Configurações de {label}</p>
       <p className="text-xs opacity-60">Em breve disponíveis aqui.</p>
     </div>
+  );
+}
+
+function OperationalCadastrosPanel() {
+  return (
+    <Tabs defaultValue="items" className="w-full space-y-4">
+      <TabsList className="grid w-full grid-cols-3">
+        <TabsTrigger value="items">Insumos</TabsTrigger>
+        <TabsTrigger value="base-products">Produtos Base</TabsTrigger>
+        <TabsTrigger value="entities">Pessoas & Empresas</TabsTrigger>
+      </TabsList>
+      <TabsContent value="items">
+        <ItemManagement />
+      </TabsContent>
+      <TabsContent value="base-products">
+        <BaseProductManagement />
+      </TabsContent>
+      <TabsContent value="entities">
+        <EntityManagement />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function CommercialCompetitorsPanel() {
+  const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
+  const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<string[]>([]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon">
+              <Menu className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setIsSelectionModalOpen(true)}>
+              <SlidersHorizontal className="mr-2 h-4 w-4" />
+              Selecionar concorrentes
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setIsProductModalOpen(true)}>
+              <Group className="mr-2 h-4 w-4" />
+              Mercadorias dos concorrentes
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setIsCompetitorModalOpen(true)}>
+              <Users2 className="mr-2 h-4 w-4" />
+              Gerenciar concorrentes
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <PriceComparisonTable selectedCompetitorIds={selectedCompetitorIds} />
+
+      <CompetitorManagementModal
+        isOpen={isCompetitorModalOpen}
+        onClose={() => setIsCompetitorModalOpen(false)}
+      />
+      <CompetitorProductManagementModal
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+      />
+      <CompetitorSelectionModal
+        isOpen={isSelectionModalOpen}
+        onClose={() => setIsSelectionModalOpen(false)}
+        selectedCompetitorIds={selectedCompetitorIds}
+        setSelectedCompetitorIds={setSelectedCompetitorIds}
+      />
+    </div>
+  );
+}
+
+function CommercialGoalsPanel({ canManage }: { canManage: boolean }) {
+  return (
+    <GoalsProvider>
+      {canManage ? <GoalsRegistrationDashboard /> : <GoalsTrackingDashboard />}
+    </GoalsProvider>
   );
 }
 
@@ -78,6 +245,64 @@ function SettingsLaunchPanel({
       </div>
     </div>
   );
+}
+
+function OperationalChecklistsPanel() {
+  const { firebaseUser } = useAuth();
+  const [mode, setMode] = useState<"loading" | "forms" | "legacy">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveMode() {
+      if (!firebaseUser) {
+        if (!cancelled) setMode("legacy");
+        return;
+      }
+
+      try {
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch("/api/forms/navigation", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        });
+
+        if (!cancelled) {
+          setMode(response.ok ? "forms" : "legacy");
+        }
+      } catch {
+        if (!cancelled) {
+          setMode("legacy");
+        }
+      }
+    }
+
+    resolveMode();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser]);
+
+  if (mode === "loading") {
+    return <EmptySection label="Checklists" />;
+  }
+
+  if (mode === "forms") {
+    return (
+      <SettingsLaunchPanel
+        title="Novo módulo de formulários"
+        description="A configuração operacional já foi migrada para o novo domínio de formulários. Use esse acesso para projetos, templates e execuções."
+        href="/dashboard/forms"
+        actionLabel="Abrir formulários"
+      />
+    );
+  }
+
+  return <DPChecklistsV2Page />;
 }
 
 type NestedTab = {
@@ -180,48 +405,14 @@ export default function SettingsPage() {
       label: "Checklists",
       title: "Checklists operacionais",
       description: "Centralize o acesso às configurações operacionais dos formulários e ao catálogo de templates.",
-      content: (
-        <div className="space-y-4">
-          <SettingsLaunchPanel
-            title="Templates e formulário operacional"
-            description="Crie, edite e versione templates no módulo normal de checklists. O builder e a edição ficam centralizados lá."
-            href="/dashboard/dp/checklists?tab=templates"
-            actionLabel="Abrir templates"
-          />
-          <SettingsLaunchPanel
-            title="Operação e analytics"
-            description="Acompanhe execuções do dia, tarefas operacionais e visão gerencial sem sair do módulo de checklists."
-            href="/dashboard/dp/checklists?tab=operations"
-            actionLabel="Abrir módulo"
-          />
-        </div>
-      ),
+      content: <OperationalChecklistsPanel />,
     },
     {
       value: "cadastros",
       label: "Cadastros",
       title: "Cadastros operacionais",
       description: "Gerencie insumos, produtos base e entidades do sistema.",
-      content: (
-        <div className="space-y-4">
-          {(permissions.registration.items.add || permissions.registration.items.edit || permissions.registration.items.delete) && (
-            <SettingsLaunchPanel
-              title="Insumos e produtos base"
-              description="Cadastre produtos, agrupe-os em produtos base e defina metas de estoque por unidade."
-              href="/dashboard/registration/items"
-              actionLabel="Gerenciar insumos"
-            />
-          )}
-          {(permissions.registration.entities.add || permissions.registration.entities.edit || permissions.registration.entities.delete) && (
-            <SettingsLaunchPanel
-              title="Pessoas e empresas"
-              description="Gerencie contatos, clientes e fornecedores em um único lugar."
-              href="/dashboard/registration/entities"
-              actionLabel="Gerenciar entidades"
-            />
-          )}
-        </div>
-      ),
+      content: <OperationalCadastrosPanel />,
     },
     {
       value: "units",
@@ -244,48 +435,48 @@ export default function SettingsPage() {
 
   const commercialTabs: NestedTab[] = [
     {
+      value: "purchasing",
+      label: "Compras",
+      title: "Compras",
+      description: "Classificações padrão usadas pelo módulo de compras para mercadoria e frete.",
+      content: <PurchasingAccountingSettings />,
+    },
+    {
       value: "pricing",
       label: "Precificação",
       title: "Precificação",
       description: "Parâmetros e rotinas ligadas a preços, margens e simulações.",
-      content: (
-        <SettingsLaunchPanel
-          title="Parâmetros de precificação"
-          description="Abra o módulo comercial para ajustar taxas, margens, metas e categorias de simulação."
-          href="/dashboard/pricing"
-          actionLabel="Abrir módulo"
-        />
-      ),
+      content: <PricingSimulator />,
     },
     {
       value: "competitors",
       label: "Concorrentes",
       title: "Concorrentes",
       description: "Gestão de grupos, unidades e produtos monitorados da concorrência.",
-      content: (
-        <SettingsLaunchPanel
-          title="Estudo de preço e concorrentes"
-          description="Abra o estudo de preço para gerenciar concorrentes e mercadorias relacionadas."
-          href="/dashboard/pricing/price-comparison"
-          actionLabel="Abrir estudo"
-        />
-      ),
+      content: <CommercialCompetitorsPanel />,
     },
     {
       value: "goals",
       label: "Metas",
       title: "Metas",
       description: "Templates e acompanhamento das metas do departamento comercial.",
-      content: (
-        <SettingsLaunchPanel
-          title="Templates e acompanhamento de metas"
-          description="Abra o módulo de metas para gerenciar templates, períodos e acompanhamento comercial."
-          href="/dashboard/goals/tracking"
-          actionLabel="Abrir metas"
-        />
-      ),
+      content: <CommercialGoalsPanel canManage={!!permissions.goals?.manage} />,
     },
-  ];
+  ].filter((tab) => {
+    if (tab.value === "purchasing") {
+      return !!permissions.purchasing?.view;
+    }
+    if (tab.value === "pricing") {
+      return !!(permissions.pricing.view || permissions.pricing.manageParameters || permissions.dashboard.pricing);
+    }
+    if (tab.value === "competitors") {
+      return !!permissions.pricing.view;
+    }
+    if (tab.value === "goals") {
+      return !!(permissions.goals?.view || permissions.goals?.manage);
+    }
+    return false;
+  });
 
   const personalTabs: NestedTab[] = [
     {
@@ -294,6 +485,42 @@ export default function SettingsPage() {
       title: "Usuários",
       description: "Gerencie usuários, perfis de acesso e dados complementares do DP.",
       content: <UserManagement />,
+    },
+    {
+      value: "roles",
+      label: "Cargos & Funções",
+      title: "Cargos & Funções",
+      description: "Catálogo de cargos, funções e vínculo com perfis do departamento pessoal.",
+      content: <DPSettingsRoles />,
+    },
+    {
+      value: "organogram",
+      label: "Organograma",
+      title: "Organograma",
+      description: "Visualização da estrutura organizacional do departamento pessoal.",
+      content: (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Esta visualização usa cargos e vínculos dos colaboradores sem substituir o modelo atual de permissões.
+          </p>
+          <DPOrgChart />
+        </div>
+      ),
+    },
+    {
+      value: "login-access",
+      label: "Acesso por Escala",
+      title: "Acesso por Escala",
+      description: "Diagnóstico e auditoria da política de acesso vinculada à escala.",
+      content: (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Esta área reúne o diagnóstico da regra atual e a auditoria das justificativas já registradas.
+          </p>
+          <DPLoginAccessDiagnostic />
+          <DPLoginAccessAudit />
+        </div>
+      ),
     },
     {
       value: "shifts",
@@ -307,11 +534,28 @@ export default function SettingsPage() {
       label: "Calendário",
       title: "Calendários de Trabalho",
       description: "Configure calendários de feriados usados nas escalas.",
-      content: <CalendarManagement />,
+      content: <DPSettingsCalendars />,
     },
   ].filter((tab) => {
     if (tab.value === "users") {
       return !!(permissions.settings.manageUsers || permissions.settings.manageProfiles);
+    }
+    if (tab.value === "roles") {
+      return !!(permissions.settings.manageUsers || permissions.dp?.collaborators?.edit);
+    }
+    if (tab.value === "organogram") {
+      return !!(
+        permissions.settings.manageUsers ||
+        permissions.dp?.collaborators?.edit ||
+        permissions.dp?.collaborators?.terminate
+      );
+    }
+    if (tab.value === "login-access") {
+      return !!(
+        permissions.settings.manageUsers ||
+        permissions.dp?.collaborators?.edit ||
+        permissions.dp?.collaborators?.terminate
+      );
     }
     if (tab.value === "shifts") {
       return !!permissions.dp?.settings?.manageShifts;
@@ -329,12 +573,10 @@ export default function SettingsPage() {
       title: "Cadastros Contábeis",
       description: "Plano de contas e centros de resultado do módulo financeiro.",
       content: (
-        <SettingsLaunchPanel
-          title="Abrir cadastros contábeis"
-          description="Abra a tela financeira já posicionada na aba de contabilidade."
-          href="/dashboard/financial/settings?tab=accounting"
-          actionLabel="Abrir contabilidade"
-        />
+        <div className="space-y-6">
+          <AccountPlansManagement canManage={permissions.financial?.settings?.manageAccountPlans} />
+          <ResultCentersManagement canManage={permissions.financial?.settings?.manageResultCenters} />
+        </div>
       ),
     },
     {
@@ -343,12 +585,7 @@ export default function SettingsPage() {
       title: "Contas Bancárias",
       description: "Gerencie bancos, contas e vínculos usados no financeiro.",
       content: (
-        <SettingsLaunchPanel
-          title="Abrir contas bancárias"
-          description="Abra a tela financeira já posicionada na aba de contas."
-          href="/dashboard/financial/settings?tab=accounts"
-          actionLabel="Abrir contas"
-        />
+        <BankAccountsManagement canManage={permissions.financial?.settings?.manageBankAccounts} />
       ),
     },
     {
@@ -357,12 +594,7 @@ export default function SettingsPage() {
       title: "Aliases de Importação",
       description: "Mapeie aliases e regras usadas na importação financeira.",
       content: (
-        <SettingsLaunchPanel
-          title="Abrir aliases de importação"
-          description="Abra a tela financeira já posicionada na aba de importação."
-          href="/dashboard/financial/settings?tab=import"
-          actionLabel="Abrir importação"
-        />
+        <ImportAliasesManagement canManage={permissions.financial?.settings?.manageImportAliases} />
       ),
     },
   ].filter(() => !!permissions.financial?.settings?.view);

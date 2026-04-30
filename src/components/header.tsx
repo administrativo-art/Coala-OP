@@ -22,6 +22,7 @@ import type { OperationalTask } from "@/types";
 const SECTION_MAP: Record<string, string> = {
   "/dashboard/operations": "Operações",
   "/dashboard/tasks": "Operações",
+  "/dashboard/forms": "Operações",
   "/dashboard/stock": "Estoque",
   "/dashboard/commercial": "Comercial",
   "/dashboard/goals": "Comercial",
@@ -37,6 +38,7 @@ const SECTION_MAP: Record<string, string> = {
   "/dashboard/dp/checklists": "Departamento Pessoal",
   "/dashboard/dp/ferias": "Departamento Pessoal",
   "/dashboard/dp/settings": "Departamento Pessoal",
+  "/dashboard/purchasing": "Compras",
   "/dashboard/registration": "Configurações",
   "/dashboard/settings": "Configurações",
   "/dashboard/help": "Ajuda",
@@ -46,13 +48,20 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard": "Painel Central",
   "/dashboard/operations": "Painel de Operações",
   "/dashboard/tasks": "Tarefas Gerais",
+  "/dashboard/forms": "Formulários",
   "/dashboard/stock": "Gestão de Estoque",
   "/dashboard/stock/expiry": "Validades",
   "/dashboard/stock/restock": "Reposição",
   "/dashboard/stock/movement": "Histórico de Movimentos",
   "/dashboard/stock/audit": "Auditoria",
   "/dashboard/stock/analysis": "Análise de Consumo",
-  "/dashboard/stock/purchasing": "Compras",
+  "/dashboard/stock/purchasing": "Compras (legado)",
+  "/dashboard/purchasing": "Compras",
+  "/dashboard/purchasing/quotations": "Cotações",
+  "/dashboard/purchasing/orders": "Pedidos de compra",
+  "/dashboard/purchasing/receipts": "Recebimentos",
+  "/dashboard/purchasing/financial": "Despesas de compras",
+  "/dashboard/purchasing/costs": "Histórico de custo efetivo",
   "/dashboard/commercial": "Painel Comercial",
   "/dashboard/goals": "Metas de Vendas",
   "/dashboard/pricing": "Gestão de Preços",
@@ -182,13 +191,19 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Painel Central", href: "/dashboard", section: "Início" },
   { label: "Painel de Operações", href: "/dashboard/operations", section: "Departamento Operacional" },
   { label: "Tarefas gerais", href: "/dashboard/tasks", section: "Departamento Operacional" },
+  { label: "Formulários", href: "/dashboard/forms", section: "Departamento Operacional" },
   { label: "Gestão de Estoque", href: "/dashboard/stock", section: "Departamento Operacional" },
   { label: "Validades", href: "/dashboard/stock/expiry", section: "Departamento Operacional" },
   { label: "Reposição", href: "/dashboard/stock/restock", section: "Departamento Operacional" },
   { label: "Histórico de Movimentos", href: "/dashboard/stock/movement", section: "Departamento Operacional" },
   { label: "Auditoria de Estoque", href: "/dashboard/stock/audit", section: "Departamento Operacional" },
   { label: "Análise de Consumo", href: "/dashboard/stock/analysis", section: "Departamento Operacional" },
-  { label: "Compras", href: "/dashboard/stock/purchasing", section: "Departamento Operacional" },
+  { label: "Compras", href: "/dashboard/purchasing", section: "Departamento Operacional" },
+  { label: "Cotações", href: "/dashboard/purchasing/quotations", section: "Departamento Operacional" },
+  { label: "Pedidos de compra", href: "/dashboard/purchasing/orders", section: "Departamento Operacional" },
+  { label: "Recebimentos", href: "/dashboard/purchasing/receipts", section: "Departamento Operacional" },
+  { label: "Despesas de compras", href: "/dashboard/financial/expenses?origin=purchasing&status=pending_audit", section: "Departamento Financeiro" },
+  { label: "Histórico de custo efetivo", href: "/dashboard/purchasing/costs", section: "Departamento Operacional" },
   { label: "Painel Comercial", href: "/dashboard/commercial", section: "Departamento Comercial" },
   { label: "Metas de Vendas", href: "/dashboard/goals", section: "Departamento Comercial" },
   { label: "Gestão de Preços", href: "/dashboard/pricing", section: "Departamento Comercial" },
@@ -196,14 +211,13 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", section: "Departamento Pessoal" },
   { label: "Checklists Operacionais", href: "/dashboard/dp/checklists", section: "Departamento Pessoal" },
   { label: "Férias da equipe", href: "/dashboard/dp/ferias", section: "Departamento Pessoal" },
-  { label: "Configurações do DP", href: "/dashboard/dp/settings", section: "Departamento Pessoal" },
-  { label: "Colaboradores", href: "/dashboard/dp/settings/collaborators", section: "Departamento Pessoal" },
-  { label: "Cargos & Funções", href: "/dashboard/dp/settings/roles", section: "Departamento Pessoal" },
-  { label: "Organograma", href: "/dashboard/dp/settings/organogram", section: "Departamento Pessoal" },
-  { label: "Acesso por Escala", href: "/dashboard/dp/settings/login-access", section: "Departamento Pessoal" },
-  { label: "Unidades do DP", href: "/dashboard/dp/settings/units", section: "Departamento Pessoal" },
-  { label: "Turnos do DP", href: "/dashboard/dp/settings/shifts", section: "Departamento Pessoal" },
-  { label: "Calendários do DP", href: "/dashboard/dp/settings/calendars", section: "Departamento Pessoal" },
+  { label: "Configurações do DP", href: "/dashboard/settings?department=pessoal&tab=users", section: "Departamento Pessoal" },
+  { label: "Colaboradores", href: "/dashboard/settings?department=pessoal&tab=users", section: "Departamento Pessoal" },
+  { label: "Cargos & Funções", href: "/dashboard/settings?department=pessoal&tab=roles", section: "Departamento Pessoal" },
+  { label: "Organograma", href: "/dashboard/settings?department=pessoal&tab=organogram", section: "Departamento Pessoal" },
+  { label: "Acesso por Escala", href: "/dashboard/settings?department=pessoal&tab=login-access", section: "Departamento Pessoal" },
+  { label: "Turnos do DP", href: "/dashboard/settings?department=pessoal&tab=shifts", section: "Departamento Pessoal" },
+  { label: "Calendários do DP", href: "/dashboard/settings?department=pessoal&tab=calendars", section: "Departamento Pessoal" },
   { label: "Coala Signage", href: "/signage", section: "Departamento de Marketing" },
   { label: "Painel Financeiro", href: "/dashboard/financial", section: "Departamento Financeiro" },
   { label: "Despesas", href: "/dashboard/financial/expenses", section: "Departamento Financeiro" },
@@ -349,6 +363,9 @@ export function Header({ onMenuClick, tasks }: HeaderProps) {
   const { section, current } = getBreadcrumb(pathname ?? "");
   const [checklistTasks, setChecklistTasks] = useState<OperationalTask[]>([]);
   const [checklistLoading, setChecklistLoading] = useState(false);
+  const [legacyChecklistAlertsEnabled, setLegacyChecklistAlertsEnabled] =
+    useState(true);
+  const checklistFetchInFlightRef = useRef(false);
 
   const canViewChecklistAlerts =
     permissions.dp?.view ||
@@ -358,12 +375,73 @@ export function Header({ onMenuClick, tasks }: HeaderProps) {
     permissions.dp?.collaborators?.edit ||
     permissions.settings?.manageUsers;
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRolloutState() {
+      if (!firebaseUser || !canViewChecklistAlerts) {
+        if (!cancelled) {
+          setLegacyChecklistAlertsEnabled(false);
+          setChecklistTasks([]);
+        }
+        return;
+      }
+
+      try {
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch("/api/dp/checklists/rollout", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setLegacyChecklistAlertsEnabled(false);
+            setChecklistTasks([]);
+          }
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          legacyReadAllowed?: boolean;
+        };
+
+        if (!cancelled) {
+          const enabled = payload.legacyReadAllowed === true;
+          setLegacyChecklistAlertsEnabled(enabled);
+          if (!enabled) {
+            setChecklistTasks([]);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setLegacyChecklistAlertsEnabled(false);
+          setChecklistTasks([]);
+        }
+      }
+    }
+
+    void loadRolloutState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewChecklistAlerts, firebaseUser]);
+
   const refreshChecklistTasks = useCallback(async () => {
-    if (!firebaseUser || !canViewChecklistAlerts) {
+    if (!firebaseUser || !canViewChecklistAlerts || !legacyChecklistAlertsEnabled) {
       setChecklistTasks([]);
       return;
     }
 
+    if (checklistFetchInFlightRef.current) {
+      return;
+    }
+
+    checklistFetchInFlightRef.current = true;
     setChecklistLoading(true);
 
     try {
@@ -374,39 +452,22 @@ export function Header({ onMenuClick, tasks }: HeaderProps) {
     } catch (error) {
       console.error("[Header] Falha ao carregar alertas operacionais.", error);
     } finally {
+      checklistFetchInFlightRef.current = false;
       setChecklistLoading(false);
     }
-  }, [canViewChecklistAlerts, firebaseUser]);
+  }, [canViewChecklistAlerts, firebaseUser, legacyChecklistAlertsEnabled]);
 
   useEffect(() => {
-    let cancelled = false;
+    void refreshChecklistTasks();
 
-    const run = async () => {
-      if (cancelled) return;
-      await refreshChecklistTasks();
-    };
-
-    void run();
-
-    if (!firebaseUser || !canViewChecklistAlerts) {
-      return () => {
-        cancelled = true;
-      };
+    if (!firebaseUser || !canViewChecklistAlerts || !legacyChecklistAlertsEnabled) {
+      return;
     }
-
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, 60000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [canViewChecklistAlerts, firebaseUser, refreshChecklistTasks]);
+  }, [canViewChecklistAlerts, firebaseUser, legacyChecklistAlertsEnabled, refreshChecklistTasks]);
 
   const handleResolveChecklistTask = useCallback(
     async (taskId: string) => {
-      if (!firebaseUser) return;
+      if (!firebaseUser || !legacyChecklistAlertsEnabled) return;
 
       try {
         await updateDPChecklistTask(firebaseUser, taskId, { status: "resolved" });
@@ -427,7 +488,7 @@ export function Header({ onMenuClick, tasks }: HeaderProps) {
         });
       }
     },
-    [firebaseUser, refreshChecklistTasks, toast]
+    [firebaseUser, legacyChecklistAlertsEnabled, refreshChecklistTasks, toast]
   );
 
   return (

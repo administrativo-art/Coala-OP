@@ -220,6 +220,30 @@ function isShiftEnded(shiftEndDate: string, shiftEndTime: string, now: Date): bo
   return endMinutes <= nowMinutes;
 }
 
+export const cleanupExpiredActionLogs = onSchedule({
+  schedule: "every 24 hours",
+  timeZone: "America/Sao_Paulo",
+  retryCount: 1,
+}, async () => {
+  const now = new Date();
+  const snap = await db
+    .collection('actionLogs')
+    .where('ttl', '<=', now)
+    .limit(500)
+    .get();
+
+  if (snap.empty) {
+    console.log('[cleanupExpiredActionLogs] Nenhum log expirado encontrado.');
+    return;
+  }
+
+  const batch = db.batch();
+  snap.docs.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
+
+  console.log(`[cleanupExpiredActionLogs] ${snap.size} log(s) removido(s).`);
+});
+
 // --- Rotina Diária de Sincronização (PDV Legal -> Coala) ---
 // --- Rotina Horária de Sincronização (PDV Legal -> Coala) ---
 // Mantém as metas atualizadas durante o dia de funcionamento
@@ -661,6 +685,74 @@ export const checklistEscalateTasks = onSchedule(
     }
 
     console.log(`[checklistEscalateTasks] ${candidates.length} tarefa(s) escalada(s).`);
+  }
+);
+
+// --- Compras v2: expirar cotações vencidas ---
+export const expireQuotations = onSchedule(
+  { schedule: '30 0 * * *', timeZone: BRT, retryCount: 2, memory: '256MiB' },
+  async () => {
+    const today = getBrtDate(new Date());
+    console.log(`[expireQuotations] Verificando cotações vencidas antes de ${today}`);
+
+    const snap = await db.collection('quotations')
+      .where('validUntil', '<', today)
+      .where('status', 'in', ['quoted', 'partially_converted'])
+      .get();
+
+    if (snap.empty) {
+      console.log('[expireQuotations] Nenhuma cotação para expirar.');
+      return;
+    }
+
+    for (let i = 0; i < snap.docs.length; i += 400) {
+      const batch = db.batch();
+      snap.docs.slice(i, i + 400).forEach((docSnap) => {
+        batch.update(docSnap.ref, {
+          status: 'expired',
+          updatedAt: new Date().toISOString(),
+        });
+      });
+      await batch.commit();
+    }
+
+    console.log(`[expireQuotations] ${snap.docs.length} cotação(ões) expirada(s).`);
+  }
+);
+
+// --- Compras v2: ao confirmar recebimento, refletir total e data no pedido ---
+export const onReceiptStatusChange = onDocumentWritten(
+  { document: 'purchase_receipts/{receiptId}', database: 'coala' },
+  async (event: any) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    if (!after) return;
+
+    const confirmedStatuses = ['received', 'received_with_divergence'];
+    const wasAlreadyConfirmed = confirmedStatuses.includes(before?.status ?? '');
+    const isNowConfirmed = confirmedStatuses.includes(after.status ?? '');
+
+    // Only act on the transition into a confirmed state
+    if (wasAlreadyConfirmed || !isNowConfirmed) return;
+
+    const purchaseOrderId: string | undefined = after.purchaseOrderId;
+    if (!purchaseOrderId) return;
+
+    try {
+      const orderRef = db.collection('purchase_orders').doc(purchaseOrderId);
+      const orderSnap = await orderRef.get();
+      if (!orderSnap.exists) return;
+
+      await orderRef.update({
+        totalConfirmed: after.totalConfirmed ?? null,
+        receivedAt: after.receivedAt ?? new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      console.log(`[onReceiptStatusChange] Pedido ${purchaseOrderId} atualizado para ${after.status}.`);
+    } catch (err) {
+      console.error('[onReceiptStatusChange] Erro ao atualizar pedido:', err);
+    }
   }
 );
 

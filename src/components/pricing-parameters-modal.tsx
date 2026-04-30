@@ -11,15 +11,18 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlusCircle, Edit, Trash2, Palette } from 'lucide-react';
-import { type PricingParameters, type ProfitRange, type SimulationCategory } from '@/types';
+import { type PricingParameters, type ProfitRange, type SalesChannel, type SimulationCategory } from '@/types';
 import { useEffect, useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
+import { useChannels } from '@/hooks/use-channels';
+import { useToast } from '@/hooks/use-toast';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from './ui/dropdown-menu';
+import { Switch } from './ui/switch';
 
 const profitRangeSchema = z.object({
   id: z.string(),
@@ -123,11 +126,12 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4 flex-1 flex flex-col overflow-hidden">
              <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="general">Geral</TabsTrigger>
                     <TabsTrigger value="categories">Categorias</TabsTrigger>
                     <TabsTrigger value="lines">Linhas</TabsTrigger>
                     <TabsTrigger value="groups">Grupos</TabsTrigger>
+                    <TabsTrigger value="channels">Canais</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="general" className="flex-1 overflow-y-auto pr-2">
@@ -249,6 +253,11 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                 <TabsContent value="groups" className="flex-1 overflow-y-auto pr-2">
                     <div className="space-y-4 py-4">
                         <GenericCategoryManager type="group" label="Grupo por Insumo" />
+                    </div>
+                </TabsContent>
+                <TabsContent value="channels" className="flex-1 overflow-y-auto pr-2">
+                    <div className="space-y-4 py-4">
+                        <ChannelManager />
                     </div>
                 </TabsContent>
             </Tabs>
@@ -390,4 +399,231 @@ function GenericCategoryManager({ type, label }: { type: 'line' | 'group' | 'cat
             </div>
         </div>
     );
+}
+
+function ChannelManager() {
+    const { channels, addChannel, updateChannel, estimateChannelRuleImpact } = useChannels();
+    const { toast } = useToast();
+    const [name, setName] = useState('');
+    const [type, setType] = useState<'custom' | 'balcao' | 'delivery_proprio' | 'ifood' | 'rappi'>('custom');
+    const [ruleMode, setRuleMode] = useState<'none' | 'markup'>('none');
+    const [rulePercent, setRulePercent] = useState<number>(0);
+
+    const handleAdd = async () => {
+        if (!name.trim()) return;
+        try {
+            await addChannel({
+              name: name.trim(),
+              type,
+              active: true,
+              defaultPriceRule: ruleMode === 'markup' ? { mode: 'markup', value: rulePercent / 100 } : null,
+            });
+            setName('');
+            setType('custom');
+            setRuleMode('none');
+            setRulePercent(0);
+            toast({ title: 'Canal criado com sucesso.' });
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro ao criar canal.' });
+        }
+    };
+
+    const handleToggle = async (channelId: string, active: boolean) => {
+        try {
+            const channel = channels.find((entry) => entry.id === channelId);
+            if (!channel) return;
+            await updateChannel(channelId, { active, updatedAt: channel.updatedAt });
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Não foi possível atualizar o canal.',
+                description: error instanceof Error ? error.message : 'Erro inesperado.',
+            });
+        }
+    };
+
+    const handleRuleSave = async (channelId: string, nextMode: 'none' | 'markup', nextPercent: number) => {
+        const channel = channels.find((entry) => entry.id === channelId);
+        if (!channel) return;
+
+        const impact = await estimateChannelRuleImpact(channelId).catch((error) => {
+          toast({
+            variant: 'destructive',
+            title: 'Não foi possível calcular o impacto da regra.',
+            description: error instanceof Error ? error.message : 'Erro inesperado.',
+          });
+          return null;
+        });
+
+        if (!impact) {
+          return;
+        }
+
+        const message = `Esta mudança afetará ${impact.affectedProducts} produtos em ${impact.affectedUnits} unidades. Confirmar?`;
+        if (typeof window !== 'undefined' && !window.confirm(message)) {
+          return;
+        }
+
+        try {
+          await updateChannel(channelId, {
+            defaultPriceRule: nextMode === 'markup' ? { mode: 'markup', value: nextPercent / 100 } : null,
+            updatedAt: channel.updatedAt,
+          });
+          toast({
+            title: 'Regra do canal atualizada.',
+            description: `${impact.affectedProducts} produtos e ${impact.affectedUnits} unidades herdam desta regra.`,
+          });
+        } catch (error) {
+          toast({
+            variant: 'destructive',
+            title: 'Não foi possível salvar a regra do canal.',
+            description: error instanceof Error ? error.message : 'Erro inesperado.',
+          });
+        }
+    };
+
+    const previewBasePrice = 12;
+    const previewRulePrice = ruleMode === 'markup' ? previewBasePrice * (1 + rulePercent / 100) : previewBasePrice;
+
+    return (
+        <div className="space-y-4">
+            <div className="rounded-lg border p-4 space-y-3">
+                <h3 className="font-semibold">Adicionar canal</h3>
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                    <Input
+                        placeholder="Nome do canal"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                    />
+                    <Select value={type} onValueChange={(value) => setType(value as typeof type)}>
+                        <SelectTrigger>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="custom">Personalizado</SelectItem>
+                            <SelectItem value="balcao">Balcao</SelectItem>
+                            <SelectItem value="delivery_proprio">Delivery proprio</SelectItem>
+                            <SelectItem value="ifood">iFood</SelectItem>
+                            <SelectItem value="rappi">Rappi</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="grid gap-3 md:grid-cols-[220px_180px_1fr_auto] md:items-end">
+                    <div className="space-y-2">
+                        <p className="text-sm font-medium">Regra padrão</p>
+                        <Select value={ruleMode} onValueChange={(value) => setRuleMode(value as 'none' | 'markup')}>
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Sem regra automática</SelectItem>
+                                <SelectItem value="markup">Acréscimo percentual</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <p className="text-sm font-medium">Acréscimo (%)</p>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          disabled={ruleMode !== 'markup'}
+                          value={rulePercent}
+                          onChange={(event) => setRulePercent(Number(event.target.value) || 0)}
+                        />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      R$ 12,00 (base) → <span className="font-semibold text-foreground">{previewRulePrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    </p>
+                    <Button type="button" onClick={handleAdd}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Adicionar
+                    </Button>
+                </div>
+            </div>
+
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Canal</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead>Regra padrão</TableHead>
+                            <TableHead className="w-[140px]">Ativo</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {channels.map((channel) => (
+                            <TableRow key={channel.id}>
+                                <TableCell className="font-medium">{channel.name}</TableCell>
+                                <TableCell className="uppercase text-xs text-muted-foreground">{channel.type}</TableCell>
+                                <TableCell>
+                                    <InlineChannelRuleEditor channel={channel} onSave={handleRuleSave} />
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex items-center gap-3">
+                                        <Switch
+                                            checked={channel.active}
+                                            onCheckedChange={(checked) => handleToggle(channel.id, checked)}
+                                        />
+                                        <span className="text-xs text-muted-foreground">
+                                            {channel.active ? 'Ativo' : 'Inativo'}
+                                        </span>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+        </div>
+    );
+}
+
+function InlineChannelRuleEditor({
+  channel,
+  onSave,
+}: {
+  channel: SalesChannel;
+  onSave: (channelId: string, nextMode: 'none' | 'markup', nextPercent: number) => Promise<void>;
+}) {
+  const [mode, setMode] = useState<'none' | 'markup'>(channel.defaultPriceRule?.mode === 'markup' ? 'markup' : 'none');
+  const [percent, setPercent] = useState<number>((channel.defaultPriceRule?.value ?? 0) * 100);
+
+  useEffect(() => {
+    setMode(channel.defaultPriceRule?.mode === 'markup' ? 'markup' : 'none');
+    setPercent((channel.defaultPriceRule?.value ?? 0) * 100);
+  }, [channel.defaultPriceRule?.mode, channel.defaultPriceRule?.value]);
+
+  const previewBasePrice = 12;
+  const previewRulePrice = mode === 'markup' ? previewBasePrice * (1 + percent / 100) : previewBasePrice;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Select value={mode} onValueChange={(value) => setMode(value as 'none' | 'markup')}>
+          <SelectTrigger className="h-9 w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Sem regra automática</SelectItem>
+            <SelectItem value="markup">Acréscimo percentual</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input
+          type="number"
+          step="0.01"
+          className="h-9 w-[110px]"
+          disabled={mode !== 'markup'}
+          value={percent}
+          onChange={(event) => setPercent(Number(event.target.value) || 0)}
+        />
+        <Button type="button" size="sm" variant="outline" onClick={() => onSave(channel.id, mode, percent)}>
+          Salvar
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        R$ 12,00 (base) → {previewRulePrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+      </p>
+    </div>
+  );
 }

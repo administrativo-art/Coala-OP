@@ -8,8 +8,7 @@ import { useTasks } from './use-tasks';
 import { useReposition } from './use-reposition';
 import { useReturnRequests } from './use-return-requests';
 import { useStockAudit } from './use-stock-audit';
-import { useItemAddition } from './use-item-addition';
-import { ClipboardCheck, Truck, ShieldAlert, ListOrdered, PackagePlus } from 'lucide-react';
+import { ClipboardCheck, Truck, ShieldAlert, ListOrdered, ListTodo, History } from 'lucide-react';
 import { type Task, type RepositionActivity } from '@/types';
 
 export interface LegacyTask {
@@ -23,13 +22,17 @@ export interface LegacyTask {
 
 interface AllTasksContextType {
   allTasks: Task[];
-  legacyTasks: LegacyTask[]; 
+  legacyTasks: LegacyTask[];
+  taskNotifications: LegacyTask[];
+  pendingTaskCount: number;
   loading: boolean;
 }
 
 const AllTasksContext = createContext<AllTasksContextType>({
   allTasks: [],
   legacyTasks: [],
+  taskNotifications: [],
+  pendingTaskCount: 0,
   loading: true,
 });
 
@@ -41,7 +44,6 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   const { requests: returnRequests, loading: returnsLoading } = useReturnRequests();
   const { auditSessions, loading: auditLoading } = useStockAudit();
-  const { requests: itemAdditionRequests, loading: itemAdditionLoading } = useItemAddition();
 
   const shouldLoadTasks = !!user;
   const shouldLoadAudit = !!user && !!permissions.stock.stockCount.approve;
@@ -56,8 +58,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     || (shouldLoadTasks && tasksLoading)
     || (shouldLoadReposition && repositionLoading)
     || (shouldLoadReturns && returnsLoading)
-    || (shouldLoadAudit && auditLoading)
-    || itemAdditionLoading;
+    || (shouldLoadAudit && auditLoading);
 
   const allTasks: Task[] = useMemo(() => {
     if (loading || !user) return [];
@@ -77,6 +78,17 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     if (loading || !user) return [];
     
     const allLegacyTasks: LegacyTask[] = [];
+    const coveredLegacyOrigins = new Set(
+      tasks
+        .flatMap((task) =>
+          task.origin.kind === 'legacy'
+            ? [`${task.origin.type}:${task.origin.id}`]
+            : []
+        )
+    );
+    const coveredTaskIds = new Set(
+      tasks.map((task) => task.id)
+    );
 
     if (permissions.stock.stockCount.approve) {
         auditSessions.forEach(session => {
@@ -94,6 +106,12 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     }
 
     repositionActivities.forEach((activity: RepositionActivity) => {
+        if (
+          coveredLegacyOrigins.has(`reposition_activity:${activity.id}`) ||
+          (activity.taskId && coveredTaskIds.has(activity.taskId))
+        ) {
+            return;
+        }
         if (activity.status === 'Aguardando despacho' && user.username === 'Tiago Brasil') {
              allLegacyTasks.push({
                 id: `dispatch-${activity.id}`,
@@ -128,6 +146,9 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
     if (permissions.stock.returns.updateStatus) {
         returnRequests.forEach(request => {
+            if (coveredLegacyOrigins.has(`return_request:${request.id}`)) {
+                return;
+            }
             if (request.status === 'em_andamento') {
                 allLegacyTasks.push({
                     id: `return-${request.id}`,
@@ -142,11 +163,36 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     }
     
     return allLegacyTasks;
-  }, [user, permissions, auditSessions, repositionActivities, returnRequests, itemAdditionRequests, loading]);
+  }, [user, permissions, auditSessions, repositionActivities, returnRequests, tasks, loading]);
+
+  const taskNotifications: LegacyTask[] = useMemo(() => {
+    const newTaskNotifications = allTasks
+      .filter((task) =>
+        task.status === 'pending' ||
+        task.status === 'reopened' ||
+        task.status === 'in_progress' ||
+        task.status === 'awaiting_approval'
+      )
+      .map((task) => ({
+        id: `task-${task.id}`,
+        type: task.status === 'awaiting_approval' ? 'Aprovação' : 'Tarefa',
+        title: task.title,
+        description:
+          task.status === 'awaiting_approval'
+            ? task.description || 'Aguardando sua aprovação.'
+            : task.description || 'Tarefa pendente no novo motor.',
+        link: '/dashboard/tasks',
+        icon: task.status === 'awaiting_approval' ? History : ListTodo,
+      }));
+
+    return [...newTaskNotifications, ...legacyTasks];
+  }, [allTasks, legacyTasks]);
   
   const value = {
     allTasks,
     legacyTasks,
+    taskNotifications,
+    pendingTaskCount: taskNotifications.length,
     loading
   };
 

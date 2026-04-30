@@ -2,59 +2,10 @@ import { NextRequest } from "next/server";
 import { type DecodedIdToken } from "firebase-admin/auth";
 
 import {
-  defaultAdminPermissions,
-  defaultGuestPermissions,
   type PermissionSet,
 } from "@/types";
 import { dbAdmin } from "@/lib/firebase-admin";
-import { verifyAuth } from "@/lib/verify-auth";
-
-function mergeRecursive(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>
-) {
-  Object.entries(source).forEach(([key, value]) => {
-    const current = target[key];
-    if (
-      value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      current &&
-      typeof current === "object" &&
-      !Array.isArray(current)
-    ) {
-      mergeRecursive(
-        current as Record<string, unknown>,
-        value as Record<string, unknown>
-      );
-      return;
-    }
-
-    target[key] = value;
-  });
-}
-
-function buildPermissions(
-  profilePermissions: Partial<PermissionSet> | undefined,
-  isDefaultAdmin: boolean
-) {
-  if (isDefaultAdmin) {
-    return defaultAdminPermissions;
-  }
-
-  const merged = JSON.parse(
-    JSON.stringify(defaultGuestPermissions)
-  ) as PermissionSet;
-
-  if (profilePermissions) {
-    mergeRecursive(
-      merged as unknown as Record<string, unknown>,
-      profilePermissions as Record<string, unknown>
-    );
-  }
-
-  return merged;
-}
+import { requireUser } from "@/lib/auth-server";
 
 function canViewHr(permissions: PermissionSet, isDefaultAdmin: boolean) {
   return (
@@ -109,40 +60,18 @@ export async function assertHrAccess(
   req: NextRequest,
   mode: "view" | "manage" = "view"
 ): Promise<HrAccess> {
-  const decoded = await verifyAuth(req);
-  const isDefaultAdmin = decoded.isDefaultAdmin === true;
-
-  let profileId =
-    typeof decoded.profileId === "string" && decoded.profileId
-      ? decoded.profileId
-      : null;
-  let profilePermissions: Partial<PermissionSet> | undefined;
   let lookupError: string | null = null;
+  let context;
 
-  if (!isDefaultAdmin) {
-    try {
-      if (!profileId && decoded.uid) {
-        const userSnap = await dbAdmin.collection("users").doc(decoded.uid).get();
-        const userData = userSnap.data() ?? {};
-        profileId =
-          typeof userData.profileId === "string" && userData.profileId
-            ? userData.profileId
-            : null;
-      }
-
-      if (profileId) {
-        const profileSnap = await dbAdmin.collection("profiles").doc(profileId).get();
-        profilePermissions = profileSnap.data()?.permissions as
-          | Partial<PermissionSet>
-          | undefined;
-      }
-    } catch (error) {
-      lookupError =
-        error instanceof Error ? error.message : "Falha ao validar acesso ao RH.";
-    }
+  try {
+    context = await requireUser(req);
+  } catch (error) {
+    lookupError =
+      error instanceof Error ? error.message : "Falha ao validar acesso ao RH.";
+    throw new Error(lookupError);
   }
 
-  const permissions = buildPermissions(profilePermissions, isDefaultAdmin);
+  const { decoded, permissions, isDefaultAdmin, profileId } = context;
   const access: HrAccess = {
     decoded,
     isDefaultAdmin,

@@ -8,12 +8,14 @@ import { brand } from "@/config/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import { useAllTasks } from "@/hooks/use-all-tasks";
+import { canViewPurchasing } from "@/lib/purchasing-permissions";
 import {
   ChevronDown, X, LayoutDashboard, Package, ListTodo, Target,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
-  LogOut, DollarSign,
+  LogOut, DollarSign, ShoppingCart,
 } from "lucide-react";
+import { FileText } from "@phosphor-icons/react";
 
 interface NavItem {
   label: string;
@@ -60,7 +62,8 @@ const BADGE_COLORS: Record<"crit" | "warn" | "info" | "ok", { bg: string; color:
 export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const pathname = usePathname();
   const { user, permissions, logout } = useAuth();
-  const { legacyTasks } = useAllTasks();
+  const { pendingTaskCount } = useAllTasks();
+  const canAccessPurchasing = canViewPurchasing(permissions);
 
   const navSections = useMemo((): NavSection[] => {
     const all: NavSection[] = [
@@ -70,9 +73,11 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         color: SECTION_COLORS.ops,
         items: [
           { label: "Painel de Operações", href: "/dashboard/operations", icon: LayoutGrid, show: permissions.dashboard.operational },
-          { label: "Tarefas gerais", href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, badge: legacyTasks.length > 0 ? { count: legacyTasks.length, variant: "warn" } : undefined },
+          { label: "Tarefas gerais", href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, badge: pendingTaskCount > 0 ? { count: pendingTaskCount, variant: "warn" } : undefined },
+          { label: "Formulários", href: "/dashboard/forms", icon: FileText, show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.dp?.checklists?.view || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.manageTemplates },
           { label: "Checklists", href: "/dashboard/dp/checklists", icon: ListChecks, show: permissions.dp?.checklists?.view || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.manageTemplates || permissions.dp?.view },
           { label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package, show: permissions.stock.view },
+          { label: "Compras", href: "/dashboard/purchasing", icon: ShoppingCart, show: canAccessPurchasing },
         ],
       },
       {
@@ -93,18 +98,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
           { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
           { label: "Férias da equipe", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
-          {
-            label: "Configurações",
-            href: "/dashboard/dp/settings",
-            icon: Settings,
-            show: !!(
-              permissions.dp?.collaborators?.edit ||
-              permissions.dp?.collaborators?.terminate ||
-              permissions.dp?.settings?.manageUnits ||
-              permissions.dp?.settings?.manageShifts ||
-              permissions.dp?.settings?.manageCalendars
-            ),
-          },
         ],
       },
       {
@@ -138,7 +131,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       },
     ];
     return all.map(s => ({ ...s, items: s.items.filter(i => i.show) })).filter(s => s.items.length > 0);
-  }, [permissions, legacyTasks.length]);
+  }, [canAccessPurchasing, pendingTaskCount, permissions]);
 
   // Start with all accordion sections collapsed.
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set());

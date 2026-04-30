@@ -3,6 +3,7 @@ import { getStorage } from "firebase-admin/storage";
 import { z } from "zod";
 
 import { adminApp } from "@/lib/firebase-admin";
+import { assertLegacyChecklistWriteAllowed } from "@/features/dp-checklists/lib/rollout";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   buildChecklistStoragePath,
@@ -20,6 +21,7 @@ const kindSchema = z.enum(["photo", "signature"]);
 
 export async function POST(request: NextRequest) {
   try {
+    await assertLegacyChecklistWriteAllowed();
     await assertDPChecklistAccess(request, "operate");
 
     const formData = await request.formData();

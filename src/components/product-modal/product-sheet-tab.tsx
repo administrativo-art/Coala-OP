@@ -170,7 +170,6 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
           portionTolerance: values.portionTolerance,
         } as any,
         items: values.ingredients as any,
-        totalCmv: totalCmv,
       });
       toast({ title: "Ficha técnica salva com sucesso!" });
       onOpenChange(false);

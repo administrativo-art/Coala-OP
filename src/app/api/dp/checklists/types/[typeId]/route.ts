@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { assertLegacyChecklistWriteAllowed } from "@/features/dp-checklists/lib/rollout";
 import { assertDPChecklistAccess } from "@/features/dp-checklists/lib/server-access";
 import {
   appendChecklistAudit,
@@ -40,6 +41,7 @@ export async function PUT(
   { params }: { params: Promise<{ typeId: string }> }
 ) {
   try {
+    await assertLegacyChecklistWriteAllowed();
     const { typeId } = await params;
     const access = await assertDPChecklistAccess(request, "manage");
     const actor = await loadChecklistActor(access.decoded.uid);
@@ -79,6 +81,7 @@ export async function DELETE(
   { params }: { params: Promise<{ typeId: string }> }
 ) {
   try {
+    await assertLegacyChecklistWriteAllowed();
     const { typeId } = await params;
     const access = await assertDPChecklistAccess(request, "manage");
     const actor = await loadChecklistActor(access.decoded.uid);
