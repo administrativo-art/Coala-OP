@@ -46,6 +46,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { cn } from "@/lib/utils";
+
 const STATUS_LABELS: Record<string, string> = {
   pending_audit: "Pendente auditoria",
   paid: "Pago",
@@ -53,6 +55,15 @@ const STATUS_LABELS: Record<string, string> = {
   overdue: "Vencido",
   pending: "Em aberto",
   due_soon: "Vence hoje",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  pending_audit: "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800",
+  paid: "border-green-400 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800",
+  cancelled: "border-zinc-300 bg-zinc-50 text-zinc-500 dark:bg-zinc-900/50 dark:text-zinc-400 dark:border-zinc-800",
+  overdue: "border-red-300 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800",
+  pending: "border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800",
+  due_soon: "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800",
 };
 
 function KpiCard({
@@ -132,12 +143,13 @@ export function ExpensesPage() {
 
         const due = toDate(expense.dueDate);
         let computedStatus = expense.status;
-        if (expense.originModule === "purchasing" && expense.originStatus === "pending_audit") {
-          computedStatus = "pending_audit";
-        }
-        if (computedStatus !== "pending_audit" && expense.status === "pending" && due) {
-          if (isPast(due) && due < now) computedStatus = "overdue";
-          else if (format(due, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")) computedStatus = "due_soon";
+        if (expense.status === "pending") {
+          if (expense.originModule === "purchasing" && expense.originStatus === "pending_audit") {
+            computedStatus = "pending_audit";
+          } else if (due) {
+            if (isPast(due) && due < now) computedStatus = "overdue";
+            else if (format(due, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")) computedStatus = "due_soon";
+          }
         }
 
         const matchesStatus =
@@ -177,11 +189,19 @@ export function ExpensesPage() {
 
   async function handleDelete() {
     if (!deleteTarget) return;
+
+    if (deleteTarget.originModule === "purchasing") {
+      toast({ variant: "destructive", title: "Ação não permitida.", description: "Esta despesa foi gerada pelo módulo de compras. Cancele o pedido de compra correspondente para remover esta despesa." });
+      setDeleteTarget(null);
+      return;
+    }
+
     try {
       await deleteDoc(financialDoc("expenses", deleteTarget.id));
       toast({ title: "Despesa excluída." });
-    } catch {
-      toast({ variant: "destructive", title: "Erro ao excluir a despesa." });
+    } catch (error: any) {
+      console.error("Erro ao excluir despesa:", error);
+      toast({ variant: "destructive", title: "Erro ao excluir a despesa.", description: error.message || "Tente novamente mais tarde." });
     } finally {
       setDeleteTarget(null);
     }
@@ -316,9 +336,13 @@ export function ExpensesPage() {
                     const due = toDate(expense.dueDate);
                     const now = startOfDay(new Date());
                     let statusKey = expense.status;
-                    if (statusKey !== "pending_audit" && expense.status === "pending" && due) {
-                      if (due < now) statusKey = "overdue";
-                      else if (format(due, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")) statusKey = "due_soon";
+                    if (expense.status === "pending") {
+                      if (expense.originModule === "purchasing" && expense.originStatus === "pending_audit") {
+                        statusKey = "pending_audit";
+                      } else if (due) {
+                        if (due < now) statusKey = "overdue";
+                        else if (format(due, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")) statusKey = "due_soon";
+                      }
                     }
 
                     return (
@@ -349,7 +373,7 @@ export function ExpensesPage() {
                         <td className="px-4 py-3">{due ? format(due, "dd/MM/yyyy") : "—"}</td>
                         <td className="px-4 py-3 text-right font-mono">{formatCompactCurrency(expense.totalValue || 0)}</td>
                         <td className="px-4 py-3 text-center">
-                          <span className="rounded-full border px-2 py-1 text-[11px]">
+                          <span className={cn("rounded-full border px-2 py-1 text-[11px]", STATUS_COLORS[statusKey] || "border-border text-foreground")}>
                             {STATUS_LABELS[statusKey] || statusKey}
                           </span>
                         </td>
@@ -370,7 +394,7 @@ export function ExpensesPage() {
                                   <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>Editar</Link>
                                 </DropdownMenuItem>
                               )}
-                              {permissions.financial?.expenses?.delete && (
+                              {permissions.financial?.expenses?.delete && expense.originModule !== "purchasing" && (
                                 <DropdownMenuItem onClick={() => setDeleteTarget(expense)}>
                                   <Trash2 className="mr-2 h-4 w-4" /> Excluir
                                 </DropdownMenuItem>

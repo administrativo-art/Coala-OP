@@ -254,19 +254,31 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
   if (resource === 'orders' && !id) {
     const ref = dbAdmin.collection('purchase_orders').doc();
+    const items = Array.isArray(body.items) ? body.items : [];
+    const itemsTotal = items.reduce((sum: number, item: any) => sum + (item.quantityOrdered * item.unitPriceOrdered), 0);
+    const deliveryFee = Number(body.deliveryFee ?? 0);
+    const totalEstimated = body.totalEstimated ?? (itemsTotal + deliveryFee);
+
     const orderData = {
       workspaceId: WORKSPACE_ID,
       supplierId: body.supplierId,
       supplierName: body.supplierName,
       status: 'created',
-      totalEstimated: body.totalEstimated ?? 0,
+      receiptMode: body.receiptMode || 'future_delivery',
+      estimatedReceiptDate: body.estimatedReceiptDate || body.paymentDueDate || now,
+      totalEstimated,
       totalConfirmed: 0,
+      deliveryFee,
       paymentCondition: body.paymentCondition ?? 'cash',
       paymentDueDate: body.paymentDueDate ?? now,
+      paymentMethod: body.paymentMethod || 'pix',
       installmentsCount: body.installmentsCount ?? 1,
       accountPlanId: body.accountPlanId ?? null,
       accountPlanName: body.accountPlanName ?? null,
+      freightAccountPlanId: body.freightAccountPlanId ?? null,
+      freightAccountPlanName: body.freightAccountPlanName ?? null,
       resultCenterId: body.resultCenterId ?? null,
+      resultCenterName: body.resultCenterName ?? null,
       notes: body.notes ?? null,
       quotationId: body.quotationId ?? null,
       createdAt: now,
@@ -275,9 +287,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     };
     await ref.set(orderData);
 
-    if (Array.isArray(body.items)) {
+    if (items.length > 0) {
       const batch = dbAdmin.batch();
-      for (const item of body.items) {
+      for (const item of items) {
         const itemRef = ref.collection('items').doc();
         batch.set(itemRef, {
           purchaseOrderId: ref.id,
@@ -288,8 +300,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           purchaseUnitLabel: item.purchaseUnitLabel ?? item.unit,
           quantityOrdered: item.quantityOrdered,
           unitPriceOrdered: item.unitPriceOrdered,
-          totalOrdered: item.quantityOrdered * item.unitPriceOrdered,
+          discountOrdered: item.discountOrdered ?? 0,
+          totalOrdered: Math.max((item.quantityOrdered * item.unitPriceOrdered) - (item.discountOrdered ?? 0), 0),
           quotationItemId: item.quotationItemId ?? null,
+          notes: item.notes ?? null,
         });
       }
       await batch.commit();
@@ -304,11 +318,29 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const order = orderSnap.data()!;
 
     const batch = dbAdmin.batch();
-    batch.update(orderRef, { status: 'confirmed', confirmedAt: now, updatedAt: now });
+    
+    // Fallback: if totalEstimated is 0 or missing, calculate it from items
+    let totalEstimated = order.totalEstimated || 0;
+    const itemsSnap = await orderRef.collection('items').get();
+    if (totalEstimated === 0) {
+      itemsSnap.forEach(doc => {
+        totalEstimated += (doc.data().totalOrdered || 0);
+      });
+      totalEstimated += (order.deliveryFee || 0);
+    }
+
+    batch.update(orderRef, { 
+      status: 'confirmed', 
+      totalEstimated,
+      confirmedAt: now, 
+      updatedAt: now 
+    });
 
     const receiptRef = dbAdmin.collection('purchase_receipts').doc();
     const financialRef = dbAdmin.collection('purchase_financials').doc();
-    const receiptMode = order.paymentCondition === 'immediate' ? 'immediate_pickup' : 'future_delivery';
+    
+    // Use saved receiptMode or fallback to future_delivery
+    const receiptMode = order.receiptMode || (order.paymentCondition === 'immediate' ? 'immediate_pickup' : 'future_delivery');
     // Per user request, all new receipts start as 'awaiting_delivery' (Aguardando recebimento)
     const initialReceiptStatus = 'awaiting_delivery';
 
@@ -319,14 +351,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       supplierName: order.supplierName,
       status: initialReceiptStatus,
       receiptMode,
-      expectedDate: order.paymentDueDate,
-      totalEstimated: order.totalEstimated,
+      expectedDate: order.estimatedReceiptDate || order.paymentDueDate,
+      totalEstimated,
       totalConfirmed: 0,
       createdAt: now,
       updatedAt: now,
     });
 
-    const itemsSnap = await orderRef.collection('items').get();
     for (const itemDoc of itemsSnap.docs) {
       const item = itemDoc.data();
       const receiptItemRef = receiptRef.collection('items').doc();
@@ -336,8 +367,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         baseItemId: item.baseItemId,
         productId: item.productId ?? null,
         unit: item.unit,
-        purchaseUnitType: item.purchaseUnitType,
-        purchaseUnitLabel: item.purchaseUnitLabel,
+        purchaseUnitType: item.purchaseUnitType || 'content',
+        purchaseUnitLabel: item.purchaseUnitLabel || item.unit,
         quantityOrdered: item.quantityOrdered,
         unitPriceOrdered: item.unitPriceOrdered,
         quantityReceived: 0,
@@ -351,7 +382,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       purchaseOrderId: id,
       supplierId: order.supplierId,
       supplierName: order.supplierName,
-      amountEstimated: order.totalEstimated,
+      amountEstimated: totalEstimated,
       dueDate: order.paymentDueDate,
       status: 'confirmed',
       createdAt: now,
@@ -361,13 +392,30 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     await batch.commit();
 
     // Sync financial expense
-    await internalSyncExpense(id, order, decoded.uid).catch(e => console.error('Sync expense error:', e));
+    await internalSyncExpense(id, { ...order, totalEstimated }, decoded.uid).catch(e => console.error('Sync expense error:', e));
 
     return NextResponse.json({ ok: true, receiptId: receiptRef.id });
   }
 
+
   if (resource === 'orders' && id && child === 'cancel') {
     await dbAdmin.collection('purchase_orders').doc(id).update({ status: 'cancelled', cancelledAt: now, updatedAt: now });
+
+    // Try to cancel the financial expense as well
+    const financialSnap = await financialDbAdmin
+      .collection('expenses')
+      .where('purchaseOrderId', '==', id)
+      .limit(1)
+      .get();
+    
+    if (!financialSnap.empty) {
+      await financialSnap.docs[0].ref.update({
+        status: 'cancelled',
+        updatedAt: Timestamp.now(),
+        notes: `Cancelado junto com o pedido de compra em ${new Date().toLocaleDateString('pt-BR')}.`,
+      });
+    }
+
     return NextResponse.json({ ok: true });
   }
 

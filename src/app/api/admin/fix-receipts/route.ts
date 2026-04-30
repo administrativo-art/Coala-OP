@@ -29,24 +29,39 @@ export async function POST(request: NextRequest) {
       .get();
 
     if (receiptSnap.empty) {
+      const itemsSnap = await orderDoc.ref.collection('items').get();
+      
+      // Calculate total if missing or 0
+      let totalEstimated = orderData.totalEstimated || 0;
+      if (totalEstimated === 0) {
+        itemsSnap.forEach(doc => {
+          totalEstimated += (doc.data().totalOrdered || 0);
+        });
+        totalEstimated += (orderData.deliveryFee || 0);
+        
+        // Update order with calculated total
+        await orderDoc.ref.update({ totalEstimated });
+      }
+
       const receiptRef = dbAdmin.collection('purchase_receipts').doc();
       const batch = dbAdmin.batch();
+
+      const receiptMode = orderData.receiptMode || (orderData.paymentCondition === 'immediate' ? 'immediate_pickup' : 'future_delivery');
 
       batch.set(receiptRef, {
         workspaceId: orderData.workspaceId || 'coala',
         purchaseOrderId: orderId,
         supplierId: orderData.supplierId,
         supplierName: orderData.supplierName || '',
-        status: orderData.receiptMode === 'immediate_pickup' ? 'in_stock_entry' : 'awaiting_delivery',
-        receiptMode: orderData.receiptMode || 'future_delivery',
+        status: receiptMode === 'immediate_pickup' ? 'in_stock_entry' : 'awaiting_delivery',
+        receiptMode,
         expectedDate: orderData.estimatedReceiptDate || orderData.paymentDueDate || now,
-        totalEstimated: orderData.totalEstimated || 0,
+        totalEstimated: totalEstimated || 0,
         totalConfirmed: 0,
         createdAt: now,
         updatedAt: now,
       });
 
-      const itemsSnap = await orderDoc.ref.collection('items').get();
       for (const itemDoc of itemsSnap.docs) {
         const item = itemDoc.data();
         const itemRef = receiptRef.collection('items').doc();
@@ -67,7 +82,7 @@ export async function POST(request: NextRequest) {
       }
 
       await batch.commit();
-      results.push({ orderId, receiptId: receiptRef.id, supplier: orderData.supplierName });
+      results.push({ orderId, receiptId: receiptRef.id, supplier: orderData.supplierName, total: totalEstimated });
     }
   }
 
