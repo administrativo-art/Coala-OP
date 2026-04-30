@@ -999,6 +999,8 @@ export type PurchaseReceipt = {
   receiptMode: PurchaseReceiptMode;
   status: PurchaseReceiptStatus;
   expectedDate: string;
+  totalEstimated?: number;
+  totalConfirmed?: number;
   conferenceStartedAt?: string;
   conferenceCompletedAt?: string;
   stockEntryStartedAt?: string;
