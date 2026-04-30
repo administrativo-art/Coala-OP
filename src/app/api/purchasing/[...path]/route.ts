@@ -868,7 +868,55 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   }
 
   if (resource === 'orders' && id && !child) {
-    await dbAdmin.collection('purchase_orders').doc(id).update({ ...body, updatedAt: now });
+    const orderRef = dbAdmin.collection('purchase_orders').doc(id);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+    const currentOrder = orderSnap.data()!;
+
+    const { items, ...rest } = body;
+    const batch = dbAdmin.batch();
+
+    // If items are provided, we need to recalculate the totalEstimated
+    if (Array.isArray(items)) {
+      const itemsTotal = items.reduce(
+        (sum: number, item: any) =>
+          sum + (Number(item.quantityOrdered || 0) * Number(item.unitPriceOrdered || 0)) - Number(item.discountOrdered || 0),
+        0,
+      );
+      const deliveryFee = Number(rest.deliveryFee ?? currentOrder.deliveryFee ?? 0);
+      rest.totalEstimated = Math.max(itemsTotal + deliveryFee, 0);
+
+      // Replace items: delete old ones first
+      const itemsSnap = await orderRef.collection('items').get();
+      for (const itemDoc of itemsSnap.docs) {
+        batch.delete(itemDoc.ref);
+      }
+
+      // Add new ones
+      for (const item of items) {
+        const itemRef = orderRef.collection('items').doc();
+        const q = Number(item.quantityOrdered || 0);
+        const p = Number(item.unitPriceOrdered || 0);
+        const d = Number(item.discountOrdered || 0);
+        batch.set(itemRef, {
+          purchaseOrderId: id,
+          baseItemId: item.baseItemId || '',
+          productId: item.productId ?? null,
+          unit: item.unit || '',
+          purchaseUnitType: item.purchaseUnitType ?? 'content',
+          purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
+          quantityOrdered: q,
+          unitPriceOrdered: p,
+          discountOrdered: d,
+          totalOrdered: Math.max((q * p) - d, 0),
+          quotationItemId: item.quotationItemId ?? null,
+          notes: item.notes ?? null,
+        });
+      }
+    }
+
+    batch.update(orderRef, { ...rest, updatedAt: now });
+    await batch.commit();
     return NextResponse.json({ ok: true });
   }
 

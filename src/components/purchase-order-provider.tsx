@@ -72,6 +72,18 @@ export type OrderEdits = {
   resultCenterName?: string;
   deliveryFee?: number;
   notes?: string;
+  items?: Array<{
+    baseItemId: string;
+    productId?: string;
+    quotationItemId?: string;
+    unit: string;
+    purchaseUnitType?: PurchaseUnitType;
+    purchaseUnitLabel?: string;
+    quantityOrdered: number;
+    unitPriceOrdered: number;
+    discountOrdered?: number;
+    notes?: string;
+  }>;
 };
 
 export interface PurchaseOrderContextType {

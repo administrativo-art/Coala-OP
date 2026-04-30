@@ -55,6 +55,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { AccountPlanTreeSelect } from '@/components/purchasing/account-plan-tree-select';
+import { ManageOrderItemsModal } from '@/components/purchasing/manage-order-items-modal';
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
@@ -141,6 +142,7 @@ export default function PurchaseOrderPage() {
   const [confirming, setConfirming] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [itemsEditOpen, setItemsEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [syncingExpense, setSyncingExpense] = useState(false);
@@ -550,7 +552,15 @@ export default function PurchaseOrderPage() {
                   <ShoppingCart className="h-4 w-4 text-muted-foreground" />
                   <h2 className="font-semibold">Itens do pedido</h2>
                 </div>
-                <span className="text-sm text-muted-foreground">{items.length} item(ns)</span>
+                <div className="flex items-center gap-3">
+                  {isCreated && canEdit && (
+                    <Button variant="ghost" size="sm" onClick={() => setItemsEditOpen(true)}>
+                      <Pencil className="mr-2 h-3 w-3" />
+                      Editar itens
+                    </Button>
+                  )}
+                  <span className="text-sm text-muted-foreground">{items.length} item(ns)</span>
+                </div>
               </div>
 
               {itemsLoading ? (
@@ -890,6 +900,16 @@ export default function PurchaseOrderPage() {
             </DialogContent>
           </Dialog>
         )}
+
+        <ManageOrderItemsModal
+          orderId={params.orderId}
+          initialItems={items}
+          open={itemsEditOpen}
+          onOpenChange={setItemsEditOpen}
+          onSuccess={() => {
+            fetchOrderItems(params.orderId).then(setItems);
+          }}
+        />
       </div>
     </PermissionGuard>
   );
