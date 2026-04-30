@@ -1002,16 +1002,17 @@ export type PurchaseReceipt = {
   expectedDate: string;
   totalEstimated?: number;
   totalConfirmed?: number;
+  totalExpected?: number;
   conferenceStartedAt?: string;
   conferenceCompletedAt?: string;
   stockEntryStartedAt?: string;
   stockEnteredAt?: string;
   receivedAt?: string;
-  totalExpected: number;
-  totalConfirmed?: number;
   receiptProofUrl?: string;
   receiptProofDescription?: string;
   notes?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type PurchaseReceiptItemStatus = 'pending' | 'received' | 'partial' | 'divergent' | 'cancelled';
