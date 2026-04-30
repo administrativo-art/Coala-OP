@@ -517,18 +517,27 @@ export function ReceiptWorkspace({ receipt }: Props) {
                         {isInStockEntry && (
                           <div className="space-y-1">
                             <Label className="text-xs">Unidade estoque</Label>
-                            <Select value={draft.productId} onValueChange={(v) => updateDraft(idx, { productId: v })}>
-                              <SelectTrigger className={cn(!draft.productId && 'border-amber-400')} disabled={isReadonly}>
-                                <SelectValue placeholder="Selecione..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {variantOptions.map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.baseName} ({p.packageSize}{p.unit})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {selectedStockProduct ? (
+                              <Input
+                                value={`${selectedStockProduct.baseName} (${selectedStockProduct.packageSize}${selectedStockProduct.unit})`}
+                                readOnly
+                                disabled
+                                className="bg-muted font-medium"
+                              />
+                            ) : (
+                              <Select value={draft.productId} onValueChange={(v) => updateDraft(idx, { productId: v })}>
+                                <SelectTrigger className={cn(!draft.productId && 'border-amber-400')} disabled={isReadonly}>
+                                  <SelectValue placeholder="Selecione..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {variantOptions.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                      {p.baseName} ({p.packageSize}{p.unit})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </div>
                         )}
                       </div>
