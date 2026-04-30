@@ -197,9 +197,8 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
           purchaseOrderId: orderId,
           supplierId: order.supplierId,
           status:
-            order.paymentCondition === 'immediate' ? 'in_stock_entry' : 'awaiting_delivery',
-          receiptMode:
-            order.paymentCondition === 'immediate' ? 'immediate_pickup' : 'future_delivery',
+            order.receiptMode === 'immediate_pickup' ? 'in_stock_entry' : 'awaiting_delivery',
+          receiptMode: order.receiptMode,
           expectedDate: order.paymentDueDate,
           notes: order.notes,
         }).catch((error) => {
