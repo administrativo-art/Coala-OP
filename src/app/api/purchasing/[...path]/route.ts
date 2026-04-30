@@ -252,6 +252,23 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     return lookupBarcode(body.barcode ?? null);
   }
 
+  if (resource === 'quotations' && !id) {
+    const ref = dbAdmin.collection('quotations').doc();
+    const quotationData = {
+      workspaceId: WORKSPACE_ID,
+      supplierId: body.supplierId || null,
+      mode: body.mode || 'open',
+      validUntil: body.validUntil || null,
+      notes: body.notes || null,
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now,
+      createdBy: decoded.uid,
+    };
+    await ref.set(quotationData);
+    return NextResponse.json({ id: ref.id }, { status: 201 });
+  }
+
   if (resource === 'orders' && !id) {
     const ref = dbAdmin.collection('purchase_orders').doc();
     const items = Array.isArray(body.items) ? body.items : [];
