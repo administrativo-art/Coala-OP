@@ -272,24 +272,36 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   if (resource === 'orders' && !id) {
     const ref = dbAdmin.collection('purchase_orders').doc();
     const items = Array.isArray(body.items) ? body.items : [];
-    const itemsTotal = items.reduce((sum: number, item: any) => sum + (item.quantityOrdered * item.unitPriceOrdered), 0);
+    const itemsTotal = items.reduce((sum: number, item: any) => sum + (Number(item.quantityOrdered || 0) * Number(item.unitPriceOrdered || 0)), 0);
     const deliveryFee = Number(body.deliveryFee ?? 0);
-    const totalEstimated = body.totalEstimated ?? (itemsTotal + deliveryFee);
+    const totalEstimated = Number(body.totalEstimated ?? (itemsTotal + deliveryFee));
+
+    let supplierName = body.supplierName;
+    if (!supplierName && body.supplierId) {
+      const s = await dbAdmin.collection('entities').doc(body.supplierId).get();
+      if (s.exists) {
+        const d = s.data();
+        supplierName = d?.fantasyName || d?.name || '';
+      }
+    }
+
+    const paymentDueDate = body.paymentDueDate || now;
+    const estimatedReceiptDate = body.estimatedReceiptDate || paymentDueDate;
 
     const orderData = {
       workspaceId: WORKSPACE_ID,
-      supplierId: body.supplierId,
-      supplierName: body.supplierName,
+      supplierId: body.supplierId || '',
+      supplierName: supplierName || '',
       status: 'created',
       receiptMode: body.receiptMode || 'future_delivery',
-      estimatedReceiptDate: body.estimatedReceiptDate || body.paymentDueDate || now,
+      estimatedReceiptDate,
       totalEstimated,
       totalConfirmed: 0,
       deliveryFee,
       paymentCondition: body.paymentCondition ?? 'cash',
-      paymentDueDate: body.paymentDueDate ?? now,
+      paymentDueDate,
       paymentMethod: body.paymentMethod || 'pix',
-      installmentsCount: body.installmentsCount ?? 1,
+      installmentsCount: Number(body.installmentsCount ?? 1),
       accountPlanId: body.accountPlanId ?? null,
       accountPlanName: body.accountPlanName ?? null,
       freightAccountPlanId: body.freightAccountPlanId ?? null,
@@ -308,17 +320,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       const batch = dbAdmin.batch();
       for (const item of items) {
         const itemRef = ref.collection('items').doc();
+        const q = Number(item.quantityOrdered || 0);
+        const p = Number(item.unitPriceOrdered || 0);
+        const d = Number(item.discountOrdered || 0);
         batch.set(itemRef, {
           purchaseOrderId: ref.id,
-          baseItemId: item.baseItemId,
+          baseItemId: item.baseItemId || '',
           productId: item.productId ?? null,
-          unit: item.unit,
+          unit: item.unit || '',
           purchaseUnitType: item.purchaseUnitType ?? 'content',
-          purchaseUnitLabel: item.purchaseUnitLabel ?? item.unit,
-          quantityOrdered: item.quantityOrdered,
-          unitPriceOrdered: item.unitPriceOrdered,
-          discountOrdered: item.discountOrdered ?? 0,
-          totalOrdered: Math.max((item.quantityOrdered * item.unitPriceOrdered) - (item.discountOrdered ?? 0), 0),
+          purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
+          quantityOrdered: q,
+          unitPriceOrdered: p,
+          discountOrdered: d,
+          totalOrdered: Math.max((q * p) - d, 0),
           quotationItemId: item.quotationItemId ?? null,
           notes: item.notes ?? null,
         });

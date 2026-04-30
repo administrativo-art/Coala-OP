@@ -100,7 +100,7 @@ function newDraftItem(): DraftItem {
     baseItemId: '',
     unit: '',
     purchaseUnitType: 'content',
-    quantityOrdered: 1,
+    quantityOrdered: 0,
     unitPriceOrdered: 0,
   };
 }
@@ -271,9 +271,13 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
   const onSubmit = async (values: FormValues) => {
     if (validItems.length !== items.length) return;
     setSubmitting(true);
+    
+    const supplier = entities.find(e => e.id === values.supplierId);
+
     try {
       const orderId = await createPurchase({
         supplierId: values.supplierId,
+        supplierName: supplier?.fantasyName || supplier?.name || '',
         origin: 'direct',
         receiptMode: values.receiptMode as PurchaseReceiptMode,
         paymentMethod: values.paymentMethod,
@@ -372,7 +376,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                     <FormItem>
                       <FormLabel>Data estimada</FormLabel>
                       <FormControl>
-                        <Input type="date" min={today} {...field} />
+                        <Input type="date" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -529,7 +533,8 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                       <Input
                         type="number"
                         step="0.001"
-                        value={item.quantityOrdered}
+                        placeholder="0,00"
+                        value={item.quantityOrdered || ''}
                         onChange={(event) => updateItem(item.key, { quantityOrdered: parseFloat(event.target.value) || 0 })}
                       />
                     </div>
