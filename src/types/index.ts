@@ -996,6 +996,7 @@ export type PurchaseReceipt = {
   workspaceId: string;
   purchaseOrderId: string;
   supplierId: string; // ref → entities collection
+  supplierName?: string;
   receiptMode: PurchaseReceiptMode;
   status: PurchaseReceiptStatus;
   expectedDate: string;
