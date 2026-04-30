@@ -74,10 +74,20 @@ export default function PurchasingHubPage() {
   const canView = canViewPurchasing(permissions);
   const canOpenQuotations = canCreateQuotation(permissions);
 
-  const activeQuotations = useMemo(
-    () => quotations.filter((q) => q.status === 'draft' || q.status === 'partially_converted'),
+  // Quotations breakdown
+  const quotationsDraft = useMemo(
+    () => quotations.filter((q) => q.status === 'draft'),
     [quotations],
   );
+  const quotationsQuoted = useMemo(
+    () => quotations.filter((q) => q.status === 'quoted'),
+    [quotations],
+  );
+  const quotationsPartial = useMemo(
+    () => quotations.filter((q) => q.status === 'partially_converted'),
+    [quotations],
+  );
+  const hasQuotationActivity = quotationsDraft.length > 0 || quotationsQuoted.length > 0 || quotationsPartial.length > 0;
 
   // Orders breakdown
   const ordersInReview = useMemo(
@@ -138,8 +148,12 @@ export default function PurchasingHubPage() {
             icon={FileText}
             title="Cotações"
             description="Pesquise preços por fornecedor antes de fechar uma compra."
-            pills={activeQuotations.length > 0 ? (
-              <PhasePill label="em aberto" count={activeQuotations.length} color="border-blue-300 bg-blue-50 text-blue-700" />
+            pills={hasQuotationActivity ? (
+              <>
+                <PhasePill label="rascunho" count={quotationsDraft.length} color="border-amber-300 bg-amber-50 text-amber-700" />
+                <PhasePill label="ag. resposta" count={quotationsQuoted.length} color="border-blue-300 bg-blue-50 text-blue-700" />
+                <PhasePill label="conversão parcial" count={quotationsPartial.length} color="border-purple-300 bg-purple-50 text-purple-700" />
+              </>
             ) : undefined}
           />
 
