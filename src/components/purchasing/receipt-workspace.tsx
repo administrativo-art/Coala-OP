@@ -129,9 +129,9 @@ export function ReceiptWorkspace({ receipt }: Props) {
   };
 
   const goodsGrossSubtotal = useMemo(() => {
-    if (!order) return receipt.totalEstimated;
-    return receipt.totalEstimated;
-  }, [order, receipt.totalEstimated]);
+    // receipt.totalEstimated may be undefined for receipts created before this field was populated
+    return receipt.totalEstimated || order?.totalEstimated || 0;
+  }, [order?.totalEstimated, receipt.totalEstimated]);
 
   const effectiveOrderTotal = useMemo(() => {
     return (goodsGrossSubtotal || 0) + (order?.deliveryFee || 0);

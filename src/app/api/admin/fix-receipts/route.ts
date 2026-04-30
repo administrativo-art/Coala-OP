@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   const decoded = await verifyAuth(request).catch(() => null);
-  if (!decoded || decoded.email !== 'imated@gmail.com') { // Basic safety check for the user
+  if (!decoded) {
      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
@@ -36,10 +36,10 @@ export async function POST(request: NextRequest) {
         workspaceId: orderData.workspaceId || 'coala',
         purchaseOrderId: orderId,
         supplierId: orderData.supplierId,
-        supplierName: orderData.supplierName,
-        status: 'awaiting_delivery',
-        receiptMode: orderData.paymentCondition === 'immediate' ? 'immediate_pickup' : 'future_delivery',
-        expectedDate: orderData.paymentDueDate || now,
+        supplierName: orderData.supplierName || '',
+        status: orderData.receiptMode === 'immediate_pickup' ? 'in_stock_entry' : 'awaiting_delivery',
+        receiptMode: orderData.receiptMode || 'future_delivery',
+        expectedDate: orderData.estimatedReceiptDate || orderData.paymentDueDate || now,
         totalEstimated: orderData.totalEstimated || 0,
         totalConfirmed: 0,
         createdAt: now,

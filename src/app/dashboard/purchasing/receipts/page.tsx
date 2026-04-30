@@ -84,7 +84,7 @@ function ReceiptRow({ receipt }: { receipt: PurchaseReceipt }) {
 
 export default function ReceiptsPage() {
   const router = useRouter();
-  const { permissions } = useAuth();
+  const { permissions, firebaseUser } = useAuth();
   const { receipts, loading } = usePurchaseReceipts();
   const canView = canViewPurchasing(permissions);
 
@@ -108,11 +108,38 @@ export default function ReceiptsPage() {
         </Button>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-bold">Recebimentos</h1>
-        <p className="text-sm text-muted-foreground">
-          Confira mercadorias e registre a entrada no estoque.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Recebimentos</h1>
+          <p className="text-sm text-muted-foreground">
+            Confira mercadorias e registre a entrada no estoque.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            const token = await firebaseUser?.getIdToken(true);
+            if (!token) return;
+            try {
+              const res = await fetch('/api/admin/fix-receipts', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: '{}'
+              });
+              const data = await res.json();
+              if (data.ok) {
+                alert(`${data.recovered?.length || 0} recebimento(s) sincronizado(s).`);
+                window.location.reload();
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          }}
+        >
+          <Boxes className="mr-2 h-4 w-4" />
+          Sincronizar
+        </Button>
       </div>
 
       <Tabs defaultValue="pending">
