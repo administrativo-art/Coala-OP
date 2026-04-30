@@ -53,6 +53,7 @@ interface ItemDraft {
   unitPriceConfirmed: number;
   divergenceReason: string;
   lots: LotDraft[];
+  expiryDate?: string;
 }
 
 function generateLotCode(baseItemName: string) {
@@ -155,7 +156,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
               receiptItemId: item.id,
               purchaseOrderItemId: item.purchaseOrderItemId,
               baseItemId: item.baseItemId,
-              productId: '',
+              productId: item.productId || '',
               unit: item.unit || item.purchaseUnitLabel || base?.unit || '',
               purchaseUnitType: item.purchaseUnitType ?? 'content',
               purchaseUnitLabel: item.purchaseUnitLabel || item.unit || base?.unit || '',
@@ -163,6 +164,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
               quantityReceived: remainingQuantity,
               unitPriceConfirmed: item.unitPriceConfirmed || item.unitPriceOrdered,
               divergenceReason: '',
+              expiryDate: '',
               lots: [
                 {
                   _key: lotKey(),
@@ -471,9 +473,17 @@ export function ReceiptWorkspace({ receipt }: Props) {
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
                           <p className="font-semibold text-lg">{base?.name ?? draft.baseItemId}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmt(draft.unitPriceConfirmed)}
-                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmt(draft.unitPriceConfirmed)}</span>
+                            {base && (
+                              <>
+                                <span>•</span>
+                                <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">
+                                  Insumo base: {base.name}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
                         {hasDivergence && (
                           <Badge variant="outline" className="text-amber-600 border-amber-400 shrink-0">
@@ -547,9 +557,19 @@ export function ReceiptWorkspace({ receipt }: Props) {
                           </div>
                           <div className="space-y-2">
                             {draft.lots.map((lot) => (
-                              <div key={lot._key} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-                                <Input value={lot.lotCode} disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { lotCode: e.target.value })} className="h-8 text-sm" />
-                                <Input type="number" value={lot.quantity} disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { quantity: parseFloat(e.target.value) || 0 })} className="h-8 text-sm" />
+                              <div key={lot._key} className="grid grid-cols-[1fr_1fr_120px_auto] gap-2 items-end">
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] text-muted-foreground uppercase">Cód. Lote</Label>
+                                  <Input value={lot.lotCode} disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { lotCode: e.target.value })} className="h-8 text-sm" />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] text-muted-foreground uppercase">Qtd.</Label>
+                                  <Input type="number" value={lot.quantity} disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { quantity: parseFloat(e.target.value) || 0 })} className="h-8 text-sm" />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] text-muted-foreground uppercase">Validade</Label>
+                                  <Input type="date" value={lot.expiryDate} disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { expiryDate: e.target.value })} className="h-8 text-sm" />
+                                </div>
                                 {!isReadonly && (
                                   <Button variant="ghost" size="icon" onClick={() => removeLot(idx, lot._key)} className="h-8 w-8 text-destructive">
                                     <Trash2 className="h-4 w-4" />

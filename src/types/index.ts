@@ -1022,6 +1022,7 @@ export type PurchaseReceiptItem = {
   purchaseReceiptId: string;
   purchaseOrderItemId: string;
   baseItemId: string;
+  productId?: string;
   unit: string;
   purchaseUnitType?: PurchaseUnitType;
   purchaseUnitLabel?: string;
