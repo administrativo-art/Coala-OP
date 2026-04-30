@@ -771,6 +771,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   const path = (await context.params).path ?? [];
   const [resource, id, child, childId] = path;
   const body = await request.json().catch(() => ({}));
+  const now = new Date().toISOString();
 
   if (resource === 'quotations' && id && child === 'items' && childId) {
     const update = { ...body };
