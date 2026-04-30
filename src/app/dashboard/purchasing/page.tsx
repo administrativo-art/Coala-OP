@@ -32,7 +32,7 @@ function NavCard({
   icon: React.ElementType;
   title: string;
   description: string;
-  badge?: string | number;
+  badge?: React.ReactNode;
   badgeVariant?: 'default' | 'secondary' | 'destructive' | 'outline';
 }) {
   return (
@@ -82,17 +82,33 @@ export default function PurchasingHubPage() {
     [orders],
   );
 
-  const pendingReceipts = useMemo(
+  // Recebimentos - Quebras por fase
+  const receiptsInitial = useMemo(
+    () => receipts.filter(
+      (r) => r.status === 'awaiting_delivery' && !cancelledOrderIds.has(r.purchaseOrderId)
+    ),
+    [receipts, cancelledOrderIds]
+  );
+
+  const receiptsPhase1 = useMemo(
+    () => receipts.filter(
+      (r) => r.status === 'in_conference' && !cancelledOrderIds.has(r.purchaseOrderId)
+    ),
+    [receipts, cancelledOrderIds]
+  );
+
+  const receiptsPhase2 = useMemo(
     () => receipts.filter(
       (r) =>
-        (r.status === 'in_conference' ||
-          r.status === 'awaiting_stock' ||
+        (r.status === 'awaiting_stock' ||
           r.status === 'in_stock_entry' ||
           r.status === 'partially_stocked') &&
         !cancelledOrderIds.has(r.purchaseOrderId),
     ),
     [receipts, cancelledOrderIds],
   );
+
+  const totalReceipts = receiptsInitial.length + receiptsPhase1.length + receiptsPhase2.length;
 
   return (
     <PermissionGuard allowed={canView}>
@@ -130,7 +146,17 @@ export default function PurchasingHubPage() {
             icon={PackageCheck}
             title="Recebimentos"
             description="Confira mercadorias recebidas e registre entradas no estoque."
-            badge={pendingReceipts.length > 0 ? pendingReceipts.length : undefined}
+            badge={
+              totalReceipts > 0 ? (
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span title="Aguardando entrega">{receiptsInitial.length}</span>
+                  <span className="opacity-40">|</span>
+                  <span title="Em conferência" className="text-primary-foreground">{receiptsPhase1.length}</span>
+                  <span className="opacity-40">|</span>
+                  <span title="Entrada no estoque">{receiptsPhase2.length}</span>
+                </span>
+              ) : undefined
+            }
             badgeVariant="outline"
           />
         </div>

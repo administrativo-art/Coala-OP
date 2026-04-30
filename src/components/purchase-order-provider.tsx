@@ -29,6 +29,7 @@ import { PURCHASING_COLLECTIONS } from '@/lib/purchasing-constants';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
 import { WORKSPACE_ID } from '@/lib/workspace';
 import { calculatePricePerBaseUnit } from '@/lib/purchasing-units';
+import { syncPurchaseReceiptTask } from '@/features/tasks/lib/client';
 
 export interface CreatePurchasePayload {
   supplierId: string;
@@ -458,7 +459,48 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
       });
     }
 
+    // --- Iniciar recebimento automaticamente ---
+    const receiptSnap = await getDocs(
+      query(
+        collection(db, PURCHASING_COLLECTIONS.purchaseReceipts),
+        where('purchaseOrderId', '==', orderId),
+      ),
+    );
+
+    const receiptsToSync: PurchaseReceipt[] = [];
+
+    for (const rd of receiptSnap.docs) {
+      const receipt = { id: rd.id, ...rd.data() } as PurchaseReceipt;
+      const isImmediate = receipt.receiptMode === 'immediate_pickup';
+      const nextStatus = isImmediate ? 'in_stock_entry' : 'in_conference';
+
+      batch.update(rd.ref, {
+        status: nextStatus,
+        ...(isImmediate ? { stockEntryStartedAt: now } : { conferenceStartedAt: now }),
+      });
+
+      receiptsToSync.push({
+        ...receipt,
+        status: nextStatus,
+      });
+    }
+
     await batch.commit();
+
+    // Sincronizar tarefas de recebimento
+    for (const receipt of receiptsToSync) {
+      void syncPurchaseReceiptTask(firebaseUser, {
+        receiptId: receipt.id,
+        purchaseOrderId: receipt.purchaseOrderId,
+        supplierId: receipt.supplierId,
+        status: receipt.status,
+        receiptMode: receipt.receiptMode,
+        expectedDate: receipt.expectedDate,
+        notes: receipt.notes,
+      }).catch((error) => {
+        console.error('Erro ao sincronizar tarefa automática:', error);
+      });
+    }
 
     const token = await firebaseUser.getIdToken();
     const response = await fetch(`/api/purchasing/orders/${orderId}/sync-expense`, {
