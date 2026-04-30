@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ArrowLeft, PackageCheck, ChevronRight, Clock } from 'lucide-react';
+import { ArrowLeft, PackageCheck, ChevronRight, Clock, Package, CheckCircle2, Boxes } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -18,24 +18,28 @@ import { useAuth } from '@/hooks/use-auth';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
 import { type PurchaseReceipt } from '@/types';
 
-const STATUS_CONFIG: Record<
-  PurchaseReceipt['status'],
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
-> = {
-  awaiting_delivery: { label: 'Aguardando recebimento', variant: 'secondary' },
-  in_conference: { label: 'Em conferência', variant: 'default' },
-  awaiting_stock: { label: 'Aguardando estoque', variant: 'secondary' },
-  in_stock_entry: { label: 'Entrada no estoque', variant: 'default' },
-  partially_stocked: { label: 'Estoque parcial', variant: 'outline' },
-  stocked: { label: 'Estocado', variant: 'outline' },
-  stocked_with_divergence: { label: 'Estocado c/ divergência', variant: 'destructive' },
-  cancelled: { label: 'Cancelado', variant: 'destructive' },
+type PhaseConfig = {
+  label: string;
+  icon: React.ElementType;
+  className: string;
+};
+
+const PHASE_CONFIG: Record<PurchaseReceipt['status'], PhaseConfig> = {
+  awaiting_delivery: { label: 'Aguardando recebimento', icon: Clock, className: 'border-orange-300 bg-orange-50 text-orange-700' },
+  in_conference: { label: 'Em conferência', icon: PackageCheck, className: 'border-blue-300 bg-blue-50 text-blue-700' },
+  awaiting_stock: { label: 'Aguardando estoque', icon: Package, className: 'border-amber-300 bg-amber-50 text-amber-700' },
+  in_stock_entry: { label: 'Entrada no estoque', icon: Boxes, className: 'border-purple-300 bg-purple-50 text-purple-700' },
+  partially_stocked: { label: 'Estoque parcial', icon: Boxes, className: 'border-amber-300 bg-amber-50 text-amber-700' },
+  stocked: { label: 'Estocado', icon: CheckCircle2, className: 'border-green-400 bg-green-50 text-green-700' },
+  stocked_with_divergence: { label: 'Estocado c/ divergência', icon: CheckCircle2, className: 'border-red-300 bg-red-50 text-red-700' },
+  cancelled: { label: 'Cancelado', icon: CheckCircle2, className: 'border-zinc-300 bg-zinc-50 text-zinc-500' },
 };
 
 function ReceiptRow({ receipt }: { receipt: PurchaseReceipt }) {
   const { entities } = useEntities();
   const supplier = entities.find((e) => e.id === receipt.supplierId);
-  const status = STATUS_CONFIG[receipt.status];
+  const phase = PHASE_CONFIG[receipt.status];
+  const PhaseIcon = phase.icon;
 
   return (
     <Link
@@ -44,30 +48,31 @@ function ReceiptRow({ receipt }: { receipt: PurchaseReceipt }) {
     >
       <div className="flex items-center gap-4 min-w-0">
         <div className="flex-shrink-0 p-2 rounded-md bg-muted">
-          <PackageCheck className="h-5 w-5 text-muted-foreground" />
+          <PhaseIcon className="h-5 w-5 text-muted-foreground" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium truncate">
               {supplier?.fantasyName ?? supplier?.name ?? '—'}
             </span>
-            <Badge variant={status.variant} className="text-xs">
-              {status.label}
+            <Badge variant="outline" className={`text-xs ${phase.className}`}>
+              {phase.label}
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {receipt.receiptMode === 'immediate_pickup' ? '⚡ Retirada' : '🚚 Entrega futura'}
             </Badge>
           </div>
-          <div className="flex gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
-            <span>
-              {receipt.receiptMode === 'immediate_pickup' ? 'Retirada imediata' : 'Entrega futura'}
-            </span>
-            {receipt.expectedDate && (
-              <span>
-                Previsto: {format(parseISO(receipt.expectedDate), 'dd/MM/yyyy', { locale: ptBR })}
+          <div className="flex gap-3 text-xs text-muted-foreground flex-wrap">
+            {receipt.totalEstimated != null && (
+              <span className="font-medium text-foreground">
+                {receipt.totalEstimated.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </span>
             )}
+            {receipt.expectedDate && (
+              <span>Previsto: {format(parseISO(receipt.expectedDate), 'dd/MM/yyyy', { locale: ptBR })}</span>
+            )}
             {receipt.stockEnteredAt && (
-              <span>
-                Estocado: {format(parseISO(receipt.stockEnteredAt), 'dd/MM/yyyy', { locale: ptBR })}
-              </span>
+              <span>Estocado: {format(parseISO(receipt.stockEnteredAt), 'dd/MM/yyyy', { locale: ptBR })}</span>
             )}
           </div>
         </div>

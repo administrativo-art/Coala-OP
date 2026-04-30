@@ -34,6 +34,7 @@ function OrderRow({ order }: { order: PurchaseOrder }) {
   const { entities } = useEntities();
   const supplier = entities.find((e) => e.id === order.supplierId);
   const status = STATUS_LABELS[order.status];
+  const isReceived = !!order.receivedAt;
 
   return (
     <Link
@@ -44,24 +45,33 @@ function OrderRow({ order }: { order: PurchaseOrder }) {
         <div className="flex-shrink-0 p-2 rounded-md bg-muted">
           <ShoppingCart className="h-5 w-5 text-muted-foreground" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium truncate">
               {supplier?.fantasyName ?? supplier?.name ?? '—'}
             </span>
-            <Badge variant={status.variant} className="text-xs">{status.label}</Badge>
-            <span className="text-xs text-muted-foreground">{RECEIPT_LABELS[order.receiptMode]}</span>
-            <span className="text-xs text-muted-foreground">
-              {order.origin === 'direct' ? '• Compra direta' : '• Via cotação'}
-            </span>
+            {isReceived ? (
+              <Badge variant="outline" className="text-xs border-green-400 text-green-700 bg-green-50">✓ Recebida</Badge>
+            ) : (
+              <Badge variant={status.variant} className="text-xs">{status.label}</Badge>
+            )}
+            <Badge variant="outline" className="text-xs">
+              {order.receiptMode === 'immediate_pickup' ? '⚡ Retirada' : '🚚 Entrega futura'}
+            </Badge>
+            <Badge variant="outline" className="text-xs text-muted-foreground">
+              {order.origin === 'direct' ? 'Compra direta' : 'Via cotação'}
+            </Badge>
           </div>
-          <div className="flex gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
+          <div className="flex gap-3 text-xs text-muted-foreground flex-wrap">
             <span>{format(parseISO(order.createdAt), "dd 'de' MMM 'de' yyyy", { locale: ptBR })}</span>
-            <span>
+            <span className="font-medium text-foreground">
               {order.totalEstimated.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </span>
             {order.receiptMode === 'future_delivery' && (
               <span>Entrega: {format(parseISO(order.estimatedReceiptDate), 'dd/MM/yyyy')}</span>
+            )}
+            {order.receivedAt && (
+              <span>Recebida em: {format(parseISO(order.receivedAt), 'dd/MM/yyyy')}</span>
             )}
           </div>
         </div>
@@ -95,7 +105,7 @@ export default function PurchaseOrdersPage() {
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/purchasing')} className="-ml-2">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Cotações
+          Compras
         </Button>
       </div>
 

@@ -472,7 +472,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                         <div className="min-w-0">
                           <p className="font-semibold text-lg">{base?.name ?? draft.baseItemId}</p>
                           <p className="text-sm text-muted-foreground">
-                            Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} x {fmt(draft.unitPriceConfirmed / (draft.quantityReceived || draft.quantityOrdered || 1))}
+                            Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmt(draft.unitPriceConfirmed)}
                           </p>
                         </div>
                         {hasDivergence && (
@@ -667,6 +667,31 @@ export function ReceiptWorkspace({ receipt }: Props) {
               </div>
             </div>
           </div>
+
+          {isInStockEntry && (
+            <div className="rounded-2xl border bg-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Truck className="h-4 w-4 text-muted-foreground" />
+                <h3 className="font-semibold">Destino do estoque</h3>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground uppercase tracking-tight">Quiosque de destino</Label>
+                <Select value={destinationKioskId} onValueChange={setDestinationKioskId}>
+                  <SelectTrigger className={!destinationKioskId ? 'border-amber-400' : ''}>
+                    <SelectValue placeholder="Selecione o quiosque..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {kiosks.map((k) => (
+                      <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!destinationKioskId && (
+                  <p className="text-xs text-amber-600">Obrigatório para confirmar a entrada.</p>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="rounded-2xl border bg-card p-5 space-y-4">
             <div className="flex items-center gap-2">
