@@ -34,27 +34,3 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ id: ref.id }, { status: 201 });
 }
-
-export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const decoded = await verifyAuth(request).catch(() => null);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
-  const { id } = await context.params;
-  const body = await request.json();
-
-  await dbAdmin.collection('candidates').doc(id).update({
-    ...body,
-    updatedAt: new Date().toISOString(),
-  });
-
-  return NextResponse.json({ ok: true });
-}
-
-export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const decoded = await verifyAuth(request).catch(() => null);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
-  const { id } = await context.params;
-  await dbAdmin.collection('candidates').doc(id).delete();
-  return NextResponse.json({ ok: true });
-}

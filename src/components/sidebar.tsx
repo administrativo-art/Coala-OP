@@ -13,7 +13,7 @@ import {
   ChevronDown, X, LayoutDashboard, Package, ListTodo, Target,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
-  LogOut, DollarSign, ShoppingCart, Sitemap, Users
+  LogOut, DollarSign, ShoppingCart, Network, Users
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -96,7 +96,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         color: SECTION_COLORS.dp,
         items: [
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
-          { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Sitemap, show: permissions.dp?.view },
+          { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Network, show: permissions.dp?.view },
           { label: "Recrutamento", href: "/dashboard/hr/recruitment", icon: Users, show: permissions.dp?.view },
           { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
           { label: "Férias da equipe", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
