@@ -539,7 +539,27 @@ export type JobRoleSalaryRange = {
   visible?: boolean;
 };
 
+export type CandidateStatus = 'applied' | 'screening' | 'interview' | 'technical_test' | 'offer' | 'hired' | 'rejected' | 'withdrawn';
+
+export type Candidate = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  resumeUrl?: string;
+  jobRoleId: string;
+  jobRoleName?: string;
+  status: CandidateStatus;
+  notes?: string;
+  rating?: number; // 1-5
+  source?: string;
+  appliedAt: string;
+  updatedAt: string;
+  createdBy: string;
+};
+
 export type JobRole = {
+// ...
   id: string;
   name: string;
   publicTitle: string;

@@ -71,7 +71,7 @@ export default function ReceiptPage() {
         <h1 className="text-2xl font-bold">Recebimento</h1>
         <p className="text-sm text-muted-foreground">
           {supplier?.fantasyName ?? supplier?.name ?? '—'} —{' '}
-          {format(parseISO(receipt.expectedDate), "dd 'de' MMM 'de' yyyy", { locale: ptBR })}
+          {receipt.expectedDate ? format(parseISO(receipt.expectedDate), "dd 'de' MMM 'de' yyyy", { locale: ptBR }) : 'Data não informada'}
         </p>
       </div>
 

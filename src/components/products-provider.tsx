@@ -4,6 +4,7 @@
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Product, type ProductDefinition, unitCategories, type UnitCategory } from '@/types';
+import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
 
@@ -33,6 +34,7 @@ const cleanUndefinedFields = (data: Record<string, any>) => {
 
 export function ProductsProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
+  const { firebaseUser } = useAuth();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -67,6 +69,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const findOrCreateProduct = useCallback(async (productDef: ProductDefinition): Promise<Product | null> => {
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
     const q = query(
         collection(db, "products"),
         where("baseName", "==", productDef.baseName),
@@ -80,75 +83,92 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
             const existingDoc = querySnapshot.docs[0];
             return { id: existingDoc.id, ...existingDoc.data() } as Product;
         } else {
-            const docRef = await addDoc(collection(db, "products"), productDef);
-            return { id: docRef.id, ...productDef } as Product;
+            const token = await firebaseUser.getIdToken();
+            const response = await fetch('/api/registry/products', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(productDef),
+            });
+            if (!response.ok) throw new Error('Falha ao criar produto.');
+            const { id } = await response.json();
+            return { id, ...productDef } as Product;
         }
     } catch (error) {
         console.error("Error finding or creating product:", error);
         return null;
     }
-  }, []);
+  }, [firebaseUser]);
 
   const addProduct = useCallback(async (product: Omit<Product, 'id'>) => {
-    try {
-        const cleanedProduct = cleanUndefinedFields(product);
-        await addDoc(collection(db, "products"), cleanedProduct);
-    } catch(error) {
-        console.error("Error adding product:", error);
-    }
-  }, []);
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch('/api/registry/products', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(product),
+    });
+    if (!response.ok) throw new Error('Falha ao adicionar produto.');
+  }, [firebaseUser]);
 
   const updateProduct = useCallback(async (updatedProduct: Product) => {
-    const productRef = doc(db, "products", updatedProduct.id);
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
     const { id, ...dataToUpdate } = updatedProduct;
-    try {
-        const cleanedData = cleanUndefinedFields(dataToUpdate);
-        await updateDoc(productRef, cleanedData);
-    } catch(error) {
-        console.error("Error updating product:", error);
-    }
-  }, []);
-  
-  const updateMultipleProducts = useCallback(async (productsToUpdate: Partial<Product>[]) => {
-    const batch = writeBatch(db);
-    productsToUpdate.forEach(product => {
-      if(product.id) {
-        const productRef = doc(db, "products", product.id);
-        const { id, ...dataToUpdate } = product;
-        const cleanedData = cleanUndefinedFields(dataToUpdate);
-        batch.update(productRef, cleanedData);
-      }
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/registry/products/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(dataToUpdate),
     });
-    try {
-      await batch.commit();
-    } catch(error) {
-      console.error("Error updating multiple products:", error);
-      throw error;
-    }
-  }, []);
+    if (!response.ok) throw new Error('Falha ao atualizar produto.');
+  }, [firebaseUser]);
+
+  const updateMultipleProducts = useCallback(async (productsToUpdate: Partial<Product>[]) => {
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    // Simplified: loop for now, or could add a batch endpoint to the API
+    await Promise.all(productsToUpdate.map(async (product) => {
+      const { id, ...data } = product;
+      if (!id) return;
+      return fetch(`/api/registry/products/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+    }));
+  }, [firebaseUser]);
 
   const deleteProduct = useCallback(async (productId: string) => {
-    try {
-        await deleteDoc(doc(db, "products", productId));
-    } catch (error) {
-        console.error("Error deleting product:", error);
-        throw error;
-    }
-  }, []);
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/registry/products/${productId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error('Falha ao deletar produto.');
+  }, [firebaseUser]);
 
   const deleteMultipleProducts = useCallback(async (productIds: string[]) => {
-    const batch = writeBatch(db);
-    productIds.forEach(productId => {
-        const productRef = doc(db, "products", productId);
-        batch.delete(productRef);
-    });
-    try {
-        await batch.commit();
-    } catch(error) {
-        console.error("Error deleting multiple products:", error);
-        throw error;
-    }
-  }, []);
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    await Promise.all(productIds.map(id => 
+      fetch(`/api/registry/products/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ));
+  }, [firebaseUser]);
   
   const getProductFullName = useCallback((product: Product | null | undefined) => {
     if (!product) return '';

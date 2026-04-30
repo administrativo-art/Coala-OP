@@ -149,7 +149,7 @@ export default function PurchasingHubPage() {
             badge={
               totalReceipts > 0 ? (
                 <span className="flex items-center gap-1.5 font-medium">
-                  <span title="Aguardando entrega">{receiptsInitial.length}</span>
+                  <span title="Aguardando recebimento">{receiptsInitial.length}</span>
                   <span className="opacity-40">|</span>
                   <span title="Em conferência" className="text-primary-foreground">{receiptsPhase1.length}</span>
                   <span className="opacity-40">|</span>

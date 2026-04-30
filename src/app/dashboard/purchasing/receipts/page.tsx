@@ -22,7 +22,7 @@ const STATUS_CONFIG: Record<
   PurchaseReceipt['status'],
   { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
 > = {
-  awaiting_delivery: { label: 'Aguardando entrega', variant: 'secondary' },
+  awaiting_delivery: { label: 'Aguardando recebimento', variant: 'secondary' },
   in_conference: { label: 'Em conferência', variant: 'default' },
   awaiting_stock: { label: 'Aguardando estoque', variant: 'secondary' },
   in_stock_entry: { label: 'Entrada no estoque', variant: 'default' },

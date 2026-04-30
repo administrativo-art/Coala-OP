@@ -188,13 +188,13 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     return [...newTaskNotifications, ...legacyTasks];
   }, [allTasks, legacyTasks]);
   
-  const value = {
+  const value = useMemo(() => ({
     allTasks,
     legacyTasks,
     taskNotifications,
     pendingTaskCount: taskNotifications.length,
     loading
-  };
+  }), [allTasks, legacyTasks, taskNotifications, loading]);
 
   return <AllTasksContext.Provider value={value}>{children}</AllTasksContext.Provider>;
 };

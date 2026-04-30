@@ -21,6 +21,7 @@ import type { FormExecution, FormExecutionEvent, FormExecutionItem } from "@/typ
 import { useAuth } from "@/hooks/use-auth";
 import {
   claimFormExecution,
+  deleteFormAsset,
   fetchFormExecution,
   updateFormExecution,
   uploadFormAsset,
@@ -64,6 +65,20 @@ function getStatusLabel(status: string) {
   if (status === "overdue") return "Atrasada";
   if (status === "canceled") return "Cancelada";
   return status;
+}
+
+function extractAssetPathFromUrl(value: unknown) {
+  if (typeof value !== "string" || !value) return null;
+
+  try {
+    const parsed = new URL(value);
+    const marker = "/o/";
+    const index = parsed.pathname.indexOf(marker);
+    if (index === -1) return null;
+    return decodeURIComponent(parsed.pathname.slice(index + marker.length));
+  } catch {
+    return null;
+  }
 }
 
 export function FormExecutionDetailShell({ executionId }: { executionId: string }) {
@@ -195,6 +210,57 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
       toast({
         variant: "destructive",
         title: uploadError instanceof Error ? uploadError.message : "Falha ao enviar arquivo.",
+      });
+    } finally {
+      setUploadingKey(null);
+    }
+  }
+
+  async function handleAssetDelete(
+    item: FormExecutionItem,
+    kind: "photo" | "signature" | "file",
+    targetUrl: string
+  ) {
+    if (!firebaseUser || !canEdit) return;
+
+    try {
+      setUploadingKey(`${item.id}:${kind}:delete`);
+      const assetPath = extractAssetPathFromUrl(targetUrl);
+      if (assetPath) {
+        await deleteFormAsset(firebaseUser, assetPath);
+      }
+
+      if (kind === "photo") {
+        const currentUrls = Array.isArray(drafts[item.id]?.photo_urls)
+          ? (drafts[item.id]?.photo_urls as string[])
+          : [];
+        updateDraft(item.id, {
+          photo_urls: currentUrls.filter((url) => url !== targetUrl),
+        });
+      } else if (kind === "signature") {
+        updateDraft(item.id, { signature_url: "" });
+      } else {
+        const currentFiles = Array.isArray(drafts[item.id]?.file_urls)
+          ? (drafts[item.id]?.file_urls as Array<Record<string, unknown>>)
+          : [];
+        updateDraft(item.id, {
+          file_urls: currentFiles.filter(
+            (entry) =>
+              !entry ||
+              typeof entry !== "object" ||
+              String((entry as Record<string, unknown>).url ?? "") !== targetUrl
+          ),
+        });
+      }
+
+      toast({ title: "Arquivo removido" });
+    } catch (deleteError) {
+      toast({
+        variant: "destructive",
+        title:
+          deleteError instanceof Error
+            ? deleteError.message
+            : "Falha ao remover arquivo.",
       });
     } finally {
       setUploadingKey(null);
@@ -562,6 +628,27 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                           }
                           placeholder="Uma URL de foto por linha"
                         />
+                        {Array.isArray(draft.photo_urls) && draft.photo_urls.length > 0 ? (
+                          <div className="space-y-2">
+                            {draft.photo_urls.map((url) => (
+                              <div
+                                key={url}
+                                className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                              >
+                                <span className="truncate">{url}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={!canEdit || uploadingKey === `${item.id}:photo:delete`}
+                                  onClick={() => void handleAssetDelete(item, "photo", url)}
+                                >
+                                  Remover
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 
@@ -603,6 +690,26 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                           }
                           placeholder="URL da assinatura"
                         />
+                        {String(draft.signature_url ?? "") ? (
+                          <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
+                            <span className="truncate">{String(draft.signature_url ?? "")}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={!canEdit || uploadingKey === `${item.id}:signature:delete`}
+                              onClick={() =>
+                                void handleAssetDelete(
+                                  item,
+                                  "signature",
+                                  String(draft.signature_url ?? "")
+                                )
+                              }
+                            >
+                              Remover
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 
@@ -657,6 +764,33 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                           }
                           placeholder="nome|mime|url"
                         />
+                        {Array.isArray(draft.file_urls) && draft.file_urls.length > 0 ? (
+                          <div className="space-y-2">
+                            {draft.file_urls.map((entry, index) => {
+                              if (!entry || typeof entry !== "object") return null;
+                              const fileEntry = entry as Record<string, unknown>;
+                              const url = String(fileEntry.url ?? "");
+                              const label = String(fileEntry.name ?? url ?? `arquivo-${index + 1}`);
+                              return (
+                                <div
+                                  key={`${url}-${index}`}
+                                  className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                                >
+                                  <span className="truncate">{label}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={!canEdit || uploadingKey === `${item.id}:file:delete`}
+                                    onClick={() => void handleAssetDelete(item, "file", url)}
+                                  >
+                                    Remover
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 

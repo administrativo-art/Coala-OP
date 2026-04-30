@@ -4,7 +4,8 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type StockAuditSession } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { useAuth } from '@/hooks/use-auth';
 
 export interface StockAuditContextType {
   auditSessions: StockAuditSession[];
@@ -21,6 +22,7 @@ export const StockAuditContext = createContext<StockAuditContextType | undefined
 export function StockAuditProvider({ children }: { children: React.ReactNode }) {
   const [auditSessions, setAuditSessions] = useState<StockAuditSession[]>([]);
   const [activeSession, setActiveSession] = useState<StockAuditSession | null>(null);
+  const { firebaseUser } = useAuth();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -56,36 +58,60 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const addAuditSession = useCallback(async (session: Omit<StockAuditSession, 'id'>): Promise<string | null> => {
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
     try {
-        const docRef = await addDoc(collection(db, "stockAuditSessions"), session);
-        return docRef.id;
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch('/api/registry/stock-audit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(session),
+        });
+        if (!response.ok) throw new Error('Falha ao criar sessão de auditoria.');
+        const { id } = await response.json();
+        return id;
     } catch(error) {
         console.error("Error adding audit session:", error);
         return null;
     }
-  }, []);
+  }, [firebaseUser]);
 
   const updateAuditSession = useCallback(async (sessionId: string, updates: Partial<StockAuditSession>) => {
-    const sessionRef = doc(db, "stockAuditSessions", sessionId);
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
     try {
-        const cleanData = JSON.parse(JSON.stringify(updates));
-        await updateDoc(sessionRef, cleanData);
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch(`/api/registry/stock-audit/${sessionId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(updates),
+        });
+        if (!response.ok) throw new Error('Falha ao atualizar sessão de auditoria.');
     } catch(error) {
         console.error("Error updating audit session:", error);
     }
-  }, []);
+  }, [firebaseUser]);
 
   const deleteAuditSession = useCallback(async (sessionId: string) => {
-    const sessionRef = doc(db, "stockAuditSessions", sessionId);
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
     try {
-      await deleteDoc(sessionRef);
-      if (activeSession?.id === sessionId) {
-          setActiveSession(null);
-      }
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch(`/api/registry/stock-audit/${sessionId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Falha ao deletar sessão de auditoria.');
+        if (activeSession?.id === sessionId) {
+            setActiveSession(null);
+        }
     } catch (error) {
       console.error("Error deleting audit session:", error);
     }
-  }, [activeSession]);
+  }, [activeSession, firebaseUser]);
 
   const value: StockAuditContextType = useMemo(() => ({
     auditSessions,

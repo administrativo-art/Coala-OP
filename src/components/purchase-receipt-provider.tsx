@@ -132,19 +132,24 @@ export function PurchaseReceiptProvider({ children }: { children: React.ReactNod
     return unsub;
   }, [canView]);
 
-  const fetchReceiptItems = useCallback(async (receiptId: string): Promise<PurchaseReceiptItem[]> => {
-    const snap = await getDocs(collection(db, PURCHASING_COLLECTIONS.purchaseReceiptItems(receiptId)));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PurchaseReceiptItem));
-  }, []);
-
   const startConference = useCallback(async (receiptId: string) => {
-    const now = new Date().toISOString();
-    await updateDoc(doc(db, PURCHASING_COLLECTIONS.purchaseReceipts, receiptId), {
-      status: 'in_conference',
-      conferenceStartedAt: now,
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/purchasing/receipts/${receiptId}/start-conference`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Falha ao iniciar a conferência.');
+    }
+
     const receipt = receipts.find((entry) => entry.id === receiptId);
-    if (firebaseUser && receipt) {
+    if (receipt) {
       await syncPurchaseReceiptTask(firebaseUser, {
         receiptId: receipt.id,
         purchaseOrderId: receipt.purchaseOrderId,
@@ -161,99 +166,25 @@ export function PurchaseReceiptProvider({ children }: { children: React.ReactNod
 
   const saveConference = useCallback(
     async (receiptId: string, payload: SaveConferencePayload) => {
-      if (!user) throw new Error('Usuário não autenticado.');
+      if (!firebaseUser) throw new Error('Usuário não autenticado.');
 
-      const now = new Date().toISOString();
-      const batch = writeBatch(db);
-      const receipt = receipts.find((r) => r.id === receiptId);
-      const orderSnap = receipt?.purchaseOrderId
-        ? await getDoc(doc(db, PURCHASING_COLLECTIONS.purchaseOrders, receipt.purchaseOrderId))
-        : null;
-      const orderData = orderSnap?.exists() ? orderSnap.data() : null;
-      const orderItemsSnap = receipt?.purchaseOrderId
-        ? await getDocs(collection(db, PURCHASING_COLLECTIONS.purchaseOrderItems(receipt.purchaseOrderId)))
-        : null;
-      const orderItemsById = new Map(orderItemsSnap?.docs.map((d) => [d.id, d.data()]) ?? []);
-
-      let totalConfirmed = 0;
-      let hasDivergence = false;
-      let hasRemaining = false;
-
-      for (const item of payload.items) {
-        const orderItem = orderItemsById.get(item.purchaseOrderItemId);
-        const quantityOrdered = Number(orderItem?.quantityOrdered ?? item.quantityReceived);
-        const unitPriceOrdered = Number(orderItem?.unitPriceOrdered ?? item.unitPriceConfirmed);
-        const itemStatus = getReceiptItemStatus(
-          item.quantityReceived,
-          quantityOrdered,
-          item.unitPriceConfirmed,
-          unitPriceOrdered,
-          item.divergenceReason,
-        );
-
-        totalConfirmed += item.quantityReceived * item.unitPriceConfirmed;
-        if (itemStatus === 'partial') hasRemaining = true;
-        if (itemStatus === 'partial' || itemStatus === 'divergent') hasDivergence = true;
-
-        batch.update(
-          doc(db, PURCHASING_COLLECTIONS.purchaseReceiptItems(receiptId), item.receiptItemId),
-          {
-            unit: item.unit,
-            purchaseUnitType: item.purchaseUnitType ?? orderItem?.purchaseUnitType ?? 'content',
-            purchaseUnitLabel: item.purchaseUnitLabel ?? orderItem?.purchaseUnitLabel ?? item.unit,
-            quantityReceived: item.quantityReceived,
-            unitPriceConfirmed: item.unitPriceConfirmed,
-            totalConfirmed: item.quantityReceived * item.unitPriceConfirmed,
-            status: itemStatus,
-            divergenceReason: item.divergenceReason?.trim() || null,
-          },
-        );
-      }
-
-      batch.update(doc(db, PURCHASING_COLLECTIONS.purchaseReceipts, receiptId), {
-        status: 'awaiting_stock',
-        totalConfirmed,
-        conferenceCompletedAt: now,
-        ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
-        ...(payload.receiptProofUrl !== undefined ? { receiptProofUrl: payload.receiptProofUrl } : {}),
-        ...(payload.receiptProofDescription !== undefined ? { receiptProofDescription: payload.receiptProofDescription } : {}),
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/purchasing/receipts/${receiptId}/save-conference`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
       });
 
-      if (receipt?.purchaseOrderId) {
-        batch.update(doc(db, PURCHASING_COLLECTIONS.purchaseOrders, receipt.purchaseOrderId), {
-          totalConfirmed,
-        });
-
-        const finSnap = await getDocs(
-          query(
-            collection(db, PURCHASING_COLLECTIONS.purchaseFinancials),
-            where('purchaseOrderId', '==', receipt.purchaseOrderId),
-          ),
-        );
-        finSnap.forEach((d) => {
-          const wasDivergent =
-            receipt.receiptMode === 'future_delivery' &&
-            Math.abs(totalConfirmed - (d.data().amountEstimated ?? 0)) > 0.01;
-          batch.update(d.ref, {
-            status: hasRemaining ? 'forecasted' : wasDivergent || hasDivergence ? 'divergent' : 'confirmed',
-            updatedAt: now,
-          });
-        });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao salvar a conferência.');
       }
 
-      if (orderData?.quotationId) {
-        const quotationItemsSnap = await getDocs(
-          collection(db, PURCHASING_COLLECTIONS.quotationItems(orderData.quotationId)),
-        );
-        const someConverted = quotationItemsSnap.docs.some((d) => d.data().conversionStatus === 'converted');
-        batch.update(doc(db, PURCHASING_COLLECTIONS.quotations, orderData.quotationId), {
-          status: someConverted ? 'partially_converted' : 'quoted',
-        });
-      }
-
-      await batch.commit();
-
-      if (firebaseUser && receipt) {
+      const receipt = receipts.find((r) => r.id === receiptId);
+      if (receipt) {
         await syncPurchaseReceiptTask(firebaseUser, {
           receiptId: receipt.id,
           purchaseOrderId: receipt.purchaseOrderId,
@@ -267,17 +198,27 @@ export function PurchaseReceiptProvider({ children }: { children: React.ReactNod
         });
       }
     },
-    [firebaseUser, receipts, user],
+    [firebaseUser, receipts],
   );
 
   const startStockEntry = useCallback(async (receiptId: string) => {
-    const now = new Date().toISOString();
-    await updateDoc(doc(db, PURCHASING_COLLECTIONS.purchaseReceipts, receiptId), {
-      status: 'in_stock_entry',
-      stockEntryStartedAt: now,
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/purchasing/receipts/${receiptId}/start-stock-entry`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Falha ao iniciar a entrada em estoque.');
+    }
+
     const receipt = receipts.find((entry) => entry.id === receiptId);
-    if (firebaseUser && receipt) {
+    if (receipt) {
       await syncPurchaseReceiptTask(firebaseUser, {
         receiptId: receipt.id,
         purchaseOrderId: receipt.purchaseOrderId,
@@ -294,260 +235,30 @@ export function PurchaseReceiptProvider({ children }: { children: React.ReactNod
 
   const confirmStockEntry = useCallback(
     async (receiptId: string, payload: ConfirmStockEntryPayload) => {
-      if (!user) throw new Error('Usuário não autenticado.');
+      if (!firebaseUser) throw new Error('Usuário não autenticado.');
 
-      const now = new Date().toISOString();
-      const batch = writeBatch(db);
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/purchasing/receipts/${receiptId}/confirm-stock-entry`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...payload,
+          username: user?.username || 'Sistema',
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao confirmar a entrada em estoque.');
+      }
+
+      const { status: finalStatus } = await response.json();
+
       const receipt = receipts.find((r) => r.id === receiptId);
-      const orderSnap = receipt?.purchaseOrderId
-        ? await getDoc(doc(db, PURCHASING_COLLECTIONS.purchaseOrders, receipt.purchaseOrderId))
-        : null;
-      const orderData = orderSnap?.exists() ? orderSnap.data() : null;
-      const orderItemsSnap = receipt?.purchaseOrderId
-        ? await getDocs(collection(db, PURCHASING_COLLECTIONS.purchaseOrderItems(receipt.purchaseOrderId)))
-        : null;
-      const orderItemsById = new Map(
-        orderItemsSnap?.docs.map((d) => [d.id, d.data()]) ?? [],
-      );
-      const receiptItemsSnap = await getDocs(collection(db, PURCHASING_COLLECTIONS.purchaseReceiptItems(receiptId)));
-      const receiptItemsById = new Map(
-        receiptItemsSnap.docs.map((d) => [d.id, d.data() as PurchaseReceiptItem]),
-      );
-      const convertedQuotationItemIds = new Set<string>();
-
-      let totalConfirmed = 0;
-      let hasDivergence = false;
-      let hasRemaining = false;
-      const payloadReceiptItemIds = new Set(payload.items.map((item) => item.receiptItemId));
-
-      for (const item of payload.items) {
-        const orderItem = orderItemsById.get(item.purchaseOrderItemId);
-        const existingReceiptItem = receiptItemsById.get(item.receiptItemId);
-        const productSnap = await getDoc(doc(db, 'products', item.productId));
-        if (!productSnap.exists()) {
-          throw new Error('A unidade de estoque escolhida não foi encontrada.');
-        }
-        const product = { id: productSnap.id, ...productSnap.data() } as Product;
-
-        const baseProductSnap = await getDoc(doc(db, 'baseProducts', item.baseItemId));
-        if (!baseProductSnap.exists()) {
-          throw new Error('O insumo base do recebimento não foi encontrado.');
-        }
-        const baseProduct = { id: baseProductSnap.id, ...baseProductSnap.data() } as BaseProduct;
-
-        const purchaseUnitType = item.purchaseUnitType ?? existingReceiptItem?.purchaseUnitType ?? orderItem?.purchaseUnitType ?? 'content';
-        const purchaseUnitLabel =
-          item.purchaseUnitLabel ??
-          existingReceiptItem?.purchaseUnitLabel ??
-          orderItem?.purchaseUnitLabel ??
-          existingReceiptItem?.unit ??
-          orderItem?.unit ??
-          '';
-        const convertedPrice = calculatePricePerBaseUnit(
-          existingReceiptItem?.unitPriceConfirmed ?? orderItem?.unitPriceOrdered ?? 0,
-          product,
-          baseProduct,
-          purchaseUnitType,
-        );
-        if (!convertedPrice.ok) {
-          throw new Error(convertedPrice.error);
-        }
-
-        const cumulativeReceived = existingReceiptItem?.quantityReceived ?? orderItem?.quantityOrdered ?? 0;
-        const confirmedUnitPrice = existingReceiptItem?.unitPriceConfirmed ?? orderItem?.unitPriceOrdered ?? 0;
-        totalConfirmed += cumulativeReceived * confirmedUnitPrice;
-
-        const receiptItemStatus = getReceiptItemStatus(
-          cumulativeReceived,
-          Number(orderItem?.quantityOrdered ?? cumulativeReceived),
-          confirmedUnitPrice,
-          Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
-          existingReceiptItem?.divergenceReason,
-        );
-
-        if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') {
-          hasDivergence = true;
-        }
-        if (receiptItemStatus === 'partial') {
-          hasRemaining = true;
-        }
-
-        // Create lots
-        for (const lot of item.lots) {
-          const stockConversion = calculateStockQuantityFromPurchase(
-            lot.quantity,
-            product,
-            product,
-            baseProduct,
-            purchaseUnitType,
-          );
-          if (!stockConversion.ok) {
-            throw new Error(stockConversion.error);
-          }
-
-          // 1. PurchaseReceiptLot (subcollection)
-          const lotRef = doc(
-            collection(db, PURCHASING_COLLECTIONS.purchaseReceiptLots(receiptId, item.receiptItemId)),
-          );
-          batch.set(lotRef, {
-            purchaseReceiptItemId: item.receiptItemId,
-            baseItemId: item.baseItemId,
-            lotCode: lot.lotCode,
-            ...(lot.expiryDate != null ? { expiryDate: lot.expiryDate } : {}),
-            quantity: lot.quantity,
-            stockQuantity: stockConversion.stockQuantity,
-            purchaseUnitType,
-            purchaseUnitLabel,
-            unitCost: confirmedUnitPrice,
-            occurredAt: now,
-          });
-
-          // 2. EffectiveCostEntry
-          const costRef = doc(collection(db, PURCHASING_COLLECTIONS.effectiveCostHistory));
-          const costEntry: Omit<EffectiveCostEntry, 'id'> = {
-            workspaceId: WORKSPACE_ID,
-            baseItemId: item.baseItemId,
-            supplierId: receipt?.supplierId ?? '',
-            unitCost: convertedPrice.pricePerBaseUnit,
-            quantity: stockConversion.baseQuantity,
-            purchasePrice: confirmedUnitPrice,
-            purchaseQuantity: lot.quantity,
-            purchaseUnitType,
-            purchaseUnitLabel,
-            stockProductId: item.productId,
-            stockProductQuantity: stockConversion.stockQuantity,
-            purchaseReceiptId: receiptId,
-            purchaseReceiptLotId: lotRef.id,
-            purchaseOrderId: receipt?.purchaseOrderId ?? '',
-            ...(orderData?.quotationId ? { quotationId: orderData.quotationId } : {}),
-            ...(orderItem?.quotationItemId ? { quotationItemId: orderItem.quotationItemId } : {}),
-            occurredAt: now,
-          };
-          batch.set(costRef, costEntry);
-
-          // 3. Stock lot entry (LotEntry in existing `lots` collection)
-          const lotKey = `${item.productId}_${payload.destinationKioskId}_${lot.lotCode}_${lot.expiryDate ?? 'noval'}`;
-          const stockLotRef = doc(db, 'lots', lotKey);
-          batch.set(
-            stockLotRef,
-            {
-              productId: item.productId,
-              productName: item.productName ?? item.baseItemId,
-              lotNumber: lot.lotCode,
-              expiryDate: lot.expiryDate ?? null,
-              kioskId: payload.destinationKioskId,
-              quantity: increment(stockConversion.stockQuantity),
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true },
-          );
-
-          // 4. Movement history record
-          const movRef = doc(collection(db, 'movementHistory'));
-          batch.set(movRef, {
-            lotId: lotKey,
-            productId: item.productId,
-            productName: item.productName ?? item.baseItemId,
-            lotNumber: lot.lotCode,
-            type: 'ENTRADA',
-            quantityChange: stockConversion.stockQuantity,
-            toKioskId: payload.destinationKioskId,
-            toKioskName: payload.destinationKioskName,
-            userId: user.id,
-            username: user.username,
-            timestamp: now,
-            sourceType: 'purchase_receipt',
-            sourceId: receiptId,
-          });
-        }
-
-        if (orderData?.quotationId && orderItem?.quotationItemId) {
-          convertedQuotationItemIds.add(orderItem.quotationItemId);
-          batch.update(
-            doc(
-              db,
-              PURCHASING_COLLECTIONS.quotationItems(orderData.quotationId),
-              orderItem.quotationItemId,
-            ),
-            {
-              conversionStatus: 'converted',
-              convertedToPurchaseItemId: item.purchaseOrderItemId,
-            },
-          );
-        }
-      }
-
-      receiptItemsById.forEach((existingItem, id) => {
-        if (payloadReceiptItemIds.has(id)) return;
-        totalConfirmed += (existingItem.quantityReceived ?? 0) * (existingItem.unitPriceConfirmed ?? existingItem.unitPriceOrdered ?? 0);
-        if (existingItem.status === 'partial') hasRemaining = true;
-        if (existingItem.status === 'partial' || existingItem.status === 'divergent') hasDivergence = true;
-      });
-
-      // Update PurchaseReceipt
-      const receiptRef = doc(db, PURCHASING_COLLECTIONS.purchaseReceipts, receiptId);
-      const finalStatus: PurchaseReceipt['status'] =
-        hasRemaining
-          ? 'partially_stocked'
-          : hasDivergence
-          ? 'stocked_with_divergence'
-          : 'stocked';
-
-      batch.update(receiptRef, {
-        status: finalStatus,
-        stockEnteredAt: now,
-        receivedAt: now,
-        totalConfirmed,
-        ...(payload.notes ? { notes: payload.notes } : {}),
-        ...(payload.receiptProofUrl ? { receiptProofUrl: payload.receiptProofUrl } : {}),
-        ...(payload.receiptProofDescription ? { receiptProofDescription: payload.receiptProofDescription } : {}),
-      });
-
-      // Update PurchaseOrder (totalConfirmed + receivedAt)
-      if (receipt?.purchaseOrderId) {
-        batch.update(doc(db, PURCHASING_COLLECTIONS.purchaseOrders, receipt.purchaseOrderId), {
-          totalConfirmed,
-          ...(finalStatus !== 'partially_stocked' ? { receivedAt: now } : {}),
-        });
-
-        // Update PurchaseFinancial: forecasted → confirmed (or divergent)
-        const finSnap = await getDocs(
-          query(
-            collection(db, PURCHASING_COLLECTIONS.purchaseFinancials),
-            where('purchaseOrderId', '==', receipt.purchaseOrderId),
-          ),
-        );
-        finSnap.forEach((d) => {
-          const wasDivergent =
-            receipt.receiptMode === 'future_delivery' &&
-            Math.abs(totalConfirmed - (d.data().amountEstimated ?? 0)) > 0.01;
-          batch.update(d.ref, {
-            status: finalStatus === 'partially_stocked' ? 'forecasted' : wasDivergent ? 'divergent' : 'confirmed',
-            updatedAt: now,
-          });
-        });
-      }
-
-      if (orderData?.quotationId && convertedQuotationItemIds.size > 0) {
-        const quotationItemsSnap = await getDocs(
-          collection(db, PURCHASING_COLLECTIONS.quotationItems(orderData.quotationId)),
-        );
-        const conversionStatuses = quotationItemsSnap.docs.map((d) => {
-          if (convertedQuotationItemIds.has(d.id)) return 'converted';
-          return d.data().conversionStatus;
-        });
-        const convertibleStatuses = conversionStatuses.filter((s) => s !== 'discarded');
-        const allConverted =
-          convertibleStatuses.length > 0 && convertibleStatuses.every((s) => s === 'converted');
-        const someConverted = convertibleStatuses.some((s) => s === 'converted');
-        batch.update(doc(db, PURCHASING_COLLECTIONS.quotations, orderData.quotationId), {
-          status: allConverted ? 'converted' : someConverted ? 'partially_converted' : 'quoted',
-        });
-      }
-
-      await batch.commit();
-
-      if (firebaseUser && receipt) {
+      if (receipt) {
         await syncPurchaseReceiptTask(firebaseUser, {
           receiptId: receipt.id,
           purchaseOrderId: receipt.purchaseOrderId,
@@ -561,8 +272,18 @@ export function PurchaseReceiptProvider({ children }: { children: React.ReactNod
         });
       }
     },
-    [firebaseUser, user, receipts],
+    [firebaseUser, receipts, user],
   );
+
+  const fetchReceiptItems = useCallback(async (receiptId: string): Promise<PurchaseReceiptItem[]> => {
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/purchasing/receipts/${receiptId}/items`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error('Falha ao buscar itens do recebimento.');
+    return response.json();
+  }, [firebaseUser]);
 
   const value: PurchaseReceiptContextType = useMemo(
     () => ({ receipts, loading, fetchReceiptItems, startConference, saveConference, startStockEntry, confirmStockEntry }),

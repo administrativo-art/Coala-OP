@@ -39,6 +39,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
 
       setLoading(true);
       const q = query(collection(db, "profiles"));
+      let lastUpdateAt = 0;
       unsubscribeProfiles = onSnapshot(q, async (querySnapshot) => {
         let profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
 
@@ -98,7 +99,10 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
           const newAdminPerms = JSON.parse(JSON.stringify(adminPerms));
           deepUpdateRecursive(newAdminPerms, templatePerms);
 
-          if (needsUpdate) {
+          const now = Date.now();
+          const cooldown = 10000; // 10 seconds cooldown
+          if (needsUpdate && (now - lastUpdateAt > cooldown)) {
+              lastUpdateAt = now;
               const adminProfileRef = doc(db, "profiles", adminProfile.id);
               updateDoc(adminProfileRef, { permissions: newAdminPerms }).catch(console.error);
           }

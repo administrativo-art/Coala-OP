@@ -5,6 +5,12 @@ import { addMonths } from 'date-fns';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { financialDbAdmin } from '@/lib/firebase-financial-admin';
 import { verifyAuth } from '@/lib/verify-auth';
+import { PURCHASING_COLLECTIONS } from '@/lib/purchasing-constants';
+import {
+  calculatePricePerBaseUnit,
+  calculateStockQuantityFromPurchase,
+} from '@/lib/purchasing-units';
+import { type Product, type BaseProduct } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -112,6 +118,74 @@ async function lookupBarcode(rawBarcode: string | null) {
   return NextResponse.json({ found: false, scaleBarcode: false, barcode });
 }
 
+async function internalSyncExpense(orderId: string, orderData: any, uid: string) {
+  const supplierSnap = orderData.supplierId ? await dbAdmin.collection('entities').doc(orderData.supplierId).get() : null;
+  const supplier = supplierSnap?.data() as Record<string, any> | undefined;
+
+  const financialSnap = await financialDbAdmin
+    .collection('expenses')
+    .where('purchaseOrderId', '==', orderId)
+    .limit(1)
+    .get();
+
+  const totalValue = Number(orderData.totalEstimated ?? 0);
+  const basePayload = {
+    description: `Compra ${supplier?.fantasyName || supplier?.name || orderData.supplierId || orderId}`,
+    supplier: supplier?.fantasyName || supplier?.name || '',
+    accountPlan: orderData.accountPlanId ?? '',
+    accountPlanName: orderData.accountPlanName ?? '',
+    totalValue,
+    dueDate: Timestamp.fromDate(new Date(orderData.paymentDueDate)),
+    competenceDate: Timestamp.fromDate(new Date(orderData.createdAt ?? orderData.paymentDueDate)),
+    paymentMethod: orderData.paymentCondition === 'installments' ? 'installments' : 'single',
+    installments:
+      orderData.paymentCondition === 'installments'
+        ? buildExpenseInstallments(totalValue, Number(orderData.installmentsCount ?? 2), orderData.paymentDueDate)
+        : null,
+    installmentType: orderData.paymentCondition === 'installments' ? 'equal' : null,
+    installmentPeriodicity: orderData.paymentCondition === 'installments' ? 'monthly' : null,
+    firstInstallmentDueDate:
+      orderData.paymentCondition === 'installments' ? Timestamp.fromDate(new Date(orderData.paymentDueDate)) : null,
+    isApportioned: false,
+    resultCenter: orderData.resultCenterId ?? null,
+    apportionments: null,
+    notes: orderData.notes
+      ? `${orderData.notes}\n\n[AUDITORIA DE COMPRAS PENDENTE] Revise parcelamento, conta financeira e liquidação.`
+      : '[AUDITORIA DE COMPRAS PENDENTE] Revise parcelamento, conta financeira e liquidação.',
+    status: 'pending',
+    originModule: 'purchasing',
+    originStatus: 'pending_audit',
+    purchaseOrderId: orderId,
+    purchaseFinancialStatus: orderData.paymentCondition === 'installments' ? 'installments_pending_audit' : 'pending_audit',
+    createdBy: uid,
+    updatedAt: Timestamp.now(),
+  };
+
+  let expenseId: string;
+  if (financialSnap.empty) {
+    const expenseRef = financialDbAdmin.collection('expenses').doc();
+    expenseId = expenseRef.id;
+    await expenseRef.set({ ...basePayload, createdAt: Timestamp.now() });
+  } else {
+    const existing = financialSnap.docs[0];
+    expenseId = existing.id;
+    await existing.ref.set(basePayload, { merge: true });
+  }
+
+  await Promise.all([
+    dbAdmin.collection('purchase_orders').doc(orderId).set({ linkedExpenseId: expenseId }, { merge: true }),
+    dbAdmin
+      .collection('purchase_financials')
+      .where('purchaseOrderId', '==', orderId)
+      .get()
+      .then((snapshot) =>
+        Promise.all(snapshot.docs.map((doc) => doc.ref.set({ linkedExpenseId: expenseId }, { merge: true }))),
+      ),
+  ]);
+
+  return expenseId;
+}
+
 export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
   const decoded = await assertAuth(request);
   if (!decoded) return jsonError('Não autorizado.', 401);
@@ -139,12 +213,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
     });
   }
 
-  if (resource === 'quotations' && id && child === 'items') {
+  if ((resource === 'quotations' || resource === 'receipts' || resource === 'orders') && id && child === 'items') {
+    const collectionName = resource === 'quotations' ? 'quotations' : resource === 'receipts' ? 'purchase_receipts' : 'purchase_orders';
     if (childId) {
-      const doc = await dbAdmin.collection('quotations').doc(id).collection('items').doc(childId).get();
+      const doc = await dbAdmin.collection(collectionName).doc(id).collection('items').doc(childId).get();
       return NextResponse.json(docData(doc));
     }
-    const snapshot = await dbAdmin.collection('quotations').doc(id).collection('items').get();
+    const snapshot = await dbAdmin.collection(collectionName).doc(id).collection('items').get();
     return NextResponse.json(collectionData(snapshot));
   }
 
@@ -177,72 +252,437 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     return lookupBarcode(body.barcode ?? null);
   }
 
-  if (resource === 'quotations' && !id) {
-    const ref = dbAdmin.collection('quotations').doc();
-    await ref.set({
+  if (resource === 'orders' && !id) {
+    const ref = dbAdmin.collection('purchase_orders').doc();
+    const orderData = {
       workspaceId: WORKSPACE_ID,
       supplierId: body.supplierId,
-      mode: body.mode ?? 'remote',
-      status: 'draft',
-      validUntil: body.validUntil ?? null,
+      supplierName: body.supplierName,
+      status: 'created',
+      totalEstimated: body.totalEstimated ?? 0,
+      totalConfirmed: 0,
+      paymentCondition: body.paymentCondition ?? 'cash',
+      paymentDueDate: body.paymentDueDate ?? now,
+      installmentsCount: body.installmentsCount ?? 1,
+      accountPlanId: body.accountPlanId ?? null,
+      accountPlanName: body.accountPlanName ?? null,
+      resultCenterId: body.resultCenterId ?? null,
       notes: body.notes ?? null,
+      quotationId: body.quotationId ?? null,
       createdAt: now,
+      updatedAt: now,
       createdBy: decoded.uid,
-    });
+    };
+    await ref.set(orderData);
+
+    if (Array.isArray(body.items)) {
+      const batch = dbAdmin.batch();
+      for (const item of body.items) {
+        const itemRef = ref.collection('items').doc();
+        batch.set(itemRef, {
+          purchaseOrderId: ref.id,
+          baseItemId: item.baseItemId,
+          productId: item.productId ?? null,
+          unit: item.unit,
+          purchaseUnitType: item.purchaseUnitType ?? 'content',
+          purchaseUnitLabel: item.purchaseUnitLabel ?? item.unit,
+          quantityOrdered: item.quantityOrdered,
+          unitPriceOrdered: item.unitPriceOrdered,
+          totalOrdered: item.quantityOrdered * item.unitPriceOrdered,
+          quotationItemId: item.quotationItemId ?? null,
+        });
+      }
+      await batch.commit();
+    }
     return NextResponse.json({ id: ref.id }, { status: 201 });
   }
 
-  if (resource === 'quotations' && id && child === 'finalize') {
-    const selectedItemIds: string[] = Array.isArray(body.selectedItemIds) ? body.selectedItemIds : [];
+  if (resource === 'orders' && id && child === 'confirm') {
+    const orderRef = dbAdmin.collection('purchase_orders').doc(id);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+    const order = orderSnap.data()!;
+
     const batch = dbAdmin.batch();
-    batch.update(dbAdmin.collection('quotations').doc(id), { status: 'quoted', finalizedAt: now });
-    if (selectedItemIds.length > 0) {
-      const itemsSnap = await dbAdmin.collection('quotations').doc(id).collection('items').get();
-      for (const itemDoc of itemsSnap.docs) {
-        const nextStatus = selectedItemIds.includes(itemDoc.id) ? 'selected' : 'pending';
-        batch.update(itemDoc.ref, { conversionStatus: nextStatus });
+    batch.update(orderRef, { status: 'confirmed', confirmedAt: now, updatedAt: now });
+
+    const receiptRef = dbAdmin.collection('purchase_receipts').doc();
+    const financialRef = dbAdmin.collection('purchase_financials').doc();
+    const receiptMode = order.paymentCondition === 'immediate' ? 'immediate_pickup' : 'future_delivery';
+    // Per user request, all new receipts start as 'awaiting_delivery' (Aguardando recebimento)
+    const initialReceiptStatus = 'awaiting_delivery';
+
+    batch.set(receiptRef, {
+      workspaceId: WORKSPACE_ID,
+      purchaseOrderId: id,
+      supplierId: order.supplierId,
+      supplierName: order.supplierName,
+      status: initialReceiptStatus,
+      receiptMode,
+      expectedDate: order.paymentDueDate,
+      totalEstimated: order.totalEstimated,
+      totalConfirmed: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const itemsSnap = await orderRef.collection('items').get();
+    for (const itemDoc of itemsSnap.docs) {
+      const item = itemDoc.data();
+      const receiptItemRef = receiptRef.collection('items').doc();
+      batch.set(receiptItemRef, {
+        purchaseReceiptId: receiptRef.id,
+        purchaseOrderItemId: itemDoc.id,
+        baseItemId: item.baseItemId,
+        productId: item.productId ?? null,
+        unit: item.unit,
+        purchaseUnitType: item.purchaseUnitType,
+        purchaseUnitLabel: item.purchaseUnitLabel,
+        quantityOrdered: item.quantityOrdered,
+        unitPriceOrdered: item.unitPriceOrdered,
+        quantityReceived: 0,
+        unitPriceConfirmed: 0,
+        status: 'pending',
+      });
+    }
+
+    batch.set(financialRef, {
+      workspaceId: WORKSPACE_ID,
+      purchaseOrderId: id,
+      supplierId: order.supplierId,
+      supplierName: order.supplierName,
+      amountEstimated: order.totalEstimated,
+      dueDate: order.paymentDueDate,
+      status: 'confirmed',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await batch.commit();
+
+    // Sync financial expense
+    await internalSyncExpense(id, order, decoded.uid).catch(e => console.error('Sync expense error:', e));
+
+    return NextResponse.json({ ok: true, receiptId: receiptRef.id });
+  }
+
+  if (resource === 'orders' && id && child === 'cancel') {
+    await dbAdmin.collection('purchase_orders').doc(id).update({ status: 'cancelled', cancelledAt: now, updatedAt: now });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (resource === 'receipts' && id && child === 'start-conference') {
+    await dbAdmin.collection('purchase_receipts').doc(id).update({
+      status: 'in_conference',
+      conferenceStartedAt: now,
+      updatedAt: now,
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  function getReceiptItemStatus(
+    quantityReceived: number,
+    quantityOrdered: number,
+    unitPriceConfirmed: number,
+    unitPriceOrdered: number,
+    divergenceReason?: string,
+  ) {
+    const quantityDiffers = Math.abs(quantityReceived - quantityOrdered) > 0.001;
+    const priceDiffers = Math.abs(unitPriceConfirmed - unitPriceOrdered) > 0.01;
+
+    if (quantityReceived === 0) return 'cancelled';
+    if (quantityReceived < quantityOrdered) return 'partial';
+    if (divergenceReason || quantityDiffers || priceDiffers) return 'divergent';
+    return 'received';
+  }
+
+  if (resource === 'receipts' && id && child === 'save-conference') {
+    const batch = dbAdmin.batch();
+    const receiptRef = dbAdmin.collection('purchase_receipts').doc(id);
+    const receiptSnap = await receiptRef.get();
+    if (!receiptSnap.exists) return jsonError('Recebimento não encontrado.', 404);
+    const receipt = receiptSnap.data()!;
+
+    const orderRef = dbAdmin.collection('purchase_orders').doc(receipt.purchaseOrderId);
+    const orderItemsSnap = await orderRef.collection('items').get();
+    const orderItemsById = new Map(orderItemsSnap.docs.map((d) => [d.id, d.data()]));
+
+    let totalConfirmed = 0;
+    let hasDivergence = false;
+    let hasRemaining = false;
+
+    if (Array.isArray(body.items)) {
+      for (const item of body.items) {
+        const orderItem = orderItemsById.get(item.purchaseOrderItemId);
+        const quantityOrdered = Number(orderItem?.quantityOrdered ?? item.quantityReceived);
+        const unitPriceOrdered = Number(orderItem?.unitPriceOrdered ?? item.unitPriceConfirmed);
+        const itemStatus = getReceiptItemStatus(
+          item.quantityReceived,
+          quantityOrdered,
+          item.unitPriceConfirmed,
+          unitPriceOrdered,
+          item.divergenceReason,
+        );
+
+        totalConfirmed += item.quantityReceived * item.unitPriceConfirmed;
+        if (itemStatus === 'partial') hasRemaining = true;
+        if (itemStatus === 'partial' || itemStatus === 'divergent') hasDivergence = true;
+
+        batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
+          unit: item.unit,
+          purchaseUnitType: item.purchaseUnitType ?? orderItem?.purchaseUnitType ?? 'content',
+          purchaseUnitLabel: item.purchaseUnitLabel ?? orderItem?.purchaseUnitLabel ?? item.unit,
+          quantityReceived: item.quantityReceived,
+          unitPriceConfirmed: item.unitPriceConfirmed,
+          totalConfirmed: item.quantityReceived * item.unitPriceConfirmed,
+          status: itemStatus,
+          divergenceReason: item.divergenceReason?.trim() || null,
+        });
       }
     }
+
+    batch.update(receiptRef, {
+      status: 'awaiting_stock',
+      totalConfirmed,
+      conferenceCompletedAt: now,
+      updatedAt: now,
+      notes: body.notes ?? receipt.notes ?? null,
+      receiptProofUrl: body.receiptProofUrl ?? receipt.receiptProofUrl ?? null,
+      receiptProofDescription: body.receiptProofDescription ?? receipt.receiptProofDescription ?? null,
+    });
+
+    batch.update(orderRef, { totalConfirmed, updatedAt: now });
+
+    const finSnap = await dbAdmin
+      .collection('purchase_financials')
+      .where('purchaseOrderId', '==', receipt.purchaseOrderId)
+      .get();
+    finSnap.forEach((d) => {
+      const wasDivergent =
+        receipt.receiptMode === 'future_delivery' &&
+        Math.abs(totalConfirmed - (d.data().amountEstimated ?? 0)) > 0.01;
+      batch.update(d.ref, {
+        status: hasRemaining ? 'forecasted' : wasDivergent || hasDivergence ? 'divergent' : 'confirmed',
+        updatedAt: now,
+      });
+    });
+
     await batch.commit();
     return NextResponse.json({ ok: true });
   }
 
-  if (resource === 'quotations' && id && child === 'cancel') {
-    await dbAdmin.collection('quotations').doc(id).update({ status: 'cancelled', cancelledAt: now });
+  if (resource === 'receipts' && id && child === 'start-stock-entry') {
+    await dbAdmin.collection('purchase_receipts').doc(id).update({
+      status: 'in_stock_entry',
+      stockEntryStartedAt: now,
+      updatedAt: now,
+    });
     return NextResponse.json({ ok: true });
   }
 
-  if (resource === 'quotations' && id && child === 'items' && !childId) {
-    const ref = dbAdmin.collection('quotations').doc(id).collection('items').doc();
-    const quantity = Number(body.quantity ?? 0);
-    const unitPrice = Number(body.unitPrice ?? 0);
-    const discount = Number(body.discount ?? 0);
-    await ref.set({
-      quotationId: id,
-      baseItemId: body.baseItemId ?? null,
-      productId: body.productId ?? null,
-      freeText: body.freeText ?? null,
-      barcode: body.barcode ?? null,
-      unit: body.unit,
-      purchaseUnitType: body.purchaseUnitType ?? 'content',
-      purchaseUnitLabel: body.purchaseUnitLabel ?? body.unit,
-      quantity,
-      unitPrice,
-      discount,
-      totalPrice: Math.max(quantity * unitPrice - discount, 0),
-      deliveryEstimateDays: body.deliveryEstimateDays ?? null,
-      observation: body.observation ?? null,
-      conversionStatus: 'pending',
-    });
-    return NextResponse.json({ id: ref.id }, { status: 201 });
-  }
+  if (resource === 'receipts' && id && child === 'confirm-stock-entry') {
+    const batch = dbAdmin.batch();
+    const receiptRef = dbAdmin.collection('purchase_receipts').doc(id);
+    const receiptSnap = await receiptRef.get();
+    if (!receiptSnap.exists) return jsonError('Recebimento não encontrado.', 404);
+    const receipt = receiptSnap.data()!;
 
-  if (resource === 'quotations' && id && child === 'items' && childId && action === 'normalize') {
-    await dbAdmin.collection('quotations').doc(id).collection('items').doc(childId).update({
-      baseItemId: body.baseItemId,
-      freeText: null,
+    const orderRef = dbAdmin.collection('purchase_orders').doc(receipt.purchaseOrderId);
+    const orderItemsSnap = await orderRef.collection('items').get();
+    const orderItemsById = new Map(orderItemsSnap.docs.map((d) => [d.id, d.data()]));
+
+    const receiptItemsSnap = await receiptRef.collection('items').get();
+    const receiptItemsById = new Map(receiptItemsSnap.docs.map((d) => [d.id, d.data()]));
+
+    let totalConfirmed = 0;
+    let hasDivergence = false;
+    let hasRemaining = false;
+    const payloadReceiptItemIds = new Set(
+      Array.isArray(body.items) ? body.items.map((i: any) => i.receiptItemId) : [],
+    );
+
+    if (Array.isArray(body.items)) {
+      for (const item of body.items) {
+        const orderItem = orderItemsById.get(item.purchaseOrderItemId);
+        const existingReceiptItem = receiptItemsById.get(item.receiptItemId);
+
+        const [productDoc, baseProductDoc] = await Promise.all([
+          dbAdmin.collection('products').doc(item.productId).get(),
+          dbAdmin.collection('baseProducts').doc(item.baseItemId).get(),
+        ]);
+
+        if (!productDoc.exists || !baseProductDoc.exists) {
+          return jsonError('Unidade de estoque ou insumo base não encontrado.');
+        }
+
+        const product = { id: productDoc.id, ...productDoc.data() } as Product;
+        const baseProduct = { id: baseProductDoc.id, ...baseProductDoc.data() } as BaseProduct;
+
+        const purchaseUnitType =
+          item.purchaseUnitType ?? existingReceiptItem?.purchaseUnitType ?? orderItem?.purchaseUnitType ?? 'content';
+        const purchaseUnitLabel =
+          item.purchaseUnitLabel ??
+          existingReceiptItem?.purchaseUnitLabel ??
+          orderItem?.purchaseUnitLabel ??
+          existingReceiptItem?.unit ??
+          orderItem?.unit ??
+          '';
+
+        const confirmedUnitPrice = existingReceiptItem?.unitPriceConfirmed ?? orderItem?.unitPriceOrdered ?? 0;
+        const cumulativeReceived = existingReceiptItem?.quantityReceived ?? orderItem?.quantityOrdered ?? 0;
+
+        const convertedPrice = calculatePricePerBaseUnit(
+          confirmedUnitPrice,
+          product,
+          baseProduct,
+          purchaseUnitType,
+        );
+        if (!convertedPrice.ok) return jsonError(convertedPrice.error || 'Erro na conversão de preço.');
+
+        totalConfirmed += cumulativeReceived * confirmedUnitPrice;
+
+        const receiptItemStatus = getReceiptItemStatus(
+          cumulativeReceived,
+          Number(orderItem?.quantityOrdered ?? cumulativeReceived),
+          confirmedUnitPrice,
+          Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
+          existingReceiptItem?.divergenceReason,
+        );
+
+        if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
+        if (receiptItemStatus === 'partial') hasRemaining = true;
+
+        if (Array.isArray(item.lots)) {
+          for (const lot of item.lots) {
+            const stockConversion = calculateStockQuantityFromPurchase(
+              lot.quantity,
+              product,
+              product,
+              baseProduct,
+              purchaseUnitType,
+            );
+            if (!stockConversion.ok) return jsonError(stockConversion.error || 'Erro na conversão de estoque.');
+
+            const lotRef = receiptRef.collection('items').doc(item.receiptItemId).collection('lots').doc();
+            batch.set(lotRef, {
+              purchaseReceiptItemId: item.receiptItemId,
+              baseItemId: item.baseItemId,
+              lotCode: lot.lotCode,
+              ...(lot.expiryDate != null ? { expiryDate: lot.expiryDate } : {}),
+              quantity: lot.quantity,
+              stockQuantity: stockConversion.stockQuantity,
+              purchaseUnitType,
+              purchaseUnitLabel,
+              unitCost: confirmedUnitPrice,
+              occurredAt: now,
+            });
+
+            const costRef = dbAdmin.collection('effective_cost_history').doc();
+            batch.set(costRef, {
+              workspaceId: WORKSPACE_ID,
+              baseItemId: item.baseItemId,
+              supplierId: receipt.supplierId,
+              unitCost: convertedPrice.pricePerBaseUnit,
+              quantity: stockConversion.baseQuantity,
+              purchasePrice: confirmedUnitPrice,
+              purchaseQuantity: lot.quantity,
+              purchaseUnitType,
+              purchaseUnitLabel,
+              stockProductId: item.productId,
+              stockProductQuantity: stockConversion.stockQuantity,
+              purchaseReceiptId: id,
+              purchaseReceiptLotId: lotRef.id,
+              purchaseOrderId: receipt.purchaseOrderId,
+              occurredAt: now,
+            });
+
+            const lotKey = `${item.productId}_${body.destinationKioskId}_${lot.lotCode}_${
+              lot.expiryDate ?? 'noval'
+            }`;
+            const stockLotRef = dbAdmin.collection('lots').doc(lotKey);
+            batch.set(
+              stockLotRef,
+              {
+                productId: item.productId,
+                productName: item.productName ?? item.baseItemId,
+                lotNumber: lot.lotCode,
+                expiryDate: lot.expiryDate ?? null,
+                kioskId: body.destinationKioskId,
+                quantity: Timestamp.fromMillis(stockConversion.stockQuantity), // increment hack? no, use FieldValue
+                updatedAt: Timestamp.now(),
+              },
+              { merge: true },
+            );
+            // Need to fix increment logic for Admin SDK:
+            const adminIncrement = (val: number) => require('firebase-admin').firestore.FieldValue.increment(val);
+            batch.update(stockLotRef, { quantity: adminIncrement(stockConversion.stockQuantity) });
+
+            const movRef = dbAdmin.collection('movementHistory').doc();
+            batch.set(movRef, {
+              lotId: lotKey,
+              productId: item.productId,
+              productName: item.productName ?? item.baseItemId,
+              lotNumber: lot.lotCode,
+              type: 'ENTRADA',
+              quantityChange: stockConversion.stockQuantity,
+              toKioskId: body.destinationKioskId,
+              toKioskName: body.destinationKioskName,
+              userId: decoded.uid,
+              username: body.username ?? 'Sistema',
+              timestamp: now,
+              sourceType: 'purchase_receipt',
+              sourceId: id,
+            });
+          }
+        }
+      }
+    }
+
+    receiptItemsById.forEach((existingItem, rId) => {
+      if (payloadReceiptItemIds.has(rId)) return;
+      totalConfirmed +=
+        (existingItem.quantityReceived ?? 0) * (existingItem.unitPriceConfirmed ?? existingItem.unitPriceOrdered ?? 0);
+      if (existingItem.status === 'partial') hasRemaining = true;
+      if (existingItem.status === 'partial' || existingItem.status === 'divergent') hasDivergence = true;
     });
-    return NextResponse.json({ ok: true });
+
+    const finalStatus = hasRemaining
+      ? 'partially_stocked'
+      : hasDivergence
+      ? 'stocked_with_divergence'
+      : 'stocked';
+
+    batch.update(receiptRef, {
+      status: finalStatus,
+      stockEnteredAt: now,
+      receivedAt: now,
+      totalConfirmed,
+      updatedAt: now,
+      notes: body.notes ?? receipt.notes ?? null,
+    });
+
+    batch.update(orderRef, {
+      totalConfirmed,
+      ...(finalStatus !== 'partially_stocked' ? { receivedAt: now } : {}),
+      updatedAt: now,
+    });
+
+    const finSnap = await dbAdmin
+      .collection('purchase_financials')
+      .where('purchaseOrderId', '==', receipt.purchaseOrderId)
+      .get();
+    finSnap.forEach((d) => {
+      const wasDivergent =
+        receipt.receiptMode === 'future_delivery' &&
+        Math.abs(totalConfirmed - (d.data().amountEstimated ?? 0)) > 0.01;
+      batch.update(d.ref, {
+        status: finalStatus === 'partially_stocked' ? 'forecasted' : wasDivergent ? 'divergent' : 'confirmed',
+        updatedAt: now,
+      });
+    });
+
+    await batch.commit();
+    return NextResponse.json({ ok: true, status: finalStatus });
   }
 
   if (resource === 'orders' && id && child === 'sync-expense') {
@@ -346,8 +786,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     return NextResponse.json({ ok: true });
   }
 
-  if (resource === 'quotations' && id && !child) {
-    await dbAdmin.collection('quotations').doc(id).update(body);
+  if (resource === 'orders' && id && !child) {
+    await dbAdmin.collection('purchase_orders').doc(id).update({ ...body, updatedAt: now });
     return NextResponse.json({ ok: true });
   }
 
