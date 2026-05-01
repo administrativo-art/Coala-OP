@@ -16,7 +16,7 @@ type RouteContext = {
 export async function POST(request: NextRequest, routeContext: RouteContext) {
   try {
     const context = await requireUser(request);
-    if (!(context.isDefaultAdmin || context.permissions.stock.analysis.restock)) {
+    if (!(context.isDefaultAdmin || !!context.permissions?.stock?.analysis?.restock)) {
       return NextResponse.json(
         { error: "Sem permissão para efetivar reposições." },
         { status: 403 }

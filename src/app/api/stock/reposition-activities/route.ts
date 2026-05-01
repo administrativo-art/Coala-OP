@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function canManage(context: Awaited<ReturnType<typeof requireUser>>) {
-  return context.isDefaultAdmin || context.permissions.stock.analysis.restock;
+  return context.isDefaultAdmin || !!context.permissions?.stock?.analysis?.restock;
 }
 
 function buildRepositionTaskDescription(activity: Pick<

@@ -13,11 +13,11 @@ type RouteContext = {
 };
 
 function canManage(context: Awaited<ReturnType<typeof requireUser>>) {
-  return context.isDefaultAdmin || context.permissions.stock.analysis.restock;
+  return context.isDefaultAdmin || !!context.permissions?.stock?.analysis?.restock;
 }
 
 function canCancel(context: Awaited<ReturnType<typeof requireUser>>) {
-  return context.isDefaultAdmin || context.permissions.reposition.cancel;
+  return context.isDefaultAdmin || !!context.permissions?.reposition?.cancel;
 }
 
 function mapRepositionStatusToTaskStatus(status: RepositionActivity["status"]) {
@@ -145,10 +145,14 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
         },
       });
 
-      if (
-        current.status === "Aguardando despacho" ||
-        current.status === "Aguardando recebimento"
-      ) {
+      const activeStatuses = [
+        "Aguardando despacho",
+        "Aguardando recebimento",
+        "Recebido com divergência",
+        "Recebido sem divergência",
+      ];
+
+      if (activeStatuses.includes(current.status)) {
         for (const item of current.items) {
           for (const lot of item.suggestedLots) {
             const lotRef = dbAdmin.collection("lots").doc(lot.lotId);

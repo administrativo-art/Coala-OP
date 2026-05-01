@@ -10,11 +10,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function canReadRequests(context: Awaited<ReturnType<typeof requireUser>>) {
-  return context.isDefaultAdmin || context.permissions.stock.returns.view;
+  return context.isDefaultAdmin || !!context.permissions?.stock?.returns?.view;
 }
 
 function canCreateRequests(context: Awaited<ReturnType<typeof requireUser>>) {
-  return context.isDefaultAdmin || context.permissions.stock.returns.add;
+  return context.isDefaultAdmin || !!context.permissions?.stock?.returns?.add;
 }
 
 export async function GET(request: NextRequest) {

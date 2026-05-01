@@ -124,10 +124,14 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
 
       const response = await cancelRepositionActivityRequest(firebaseUser, activityId);
 
-      if (
-        activityToCancel.status === "Aguardando despacho" ||
-        activityToCancel.status === "Aguardando recebimento"
-      ) {
+      const activeStatuses = [
+        "Aguardando despacho",
+        "Aguardando recebimento",
+        "Recebido com divergência",
+        "Recebido sem divergência",
+      ];
+
+      if (activeStatuses.includes(activityToCancel.status)) {
         const lotUpdates = activityToCancel.items.flatMap((item) =>
           item.suggestedLots.map((lot) => ({
             lotId: lot.lotId,

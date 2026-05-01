@@ -12,7 +12,7 @@ function canReadRequests(context: Awaited<ReturnType<typeof requireUser>>) {
   return (
     context.isDefaultAdmin ||
     context.permissions.itemRequests.approve ||
-    context.permissions.stock.stockCount.perform
+    !!context.permissions?.stock?.stockCount?.perform
   );
 }
 
@@ -20,7 +20,7 @@ function canCreateRequests(context: Awaited<ReturnType<typeof requireUser>>) {
   return (
     context.isDefaultAdmin ||
     context.permissions.itemRequests.add ||
-    context.permissions.stock.stockCount.perform
+    !!context.permissions?.stock?.stockCount?.perform
   );
 }
 

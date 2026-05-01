@@ -321,8 +321,21 @@ function RepositionManagement() {
 
   const handleCancelConfirm = async () => {
     if (activityToCancel) {
-        await cancelRepositionActivity(activityToCancel.id);
-        setActivityToCancel(null);
+        try {
+            await cancelRepositionActivity(activityToCancel.id);
+            toast({
+                title: "Atividade cancelada",
+                description: "A reposição foi cancelada com sucesso.",
+            });
+            setActivityToCancel(null);
+        } catch (error) {
+            console.error("Erro ao cancelar atividade:", error);
+            toast({
+                title: "Erro ao cancelar",
+                description: error instanceof Error ? error.message : "Não foi possível cancelar a atividade.",
+                variant: "destructive",
+            });
+        }
     }
   };
 

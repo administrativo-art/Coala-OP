@@ -79,21 +79,27 @@ export async function requireUser(req: NextRequest): Promise<ServerUserContext> 
   }
 
   const userData = userSnap.data() ?? {};
-  const isDefaultAdmin = decoded.isDefaultAdmin === true;
+  const isTokenDefaultAdmin = decoded.isDefaultAdmin === true;
   const profileId =
-    typeof decoded.profileId === "string" && decoded.profileId
-      ? decoded.profileId
-      : typeof userData.profileId === "string" && userData.profileId
-        ? userData.profileId
+    typeof userData.profileId === "string" && userData.profileId
+      ? userData.profileId
+      : typeof decoded.profileId === "string" && decoded.profileId
+        ? decoded.profileId
         : null;
 
   let profilePermissions: Partial<PermissionSet> | undefined;
-  if (!isDefaultAdmin && profileId) {
+  let isProfileDefaultAdmin = false;
+
+  if (profileId) {
     const profileSnap = await dbAdmin.collection("profiles").doc(profileId).get();
-    profilePermissions = profileSnap.data()?.permissions as
-      | Partial<PermissionSet>
-      | undefined;
+    const profileData = profileSnap.data();
+    if (profileData) {
+      profilePermissions = profileData.permissions as Partial<PermissionSet> | undefined;
+      isProfileDefaultAdmin = profileData.isDefaultAdmin === true;
+    }
   }
+
+  const isDefaultAdmin = isTokenDefaultAdmin || isProfileDefaultAdmin;
 
   return {
     decoded,

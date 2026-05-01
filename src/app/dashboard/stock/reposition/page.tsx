@@ -246,12 +246,23 @@ function RepositionManagement() {
     );
   }
   
-  const handleFinalizeConfirm = async () => {
-    if (!activityToFinalize) return;
-    setIsFinalizing(true);
-    await finalizeRepositionActivity(activityToFinalize, 'trust_receipt');
-    setIsFinalizing(false);
-    setActivityToFinalize(null);
+  const handleCancelConfirm = async () => {
+    if (!activityToCancel) return;
+    try {
+        await cancelRepositionActivity(activityToCancel.id);
+        toast({
+            title: "Atividade cancelada",
+            description: "A reposição foi cancelada com sucesso.",
+        });
+        setActivityToCancel(null);
+    } catch (error) {
+        console.error("Erro ao cancelar atividade:", error);
+        toast({
+            title: "Erro ao cancelar",
+            description: error instanceof Error ? error.message : "Não foi possível cancelar a atividade.",
+            variant: "destructive",
+        });
+    }
   };
 
   return (
@@ -276,7 +287,14 @@ function RepositionManagement() {
       </div>
       {activityToDispatch && <DispatchModal activity={activityToDispatch} onOpenChange={() => setActivityToDispatch(null)} />}
       {activityToAudit && <AuditReceiptModal activity={activityToAudit} onOpenChange={() => setActivityToAudit(null)} />}
-      {activityToCancel && <DeleteConfirmationDialog open={!!activityToCancel} onOpenChange={() => setActivityToCancel(null)} onConfirm={() => { cancelRepositionActivity(activityToCancel.id); setActivityToCancel(null); }} itemName="a atividade de reposição" />}
+      {activityToCancel && (
+          <DeleteConfirmationDialog 
+            open={!!activityToCancel} 
+            onOpenChange={() => setActivityToCancel(null)} 
+            onConfirm={handleCancelConfirm} 
+            itemName="a atividade de reposição" 
+          />
+      )}
       {activityToFinalize && <DeleteConfirmationDialog open={!!activityToFinalize} onOpenChange={() => setActivityToFinalize(null)} onConfirm={handleFinalizeConfirm} isDeleting={isFinalizing} title="Efetivar movimentação?" confirmButtonText="Sim, efetivar" />}
       {activityToResolve && <ResolveDivergenceModal open={!!activityToResolve} onOpenChange={(open) => !open && setActivityToResolve(null)} activity={activityToResolve} onConfirm={(res) => finalizeRepositionActivity(activityToResolve, res)} isLoading={isFinalizing} />}
     </>

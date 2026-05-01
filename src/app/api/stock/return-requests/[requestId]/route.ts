@@ -13,11 +13,11 @@ type RouteContext = {
 };
 
 function canUpdateRequests(context: Awaited<ReturnType<typeof requireUser>>) {
-  return context.isDefaultAdmin || context.permissions.stock.returns.updateStatus;
+  return context.isDefaultAdmin || !!context.permissions?.stock?.returns?.updateStatus;
 }
 
 function canDeleteRequests(context: Awaited<ReturnType<typeof requireUser>>) {
-  return context.isDefaultAdmin || context.permissions.stock.returns.delete;
+  return context.isDefaultAdmin || !!context.permissions?.stock?.returns?.delete;
 }
 
 function cleanUndefined<T extends Record<string, unknown>>(value: T) {
