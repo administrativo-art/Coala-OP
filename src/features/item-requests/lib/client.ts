@@ -16,10 +16,22 @@ type ItemRequestCreateInput = Partial<
 };
 
 async function parseJson<T>(response: Response): Promise<T> {
-  const payload = (await response.json().catch(() => null)) as
-    | { error?: string }
-    | T
-    | null;
+  const raw = await response.text();
+  let payload: ({ error?: string } | T | null) = null;
+
+  if (raw) {
+    try {
+      payload = JSON.parse(raw) as { error?: string } | T;
+    } catch (error) {
+      console.error("[ITEM REQUESTS CLIENT] Resposta não-JSON da API", {
+        status: response.status,
+        url: response.url,
+        raw: raw.slice(0, 500),
+        error,
+      });
+      throw new Error(`Resposta inválida da API (${response.status}). Veja o console/terminal.`);
+    }
+  }
 
   if (!response.ok) {
     const message =

@@ -41,6 +41,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ requests });
   } catch (error) {
+    console.error("[ITEM REQUESTS GET] Erro ao carregar solicitações", error);
+
     return NextResponse.json(
       {
         error:
@@ -136,6 +138,8 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
+    console.error("[ITEM REQUESTS POST] Erro ao criar solicitação", error);
+
     return NextResponse.json(
       {
         error:

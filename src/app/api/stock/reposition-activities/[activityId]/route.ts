@@ -186,12 +186,23 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
     });
 
     if (current.taskId) {
-      await updateTaskDocument({
-        context,
-        taskId: current.taskId,
-        allowOriginStatusChange: true,
-        updates: { status: "rejected" },
-      });
+      try {
+        await updateTaskDocument({
+          context,
+          taskId: current.taskId,
+          allowOriginStatusChange: true,
+          updates: { status: "rejected" },
+        });
+      } catch (taskError) {
+        console.error(
+          "[REPOSITION DELETE] Reposição cancelada, mas falhou ao atualizar tarefa vinculada",
+          {
+            activityId,
+            taskId: current.taskId,
+            error: taskError,
+          }
+        );
+      }
     }
 
     return NextResponse.json({
@@ -206,6 +217,8 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
       },
     });
   } catch (error) {
+    console.error("[REPOSITION DELETE] Erro ao cancelar reposição", error);
+
     return NextResponse.json(
       {
         error:

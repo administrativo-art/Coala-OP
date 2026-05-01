@@ -36,17 +36,23 @@ function mergeRecursive(
   });
 }
 
+function clonePermissionSet(value: PermissionSet | undefined, label: string): PermissionSet {
+  if (!value) {
+    throw new Error(`${label} não está definido. Verifique o export em @/types.`);
+  }
+
+  return structuredClone(value) as PermissionSet;
+}
+
 export function buildPermissionSet(
   profilePermissions: Partial<PermissionSet> | undefined,
   isDefaultAdmin: boolean
 ) {
   if (isDefaultAdmin) {
-    return defaultAdminPermissions;
+    return clonePermissionSet(defaultAdminPermissions, "defaultAdminPermissions");
   }
 
-  const merged = JSON.parse(
-    JSON.stringify(defaultGuestPermissions)
-  ) as PermissionSet;
+  const merged = clonePermissionSet(defaultGuestPermissions, "defaultGuestPermissions");
 
   if (profilePermissions) {
     mergeRecursive(

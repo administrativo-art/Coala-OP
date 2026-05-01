@@ -508,6 +508,8 @@ export async function ensureTaskFromOrigin(params: {
   const projectId = params.trigger.task_project_id;
   await ensureTaskProjectStatuses(projectId);
 
+  const pendingStatus = await resolveStatusDoc(projectId, "pending");
+
   try {
     await dbAdmin.runTransaction(async (tx) => {
       const taskSnap = await tx.get(taskRef);
@@ -515,7 +517,6 @@ export async function ensureTaskFromOrigin(params: {
         throw new Error("already-exists");
       }
 
-      const pendingStatus = await resolveStatusDoc(projectId, "pending");
       const now = new Date().toISOString();
       const payload = {
         workspace_id: params.workspaceId,

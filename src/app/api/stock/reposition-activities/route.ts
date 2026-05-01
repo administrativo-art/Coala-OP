@@ -141,26 +141,38 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    const task = await createManualTask({
-      context,
-      input: {
-        title: `Reposição ${payload.kioskOriginName} -> ${payload.kioskDestinationName}`,
-        description: buildRepositionTaskDescription(payload),
-        assigneeType: "user",
-        assigneeId: context.userDoc.id,
-        origin: {
-          kind: "legacy",
-          type: "reposition_activity",
-          id: activityRef.id,
+    try {
+      const task = await createManualTask({
+        context,
+        input: {
+          title: `Reposição ${payload.kioskOriginName} -> ${payload.kioskDestinationName}`,
+          description: buildRepositionTaskDescription(payload),
+          assigneeType: "user",
+          assigneeId: context.userDoc.id,
+          origin: {
+            kind: "legacy",
+            type: "reposition_activity",
+            id: activityRef.id,
+          },
         },
-      },
-    });
+      });
 
-    payload.taskId = task.id;
-    await activityRef.set({ taskId: task.id }, { merge: true });
+      payload.taskId = task.id;
+      await activityRef.set({ taskId: task.id }, { merge: true });
+    } catch (taskError) {
+      console.error(
+        "[REPOSITION POST] Reposição criada, mas falhou ao criar tarefa vinculada",
+        {
+          activityId: activityRef.id,
+          error: taskError,
+        }
+      );
+    }
 
     return NextResponse.json({ activity: payload }, { status: 201 });
   } catch (error) {
+    console.error("[REPOSITION POST] Erro ao criar reposição", error);
+
     return NextResponse.json(
       {
         error:
