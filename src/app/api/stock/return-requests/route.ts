@@ -96,29 +96,15 @@ export async function POST(request: NextRequest) {
     const counterRef = dbAdmin.collection("counters").doc(`returnRequests_${today}`);
     const requestRef = dbAdmin.collection("returnRequests").doc();
 
-    const created = await dbAdmin.runTransaction(async (tx) => {
+    const { requestPayload, counterRef, requestRef, newCount } = await dbAdmin.runTransaction(async (tx) => {
       const counterSnap = await tx.get(counterRef);
-      const newCount = Number(counterSnap.data()?.count ?? 0) + 1;
+      const currentCount = Number(counterSnap.data()?.count ?? 0);
+      const nextCount = currentCount + 1;
       const prefix = body.tipo === "devolucao" ? "DEV" : "BON";
-      const sequence = String(newCount).padStart(4, "0");
+      const sequence = String(nextCount).padStart(4, "0");
       const numero = `${prefix}-${today.replace(/-/g, "")}-${sequence}`;
       const now = new Date();
       const nowIso = now.toISOString();
-
-      const task = await createManualTask({
-        context,
-        input: {
-          title: `Avaria ${numero}: ${productName}`,
-          description: motivo,
-          assigneeType: "profile",
-          assigneeId: "admin",
-          origin: {
-            kind: "legacy",
-            type: "return_request",
-            id: requestRef.id,
-          },
-        },
-      });
 
       const payload: Omit<ReturnRequest, "id"> = {
         numero,
@@ -149,13 +135,33 @@ export async function POST(request: NextRequest) {
           userId: context.userDoc.id,
           username: context.userDoc.username,
         },
-        taskId: task.id,
-      } as Omit<ReturnRequest, "id"> & { taskId: string };
+      } as Omit<ReturnRequest, "id">;
 
-      tx.set(requestRef, payload);
-      tx.set(counterRef, { count: newCount }, { merge: true });
-      return { id: requestRef.id, ...payload } as ReturnRequest;
+      return { requestPayload: payload, counterRef, requestRef, newCount: nextCount };
     });
+
+    const task = await createManualTask({
+      context,
+      input: {
+        title: `Avaria ${requestPayload.numero}: ${productName}`,
+        description: motivo,
+        assigneeType: "profile",
+        assigneeId: "admin",
+        origin: {
+          kind: "legacy",
+          type: "return_request",
+          id: requestRef.id,
+        },
+      },
+    });
+
+    const finalPayload = { ...requestPayload, taskId: task.id };
+    await dbAdmin.runTransaction(async (tx) => {
+      tx.set(requestRef, finalPayload);
+      tx.set(counterRef, { count: newCount }, { merge: true });
+    });
+
+    const created = { id: requestRef.id, ...finalPayload } as ReturnRequest;
 
     return NextResponse.json({ request: created }, { status: 201 });
   } catch (error) {

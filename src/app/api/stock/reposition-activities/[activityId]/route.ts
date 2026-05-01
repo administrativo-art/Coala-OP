@@ -136,15 +136,6 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
 
     const cancelTimestamp = new Date().toISOString();
     await dbAdmin.runTransaction(async (tx) => {
-      tx.update(ref, {
-        status: "Cancelada",
-        updatedAt: cancelTimestamp,
-        updatedBy: {
-          userId: context.userDoc.id,
-          username: context.userDoc.username,
-        },
-      });
-
       const activeStatuses = [
         "Aguardando despacho",
         "Aguardando recebimento",
@@ -153,17 +144,45 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
       ];
 
       if (activeStatuses.includes(current.status)) {
+        // First gather all unique lot IDs and their references
+        const lotMap = new Map<string, { ref: FirebaseFirestore.DocumentReference; quantityToReturn: number }>();
+        
         for (const item of current.items) {
           for (const lot of item.suggestedLots) {
-            const lotRef = dbAdmin.collection("lots").doc(lot.lotId);
-            const lotSnap = await tx.get(lotRef);
-            const currentReserved = Number(lotSnap.data()?.reservedQuantity ?? 0);
-            tx.update(lotRef, {
-              reservedQuantity: Math.max(0, currentReserved - lot.quantityToMove),
-            });
+            const existing = lotMap.get(lot.lotId);
+            if (existing) {
+              existing.quantityToReturn += lot.quantityToMove;
+            } else {
+              lotMap.set(lot.lotId, {
+                ref: dbAdmin.collection("lots").doc(lot.lotId),
+                quantityToReturn: lot.quantityToMove
+              });
+            }
           }
         }
+
+        // Then perform all reads
+        const lotEntries = Array.from(lotMap.values());
+        const lotSnaps = await Promise.all(lotEntries.map(entry => tx.get(entry.ref)));
+        
+        // Finally perform all writes
+        lotSnaps.forEach((snap, index) => {
+          const entry = lotEntries[index];
+          const currentReserved = Number(snap.data()?.reservedQuantity ?? 0);
+          tx.update(entry.ref, {
+            reservedQuantity: Math.max(0, currentReserved - entry.quantityToReturn),
+          });
+        });
       }
+
+      tx.update(ref, {
+        status: "Cancelada",
+        updatedAt: cancelTimestamp,
+        updatedBy: {
+          userId: context.userDoc.id,
+          username: context.userDoc.username,
+        },
+      });
     });
 
     if (current.taskId) {

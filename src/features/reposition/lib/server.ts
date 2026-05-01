@@ -86,6 +86,9 @@ export async function finalizeRepositionActivityServer(params: {
     );
     const destMap = new Map(destDocs.map((doc) => [doc.id, doc]));
 
+    const sourceUpdates = new Map<string, { quantityChange: number; reservedChange: number }>();
+    const destUpdates = new Map<string, { quantityChange: number; ref: FirebaseFirestore.DocumentReference; sourceData: LotEntry }>();
+
     for (const item of activity.items) {
       for (const sentLot of item.suggestedLots) {
         const sourceSnap = sourceMap.get(sentLot.lotId);
@@ -99,9 +102,15 @@ export async function finalizeRepositionActivityServer(params: {
             : sentLot.quantityToMove;
         const qtyToMove =
           params.resolution === "trust_receipt" ? receivedQty : sentLot.quantityToMove;
-        const reserved = Number(source.reservedQuantity ?? 0);
-        const quantity = Number(source.quantity ?? 0);
+        
         const reserveToRelease = sentLot.quantityToMove;
+
+        // Aggregate source changes
+        const existingSource = sourceUpdates.get(sentLot.lotId) || { quantityChange: 0, reservedChange: 0 };
+        sourceUpdates.set(sentLot.lotId, {
+          quantityChange: existingSource.quantityChange + qtyToMove,
+          reservedChange: existingSource.reservedChange + reserveToRelease
+        });
 
         if (qtyToMove > 0) {
           const destId = destLotIdKey({
@@ -111,33 +120,13 @@ export async function finalizeRepositionActivityServer(params: {
             expiryDate: source.expiryDate,
           });
           const destRef = destRefs.get(destId)!;
-          const destSnap = destMap.get(destId);
-
-          tx.update(sourceRefs.get(sentLot.lotId)!, {
-            quantity: quantity - qtyToMove,
-            reservedQuantity: Math.max(0, reserved - reserveToRelease),
-            updatedAt: now,
+          
+          // Aggregate destination changes
+          const existingDest = destUpdates.get(destId) || { quantityChange: 0, ref: destRef, sourceData: source };
+          destUpdates.set(destId, {
+            ...existingDest,
+            quantityChange: existingDest.quantityChange + qtyToMove
           });
-
-          if (destSnap?.exists) {
-            const destData = destSnap.data() as LotEntry;
-            tx.update(destRef, {
-              quantity: Number(destData.quantity ?? 0) + qtyToMove,
-              updatedAt: now,
-            });
-          } else {
-            tx.set(destRef, {
-              ...source,
-              kioskId: activity.kioskDestinationId,
-              quantity: qtyToMove,
-              reservedQuantity: 0,
-              locationId: null,
-              locationName: null,
-              locationCode: null,
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
 
           const common = {
             productId: sentLot.productId,
@@ -163,12 +152,42 @@ export async function finalizeRepositionActivityServer(params: {
             lotId: destRef.id,
             type: "TRANSFERENCIA_ENTRADA",
           });
-        } else {
-          tx.update(sourceRefs.get(sentLot.lotId)!, {
-            reservedQuantity: Math.max(0, reserved - reserveToRelease),
-            updatedAt: now,
-          });
         }
+      }
+    }
+
+    // Apply aggregated source updates
+    for (const [lotId, update] of sourceUpdates.entries()) {
+      const sourceSnap = sourceMap.get(lotId)!;
+      const sourceData = sourceSnap.data() as LotEntry;
+      tx.update(sourceRefs.get(lotId)!, {
+        quantity: Number(sourceData.quantity ?? 0) - update.quantityChange,
+        reservedQuantity: Math.max(0, Number(sourceData.reservedQuantity ?? 0) - update.reservedChange),
+        updatedAt: now,
+      });
+    }
+
+    // Apply aggregated destination updates
+    for (const [destId, update] of destUpdates.entries()) {
+      const destSnap = destMap.get(destId);
+      if (destSnap?.exists) {
+        const destData = destSnap.data() as LotEntry;
+        tx.update(update.ref, {
+          quantity: Number(destData.quantity ?? 0) + update.quantityChange,
+          updatedAt: now,
+        });
+      } else {
+        tx.set(update.ref, {
+          ...update.sourceData,
+          kioskId: activity.kioskDestinationId,
+          quantity: update.quantityChange,
+          reservedQuantity: 0,
+          locationId: null,
+          locationName: null,
+          locationCode: null,
+          createdAt: now,
+          updatedAt: now,
+        });
       }
     }
 
@@ -243,6 +262,45 @@ export async function revertRepositionActivityServer(activityId: string, actor: 
   const now = new Date().toISOString();
 
   await dbAdmin.runTransaction(async (tx) => {
+    // 1. Gather all refs needed for reading
+    const lotRefsToRead = new Set<string>();
+    for (const entry of entryMovements) {
+      const matchingExit = exitMovements.find(
+        (movement) =>
+          movement.productId === entry.productId &&
+          movement.lotNumber === entry.lotNumber &&
+          movement.quantityChange === entry.quantityChange &&
+          movement.fromKioskId === entry.fromKioskId &&
+          movement.toKioskId === entry.toKioskId
+      );
+      if (matchingExit) {
+        lotRefsToRead.add(entry.lotId);
+        lotRefsToRead.add(matchingExit.lotId);
+      }
+    }
+
+    const reservationLotMap = new Map<string, { ref: FirebaseFirestore.DocumentReference; quantityToReturn: number }>();
+    for (const item of activity.items) {
+      for (const lot of item.suggestedLots) {
+        lotRefsToRead.add(lot.lotId);
+        const existing = reservationLotMap.get(lot.lotId);
+        if (existing) {
+          existing.quantityToReturn += lot.quantityToMove;
+        } else {
+          reservationLotMap.set(lot.lotId, {
+            ref: dbAdmin.collection("lots").doc(lot.lotId),
+            quantityToReturn: lot.quantityToMove
+          });
+        }
+      }
+    }
+
+    // 2. Perform all reads
+    const uniqueRefs = Array.from(lotRefsToRead).map(id => dbAdmin.collection("lots").doc(id));
+    const snaps = await Promise.all(uniqueRefs.map(ref => tx.get(ref)));
+    const lotSnapsMap = new Map(snaps.map(snap => [snap.id, snap]));
+
+    // 3. Perform all writes
     for (const entry of entryMovements) {
       const matchingExit = exitMovements.find(
         (movement) =>
@@ -256,8 +314,10 @@ export async function revertRepositionActivityServer(activityId: string, actor: 
 
       const destRef = dbAdmin.collection("lots").doc(entry.lotId);
       const sourceRef = dbAdmin.collection("lots").doc(matchingExit.lotId);
-      const [destSnap, sourceSnap] = await Promise.all([tx.get(destRef), tx.get(sourceRef)]);
-      if (!destSnap.exists || !sourceSnap.exists) continue;
+      const destSnap = lotSnapsMap.get(entry.lotId);
+      const sourceSnap = lotSnapsMap.get(matchingExit.lotId);
+
+      if (!destSnap?.exists || !sourceSnap?.exists) continue;
 
       const destData = destSnap.data() as LotEntry;
       const sourceData = sourceSnap.data() as LotEntry;
@@ -312,17 +372,14 @@ export async function revertRepositionActivityServer(activityId: string, actor: 
       tx.update(dbAdmin.collection("movementHistory").doc(matchingExit.id), { reverted: true });
     }
 
-    for (const item of activity.items) {
-      for (const lot of item.suggestedLots) {
-        const lotRef = dbAdmin.collection("lots").doc(lot.lotId);
-        const lotSnap = await tx.get(lotRef);
-        if (!lotSnap.exists) continue;
-        const currentReserved = Number(lotSnap.data()?.reservedQuantity ?? 0);
-        tx.update(lotRef, {
-          reservedQuantity: currentReserved + lot.quantityToMove,
-          updatedAt: now,
-        });
-      }
+    for (const [lotId, info] of reservationLotMap.entries()) {
+      const snap = lotSnapsMap.get(lotId);
+      if (!snap?.exists) continue;
+      const currentReserved = Number(snap.data()?.reservedQuantity ?? 0);
+      tx.update(info.ref, {
+        reservedQuantity: currentReserved + info.quantityToReturn,
+        updatedAt: now,
+      });
     }
 
     tx.update(activityRef, {

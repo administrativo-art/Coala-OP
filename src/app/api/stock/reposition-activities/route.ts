@@ -95,42 +95,49 @@ export async function POST(request: NextRequest) {
     };
 
     await dbAdmin.runTransaction(async (tx) => {
-      const lotRefs = payload.items.flatMap((item) =>
-        item.suggestedLots.map((lot) => dbAdmin.collection("lots").doc(lot.lotId))
-      );
-      const uniqueLotRefs = Array.from(
-        new Map(lotRefs.map((ref) => [ref.path, ref])).values()
-      );
-      const lotDocs = await Promise.all(uniqueLotRefs.map((ref) => tx.get(ref)));
-      const lotDataMap = new Map(lotDocs.map((snap) => [snap.id, snap.data()]));
-
+      const lotMap = new Map<string, { ref: FirebaseFirestore.DocumentReference; quantityToReserve: number }>();
+      
       for (const item of payload.items) {
-        for (const lotToMove of item.suggestedLots) {
-          const currentData = lotDataMap.get(lotToMove.lotId);
-          if (!currentData) {
-            throw new Error(`Lote ${lotToMove.lotId} não encontrado.`);
-          }
-
-          const reserved = Number(currentData.reservedQuantity ?? 0);
-          const quantity = Number(currentData.quantity ?? 0);
-          const available = quantity - reserved;
-          if (available < lotToMove.quantityToMove) {
-            throw new Error(
-              `Estoque insuficiente para reservar no lote ${lotToMove.lotNumber}.`
-            );
+        for (const lot of item.suggestedLots) {
+          const existing = lotMap.get(lot.lotId);
+          if (existing) {
+            existing.quantityToReserve += lot.quantityToMove;
+          } else {
+            lotMap.set(lot.lotId, {
+              ref: dbAdmin.collection("lots").doc(lot.lotId),
+              quantityToReserve: lot.quantityToMove
+            });
           }
         }
       }
 
-      tx.set(activityRef, payload);
-      for (const item of payload.items) {
-        for (const lotToMove of item.suggestedLots) {
-          tx.update(dbAdmin.collection("lots").doc(lotToMove.lotId), {
-            reservedQuantity: Number(
-              (lotDataMap.get(lotToMove.lotId)?.reservedQuantity as number | undefined) ?? 0
-            ) + lotToMove.quantityToMove,
-          });
+      const lotEntries = Array.from(lotMap.values());
+      const lotSnaps = await Promise.all(lotEntries.map(entry => tx.get(entry.ref)));
+      const lotDataMap = new Map(lotSnaps.map((snap) => [snap.id, snap.data()]));
+
+      for (const entry of lotEntries) {
+        const currentData = lotDataMap.get(entry.ref.id);
+        if (!currentData) {
+          throw new Error(`Lote ${entry.ref.id} não encontrado.`);
         }
+
+        const reserved = Number(currentData.reservedQuantity ?? 0);
+        const quantity = Number(currentData.quantity ?? 0);
+        const available = quantity - reserved;
+        if (available < entry.quantityToReserve) {
+          throw new Error(
+            `Estoque insuficiente para reservar no lote ${currentData.lotNumber || entry.ref.id}.`
+          );
+        }
+      }
+
+      tx.set(activityRef, payload);
+      for (const entry of lotEntries) {
+        tx.update(entry.ref, {
+          reservedQuantity: Number(
+            (lotDataMap.get(entry.ref.id)?.reservedQuantity as number | undefined) ?? 0
+          ) + entry.quantityToReserve,
+        });
       }
     });
 
