@@ -266,6 +266,14 @@ function RepositionManagement() {
     }
   };
 
+  const handleFinalizeConfirm = async () => {
+    if (!activityToFinalize) return;
+    setIsFinalizing(true);
+    await finalizeRepositionActivity(activityToFinalize, 'trust_receipt');
+    setIsFinalizing(false);
+    setActivityToFinalize(null);
+  };
+
   return (
     <>
       <div className="space-y-4">
