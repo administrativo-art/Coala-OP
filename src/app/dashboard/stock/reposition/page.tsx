@@ -223,6 +223,7 @@ function RepositionActivityCard({
 function RepositionManagement() {
   const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
   const { permissions } = useAuth();
+  const { toast } = useToast();
   const { products, loading: productsLoading } = useProducts();
   const [activityToDispatch, setActivityToDispatch] = useState<RepositionActivity | null>(null);
   const [activityToAudit, setActivityToAudit] = useState<RepositionActivity | null>(null);
