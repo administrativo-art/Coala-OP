@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     const counterRef = dbAdmin.collection("counters").doc(`returnRequests_${today}`);
     const requestRef = dbAdmin.collection("returnRequests").doc();
 
-    const { requestPayload, counterRef, requestRef, newCount } = await dbAdmin.runTransaction(async (tx) => {
+    const { requestPayload, newCount } = await dbAdmin.runTransaction(async (tx) => {
       const counterSnap = await tx.get(counterRef);
       const currentCount = Number(counterSnap.data()?.count ?? 0);
       const nextCount = currentCount + 1;
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
         },
       } as Omit<ReturnRequest, "id">;
 
-      return { requestPayload: payload, counterRef, requestRef, newCount: nextCount };
+      return { requestPayload: payload, newCount: nextCount };
     });
 
     const task = await createManualTask({
