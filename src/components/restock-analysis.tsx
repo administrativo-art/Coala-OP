@@ -52,7 +52,7 @@ export interface AnalysisResult {
   suggestion?: SuggestedLot[];
 }
 
-function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults, onConfirm, onCancel, kioskName, isLoading }: { open: boolean; onOpenChange: (open: boolean) => void; stagedItems: RepositionItem[]; analysisResults: AnalysisResult[]; onConfirm: () => void; onCancel: () => void; kioskName: string; isLoading: boolean; }) {
+function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults, onConfirm, onCancel, onRemoveItem, kioskName, isLoading }: { open: boolean; onOpenChange: (open: boolean) => void; stagedItems: RepositionItem[]; analysisResults: AnalysisResult[]; onConfirm: () => void; onCancel: () => void; onRemoveItem: (id: string) => void; kioskName: string; isLoading: boolean; }) {
     const { products, getProductFullName } = useProducts();
     const { baseProducts } = useBaseProducts();
 
@@ -123,10 +123,23 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
                             {itemsWithDetails.map(item => {
                                 const analysisResult = analysisResults.find(r => r.baseProduct.id === item.baseProductId);
                                 return (
-                                <AccordionItem key={item.baseProductId} value={item.baseProductId} className="border-b-0">
+                                <AccordionItem key={item.baseProductId} value={item.baseProductId} className="border-b-0 relative group">
+                                    <div className="absolute right-12 top-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onRemoveItem(item.baseProductId);
+                                            }}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
                                     <Card>
                                     <AccordionTrigger className="p-3 font-semibold hover:no-underline text-left">
-                                        <div className="flex justify-between items-center w-full pr-2">
+                                        <div className="flex justify-between items-center w-full pr-10">
                                             <div>
                                                 <p className="font-semibold text-lg">{item.productName}</p>
                                                 {analysisResult && (
@@ -175,7 +188,7 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
                 </div>
                 <DialogFooter className="pt-4 border-t">
                     <Button variant="outline" onClick={onCancel}>Voltar</Button>
-                    <Button onClick={onConfirm} disabled={isLoading}>
+                    <Button onClick={onConfirm} disabled={isLoading || stagedItems.length === 0}>
                         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Confirmar
                     </Button>
@@ -719,6 +732,7 @@ export function RestockAnalysis() {
           analysisResults={analysisResults}
           onConfirm={handleCreateRepositionActivity}
           onCancel={() => setIsSummaryModalOpen(false)}
+          onRemoveItem={handleRemoveStagedItem}
           kioskName={kiosks.find(k => k.id === kioskId)?.name || ''}
           isLoading={repositionLoading}
       />
