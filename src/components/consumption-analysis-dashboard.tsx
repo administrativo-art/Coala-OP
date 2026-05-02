@@ -147,9 +147,11 @@ export function ConsumptionAnalysisDashboard() {
                       <FileClock className="mr-2 h-4 w-4" />
                       Histórico de análises
                   </Button>
-                  <Button onClick={() => setIsAiSetupModalOpen(true)}>
-                    <Wand2 className="mr-2 h-4 w-4"/> Analisar com IA
-                  </Button>
+                  {process.env.NEXT_PUBLIC_ENABLE_AI_FEATURES === "true" && (
+                    <Button onClick={() => setIsAiSetupModalOpen(true)}>
+                      <Wand2 className="mr-2 h-4 w-4"/> Analisar com IA
+                    </Button>
+                  )}
               </div>
           </div>
         </CardHeader>
