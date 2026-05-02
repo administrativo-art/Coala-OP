@@ -1496,6 +1496,19 @@ export interface RepositionContextType {
 export type GoalType = 'revenue' | 'ticket' | 'product_line' | 'product_specific'
 export type GoalPeriod = 'daily' | 'weekly' | 'monthly'
 export type GoalStatus = 'active' | 'closed' | 'cancelled'
+export type GoalDistributionMode = 'calendar_days' | 'scheduled_days'
+
+export interface GoalClosureSnapshot {
+  distributionMode: GoalDistributionMode
+  periodDateKeys: string[]
+  periodDayCount: number
+  dailyTarget: number
+  dailyUpTarget: number
+  employeeDateKeysByGoalId: Record<string, string[]>
+  employeeDayCountsByGoalId: Record<string, number>
+  employeeDailyTargetsByGoalId: Record<string, number>
+  capturedAt?: Timestamp
+}
 
 export interface GoalShift {
   id: string
@@ -1527,11 +1540,13 @@ export interface GoalPeriodDoc {
   upValue: number
   currentValue: number
   dailyProgress?: { [date: string]: number }
+  distributionMode?: GoalDistributionMode
   shifts?: GoalShift[]
   status: GoalStatus
   closedAt?: Timestamp
   closedBy?: string
   closureNote?: string
+  closureSnapshot?: GoalClosureSnapshot
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -1546,6 +1561,7 @@ export interface EmployeeGoal {
   targetValue: number
   currentValue: number
   dailyProgress?: { [date: string]: number }
+  distributionMode?: GoalDistributionMode
   updatedAt: Timestamp
   createdAt: Timestamp
 }

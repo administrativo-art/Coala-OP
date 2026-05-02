@@ -194,6 +194,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
       upValue: data.upValue,
       currentValue: 0,
       dailyProgress: {},
+      distributionMode: 'scheduled_days',
       shifts: goalShifts,
       status: 'active',
     });
@@ -214,7 +215,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
         periodId, employeeId: a.employeeId, kioskId: template.kioskId,
         shiftId: a.shiftId, fraction: withinFraction,
         targetValue: data.targetValue * shift.fraction * withinFraction,
-        currentValue: 0, dailyProgress: {},
+        currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
       });
       if (egId) savedCount++; else failCount++;
     }

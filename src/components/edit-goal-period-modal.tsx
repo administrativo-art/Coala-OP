@@ -95,6 +95,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
       shiftId, fraction: fractionNum,
       targetValue: period.targetValue * shift.fraction * fractionNum,
       currentValue: 0, dailyProgress: {},
+      distributionMode: period.distributionMode ?? 'calendar_days',
     });
     if (id) toast({ title: 'Colaborador adicionado.' });
     else toast({ title: 'Erro ao adicionar colaborador.', variant: 'destructive' });
@@ -124,6 +125,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
     const id = await addEmployeeGoal({
       periodId: period.id, employeeId: selectedEmployee, kioskId: period.kioskId,
       fraction: fractionNum, targetValue: period.targetValue * fractionNum,
+      distributionMode: period.distributionMode ?? 'calendar_days',
       currentValue: 0, dailyProgress: {},
     });
     if (id) toast({ title: 'Colaborador adicionado.' });

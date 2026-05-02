@@ -6,6 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { type GoalTemplate, type GoalPeriodDoc, type EmployeeGoal } from '@/types';
 import { GoalsContext } from '@/contexts/goals-context';
+import { buildGoalClosureSnapshot, loadGoalDistributionSnapshot } from '@/lib/goals-distribution';
 
 export function GoalsProvider({ children }: { children: React.ReactNode }) {
   const [templates, setTemplates] = useState<GoalTemplate[]>([]);
@@ -83,15 +84,28 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
 
   const closePeriod = useCallback(async (id: string, status: 'closed' | 'cancelled', closureNote: string, closedBy: string) => {
     try {
+      const period = periods.find(item => item.id === id);
+      const periodEmployeeGoals = employeeGoals.filter(goal => goal.periodId === id);
+      const distributionSnapshot = period
+        ? await loadGoalDistributionSnapshot([period], periodEmployeeGoals)
+        : null;
+      const closureSnapshot = period
+        ? {
+            ...buildGoalClosureSnapshot(period, periodEmployeeGoals, distributionSnapshot),
+            capturedAt: serverTimestamp(),
+          }
+        : null;
+
       await updateDoc(doc(db, 'goalPeriods', id), {
         status,
         closureNote,
         closedBy,
         closedAt: serverTimestamp(),
+        closureSnapshot,
         updatedAt: serverTimestamp(),
       });
     } catch (e) { console.error(e); }
-  }, []);
+  }, [employeeGoals, periods]);
 
   const reopenPeriod = useCallback(async (id: string) => {
     try {
@@ -100,6 +114,7 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
         closureNote: null,
         closedBy: null,
         closedAt: null,
+        closureSnapshot: null,
         updatedAt: serverTimestamp(),
       });
     } catch (e) { console.error(e); }

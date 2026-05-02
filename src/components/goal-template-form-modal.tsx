@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { useGoals } from '@/contexts/goals-context';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
@@ -10,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { ProductSimulationContext } from '@/components/product-simulation-provider';
 import { useContext } from 'react';
-import { type GoalShift, type GoalType } from '@/types';
+import { type GoalPeriodDoc, type GoalShift, type GoalType } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,10 @@ function monthToDateRange(monthStr: string): { start: Date; end: Date } {
 function ordinalLabel(n: number): string {
   const ordinals = ['1º', '2º', '3º', '4º', '5º', '6º', '7º', '8º', '9º', '10º'];
   return `${ordinals[n] ?? `${n + 1}º`} Turno`;
+}
+
+function monthKeyFromDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 const GOAL_TYPE_OPTIONS: { type: GoalType; label: string; description: string }[] = [
@@ -128,7 +133,7 @@ interface GoalTemplateFormModalProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormModalProps) {
-  const { addTemplate, addPeriod, addEmployeeGoal } = useGoals();
+  const { addTemplate, addPeriod, addEmployeeGoal, periods, employeeGoals, templates } = useGoals();
   const { kiosks } = useKiosks();
   const { user, permissions, users } = useAuth();
   const { toast } = useToast();
@@ -147,6 +152,8 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   const [kioskId, setKioskId] = useState(availableKiosks[0]?.id ?? '');
   const [month, setMonth] = useState(currentMonthValue());
   const [selectedTypes, setSelectedTypes] = useState<Set<GoalType>>(new Set(['revenue']));
+  const [copySourceMonth, setCopySourceMonth] = useState('none');
+  const [copiedFromMonth, setCopiedFromMonth] = useState('');
 
   // ── Revenue state ─────────────────────────────────────────────────────────
   const [revenueConfig, setRevenueConfig] = useState<RevenueConfig>({ targetValue: 0, upValue: 0 });
@@ -197,6 +204,27 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   const pctSum = shifts.reduce((s, sh) => s + (parseFloat(sh.pct) || 0), 0);
   const pctSumOk = Math.abs(pctSum - 100) < 0.01;
 
+  const availableSourceMonths = useMemo(() => {
+    const grouped = new Map<string, GoalPeriodDoc[]>();
+    periods
+      .filter(period => period.kioskId === kioskId)
+      .forEach(period => {
+        const key = monthKeyFromDate(period.startDate?.toDate?.() ?? new Date());
+        if (key === month) return;
+        const bucket = grouped.get(key);
+        if (bucket) bucket.push(period);
+        else grouped.set(key, [period]);
+      });
+
+    return Array.from(grouped.entries())
+      .map(([key, items]) => ({
+        key,
+        label: format(items[0]?.startDate?.toDate?.() ?? new Date(), 'MMMM yyyy', { locale: ptBR }),
+        items,
+      }))
+      .sort((a, b) => b.key.localeCompare(a.key));
+  }, [periods, kioskId, month]);
+
   // ── Helpers modo direto ───────────────────────────────────────────────────
 
   const directAllocatedPct = directAssignments.reduce((s, a) => s + (parseFloat(a.pct) || 0), 0);
@@ -216,6 +244,101 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
 
   function removeDirectAssignment(employeeId: string) {
     setDirectAssignments(prev => prev.filter(a => a.employeeId !== employeeId));
+  }
+
+  function applySourceMonth(sourceKey: string) {
+    const sourceGroup = availableSourceMonths.find(item => item.key === sourceKey);
+    if (!sourceGroup) {
+      toast({ title: 'Mês base não encontrado', variant: 'destructive' });
+      return;
+    }
+
+    const nextTypes = new Set<GoalType>();
+    let sourceRevenueLoaded = false;
+
+    setAssignments([]);
+    setDirectAssignments([]);
+    setNewEmp({});
+    setNewPct({});
+    setNewDirectEmp('');
+    setNewDirectPct('');
+    setProductLineConfig({});
+    setProductSpecificConfig({});
+    setTicketConfig({ targetValue: 0 });
+
+    for (const period of sourceGroup.items) {
+      const template = templates.find(item => item.id === period.templateId);
+      if (!template) continue;
+
+      nextTypes.add(template.type);
+
+      if (template.type === 'revenue' && !sourceRevenueLoaded) {
+        sourceRevenueLoaded = true;
+        setRevenueConfig({
+          targetValue: period.targetValue,
+          upValue: period.upValue ?? period.targetValue * 1.2,
+        });
+
+        const sourceEmployeeGoals = employeeGoals.filter(goal => goal.periodId === period.id);
+        if ((period.shifts?.length ?? 0) > 0) {
+          setRevenueAllocationMode('shifts');
+          setShifts(
+            (period.shifts ?? []).map((shift, index) => ({
+              id: shift.id || `shift-${index}`,
+              label: shift.label || ordinalLabel(index),
+              pct: String(Number((shift.fraction * 100).toFixed(2))),
+            }))
+          );
+          setAssignments(
+            sourceEmployeeGoals
+              .filter(goal => goal.shiftId)
+              .map(goal => ({
+                shiftId: goal.shiftId!,
+                employeeId: goal.employeeId,
+                pct: String(Number((goal.fraction * 100).toFixed(2))),
+              }))
+          );
+        } else {
+          setRevenueAllocationMode('direct');
+          setDirectAssignments(
+            sourceEmployeeGoals.map(goal => ({
+              employeeId: goal.employeeId,
+              pct: String(Number((goal.fraction * 100).toFixed(2))),
+            }))
+          );
+        }
+      }
+
+      if (template.type === 'ticket') {
+        setTicketConfig({ targetValue: period.targetValue });
+      }
+
+      if (template.type === 'product_line') {
+        setProductLineConfig({
+          lineId: template.productLineRef,
+          lineName: template.productLineName,
+          targetValue: period.targetValue,
+          upValue: period.upValue,
+        });
+      }
+
+      if (template.type === 'product_specific') {
+        setProductSpecificConfig({
+          productId: template.productRef,
+          productName: template.productName,
+          targetValue: period.targetValue,
+          upValue: period.upValue,
+        });
+      }
+    }
+
+    if (nextTypes.size > 0) {
+      setSelectedTypes(nextTypes);
+      setCopiedFromMonth(sourceKey);
+      toast({ title: 'Meta base carregada', description: `Configuração copiada de ${sourceGroup.label}.` });
+    } else {
+      toast({ title: 'Nenhuma meta aproveitável encontrada', variant: 'destructive' });
+    }
   }
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -377,7 +500,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
             endDate: Timestamp.fromDate(end),
             targetValue: revenueConfig.targetValue,
             upValue: revenueConfig.upValue,
-            currentValue: 0, dailyProgress: {},
+            currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
             shifts: goalShifts, status: 'active',
           });
           if (periodId) {
@@ -389,7 +512,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 periodId, employeeId: a.employeeId, kioskId,
                 shiftId: a.shiftId, fraction: withinFraction,
                 targetValue: revenueConfig.targetValue * shift.fraction * withinFraction,
-                currentValue: 0, dailyProgress: {},
+                currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
               });
             }
           } else hasError = true;
@@ -401,7 +524,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
             endDate: Timestamp.fromDate(end),
             targetValue: revenueConfig.targetValue,
             upValue: revenueConfig.upValue,
-            currentValue: 0, dailyProgress: {},
+            currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
             shifts: [], status: 'active',
           });
           if (periodId) {
@@ -411,7 +534,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 periodId, employeeId: a.employeeId, kioskId,
                 fraction,
                 targetValue: revenueConfig.targetValue * fraction,
-                currentValue: 0, dailyProgress: {},
+                currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
               });
             }
           } else hasError = true;
@@ -439,6 +562,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           upValue: ticketConfig.targetValue,
           currentValue: 0,
           dailyProgress: {},
+          distributionMode: 'scheduled_days',
           shifts: [],
           status: 'active',
         });
@@ -468,6 +592,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           upValue: productLineConfig.upValue!,
           currentValue: 0,
           dailyProgress: {},
+          distributionMode: 'scheduled_days',
           shifts: [],
           status: 'active',
         });
@@ -497,6 +622,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           upValue: productSpecificConfig.upValue!,
           currentValue: 0,
           dailyProgress: {},
+          distributionMode: 'scheduled_days',
           shifts: [],
           status: 'active',
         });
@@ -519,6 +645,8 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     setKioskId(availableKiosks[0]?.id ?? '');
     setMonth(currentMonthValue());
     setSelectedTypes(new Set(['revenue']));
+    setCopySourceMonth('none');
+    setCopiedFromMonth('');
     setRevenueConfig({ targetValue: 0, upValue: 0 });
     setRevenueConfigError('');
     setRevenueAllocationMode('shifts');
@@ -590,6 +718,43 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                   return <p className="text-xs text-muted-foreground">{format(start, 'dd/MM/yyyy')} até {format(end, 'dd/MM/yyyy')}</p>;
                 } catch { return null; }
               })()}
+            </div>
+
+            <div className="space-y-2 rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label>Copiar base de outro mês</Label>
+                <p className="text-xs text-muted-foreground">
+                  Opcional. Puxa valores, tipos de meta e distribuição de colaboradores do mês escolhido.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Select value={copySourceMonth} onValueChange={setCopySourceMonth}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Selecione um mês-base" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não copiar</SelectItem>
+                    {availableSourceMonths.map(option => (
+                      <SelectItem key={option.key} value={option.key}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={copySourceMonth === 'none'}
+                  onClick={() => applySourceMonth(copySourceMonth)}
+                >
+                  Carregar
+                </Button>
+              </div>
+              {copiedFromMonth && (
+                <p className="text-xs text-emerald-600">
+                  Base aplicada de {availableSourceMonths.find(option => option.key === copiedFromMonth)?.label ?? copiedFromMonth}.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

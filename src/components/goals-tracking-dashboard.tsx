@@ -28,16 +28,23 @@ import { GoalTemplateFormModal } from '@/components/goal-template-form-modal';
 import { AddEmployeeGoalModal } from '@/components/add-employee-goal-modal';
 import { type GoalPeriodDoc, type EmployeeGoal } from '@/types';
 import { 
-  Target, Plus, RefreshCw, ChevronDown, ChevronRight, Menu, BarChart2, Sparkles, Calendar as CalendarIcon, Pencil, CheckCircle, Trash2
+  Target, Plus, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, Menu, BarChart2, Sparkles, Calendar as CalendarIcon, Pencil, CheckCircle, Trash2
 } from 'lucide-react';
 import {
   format, startOfWeek, endOfWeek, endOfMonth, eachDayOfInterval,
-  getDaysInMonth, getDate, startOfMonth, isSameDay, startOfYear
+  startOfMonth, isSameDay
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { GoalsAiAnalysisModal } from '@/components/goals-ai-analysis-modal';
 import { GoalsAnalysisOutputSchema } from '@/ai/flows/goals-schemas';
 import { getUserDisplayName, pickUserIdentitySnapshot, type UserIdentityLike } from '@/lib/user-display';
+import {
+  type GoalDistributionSnapshot,
+  getEmployeeDistributionDateKeys,
+  getEmployeeDistributionDayCount,
+  getPeriodDistributionDateKeys,
+  loadGoalDistributionSnapshot,
+} from '@/lib/goals-distribution';
 import { z } from 'zod';
 
 const PdfDownloadButton = dynamic(() => import('@/components/goal-report-pdf'), { ssr: false });
@@ -113,17 +120,19 @@ function getPeriodContext(period: GoalPeriodDoc) {
 
 // ── Calculadores ──────────────────────────────────────────────────────────────
 
-function calcMonthlyStats(period: GoalPeriodDoc) {
+function calcMonthlyStats(period: GoalPeriodDoc, distributionSnapshot?: GoalDistributionSnapshot | null) {
   const up = period.upValue ?? period.targetValue * 1.2;
   const now = new Date();
   const start = period.startDate?.toDate?.() ?? now;
   const end = period.endDate?.toDate?.() ?? now;
-  
-  const totalDays = Math.max(eachDayOfInterval({ start, end }).length, 1);
-  const elapsedDays = eachDayOfInterval({ 
-    start, 
-    end: now < end ? (now < start ? start : now) : end 
-  }).length;
+
+  const activeDateKeys = getPeriodDistributionDateKeys(period, distributionSnapshot);
+  const activeDateSet = new Set(activeDateKeys);
+  const totalDays = Math.max(activeDateKeys.length, 1);
+  const elapsedDays = eachDayOfInterval({
+    start,
+    end: now < end ? (now < start ? start : now) : end
+  }).filter(day => activeDateSet.has(dateKey(day))).length;
   const remainingDays = Math.max(totalDays - elapsedDays, 0);
 
   const linearMarker = (elapsedDays / totalDays) * 100;
@@ -145,7 +154,7 @@ function calcMonthlyStats(period: GoalPeriodDoc) {
   };
 }
 
-function calcWeeklyStats(period: GoalPeriodDoc, refDate: Date, periodEnd: Date) {
+function calcWeeklyStats(period: GoalPeriodDoc, refDate: Date, periodEnd: Date, distributionSnapshot?: GoalDistributionSnapshot | null) {
   const dp = period.dailyProgress ?? {};
   const weekStart = startOfWeek(refDate, { weekStartsOn: 1 });
   const weekEndRaw = endOfWeek(refDate, { weekStartsOn: 1 });
@@ -155,9 +164,11 @@ function calcWeeklyStats(period: GoalPeriodDoc, refDate: Date, periodEnd: Date) 
   const effectiveStart = weekStart < startOfMonth(refDate) ? startOfMonth(refDate) : weekStart;
   const weekDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
   const value = weekDays.reduce((s, d) => s + (dp[dateKey(d)] ?? 0), 0);
+  const activeDateSet = new Set(getPeriodDistributionDateKeys(period, distributionSnapshot));
+  const activeWeekDays = weekDays.filter(day => activeDateSet.has(dateKey(day)));
 
   // Consideramos o alvo proporcional da meta mensal para a semana
-  const stats = calcMonthlyStats(period);
+  const stats = calcMonthlyStats(period, distributionSnapshot);
   const dailyAlvo = stats.alvo / stats.totalDays;
   const dailyUp = stats.up / stats.totalDays;
 
@@ -167,8 +178,8 @@ function calcWeeklyStats(period: GoalPeriodDoc, refDate: Date, periodEnd: Date) 
   
   return { 
     value, 
-    alvo: dailyAlvo * weekDays.length, 
-    up: dailyUp * weekDays.length, 
+    alvo: dailyAlvo * activeWeekDays.length, 
+    up: dailyUp * activeWeekDays.length, 
     weekLabel 
   };
 }
@@ -179,7 +190,7 @@ function calcEgMonthly(eg: EmployeeGoal, refDate: Date) {
   return { value: eg.currentValue, alvo: eg.targetValue, up, p };
 }
 
-function calcEgWeekly(eg: EmployeeGoal, refDate: Date, periodEnd: Date) {
+function calcEgWeekly(eg: EmployeeGoal, period: GoalPeriodDoc, refDate: Date, periodEnd: Date, distributionSnapshot?: GoalDistributionSnapshot | null) {
   const dp = eg.dailyProgress ?? {};
   const weekStart = startOfWeek(refDate, { weekStartsOn: 1 });
   const weekEndRaw = endOfWeek(refDate, { weekStartsOn: 1 });
@@ -189,10 +200,12 @@ function calcEgWeekly(eg: EmployeeGoal, refDate: Date, periodEnd: Date) {
   const effectiveStart = weekStart < startOfMonth(refDate) ? startOfMonth(refDate) : weekStart;
   const weekDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
   const value = weekDays.reduce((s, d) => s + (dp[dateKey(d)] ?? 0), 0);
+  const activeDateSet = new Set(getEmployeeDistributionDateKeys(eg, period, distributionSnapshot));
+  const activeWeekDays = weekDays.filter(day => activeDateSet.has(dateKey(day)));
   
   // Alvo semanal proporcional
-  const dailyAlvo = eg.targetValue / getDaysInMonth(refDate);
-  const alvo = dailyAlvo * weekDays.length;
+  const dailyAlvo = eg.targetValue / getEmployeeDistributionDayCount(eg, period, distributionSnapshot);
+  const alvo = dailyAlvo * activeWeekDays.length;
   const p = pct(value, alvo);
   
   return { value, alvo, p };
@@ -321,11 +334,27 @@ function getInitials(name: string): string {
   return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
 }
 
+function DailyStatusPill({ label, tone }: { label: string; tone: 'ok' | 'zero' | 'miss' | 'na' }) {
+  const toneClass = {
+    ok: 'border-emerald-500 bg-emerald-500 text-white shadow-[0_8px_20px_-14px_rgba(34,197,94,0.9)]',
+    zero: 'border-zinc-300 bg-white text-zinc-700',
+    miss: 'border-zinc-200 bg-zinc-100 text-zinc-500',
+    na: 'border-slate-200 bg-slate-100 text-slate-500',
+  }[tone];
+
+  return (
+    <span className={`inline-flex min-w-[62px] items-center justify-center rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${toneClass}`}>
+      {label}
+    </span>
+  );
+}
+
 // ── Dialog de análise diária (Mensal) ─────────────────────────────────────────
 
-function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName }: {
+function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, activeDateKeys }: {
   open: boolean; onOpenChange: (v: boolean) => void;
   period: GoalPeriodDoc | null; title: string; subjectName?: string | null;
+  activeDateKeys?: string[] | null;
 }) {
   if (!period) return null;
   const now = new Date();
@@ -333,170 +362,429 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName }: 
   const end = period.endDate?.toDate?.() ?? now;
   const days = eachDayOfInterval({ start, end });
   const dp = period.dailyProgress ?? {};
+  const activeDateSet = new Set(activeDateKeys ?? days.map(dateKey));
 
   let cumulativeSales = 0;
   const totalTarget = period.targetValue;
-  const daysInMonth = days.length;
-  
   let lockedCurrentNeed: number | null = null;
 
   const rows = days.map((day, idx) => {
     const key = dateKey(day);
     const isPast = day <= now;
+    const isActive = activeDateSet.has(key);
     const value = dp[key] ?? 0;
-    
-    let currentNeed = 0;
+    const remainingActiveDays = days.slice(idx).filter(candidate => activeDateSet.has(dateKey(candidate))).length;
 
-    if (isPast) {
-      const remainingDays = daysInMonth - idx;
-      currentNeed = remainingDays > 0 ? Math.max(totalTarget - cumulativeSales, 0) / remainingDays : 0;
+    let currentNeed = isActive ? 0 : 0;
+
+    if (isActive && isPast) {
+      currentNeed = remainingActiveDays > 0 ? Math.max(totalTarget - cumulativeSales, 0) / remainingActiveDays : 0;
       cumulativeSales += value;
     } else {
-      if (lockedCurrentNeed === null) {
-        const remainingDaysGlobal = daysInMonth - idx;
-        lockedCurrentNeed = remainingDaysGlobal > 0 ? Math.max(totalTarget - cumulativeSales, 0) / remainingDaysGlobal : 0;
+      if (isActive && lockedCurrentNeed === null) {
+        lockedCurrentNeed = remainingActiveDays > 0 ? Math.max(totalTarget - cumulativeSales, 0) / remainingActiveDays : 0;
       }
-      currentNeed = lockedCurrentNeed;
+      currentNeed = isActive ? (lockedCurrentNeed ?? 0) : 0;
     }
 
-    const hit = value >= currentNeed;
+    const hit = isActive ? value >= currentNeed : value > 0;
 
-    return { day, key, currentNeed, value, hit, isPast };
+    return { day, key, currentNeed, value, hit, isPast, isActive };
   });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-md">
-        <DialogHeader>
-          <DialogTitle className="pr-6 text-left leading-tight">{title}</DialogTitle>
-          {subjectName ? (
-            <div className="text-sm font-semibold text-foreground/85 break-words">
-              {subjectName}
-            </div>
-          ) : null}
-          <DialogDescription>Detalhamento de metas diárias para o período</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="!max-w-[980px] w-[min(92vw,980px)] overflow-hidden rounded-[30px] border border-zinc-200 bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
+        <div className="px-10 pb-8 pt-9 md:px-12 md:pb-10 md:pt-10">
+          <DialogHeader className="space-y-3 text-left">
+            <DialogTitle className="pr-12 text-[2rem] font-bold leading-none tracking-[-0.045em] text-zinc-900 md:text-[2.35rem]">
+              {title}
+            </DialogTitle>
+            {subjectName ? (
+              <div className="text-[1.1rem] font-extrabold uppercase tracking-[-0.03em] text-zinc-700 break-words md:text-[1.25rem]">
+                {subjectName}
+              </div>
+            ) : null}
+            <DialogDescription className="max-w-[640px] text-[1rem] leading-relaxed text-zinc-500">
+              Detalhamento de metas diárias para o período
+            </DialogDescription>
+          </DialogHeader>
 
-        <ScrollArea className="h-[400px] pr-4">
-          <div className="space-y-2">
-            <div className="grid grid-cols-[1fr_2fr_2fr_1fr] gap-2 text-[10px] uppercase font-bold text-muted-foreground pb-2 border-b">
+          <div className="mt-8 rounded-[24px] border border-zinc-200 bg-white">
+            <div className="grid grid-cols-[120px_1.2fr_1.2fr_130px] gap-6 border-b border-zinc-200 px-8 py-5 text-[0.92rem] font-bold uppercase tracking-[0.08em] text-zinc-500 md:grid-cols-[140px_1.3fr_1.3fr_140px] md:px-10">
               <span>Dia</span>
               <span className="text-right">Alvo Diário</span>
               <span className="text-right">Realizado</span>
               <span className="text-center">Status</span>
             </div>
-            {rows.map(r => (
-              <div key={r.key} className={`grid grid-cols-[1fr_2fr_2fr_1fr] gap-2 py-2 items-center border-b border-border/40 text-xs ${!r.isPast ? 'opacity-50' : ''}`}>
-                <span className="font-medium">{format(r.day, 'dd/MM', { locale: ptBR })}</span>
-                <span className="text-right text-muted-foreground">R$ {fmt(r.currentNeed)}</span>
-                <span className="text-right font-semibold">R$ {fmt(r.value)}</span>
-                <span className="flex justify-center">
-                  {r.value > 0 ? (
-                    r.hit ? <Badge className="bg-green-500 h-4 text-[9px]">OK</Badge> : <Badge variant="secondary" className="h-4 text-[9px]">MISS</Badge>
-                  ) : r.isPast ? (
-                    <Badge variant="outline" className="h-4 text-[9px]">ZERO</Badge>
-                  ) : null}
-                </span>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
-        </DialogFooter>
+            <ScrollArea className="h-[min(64vh,620px)]">
+              <div>
+                {rows.map(r => (
+                  <div
+                    key={r.key}
+                    className={`grid grid-cols-[120px_1.2fr_1.2fr_130px] gap-6 border-b border-zinc-100 px-8 py-5 text-[1rem] last:border-b-0 md:grid-cols-[140px_1.3fr_1.3fr_140px] md:px-10 md:py-6 md:text-[1.08rem] ${!r.isPast ? 'opacity-45' : ''}`}
+                  >
+                    <span className="font-semibold text-zinc-900">{format(r.day, 'dd/MM', { locale: ptBR })}</span>
+                    <span className="text-right font-medium text-zinc-500">R$ {fmt(r.currentNeed)}</span>
+                    <span className="text-right font-bold text-zinc-900">R$ {fmt(r.value)}</span>
+                    <span className="flex justify-center">
+                      {!r.isActive ? (
+                        <DailyStatusPill label="N/A" tone="na" />
+                      ) : r.value > 0 ? (
+                        r.hit ? <DailyStatusPill label="OK" tone="ok" /> : <DailyStatusPill label="MISS" tone="miss" />
+                      ) : r.isPast ? (
+                        <DailyStatusPill label="ZERO" tone="zero" />
+                      ) : (
+                        <DailyStatusPill label="N/A" tone="na" />
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+
+          <DialogFooter className="mt-8 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="h-16 rounded-[18px] border-zinc-200 bg-white px-8 text-[1rem] font-semibold text-zinc-800 shadow-[0_16px_40px_-30px_rgba(15,23,42,0.35)] hover:bg-zinc-50"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, onOpenDaily }: {
+function EmployeeDailyModal({
+  open,
+  onOpenChange,
+  employeeGoal,
+  period,
+  userName,
+  distributionSnapshot,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  employeeGoal: EmployeeGoal | null;
+  period: GoalPeriodDoc | null;
+  userName?: string | null;
+  distributionSnapshot?: GoalDistributionSnapshot | null;
+}) {
+  if (!employeeGoal || !period || !userName) return null;
+
+  const { refDate, periodEnd } = getPeriodContext(period);
+  const activeDateKeys = getEmployeeDistributionDateKeys(employeeGoal, period, distributionSnapshot);
+  const activeDateSet = new Set(activeDateKeys);
+  const dailyTarget = employeeGoal.targetValue / Math.max(activeDateKeys.length, 1);
+  const upTarget = employeeGoal.targetValue * 1.2;
+  const progress = employeeGoal.dailyProgress ?? {};
+  const periodStart = period.startDate?.toDate?.() ?? refDate;
+  const allPeriodDays = eachDayOfInterval({ start: periodStart, end: periodEnd });
+  const elapsedActiveDays = allPeriodDays.filter(day => day <= refDate && activeDateSet.has(dateKey(day)));
+  const elapsedCount = elapsedActiveDays.length;
+  const hitCount = elapsedActiveDays.filter(day => (progress[dateKey(day)] ?? 0) >= dailyTarget).length;
+  const noSaleCount = elapsedActiveDays.filter(day => (progress[dateKey(day)] ?? 0) <= 0).length;
+  const bestDayValue = elapsedActiveDays.reduce((best, day) => Math.max(best, progress[dateKey(day)] ?? 0), 0);
+  const averagePerElapsedDay = elapsedCount > 0 ? employeeGoal.currentValue / elapsedCount : 0;
+  const currentPace = averagePerElapsedDay;
+  const remainingActiveDays = Math.max(activeDateKeys.length - elapsedCount, 0);
+  const requiredPace = remainingActiveDays > 0 ? Math.max(employeeGoal.targetValue - employeeGoal.currentValue, 0) / remainingActiveDays : 0;
+  const currentPct = pct(employeeGoal.currentValue, employeeGoal.targetValue);
+  const upPct = pct(employeeGoal.currentValue, upTarget);
+  const paceOk = currentPace >= requiredPace;
+
+  const weekStart = startOfWeek(refDate, { weekStartsOn: 1 });
+  const weekEndRaw = endOfWeek(refDate, { weekStartsOn: 1 });
+  const monthEnd = endOfMonth(refDate);
+  const weekEnd = weekEndRaw > monthEnd ? monthEnd : weekEndRaw;
+  const effectiveEnd = weekEnd > periodEnd ? periodEnd : weekEnd;
+  const effectiveStart = weekStart < startOfMonth(refDate) ? startOfMonth(refDate) : weekStart;
+  const weekDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
+
+  const initials = getInitials(userName);
+  const avatarClass = collaboratorAvatarClass(employeeGoal.employeeId);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="!max-w-[1000px] w-[min(94vw,1000px)] overflow-hidden rounded-[30px] border border-zinc-200 bg-white p-0 shadow-[0_40px_100px_-50px_rgba(15,23,42,0.55)]">
+        <div className="flex items-center gap-5 border-b border-zinc-200 px-7 py-6 md:px-8">
+          <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-extrabold ${avatarClass}`}>
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <DialogTitle className="text-[2rem] font-bold tracking-[-0.05em] text-zinc-950">{userName}</DialogTitle>
+            <DialogDescription className="mt-1 text-[1rem] font-medium text-slate-500">
+              Acompanhamento diário · {format(refDate, 'MMMM yyyy', { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
+            </DialogDescription>
+          </div>
+        </div>
+
+        <ScrollArea className="h-[min(78vh,980px)]">
+          <div className="space-y-8 px-7 py-6 md:px-8 md:pb-8">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
+                <p className="text-center text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">Acumulado</p>
+                <p className="mt-3 text-center text-[1.2rem] font-extrabold text-rose-500 md:text-[1.45rem]">R$ {fmt(employeeGoal.currentValue)}</p>
+              </div>
+              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
+                <p className="text-center text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">% Meta</p>
+                <p className="mt-3 text-center text-[1.2rem] font-extrabold text-rose-500 md:text-[1.45rem]">{currentPct.toFixed(1)}%</p>
+              </div>
+              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
+                <p className="text-center text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">% UP</p>
+                <p className="mt-3 text-center text-[1.2rem] font-extrabold text-blue-500 md:text-[1.45rem]">{upPct.toFixed(1)}%</p>
+              </div>
+              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
+                <p className="text-center text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">Dias batidos</p>
+                <p className="mt-3 text-center text-[1.2rem] font-extrabold text-amber-500 md:text-[1.45rem]">{hitCount}/{elapsedCount}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[0.98rem] font-bold text-slate-700">
+                    <span className="h-3 w-3 rounded-full bg-slate-400" />
+                    <span>Meta Alvo</span>
+                  </div>
+                  <span className="text-[1rem] font-extrabold text-rose-500">{currentPct.toFixed(1)}% · R$ {fmt(employeeGoal.targetValue)}</span>
+                </div>
+                <div className="relative h-4 rounded-full bg-slate-200 overflow-hidden">
+                  <div className="absolute inset-y-0 left-0 rounded-full bg-rose-400" style={{ width: `${Math.min(currentPct, 100)}%` }} />
+                  <div className="absolute inset-y-0 left-[6.5%] w-[3px] bg-slate-400/60" />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[0.86rem] font-semibold text-slate-400">
+                  <span>R$ {fmt(employeeGoal.currentValue)} realizado</span>
+                  <span>▲ ritmo esperado</span>
+                  <span>R$ {fmt(employeeGoal.targetValue)} meta</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[0.98rem] font-bold text-blue-600">
+                    <span className="h-3 w-3 rounded-full bg-blue-400" />
+                    <span>Super Meta (UP)</span>
+                  </div>
+                  <span className="text-[1rem] font-extrabold text-blue-500">{upPct.toFixed(1)}% · R$ {fmt(upTarget)}</span>
+                </div>
+                <div className="relative h-4 rounded-full bg-blue-100 overflow-hidden">
+                  <div className="absolute inset-y-0 left-0 rounded-full bg-blue-400" style={{ width: `${Math.min(upPct, 100)}%` }} />
+                  <div className="absolute inset-y-0 left-[6.5%] w-[3px] bg-blue-300/90" />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[0.86rem] font-semibold text-slate-400">
+                  <span>R$ {fmt(employeeGoal.currentValue)} realizado</span>
+                  <span>R$ {fmt(upTarget)} UP</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-[18px] border border-emerald-200 bg-emerald-50 px-6 py-4">
+              <p className="text-[1rem] font-extrabold text-emerald-700">✓ Pace no ritmo</p>
+              <div className="text-right text-[0.95rem] font-extrabold leading-tight text-emerald-700">
+                <p>Atual: R$ {fmt(currentPace)}/dia</p>
+                <p>Necessário: R$ {fmt(requiredPace)}/dia</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
+                <p className="text-center text-[0.95rem] font-medium text-slate-400">Dias sem venda</p>
+                <p className="mt-2 text-center text-[1.05rem] font-extrabold text-emerald-600 md:text-[1.2rem]">{noSaleCount}</p>
+              </div>
+              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
+                <p className="text-center text-[0.95rem] font-medium text-slate-400">Melhor dia</p>
+                <p className="mt-2 text-center text-[1.05rem] font-extrabold text-blue-600 md:text-[1.2rem]">R$ {fmt(bestDayValue)}</p>
+              </div>
+              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
+                <p className="text-center text-[0.95rem] font-medium text-slate-400">Média/dia</p>
+                <p className="mt-2 text-center text-[1.05rem] font-extrabold text-slate-700 md:text-[1.2rem]">R$ {fmt(averagePerElapsedDay)}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[1.1rem] font-extrabold tracking-[-0.03em] text-slate-800">Detalhe por dia</h3>
+                <div className="flex items-center gap-4">
+                  <Button variant="outline" size="icon" className="h-11 w-11 rounded-[16px] border-zinc-200 bg-white text-slate-700 hover:bg-zinc-50">
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                  <span className="text-[0.95rem] font-bold text-slate-600">
+                    Semana atual · {format(effectiveStart, 'dd/MM', { locale: ptBR })} – {format(effectiveEnd, 'dd/MM', { locale: ptBR })}
+                  </span>
+                  <Button variant="outline" size="icon" disabled className="h-11 w-11 rounded-[16px] border-zinc-200 bg-white text-slate-300">
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
+                <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-4 border-b border-zinc-200 bg-zinc-50 px-6 py-4 text-[0.9rem] font-bold text-slate-400">
+                  <span>Dia</span>
+                  <span className="text-center">Meta/dia</span>
+                  <span className="text-center">Realizado</span>
+                  <span className="text-center">Variação</span>
+                  <span className="text-center">Status</span>
+                </div>
+
+                {weekDays.map((day) => {
+                  const key = dateKey(day);
+                  const value = progress[key] ?? 0;
+                  const isToday = isSameDay(day, refDate);
+                  const isPastOrToday = day <= refDate;
+                  const isActive = activeDateSet.has(key);
+                  const variation = dailyTarget > 0 ? ((value - dailyTarget) / dailyTarget) * 100 : 0;
+
+                  let statusLabel = 'sem venda';
+                  let statusClass = 'bg-slate-100 text-slate-400';
+                  if (!isActive || !isPastOrToday) {
+                    statusLabel = '—';
+                    statusClass = 'bg-transparent text-slate-300';
+                  } else if (value >= dailyTarget) {
+                    statusLabel = '✓ batida';
+                    statusClass = 'bg-emerald-50 text-emerald-600';
+                  } else if (value > 0) {
+                    statusLabel = '✗ abaixo';
+                    statusClass = 'bg-amber-50 text-amber-600';
+                  }
+
+                  return (
+                    <div
+                      key={key}
+                      className={`grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-4 border-b border-zinc-100 px-6 py-5 text-[1rem] last:border-b-0 ${isToday ? 'bg-rose-50/40' : 'bg-white'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`font-extrabold ${isToday ? 'text-pink-500' : 'text-slate-700'}`}>
+                          {format(day, "eee dd/MM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
+                        </span>
+                        {isToday ? (
+                          <span className="rounded-full bg-pink-100 px-3 py-1 text-[0.88rem] font-bold text-pink-500">hoje</span>
+                        ) : null}
+                      </div>
+                      <span className="text-center font-medium text-slate-500">R$ {fmt(dailyTarget)}</span>
+                      <span className={`text-center font-extrabold ${!isActive || !isPastOrToday ? 'text-slate-300' : value > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
+                        {!isActive || !isPastOrToday ? '—' : `R$ ${fmt(value)}`}
+                      </span>
+                      <span className={`text-center font-extrabold ${!isActive || !isPastOrToday ? 'text-slate-300' : variation >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                        {!isActive || !isPastOrToday ? '—' : `${variation >= 0 ? '+' : ''}${variation.toFixed(0)}%`}
+                      </span>
+                      <div className="flex justify-center">
+                        <span className={`inline-flex min-w-[118px] items-center justify-center rounded-full px-4 py-1.5 text-[0.95rem] font-bold ${statusClass}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </ScrollArea>
+
+        <div className="flex justify-end border-t border-zinc-200 bg-white px-7 py-4 md:px-8">
+          <Button onClick={() => onOpenChange(false)} className="h-14 rounded-[16px] bg-pink-500 px-8 text-[1rem] font-bold hover:bg-pink-600">
+            Fechar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period, distributionSnapshot, onOpenDaily }: {
   eg: EmployeeGoal; shiftLabel?: string; userName: string;
   refDate: Date; periodEnd: Date;
+  period: GoalPeriodDoc;
+  distributionSnapshot?: GoalDistributionSnapshot | null;
   onOpenDaily?: () => void;
 }) {
   const initials = getInitials(userName);
   const avatarClass = collaboratorAvatarClass(eg.employeeId);
   const mPct = pct(eg.currentValue, eg.targetValue);
-  const weekly = calcWeeklyStats(eg as any, refDate, periodEnd);
+  const weekly = calcEgWeekly(eg, period, refDate, periodEnd, distributionSnapshot);
   
   // Detalhamento da semana atual
   const weekStart = startOfWeek(refDate, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: endOfWeek(refDate, { weekStartsOn: 1 }) });
-  const dailyTarget = eg.targetValue / getDaysInMonth(refDate);
+  const activeDateKeys = getEmployeeDistributionDateKeys(eg, period, distributionSnapshot);
+  const activeDateSet = new Set(activeDateKeys);
+  const dailyTarget = eg.targetValue / Math.max(activeDateKeys.length, 1);
 
   // Score de batida de meta no mês
   const monthDays = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
-  const hitCount = monthDays.filter(d => (eg.dailyProgress?.[dateKey(d)] ?? 0) >= dailyTarget).length;
-  const totalDays = monthDays.length;
+  const hitCount = monthDays.filter(d => activeDateSet.has(dateKey(d)) && (eg.dailyProgress?.[dateKey(d)] ?? 0) >= dailyTarget).length;
+  const totalDays = activeDateKeys.length;
 
   return (
     <div 
-      className="group p-5 hover:bg-accent/5 transition-colors cursor-pointer bg-[#ffffff] dark:bg-card/40 border border-[#e8e8e6] dark:border-border/40 rounded-[12px] mb-[8px]"
+      className="group cursor-pointer rounded-[22px] border border-[#dbe3ef] bg-white px-6 py-5 shadow-[0_18px_50px_-42px_rgba(15,23,42,0.45)] transition-all hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-42px_rgba(15,23,42,0.55)]"
       onClick={onOpenDaily}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shadow-sm ${avatarClass}`}>
+          <div className={`h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold shadow-sm ${avatarClass}`}>
             {initials}
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-bold leading-none mb-1">{userName}</span>
-            <div className="flex items-center gap-2">
-              {shiftLabel && <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-bold h-4 uppercase">{shiftLabel}</Badge>}
-              <span className="text-[10px] text-muted-foreground font-medium">
+            <span className="text-[0.98rem] font-bold leading-none text-zinc-900">{userName}</span>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {shiftLabel && <Badge variant="secondary" className="h-5 rounded-full bg-slate-100 px-2.5 py-0 text-[10px] font-bold uppercase text-slate-600">{shiftLabel}</Badge>}
+              <span className="text-[11px] font-medium text-zinc-500">
                 Meta: R$ {fmt(eg.targetValue)} · UP: R$ {fmt(eg.targetValue * 1.2)} · Diária: R$ {fmt(dailyTarget)}
               </span>
             </div>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-sm font-bold tabular-nums">R$ {fmt(eg.currentValue)}</p>
-          <div className="flex items-center justify-end gap-1">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold">{hitCount}/{totalDays}</span>
-            <span className="text-[9px] text-muted-foreground uppercase font-medium tracking-tighter">dias batidos</span>
+          <p className="text-[1rem] font-extrabold tabular-nums text-zinc-900">R$ {fmt(eg.currentValue)}</p>
+          <div className="mt-0.5 flex items-center justify-end gap-1">
+            <span className="text-[11px] font-bold uppercase text-zinc-700">{hitCount}/{totalDays}</span>
+            <span className="text-[10px] font-medium uppercase tracking-tight text-zinc-400">dias batidos</span>
           </div>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {/* Progress Mês */}
-        <div className="space-y-1.5 text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
+      <div className="mt-5 space-y-4">
+        <div className="space-y-1.5 text-[10px] uppercase font-bold tracking-[0.16em] text-zinc-400">
           <div className="flex justify-between">
             <span>Progresso Mês</span>
-            <span className={mPct >= 100 ? 'text-green-500' : ''}>{mPct.toFixed(1)}%</span>
+            <span className={mPct >= 100 ? 'text-emerald-500' : 'text-zinc-500'}>{mPct.toFixed(1)}%</span>
           </div>
-          <div className="h-[6px] bg-slate-300 dark:bg-slate-700 rounded-[3px] overflow-hidden">
+          <div className="h-[6px] rounded-full bg-[#d8dde5] overflow-hidden">
             <div className={`h-full transition-all duration-500 ${getStatusColor(mPct).bar}`} style={{ width: `${Math.min(mPct, 100)}%` }} />
           </div>
         </div>
 
-        {/* Progress Semana */}
-        <div className="space-y-1.5 text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
+        <div className="space-y-1.5 text-[10px] uppercase font-bold tracking-[0.16em] text-zinc-400">
           <div className="flex justify-between">
             <span>Performance Semanal</span>
-            <span className={pct(weekly.value, weekly.alvo) >= 100 ? 'text-green-500' : ''}>{pct(weekly.value, weekly.alvo).toFixed(1)}%</span>
+            <span className={pct(weekly.value, weekly.alvo) >= 100 ? 'text-emerald-500' : 'text-zinc-500'}>{pct(weekly.value, weekly.alvo).toFixed(1)}%</span>
           </div>
-          <div className="h-[6px] bg-slate-300 dark:bg-slate-700 rounded-[3px] overflow-hidden">
+          <div className="h-[6px] rounded-full bg-[#d8dde5] overflow-hidden">
             <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.min(pct(weekly.value, weekly.alvo), 100)}%` }} />
           </div>
         </div>
 
-        {/* Detalhamento Diário da Semana */}
-        <div className="grid grid-cols-7 gap-1 pt-2">
+        <div className="grid grid-cols-7 gap-1.5 pt-1">
           {weekDays.map(d => {
             const key = dateKey(d);
             const val = eg.dailyProgress?.[key] ?? 0;
+            const isActive = activeDateSet.has(key);
             const isHit = val >= dailyTarget;
             const isToday = isSameDay(d, refDate);
             return (
               <div key={key} className="flex flex-col items-center gap-1">
-                <span className={`text-[8px] uppercase font-bold ${isToday ? 'text-primary' : 'text-muted-foreground/60'}`}>
+                <span className={`text-[8px] uppercase font-bold ${isToday ? 'text-primary' : 'text-zinc-400'}`}>
                   {format(d, 'eee', { locale: ptBR }).substring(0, 1)}
                 </span>
                 <div 
-                  className={`w-full h-1.5 rounded-sm transition-all ${val > 0 ? (isHit ? 'bg-green-500' : 'bg-amber-400') : 'bg-slate-300 dark:bg-slate-700'}`}
-                  title={`${format(d, 'dd/MM')}: R$ ${fmt(val)}`}
+                  className={`h-1.5 w-full rounded-full transition-all ${!isActive ? 'bg-slate-200 opacity-40' : val > 0 ? (isHit ? 'bg-emerald-500' : 'bg-amber-400') : 'bg-[#d8dde5]'}`}
+                  title={!isActive ? `${format(d, 'dd/MM')}: fora da escala` : `${format(d, 'dd/MM')}: R$ ${fmt(val)}`}
                 />
               </div>
             );
@@ -512,9 +800,10 @@ function getInitialsShort(name: string) {
   return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
 }
 
-function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserName, kioskName }: {
+function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserName, kioskName, distributionSnapshot }: {
   open: boolean; onOpenChange: (v: boolean) => void; group: any;
   employeeGoals: EmployeeGoal[]; getUserName: (id: string) => string; kioskName: string;
+  distributionSnapshot?: GoalDistributionSnapshot | null;
 }) {
   if (!group) return null;
   const mainPeriod = group.periods.find((p: any) => p.type === 'revenue' || !p.type) ?? group.periods[0];
@@ -524,19 +813,20 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
   const periodStart = mainPeriod.startDate.toDate();
   const periodEnd = mainPeriod.endDate.toDate();
   const monthDays = eachDayOfInterval({ start: startOfMonth(periodStart), end: endOfMonth(periodStart) });
-  const elapsedDays = monthDays.filter(d => d <= now).length;
-  const remainingDays = monthDays.length - elapsedDays;
-  const dailyAlvo = mainPeriod.targetValue / monthDays.length;
-  const dailyUp = (mainPeriod.upValue ?? mainPeriod.targetValue * 1.2) / monthDays.length;
-  const stats = calcMonthlyStats(mainPeriod);
+  const activeDateKeys = getPeriodDistributionDateKeys(mainPeriod, distributionSnapshot);
+  const activeDateSet = new Set(activeDateKeys);
+  const elapsedDays = monthDays.filter(d => d <= now && activeDateSet.has(dateKey(d))).length;
+  const remainingDays = Math.max(activeDateKeys.length - elapsedDays, 0);
+  const dailyAlvo = mainPeriod.targetValue / Math.max(activeDateKeys.length, 1);
+  const stats = calcMonthlyStats(mainPeriod, distributionSnapshot);
 
   // Percentual esperado até hoje
-  const expectedPct = (elapsedDays / monthDays.length) * 100;
+  const expectedPct = (elapsedDays / Math.max(activeDateKeys.length, 1)) * 100;
   const actualPct = pct(stats.value, stats.alvo);
   const diff = actualPct - expectedPct;
 
   // Dias com venda do quiosque
-  const kioskDaysWithSale = monthDays.filter(d => (mainPeriod.dailyProgress?.[dateKey(d)] ?? 0) > 0).length;
+  const kioskDaysWithSale = monthDays.filter(d => activeDateSet.has(dateKey(d)) && (mainPeriod.dailyProgress?.[dateKey(d)] ?? 0) > 0).length;
 
   // Pace necessário para bater a meta
   const paceNeeded = remainingDays > 0 ? Math.max(stats.alvo - stats.value, 0) / remainingDays : 0;
@@ -548,13 +838,15 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
     .map(eg => {
       const name = getUserName(eg.employeeId);
       const dp = eg.dailyProgress ?? {};
-      const empDailyAlvo = eg.targetValue / monthDays.length;
-      const daysWithSale = monthDays.filter(d => (dp[dateKey(d)] ?? 0) > 0).length;
-      const daysHit = monthDays.filter(d => (dp[dateKey(d)] ?? 0) >= empDailyAlvo).length;
+      const employeeActiveDateKeys = getEmployeeDistributionDateKeys(eg, mainPeriod, distributionSnapshot);
+      const employeeActiveDateSet = new Set(employeeActiveDateKeys);
+      const empDailyAlvo = eg.targetValue / Math.max(employeeActiveDateKeys.length, 1);
+      const daysWithSale = monthDays.filter(d => employeeActiveDateSet.has(dateKey(d)) && (dp[dateKey(d)] ?? 0) > 0).length;
+      const daysHit = monthDays.filter(d => employeeActiveDateSet.has(dateKey(d)) && (dp[dateKey(d)] ?? 0) >= empDailyAlvo).length;
       const empPace = elapsedDays > 0 ? eg.currentValue / elapsedDays : 0;
       const empPaceNeeded = remainingDays > 0 ? Math.max(eg.targetValue - eg.currentValue, 0) / remainingDays : 0;
       const empPct = pct(eg.currentValue, eg.targetValue);
-      return { eg, name, dp, empDailyAlvo, daysWithSale, daysHit, empPace, empPaceNeeded, empPct };
+      return { eg, name, dp, empDailyAlvo, daysWithSale, daysHit, empPace, empPaceNeeded, empPct, employeeActiveDateSet, employeeActiveDateKeys };
     });
 
   // Alertas / badges
@@ -583,7 +875,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
     elapsedDays,
     remainingDays,
     kioskDaysWithSale,
-    totalMonthDays: monthDays.length,
+    totalMonthDays: activeDateKeys.length,
     alerts: alerts.map(a => a.label),
     monthDays: monthDays.map(d => ({
       label: format(d, 'dd'),
@@ -599,7 +891,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
       paceNeeded: e.empPaceNeeded,
       daysWithSale: e.daysWithSale,
       daysHit: e.daysHit,
-      totalDays: monthDays.length,
+      totalDays: e.employeeActiveDateKeys.length,
       dailyProgress: monthDays.map(d => e.dp[dateKey(d)] ?? 0),
     })),
   };
@@ -656,7 +948,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
               </div>
               <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 shadow-sm">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Consistência</p>
-                <p className="text-xl font-black tabular-nums text-blue-500">{kioskDaysWithSale}/{monthDays.length} dias</p>
+                <p className="text-xl font-black tabular-nums text-blue-500">{kioskDaysWithSale}/{activeDateKeys.length} dias</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Dias com venda</p>
                 {empRows.map(e => (
                   <p key={e.eg.id} className={`text-[10px] font-bold mt-0.5 ${e.daysWithSale === 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>
@@ -742,6 +1034,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                         <td className="p-2 text-center border-r border-border/20 font-black">R$ {fmt(stats.value)}</td>
                         {monthDays.map(d => {
                           const val = mainPeriod.dailyProgress?.[dateKey(d)] ?? 0;
+                          const isActive = activeDateSet.has(dateKey(d));
                           const hit = val >= dailyAlvo;
                           const isFuture = d > now;
                           const isToday = isSameDay(d, now);
@@ -749,8 +1042,8 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                           return (
                             <td
                               key={d.toISOString()}
-                              title={val > 0 ? `Dia ${format(d,'dd')}: R$ ${fmt(val)} | Meta: R$ ${fmt(dailyAlvo)}` : `Dia ${format(d,'dd')}: sem venda`}
-                              className={`px-1 py-1.5 text-center border-r border-border/20 font-mono text-[10px] w-8 ${isToday ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''} ${isFuture ? 'opacity-20' : val > 0 ? (hit ? 'text-green-600' : 'text-amber-600') : 'text-muted-foreground/30'}`}
+                              title={!isActive ? `Dia ${format(d,'dd')}: fora da escala` : val > 0 ? `Dia ${format(d,'dd')}: R$ ${fmt(val)} | Meta: R$ ${fmt(dailyAlvo)}` : `Dia ${format(d,'dd')}: sem venda`}
+                              className={`px-1 py-1.5 text-center border-r border-border/20 font-mono text-[10px] w-8 ${isToday ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''} ${!isActive ? 'opacity-25' : isFuture ? 'opacity-20' : val > 0 ? (hit ? 'text-green-600' : 'text-amber-600') : 'text-muted-foreground/30'}`}
                             >
                               {label}
                             </td>
@@ -774,6 +1067,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                           <td className="p-2 text-center border-r border-border/20 font-bold">R$ {fmt(e.eg.currentValue)}</td>
                           {monthDays.map(d => {
                             const val = e.dp[dateKey(d)] ?? 0;
+                            const isActive = e.employeeActiveDateSet.has(dateKey(d));
                             const hit = val >= e.empDailyAlvo;
                             const isFuture = d > now;
                             const isToday = isSameDay(d, now);
@@ -781,8 +1075,8 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                             return (
                               <td
                                 key={d.toISOString()}
-                                title={val > 0 ? `Dia ${format(d,'dd')}: R$ ${fmt(val)} | Meta: R$ ${fmt(e.empDailyAlvo)}` : `Dia ${format(d,'dd')}: sem venda`}
-                                className={`px-1 py-1.5 text-center border-r border-border/20 font-mono text-[10px] w-8 ${isToday ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''} ${isFuture ? 'opacity-20' : val > 0 ? (hit ? 'text-green-600' : 'text-amber-600') : 'text-muted-foreground/30'}`}
+                                title={!isActive ? `Dia ${format(d,'dd')}: fora da escala` : val > 0 ? `Dia ${format(d,'dd')}: R$ ${fmt(val)} | Meta: R$ ${fmt(e.empDailyAlvo)}` : `Dia ${format(d,'dd')}: sem venda`}
+                                className={`px-1 py-1.5 text-center border-r border-border/20 font-mono text-[10px] w-8 ${isToday ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''} ${!isActive ? 'opacity-25' : isFuture ? 'opacity-20' : val > 0 ? (hit ? 'text-green-600' : 'text-amber-600') : 'text-muted-foreground/30'}`}
                               >
                                 {label}
                               </td>
@@ -828,7 +1122,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                           </div>
                           <div>
                             <p className="text-muted-foreground text-[9px] uppercase font-bold">Dias ativos</p>
-                            <p className="font-bold">{e.daysWithSale} / {monthDays.length}</p>
+                            <p className="font-bold">{e.daysWithSale} / {e.employeeActiveDateKeys.length}</p>
                           </div>
                           <div>
                             <p className="text-muted-foreground text-[9px] uppercase font-bold">Pace atual</p>
@@ -882,6 +1176,10 @@ export function GoalsTrackingDashboard() {
   const { kiosks } = useKiosks();
   const { toast } = useToast();
   const [fallbackUsersById, setFallbackUsersById] = useState<Record<string, UserIdentityLike | null>>({});
+  const [distributionSnapshot, setDistributionSnapshot] = useState<GoalDistributionSnapshot>({
+    periodDateKeysById: {},
+    employeeDateKeysByGoalId: {},
+  });
 
   const isManager = (permissions.goals?.manage ?? false) || (permissions.settings?.manageUsers ?? false);
   const isAdmin = permissions.settings?.manageUsers ?? false;
@@ -1059,6 +1357,21 @@ export function GoalsTrackingDashboard() {
     [periods, userKioskIds, isManager]
   );
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const snapshot = await loadGoalDistributionSnapshot(activePeriods, employeeGoals);
+      if (!cancelled) {
+        setDistributionSnapshot(snapshot);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePeriods, employeeGoals]);
+
   // Agrupa períodos por quiosque + mês para exibir em um único card
   const periodGroups = useMemo(() => {
     const map = new Map<string, { groupKey: string; kioskId: string; monthLabel: string; periods: GoalPeriodDoc[] }>();
@@ -1093,16 +1406,15 @@ export function GoalsTrackingDashboard() {
   if (loading) return <Skeleton className="h-64 w-full" />;
 
   return (
-    <div className="flex flex-col gap-8 pb-10 max-w-5xl mx-auto">
-      {/* Header Centralizado */}
+    <div className="mx-auto flex max-w-[1040px] flex-col gap-8 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Metas de Faturamento</h1>
-          <p className="text-muted-foreground text-sm">Acompanhamento em tempo real de performance e projeções.</p>
+          <h1 className="text-[2.15rem] font-bold tracking-[-0.04em] text-zinc-900">Metas de Faturamento</h1>
+          <p className="text-sm text-zinc-500">Acompanhamento em tempo real de performance e projeções.</p>
         </div>
         <div className="flex items-center gap-2">
           {isManager && (
-            <Button size="sm" onClick={() => setNewMetaOpen(true)} className="bg-primary hover:bg-primary/90">
+            <Button size="sm" onClick={() => setNewMetaOpen(true)} className="h-10 rounded-full bg-primary px-5 hover:bg-primary/90">
               <Plus className="mr-2 h-4 w-4" /> Nova Meta
             </Button>
           )}
@@ -1132,40 +1444,40 @@ export function GoalsTrackingDashboard() {
             onOpenChange={(v) => setOpenCards(prev => ({ ...prev, [group.groupKey]: v }))}
             className="space-y-4"
           >
-            <Card className="border-slate-300/80 dark:border-border/40 overflow-hidden bg-slate-200/70 dark:bg-slate-900/40 shadow-md rounded-2xl transition-all">
+            <Card className="overflow-hidden rounded-[24px] border border-[#cfd9e6] bg-[#eef3f9] shadow-[0_28px_70px_-52px_rgba(15,23,42,0.45)] transition-all">
               <CollapsibleTrigger asChild>
-                <div className="flex items-center justify-between p-5 cursor-pointer hover:bg-accent/10 transition-colors">
+                <div className="flex cursor-pointer items-center justify-between px-6 py-5 transition-colors hover:bg-white/25">
                   <div className="flex items-center gap-4">
-                    <div className="p-2.5 bg-primary/10 rounded-xl">
+                    <div className="rounded-full bg-primary/10 p-2.5">
                       <Target className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-bold tracking-tight">{kioskName}</h2>
-                      <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">{group.monthLabel}</p>
+                      <h2 className="text-[1.08rem] font-bold tracking-[-0.03em] text-zinc-900">{kioskName}</h2>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">{group.monthLabel}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-8">
                     <div className="text-right">
-                       <span className={`text-lg font-black ${pctPrincipal >= 100 ? 'text-green-500' : 'text-amber-500'}`}>
+                       <span className={`text-[1.55rem] font-black ${pctPrincipal >= 100 ? 'text-emerald-500' : 'text-amber-500'}`}>
                          {pctPrincipal.toFixed(1)}%
                        </span>
-                       <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">da meta faturamento</p>
+                       <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-zinc-500">da meta faturamento</p>
                     </div>
-                    <div className={`p-1.5 rounded-full bg-muted/50 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
-                      <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                    <div className={`rounded-full bg-white/80 p-1.5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+                      <ChevronDown className="h-5 w-5 text-zinc-500" />
                     </div>
                   </div>
                 </div>
               </CollapsibleTrigger>
               
               <CollapsibleContent>
-                <div className="p-6 pt-2 border-t border-border/40 space-y-10 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="flex justify-between items-center bg-muted/20 -mx-6 px-6 py-3 border-b border-border/10 mb-6">
+                <div className="space-y-8 border-t border-white/70 px-6 pb-7 pt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="mb-2 flex items-center justify-between rounded-[18px] bg-white/55 px-4 py-3">
                     <Button 
                       variant="outline" 
                       size="sm" 
                       onClick={(e) => { e.stopPropagation(); setSummaryGroup(group); setKioskSummaryOpen(true); }}
-                      className="h-9 px-4 text-xs font-bold border-blue-500/30 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-900/20"
+                      className="h-10 rounded-full border-blue-500/25 bg-white px-4 text-xs font-bold text-blue-600 hover:bg-blue-50 hover:text-blue-700"
                     >
                       <BarChart2 className="mr-2 h-4 w-4" /> Situação Geral & PDF
                     </Button>
@@ -1173,7 +1485,7 @@ export function GoalsTrackingDashboard() {
                     {isManager && mainPeriod && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-9 px-3 hover:bg-accent"><Menu className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" className="h-10 rounded-full px-3 hover:bg-white/75"><Menu className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
                            <DropdownMenuItem onClick={() => { setEmployeeGoalPeriod(mainPeriod); setEmployeeGoalOpen(true); }}>
@@ -1209,34 +1521,40 @@ export function GoalsTrackingDashboard() {
 
                   {/* ── Resumo do Período ── */}
                   <div className="space-y-4">
-                    <h3 className="text-xs font-black text-muted-foreground uppercase tracking-[0.2em] px-1 italic">Visão Geral</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <h3 className="px-1 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-500">Visão Geral</h3>
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
                        {revenuePeriods.map(period => {
-                         const stats = calcMonthlyStats(period);
+                         const stats = calcMonthlyStats(period, distributionSnapshot);
                          const diff = pct(stats.projection, stats.up) - 100;
                          return (
                            <React.Fragment key={period.id}>
-                             <StatItem 
-                               title="Acumulado"
-                               value={fmt(stats.value)}
-                               subLabel={`Meta base: R$ ${fmt(stats.alvo)}`}
-                               trend={`${pct(stats.value, stats.alvo).toFixed(1)}%`}
-                               trendColor={stats.value >= stats.alvo ? 'text-green-500' : 'text-muted-foreground'}
-                             />
-                             <StatItem 
-                               title="Pace Atual"
-                               value={fmt(stats.currentPace)}
-                               subLabel={`Necessário: R$ ${fmt(stats.neededDaily)}`}
-                               trend={stats.currentPace >= stats.neededDaily ? `+${pct(stats.currentPace - stats.neededDaily, stats.neededDaily).toFixed(0)}%` : `-${pct(stats.neededDaily - stats.currentPace, stats.neededDaily).toFixed(0)}%`}
-                               trendColor={stats.currentPace >= stats.neededDaily ? 'text-green-500' : 'text-rose-500'}
-                             />
-                             <StatItem 
-                               title="Projeção"
-                               value={fmt(stats.projection)}
-                               subLabel={`Super meta: R$ ${fmt(stats.up)}`}
-                               trend={diff >= 0 ? `+${diff.toFixed(0)}%` : `${diff.toFixed(0)}%`}
-                               trendColor={diff >= 0 ? 'text-green-500' : 'text-rose-500'}
-                             />
+                             <div className="rounded-[22px] border border-white/80 bg-white px-5 py-5 shadow-[0_18px_50px_-44px_rgba(15,23,42,0.45)]">
+                               <StatItem 
+                                 title="Acumulado"
+                                 value={fmt(stats.value)}
+                                 subLabel={`Meta base: R$ ${fmt(stats.alvo)}`}
+                                 trend={`${pct(stats.value, stats.alvo).toFixed(1)}%`}
+                                 trendColor={stats.value >= stats.alvo ? 'text-green-500' : 'text-muted-foreground'}
+                               />
+                             </div>
+                             <div className="rounded-[22px] border border-white/80 bg-white px-5 py-5 shadow-[0_18px_50px_-44px_rgba(15,23,42,0.45)]">
+                               <StatItem 
+                                 title="Pace Atual"
+                                 value={fmt(stats.currentPace)}
+                                 subLabel={`Necessário: R$ ${fmt(stats.neededDaily)}`}
+                                 trend={stats.currentPace >= stats.neededDaily ? `+${pct(stats.currentPace - stats.neededDaily, stats.neededDaily).toFixed(0)}%` : `-${pct(stats.neededDaily - stats.currentPace, stats.neededDaily).toFixed(0)}%`}
+                                 trendColor={stats.currentPace >= stats.neededDaily ? 'text-green-500' : 'text-rose-500'}
+                               />
+                             </div>
+                             <div className="rounded-[22px] border border-white/80 bg-white px-5 py-5 shadow-[0_18px_50px_-44px_rgba(15,23,42,0.45)]">
+                               <StatItem 
+                                 title="Projeção"
+                                 value={fmt(stats.projection)}
+                                 subLabel={`Super meta: R$ ${fmt(stats.up)}`}
+                                 trend={diff >= 0 ? `+${diff.toFixed(0)}%` : `${diff.toFixed(0)}%`}
+                                 trendColor={diff >= 0 ? 'text-green-500' : 'text-rose-500'}
+                               />
+                             </div>
                            </React.Fragment>
                          );
                        })}
@@ -1245,32 +1563,31 @@ export function GoalsTrackingDashboard() {
 
                   {/* ── Card de Meta do Mês ── */}
                   {revenuePeriods.map(period => {
-                    const stats = calcMonthlyStats(period);
-                    const { isCurrent, refDate, periodEnd } = getPeriodContext(period);
-                    const weekly = calcWeeklyStats(period, refDate, periodEnd);
+                    const stats = calcMonthlyStats(period, distributionSnapshot);
+                    const { refDate, periodEnd } = getPeriodContext(period);
+                    const weekly = calcWeeklyStats(period, refDate, periodEnd, distributionSnapshot);
                     const weekPct = pct(weekly.value, weekly.alvo);
 
                     return (
                       <div key={period.id} className="space-y-8">
-                        <Card className="p-7 border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 shadow-md rounded-2xl overflow-hidden relative">
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
+                        <Card className="relative overflow-hidden rounded-[24px] border border-white/80 bg-white p-7 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.45)]">
                           <MainGoalProgress value={stats.value} alvo={stats.alvo} up={stats.up} linearMarker={stats.linearMarker} />
                           
                           <div 
-                            className="mt-12 pt-5 border-t border-border/20 flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer hover:bg-accent/5 transition-all p-3 rounded-xl group/week"
+                            className="group/week mt-10 flex cursor-pointer flex-col items-center justify-between gap-4 rounded-[18px] border border-[#edf1f6] bg-[#f8fafc] p-4 transition-all hover:bg-[#f2f6fb] md:flex-row"
                             onClick={() => { setDailyModalPeriod(period); setDailyModalOpen(true); }}
                           >
                              <div className="flex items-center gap-4">
-                               <div className="p-2.5 bg-amber-500/10 rounded-lg group-hover/week:scale-110 transition-transform">
+                               <div className="rounded-[14px] bg-amber-500/10 p-2.5 transition-transform group-hover/week:scale-110">
                                  <CalendarIcon className="h-5 w-5 text-amber-500" />
                                </div>
                                <div>
-                                 <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Performance da Semana</p>
-                                 <span className="text-base font-bold">R$ {fmt(weekly.value)} <span className="text-muted-foreground font-normal text-xs">/ {fmt(weekly.alvo)}</span></span>
+                                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">Performance da Semana</p>
+                                 <span className="text-base font-bold text-zinc-900">R$ {fmt(weekly.value)} <span className="text-xs font-normal text-zinc-500">/ {fmt(weekly.alvo)}</span></span>
                                </div>
                              </div>
                              <div className="flex items-center gap-3">
-                               <Badge className={`px-3 py-1 font-bold ${weekPct >= 100 ? 'bg-green-500 text-white' : 'bg-primary/80'}`}>
+                               <Badge className={`rounded-full px-3 py-1 font-bold ${weekPct >= 100 ? 'bg-green-500 text-white' : 'bg-primary/80'}`}>
                                  {weekPct.toFixed(1)}% atingido
                                </Badge>
                                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover/week:translate-x-1 transition-transform" />
@@ -1281,7 +1598,7 @@ export function GoalsTrackingDashboard() {
                         {/* ── Por Colaborador ── */}
                         <div className="space-y-5">
                           <div className="flex items-center justify-between">
-                             <h3 className="text-xs font-black text-muted-foreground uppercase tracking-[0.2em] px-1 italic">Ranking & Consistência</h3>
+                             <h3 className="px-1 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-500">Ranking & Consistência</h3>
                           </div>
                           <div className="space-y-3">
                                {employeeGoals
@@ -1293,10 +1610,12 @@ export function GoalsTrackingDashboard() {
                                      <CollaboratorCard 
                                        key={eg.id}
                                        eg={eg}
+                                       period={period}
                                        userName={getUserName(eg.employeeId)}
                                        shiftLabel={shift?.label}
                                        refDate={refDate}
                                        periodEnd={periodEnd}
+                                       distributionSnapshot={distributionSnapshot}
                                        onOpenDaily={() => {
                                          setDailyEmpModalData({ eg, period, userName: getUserName(eg.employeeId) });
                                          setDailyEmpModalOpen(true);
@@ -1319,7 +1638,7 @@ export function GoalsTrackingDashboard() {
                         {group.periods.filter(p => templates.find(t => t.id === p.templateId)?.type !== 'revenue').map(period => {
                           const template = templates.find(t => t.id === period.templateId);
                           const typeStyle = getTypeStyle(template?.type ?? 'revenue');
-                          const { value, alvo } = calcMonthlyStats(period);
+                          const { value, alvo } = calcMonthlyStats(period, distributionSnapshot);
                           const pPct = pct(value, alvo);
                           return (
                             <Card key={period.id} className="p-5 border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors shadow-sm rounded-2xl">
@@ -1361,6 +1680,7 @@ export function GoalsTrackingDashboard() {
         employeeGoals={employeeGoals}
         getUserName={getUserName}
         kioskName={summaryGroup ? getKioskName(summaryGroup.kioskId) : ''}
+        distributionSnapshot={distributionSnapshot}
       />
 
       {/* ── Modais ── */}
@@ -1377,17 +1697,15 @@ export function GoalsTrackingDashboard() {
         onOpenChange={setDailyModalOpen} 
         period={dailyModalPeriod} 
         title="Detalhamento Diário"
+        activeDateKeys={dailyModalPeriod ? getPeriodDistributionDateKeys(dailyModalPeriod, distributionSnapshot) : null}
       />
-      <DailyAnalysisModal 
-        open={dailyEmpModalOpen} 
-        onOpenChange={setDailyEmpModalOpen} 
-        period={dailyEmpModalData ? {
-          ...dailyEmpModalData.period,
-          targetValue: dailyEmpModalData.eg.targetValue,
-          dailyProgress: dailyEmpModalData.eg.dailyProgress,
-        } : null} 
-        title="Detalhamento Diário"
-        subjectName={dailyEmpModalData?.userName}
+      <EmployeeDailyModal
+        open={dailyEmpModalOpen}
+        onOpenChange={setDailyEmpModalOpen}
+        employeeGoal={dailyEmpModalData?.eg ?? null}
+        period={dailyEmpModalData?.period ?? null}
+        userName={dailyEmpModalData?.userName}
+        distributionSnapshot={distributionSnapshot}
       />
       
       <GoalsAiAnalysisModal

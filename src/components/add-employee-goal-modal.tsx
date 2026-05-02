@@ -87,6 +87,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
       fraction: fractionNum,
       targetValue: period.targetValue * shift.fraction * fractionNum,
       currentValue: 0,
+      distributionMode: period.distributionMode ?? 'calendar_days',
     });
     toast({ title: 'Colaborador adicionado ao turno.' });
     setNewEmp(prev => ({ ...prev, [shiftId]: '' }));
@@ -126,6 +127,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
       fraction: fractionNum,
       targetValue: period.targetValue * fractionNum,
       currentValue: 0,
+      distributionMode: period.distributionMode ?? 'calendar_days',
     });
     toast({ title: 'Colaborador adicionado à meta.' });
     setSelectedEmployee('');
