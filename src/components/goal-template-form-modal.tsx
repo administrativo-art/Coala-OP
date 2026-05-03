@@ -7,6 +7,11 @@ import { ptBR } from 'date-fns/locale';
 import { useGoals } from '@/contexts/goals-context';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
+import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
+import { useDPShifts } from '@/hooks/use-dp-shifts';
+import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
+import { useShiftRevenueSalesReports } from '@/hooks/use-shift-revenue-suggestion';
+import { computeShiftSuggestion } from '@/lib/shift-revenue-suggestion';
 import { useToast } from '@/hooks/use-toast';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { ProductSimulationContext } from '@/components/product-simulation-provider';
@@ -20,7 +25,7 @@ import { CurrencyInput } from '@/components/ui/currency-input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { ChevronRight, ChevronLeft, Plus, X } from 'lucide-react';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -43,6 +48,7 @@ function ordinalLabel(n: number): string {
 function monthKeyFromDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
+
 
 const GOAL_TYPE_OPTIONS: { type: GoalType; label: string; description: string }[] = [
   { type: 'revenue', label: 'Faturamento', description: 'Meta de receita total com turnos e colaboradores' },
@@ -84,28 +90,19 @@ interface ProductSpecificConfig {
   upValue: number;
 }
 
-type RevenueAllocationMode = 'shifts' | 'direct';
-
 // Wizard step identifiers
 type WizardStepId =
   | 'selection'
   | 'revenue_config'
   | 'revenue_shifts'
-  | 'revenue_employees'
-  | 'revenue_employees_direct'
+  | 'revenue_shifts_users'
   | 'ticket_config'
   | 'product_line_config'
   | 'product_specific_config';
 
-function buildSteps(selectedTypes: Set<GoalType>, allocationMode: RevenueAllocationMode): WizardStepId[] {
+function buildSteps(selectedTypes: Set<GoalType>): WizardStepId[] {
   const steps: WizardStepId[] = ['selection'];
-  if (selectedTypes.has('revenue')) {
-    if (allocationMode === 'shifts') {
-      steps.push('revenue_config', 'revenue_shifts', 'revenue_employees');
-    } else {
-      steps.push('revenue_config', 'revenue_employees_direct');
-    }
-  }
+  if (selectedTypes.has('revenue')) steps.push('revenue_config', 'revenue_shifts', 'revenue_shifts_users');
   if (selectedTypes.has('ticket')) steps.push('ticket_config');
   if (selectedTypes.has('product_line')) steps.push('product_line_config');
   if (selectedTypes.has('product_specific')) steps.push('product_specific_config');
@@ -116,8 +113,7 @@ const STEP_LABELS: Record<WizardStepId, string> = {
   selection: 'Seleção',
   revenue_config: 'Faturamento',
   revenue_shifts: 'Turnos',
-  revenue_employees: 'Colaboradores',
-  revenue_employees_direct: 'Colaboradores',
+  revenue_shifts_users: 'Colaboradores',
   ticket_config: 'Ticket Médio',
   product_line_config: 'Linha de Produto',
   product_specific_config: 'Produto Específico',
@@ -136,6 +132,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   const { addTemplate, addPeriod, addEmployeeGoal, periods, employeeGoals, templates } = useGoals();
   const { kiosks } = useKiosks();
   const { user, permissions, users } = useAuth();
+  const { shiftDefinitions, shiftDefsLoading, schedules, units } = useDPBootstrap();
   const { toast } = useToast();
   const { categories } = useProductSimulationCategories();
   const simCtx = useContext(ProductSimulationContext);
@@ -158,23 +155,129 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   // ── Revenue state ─────────────────────────────────────────────────────────
   const [revenueConfig, setRevenueConfig] = useState<RevenueConfig>({ targetValue: 0, upValue: 0 });
   const [revenueConfigError, setRevenueConfigError] = useState('');
-  const [revenueAllocationMode, setRevenueAllocationMode] = useState<RevenueAllocationMode>('shifts');
+  // Overrides de % por turno digitados pelo usuário (chave = shiftDefinitionId)
+  const [shiftPctOverrides, setShiftPctOverrides] = useState<Record<string, string>>({});
 
-  // Modo por turno
-  const [shifts, setShifts] = useState<ShiftDraft[]>([
-    { id: 'shift-0', label: '1º Turno', pct: '50' },
-    { id: 'shift-1', label: '2º Turno', pct: '50' },
-  ]);
-  const [assignments, setAssignments] = useState<EmployeeAssignment[]>([]);
-  const [newEmp, setNewEmp] = useState<Record<string, string>>({});
-  const [newPct, setNewPct] = useState<Record<string, string>>({});
+  const { reports: revenueSalesReports, loading: revenueSalesLoading } = useShiftRevenueSalesReports(kioskId || null);
 
-  // Modo direto por colaborador
-  const [directAssignments, setDirectAssignments] = useState<{ employeeId: string; pct: string }[]>([]);
-  const [newDirectEmp, setNewDirectEmp] = useState('');
-  const [newDirectPct, setNewDirectPct] = useState('');
+  // Mapa de shiftDefinition para lookup rápido
+  const shiftDefMap = useMemo(
+    () => new Map(shiftDefinitions.map((d) => [d.id, d])),
+    [shiftDefinitions]
+  );
 
-  const steps = useMemo(() => buildSteps(selectedTypes, revenueAllocationMode), [selectedTypes, revenueAllocationMode]);
+  const [targetYear, targetMonth] = useMemo(() => {
+    if (!month) return [0, 0];
+    const [y, m] = month.split('-').map(Number);
+    return [y, m];
+  }, [month]);
+
+  // Encontra a unidade DP correspondente ao quiosque selecionado (por nome)
+  const dpUnitForKiosk = useMemo(() => {
+    const kiosk = kiosks.find(k => k.id === kioskId);
+    if (!kiosk) return null;
+    return matchDPUnitForKiosk(kiosk.name, units) ?? null;
+  }, [kiosks, kioskId, units]);
+
+  // Encontra a escala do mês para a unidade DP do quiosque
+  const scheduleForKiosk = useMemo(
+    () => schedules.find(s =>
+      s.month === targetMonth &&
+      s.year === targetYear &&
+      s.unitId === dpUnitForKiosk?.id
+    ) ?? null,
+    [schedules, targetMonth, targetYear, dpUnitForKiosk]
+  );
+
+  // Carrega os turnos reais da escala do quiosque
+  const { shifts: dpShifts, loading: dpShiftsLoading } = useDPShifts(scheduleForKiosk?.id ?? null);
+
+  // IDs dos usuários atribuídos ao quiosque selecionado
+  const kioskUserIds = useMemo(() => new Set(
+    users
+      .filter(u => kioskId && (u.assignedKioskIds?.includes(kioskId) || u.participatesInGoals === true))
+      .map(u => u.id)
+  ), [users, kioskId]);
+
+  // Filtra apenas os turnos dos colaboradores do quiosque
+  const kioskShifts = useMemo(
+    () => dpShifts.filter(s => kioskUserIds.has(s.userId)),
+    [dpShifts, kioskUserIds]
+  );
+
+  // Grupos de colaboradores por turno — derivado dos turnos reais da escala
+  const shiftGroups = useMemo(() => {
+    const workShifts = kioskShifts.filter(s => s.type === 'work' && s.shiftDefinitionId);
+
+    const byDef = new Map<string, Set<string>>();
+    for (const s of workShifts) {
+      if (!byDef.has(s.shiftDefinitionId!)) byDef.set(s.shiftDefinitionId!, new Set());
+      byDef.get(s.shiftDefinitionId!)!.add(s.userId);
+    }
+
+    const sorted = [...byDef.entries()].sort(([aId], [bId]) => {
+      const a = shiftDefMap.get(aId)?.startTime ?? '';
+      const b = shiftDefMap.get(bId)?.startTime ?? '';
+      return a.localeCompare(b);
+    });
+
+    return sorted.map(([defId, userIds]) => {
+      const def = shiftDefMap.get(defId);
+      const label = def ? `${def.name} (${def.startTime}–${def.endTime})` : '—';
+      const groupUsers = [...userIds]
+        .map(uid => users.find(u => u.id === uid))
+        .filter((u): u is NonNullable<typeof u> => u != null);
+      return { id: defId, label, users: groupUsers, def: def ?? null };
+    });
+  }, [kioskShifts, shiftDefMap, users]);
+
+  // Quantidade de dias trabalhados por colaborador em cada turno (da escala real)
+  const workedDaysMap = useMemo(() => {
+    const map = new Map<string, number>(); // `${defId}:${userId}` → nº de dias
+    for (const s of kioskShifts) {
+      if (s.type !== 'work' || !s.shiftDefinitionId) continue;
+      const key = `${s.shiftDefinitionId}:${s.userId}`;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [kioskShifts]);
+
+  const shiftSuggestion = useMemo(() => {
+    if (revenueSalesLoading || shiftGroups.length === 0 || revenueSalesReports.length === 0) return null;
+    const validGroups = shiftGroups.filter(g => g.def != null) as Array<{ id: string; def: NonNullable<(typeof shiftGroups)[0]['def']> }>;
+    if (validGroups.length === 0) return null;
+    return computeShiftSuggestion(revenueSalesReports, validGroups);
+  }, [revenueSalesReports, revenueSalesLoading, shiftGroups]);
+
+  // Derivado puro — nunca fica desatualizado, sem useEffect
+  const shifts = useMemo<ShiftDraft[]>(() => {
+    if (shiftGroups.length === 0) return [];
+    const equalPct = (100 / shiftGroups.length).toFixed(1);
+    return shiftGroups.map(g => ({
+      id: g.id,
+      label: g.label,
+      pct: shiftPctOverrides[g.id]
+        ?? (shiftSuggestion?.[g.id] != null ? shiftSuggestion[g.id].toFixed(1) : equalPct),
+    }));
+  }, [shiftGroups, shiftPctOverrides, shiftSuggestion]);
+
+  const assignments = useMemo<EmployeeAssignment[]>(() => {
+    const result: EmployeeAssignment[] = [];
+    for (const g of shiftGroups) {
+      if (g.users.length === 0) continue;
+      const totalDays = g.users.reduce((sum, u) => sum + (workedDaysMap.get(`${g.id}:${u.id}`) ?? 0), 0);
+      for (const u of g.users) {
+        const userDays = workedDaysMap.get(`${g.id}:${u.id}`) ?? 0;
+        const pct = totalDays > 0
+          ? ((userDays / totalDays) * 100).toFixed(1)
+          : (100 / g.users.length).toFixed(1);
+        result.push({ shiftId: g.id, employeeId: u.id, pct });
+      }
+    }
+    return result;
+  }, [shiftGroups, workedDaysMap]);
+
+  const steps = useMemo(() => buildSteps(selectedTypes), [selectedTypes]);
   const currentStep = steps[stepIdx];
 
   // ── Ticket state ──────────────────────────────────────────────────────────
@@ -190,16 +293,6 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   const [productSpecificError, setProductSpecificError] = useState('');
 
   const [saving, setSaving] = useState(false);
-
-  // ── Derived ───────────────────────────────────────────────────────────────
-
-  const kioskUsers = useMemo(() =>
-    users.filter(u => {
-      if (!kioskId) return false;
-      return u.participatesInGoals === true || u.assignedKioskIds?.includes(kioskId);
-    }),
-    [users, kioskId]
-  );
 
   const pctSum = shifts.reduce((s, sh) => s + (parseFloat(sh.pct) || 0), 0);
   const pctSumOk = Math.abs(pctSum - 100) < 0.01;
@@ -225,27 +318,6 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       .sort((a, b) => b.key.localeCompare(a.key));
   }, [periods, kioskId, month]);
 
-  // ── Helpers modo direto ───────────────────────────────────────────────────
-
-  const directAllocatedPct = directAssignments.reduce((s, a) => s + (parseFloat(a.pct) || 0), 0);
-  const availableUsersForDirect = kioskUsers.filter(u => !directAssignments.some(a => a.employeeId === u.id));
-
-  function addDirectAssignment() {
-    if (!newDirectEmp || !newDirectPct) return;
-    const pctNum = parseFloat(newDirectPct);
-    if (isNaN(pctNum) || pctNum <= 0 || pctNum > 100) {
-      toast({ title: 'Porcentagem inválida', variant: 'destructive' });
-      return;
-    }
-    setDirectAssignments(prev => [...prev, { employeeId: newDirectEmp, pct: newDirectPct }]);
-    setNewDirectEmp('');
-    setNewDirectPct('');
-  }
-
-  function removeDirectAssignment(employeeId: string) {
-    setDirectAssignments(prev => prev.filter(a => a.employeeId !== employeeId));
-  }
-
   function applySourceMonth(sourceKey: string) {
     const sourceGroup = availableSourceMonths.find(item => item.key === sourceKey);
     if (!sourceGroup) {
@@ -256,12 +328,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     const nextTypes = new Set<GoalType>();
     let sourceRevenueLoaded = false;
 
-    setAssignments([]);
-    setDirectAssignments([]);
-    setNewEmp({});
-    setNewPct({});
-    setNewDirectEmp('');
-    setNewDirectPct('');
+    setShiftPctOverrides({});
     setProductLineConfig({});
     setProductSpecificConfig({});
     setTicketConfig({ targetValue: 0 });
@@ -278,35 +345,6 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           targetValue: period.targetValue,
           upValue: period.upValue ?? period.targetValue * 1.2,
         });
-
-        const sourceEmployeeGoals = employeeGoals.filter(goal => goal.periodId === period.id);
-        if ((period.shifts?.length ?? 0) > 0) {
-          setRevenueAllocationMode('shifts');
-          setShifts(
-            (period.shifts ?? []).map((shift, index) => ({
-              id: shift.id || `shift-${index}`,
-              label: shift.label || ordinalLabel(index),
-              pct: String(Number((shift.fraction * 100).toFixed(2))),
-            }))
-          );
-          setAssignments(
-            sourceEmployeeGoals
-              .filter(goal => goal.shiftId)
-              .map(goal => ({
-                shiftId: goal.shiftId!,
-                employeeId: goal.employeeId,
-                pct: String(Number((goal.fraction * 100).toFixed(2))),
-              }))
-          );
-        } else {
-          setRevenueAllocationMode('direct');
-          setDirectAssignments(
-            sourceEmployeeGoals.map(goal => ({
-              employeeId: goal.employeeId,
-              pct: String(Number((goal.fraction * 100).toFixed(2))),
-            }))
-          );
-        }
       }
 
       if (template.type === 'ticket') {
@@ -358,13 +396,10 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     }
     if (currentStep === 'revenue_shifts') {
       if (!pctSumOk) return;
-      const defaults: Record<string, string> = {};
-      shifts.forEach(s => { defaults[s.id] = '100'; });
-      setNewPct(defaults);
       setStepIdx(i => i + 1);
       return;
     }
-    if (currentStep === 'revenue_employees' || currentStep === 'revenue_employees_direct') {
+    if (currentStep === 'revenue_shifts_users') {
       setStepIdx(i => i + 1);
       return;
     }
@@ -397,87 +432,12 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
 
   const isLastStep = stepIdx === steps.length - 1;
 
-  // ── Shift helpers ─────────────────────────────────────────────────────────
-
-  function handleShiftCountChange(count: number) {
-    setShifts(prev => {
-      if (count <= 0) return prev;
-      if (count > prev.length) {
-        const next = [...prev];
-        while (next.length < count) {
-          next.push({ id: `shift-${next.length}`, label: ordinalLabel(next.length), pct: '' });
-        }
-        return next;
-      }
-      return prev.slice(0, count);
-    });
-  }
-
-  function assignmentsForShift(shiftId: string) {
-    return assignments.filter(a => a.shiftId === shiftId);
-  }
-
-  function allocatedPct(shiftId: string) {
-    return assignments.filter(a => a.shiftId === shiftId).reduce((s, a) => s + (parseFloat(a.pct) || 0), 0);
-  }
-
-  function availableUsersForShift(shiftId: string) {
-    return kioskUsers.filter(u => !assignmentsForShift(shiftId).some(a => a.employeeId === u.id));
-  }
-
-  function addAssignment(shiftId: string) {
-    const empId = newEmp[shiftId];
-    const pct = newPct[shiftId];
-    if (!empId || !pct) return;
-    const pctNum = parseFloat(pct);
-    if (isNaN(pctNum) || pctNum <= 0 || pctNum > 100) {
-      toast({ title: 'Porcentagem inválida', variant: 'destructive' });
-      return;
-    }
-    if (assignments.some(a => a.shiftId === shiftId && a.employeeId === empId)) {
-      toast({ title: 'Colaborador já adicionado neste turno', variant: 'destructive' });
-      return;
-    }
-    setAssignments(prev => [...prev, { shiftId, employeeId: empId, pct }]);
-    setNewEmp(prev => ({ ...prev, [shiftId]: '' }));
-    setNewPct(prev => ({ ...prev, [shiftId]: '100' }));
-  }
-
-  function removeAssignment(shiftId: string, empId: string) {
-    setAssignments(prev => prev.filter(a => !(a.shiftId === shiftId && a.employeeId === empId)));
-  }
-
-  const getUserName = (id: string) => users.find(u => u.id === id)?.username ?? id;
-
   // ── Submit ────────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
     setSaving(true);
     const { start, end } = monthToDateRange(month);
     let hasError = false;
-
-    // Auto-confirm linhas não adicionadas (modo turnos)
-    const finalAssignments = [...assignments];
-    for (const shift of shifts) {
-      const empId = newEmp[shift.id];
-      const pct = newPct[shift.id];
-      if (empId && pct) {
-        const pctNum = parseFloat(pct);
-        if (!isNaN(pctNum) && pctNum > 0 && pctNum <= 100 &&
-            !finalAssignments.some(a => a.shiftId === shift.id && a.employeeId === empId)) {
-          finalAssignments.push({ shiftId: shift.id, employeeId: empId, pct });
-        }
-      }
-    }
-    // Auto-confirm linha não adicionada (modo direto)
-    const finalDirectAssignments = [...directAssignments];
-    if (newDirectEmp && newDirectPct) {
-      const pctNum = parseFloat(newDirectPct);
-      if (!isNaN(pctNum) && pctNum > 0 && pctNum <= 100 &&
-          !finalDirectAssignments.some(a => a.employeeId === newDirectEmp)) {
-        finalDirectAssignments.push({ employeeId: newDirectEmp, pct: newDirectPct });
-      }
-    }
 
     // ── Revenue ──
     if (selectedTypes.has('revenue')) {
@@ -490,55 +450,31 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       });
 
       if (templateId) {
-        if (revenueAllocationMode === 'shifts') {
-          const goalShifts: GoalShift[] = shifts.map(s => ({
-            id: s.id, label: s.label, fraction: (parseFloat(s.pct) || 0) / 100,
-          }));
-          const periodId = await addPeriod({
-            templateId, kioskId,
-            startDate: Timestamp.fromDate(start),
-            endDate: Timestamp.fromDate(end),
-            targetValue: revenueConfig.targetValue,
-            upValue: revenueConfig.upValue,
-            currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
-            shifts: goalShifts, status: 'active',
-          });
-          if (periodId) {
-            for (const a of finalAssignments) {
-              const shift = goalShifts.find(s => s.id === a.shiftId);
-              if (!shift) continue;
-              const withinFraction = (parseFloat(a.pct) || 0) / 100;
-              await addEmployeeGoal({
-                periodId, employeeId: a.employeeId, kioskId,
-                shiftId: a.shiftId, fraction: withinFraction,
-                targetValue: revenueConfig.targetValue * shift.fraction * withinFraction,
-                currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
-              });
-            }
-          } else hasError = true;
-        } else {
-          // Modo direto: sem turnos
-          const periodId = await addPeriod({
-            templateId, kioskId,
-            startDate: Timestamp.fromDate(start),
-            endDate: Timestamp.fromDate(end),
-            targetValue: revenueConfig.targetValue,
-            upValue: revenueConfig.upValue,
-            currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
-            shifts: [], status: 'active',
-          });
-          if (periodId) {
-            for (const a of finalDirectAssignments) {
-              const fraction = (parseFloat(a.pct) || 0) / 100;
-              await addEmployeeGoal({
-                periodId, employeeId: a.employeeId, kioskId,
-                fraction,
-                targetValue: revenueConfig.targetValue * fraction,
-                currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
-              });
-            }
-          } else hasError = true;
-        }
+        const goalShifts: GoalShift[] = shifts.map(s => ({
+          id: s.id, label: s.label, fraction: (parseFloat(s.pct) || 0) / 100,
+        }));
+        const periodId = await addPeriod({
+          templateId, kioskId,
+          startDate: Timestamp.fromDate(start),
+          endDate: Timestamp.fromDate(end),
+          targetValue: revenueConfig.targetValue,
+          upValue: revenueConfig.upValue,
+          currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
+          shifts: goalShifts, status: 'active',
+        });
+        if (periodId) {
+          for (const a of assignments) {
+            const shift = goalShifts.find(s => s.id === a.shiftId);
+            if (!shift) continue;
+            const withinFraction = (parseFloat(a.pct) || 0) / 100;
+            await addEmployeeGoal({
+              periodId, employeeId: a.employeeId, kioskId,
+              shiftId: a.shiftId, fraction: withinFraction,
+              targetValue: revenueConfig.targetValue * shift.fraction * withinFraction,
+              currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
+            });
+          }
+        } else hasError = true;
       } else hasError = true;
     }
 
@@ -649,17 +585,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     setCopiedFromMonth('');
     setRevenueConfig({ targetValue: 0, upValue: 0 });
     setRevenueConfigError('');
-    setRevenueAllocationMode('shifts');
-    setShifts([
-      { id: 'shift-0', label: '1º Turno', pct: '50' },
-      { id: 'shift-1', label: '2º Turno', pct: '50' },
-    ]);
-    setAssignments([]);
-    setNewEmp({});
-    setNewPct({});
-    setDirectAssignments([]);
-    setNewDirectEmp('');
-    setNewDirectPct('');
+    setShiftPctOverrides({});
     setTicketConfig({ targetValue: 0 });
     setTicketError('');
     setProductLineConfig({});
@@ -811,29 +737,6 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Distribuição da meta</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {([
-                  { value: 'shifts', label: 'Por turno', desc: 'Define % por turno e depois vincula colaboradores a cada turno' },
-                  { value: 'direct', label: 'Por colaborador', desc: 'Vincula colaboradores diretamente com % da meta total' },
-                ] as const).map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setRevenueAllocationMode(opt.value)}
-                    className={`rounded-lg border p-3 text-left transition-colors ${revenueAllocationMode === opt.value ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'}`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 ${revenueAllocationMode === opt.value ? 'border-primary bg-primary' : 'border-muted-foreground'}`} />
-                      <span className="text-sm font-medium">{opt.label}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground pl-5">{opt.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {revenueConfigError && <p className="text-xs text-destructive">{revenueConfigError}</p>}
             <DialogFooter>
               <Button variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" />Voltar</Button>
@@ -842,182 +745,126 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           </div>
         )}
 
-        {/* ── STEP: REVENUE SHIFTS ── */}
+        {/* ── STEP: REVENUE SHIFTS (% por turno) ── */}
         {currentStep === 'revenue_shifts' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">Quantos turnos?</span>
-              <Select value={String(shifts.length)} onValueChange={v => handleShiftCountChange(parseInt(v))}>
-                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                <SelectContent>{[1, 2, 3, 4, 5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              {shifts.map(shift => (
-                <div key={shift.id} className="flex items-center gap-3">
-                  <span className="text-sm w-24 shrink-0">{shift.label}</span>
-                  <div className="relative flex-1">
-                    <Input
-                      type="number" min="0" max="100" step="0.1" placeholder="0"
-                      className="pr-8"
-                      value={shift.pct}
-                      onChange={e => setShifts(prev => prev.map(s => s.id === shift.id ? { ...s, pct: e.target.value } : s))}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground w-28 text-right shrink-0">
-                    = R$ {((parseFloat(shift.pct) || 0) / 100 * revenueConfig.targetValue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
+            {dpShiftsLoading || shiftDefsLoading ? (
+              <p className="text-sm text-muted-foreground">Carregando escala...</p>
+            ) : shiftGroups.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum turno encontrado na escala de {month} para este quiosque. Verifique se a escala foi gerada no módulo de DP.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {shiftGroups.length} turno(s) encontrado(s) na escala de {month}. Defina a distribuição percentual da meta entre eles.
+                </p>
+                {revenueSalesLoading && (
+                  <p className="text-xs text-muted-foreground">Carregando histórico de faturamento...</p>
+                )}
+                {shiftSuggestion && !revenueSalesLoading && (
+                  <p className="text-xs text-muted-foreground">
+                    Distribuição pré-preenchida com base nos últimos 3 meses de faturamento real desta unidade.
+                  </p>
+                )}
+                <div className="space-y-2">
+                  {shifts.map(shift => {
+                    const shiftPct = parseFloat(shift.pct) || 0;
+                    const shiftTarget = (shiftPct / 100) * revenueConfig.targetValue;
+                    return (
+                      <div key={shift.id} className="flex items-center gap-3">
+                        <span className="text-sm flex-1 font-medium">{shift.label}</span>
+                        <div className="relative w-24">
+                          <Input
+                            type="number" min="0" max="100" step="0.1" placeholder="0"
+                            className="pr-8"
+                            value={shift.pct}
+                            onChange={e => setShiftPctOverrides(prev => ({ ...prev, [shift.id]: e.target.value }))}
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground w-28 text-right shrink-0">
+                          = R$ {shiftTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-
-            <div className={`text-sm font-medium ${pctSumOk ? 'text-green-600' : 'text-destructive'}`}>
-              Soma: {pctSum.toFixed(1)}%{pctSumOk ? ' ✓' : ` — faltam ${(100 - pctSum).toFixed(1)}%`}
-            </div>
-
+                <div className={`text-sm font-medium ${pctSumOk ? 'text-green-600' : 'text-destructive'}`}>
+                  Soma: {pctSum.toFixed(1)}%{pctSumOk ? ' ✓' : ` — faltam ${(100 - pctSum).toFixed(1)}%`}
+                </div>
+              </>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" />Voltar</Button>
-              <Button disabled={!pctSumOk} onClick={handleNext}>Próximo <ChevronRight className="ml-1 h-4 w-4" /></Button>
+              <Button disabled={!pctSumOk || shiftGroups.length === 0} onClick={handleNext}>
+                Próximo <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
             </DialogFooter>
           </div>
         )}
 
-        {/* ── STEP: REVENUE EMPLOYEES ── */}
-        {currentStep === 'revenue_employees' && (
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-            {shifts.map(shift => {
-              const shiftPct = parseFloat(shift.pct) || 0;
-              const shiftTarget = (shiftPct / 100) * revenueConfig.targetValue;
-              const shiftAssignments = assignmentsForShift(shift.id);
-              const available = availableUsersForShift(shift.id);
-
-              return (
-                <div key={shift.id} className="space-y-2 rounded-lg border p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">{shift.label}</span>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">{shiftPct.toFixed(0)}%</Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Alvo: R$ {shiftTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  </div>
-
-                  {shiftAssignments.map(a => (
-                    <div key={a.employeeId} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-sm">
-                      <span>{getUserName(a.employeeId)}</span>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{parseFloat(a.pct).toFixed(0)}% do turno</Badge>
-                        <button onClick={() => removeAssignment(shift.id, a.employeeId)} className="text-muted-foreground hover:text-destructive">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="text-xs text-muted-foreground">
-                    Alocado: {allocatedPct(shift.id).toFixed(0)}% deste turno
-                  </div>
-
-                  {available.length > 0 && (
-                    <div className="flex gap-2 pt-1 border-t">
-                      <Select value={newEmp[shift.id] ?? ''} onValueChange={v => setNewEmp(p => ({ ...p, [shift.id]: v }))}>
-                        <SelectTrigger className="flex-1 h-8 text-sm"><SelectValue placeholder="Colaborador" /></SelectTrigger>
-                        <SelectContent>{available.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <div className="relative w-24">
-                        <Input
-                          className="h-8 text-sm pr-7"
-                          type="number" min="1" max="100" placeholder="50"
-                          value={newPct[shift.id] ?? ''}
-                          onChange={e => setNewPct(p => ({ ...p, [shift.id]: e.target.value }))}
-                        />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                      </div>
-                      <Button size="sm" className="h-8 px-2" onClick={() => addAssignment(shift.id)}
-                        disabled={!newEmp[shift.id] || !newPct[shift.id]}>
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            <DialogFooter className="pt-2">
-              <Button variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" />Voltar</Button>
-              {isLastStep
-                ? <Button onClick={handleSubmit} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>
-                : <Button onClick={handleNext}>Próximo <ChevronRight className="ml-1 h-4 w-4" /></Button>
-              }
-            </DialogFooter>
-          </div>
-        )}
-
-        {/* ── STEP: REVENUE EMPLOYEES DIRECT ── */}
-        {currentStep === 'revenue_employees_direct' && (
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+        {/* ── STEP: REVENUE SHIFTS USERS (colaboradores por turno) ── */}
+        {currentStep === 'revenue_shifts_users' && (
+          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Defina o percentual da meta total para cada colaborador.
+              Distribuição automática da meta entre os colaboradores escalados em cada turno.
             </p>
+            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+              {shiftGroups.map(group => {
+                const shift = shifts.find(s => s.id === group.id);
+                const shiftPct = parseFloat(shift?.pct ?? '0') || 0;
+                const shiftTarget = (shiftPct / 100) * revenueConfig.targetValue;
+                const totalDaysInShift = group.users.reduce(
+                  (sum, u) => sum + (workedDaysMap.get(`${group.id}:${u.id}`) ?? 0), 0
+                );
 
-            {directAssignments.length > 0 && (
-              <div className="space-y-1.5">
-                {directAssignments.map(a => {
-                  const fraction = (parseFloat(a.pct) || 0) / 100;
-                  const empTarget = revenueConfig.targetValue * fraction;
-                  return (
-                    <div key={a.employeeId} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
-                      <span className="font-medium">{getUserName(a.employeeId)}</span>
+                return (
+                  <div key={group.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold">{group.label}</span>
                       <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{parseFloat(a.pct).toFixed(0)}%</Badge>
-                        <span className="text-xs text-muted-foreground">R$ {empTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                        <button onClick={() => removeDirectAssignment(a.employeeId)} className="text-muted-foreground hover:text-destructive">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+                        <Badge variant="outline">{shiftPct.toFixed(1)}%</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          R$ {shiftTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
                       </div>
                     </div>
-                  );
-                })}
-                <p className="text-xs text-muted-foreground pt-0.5">
-                  Total alocado: <strong>{directAllocatedPct.toFixed(1)}%</strong>
-                  {' '}(R$ {(revenueConfig.targetValue * directAllocatedPct / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
-                </p>
-              </div>
-            )}
-
-            {availableUsersForDirect.length > 0 && (
-              <div className="flex gap-2 border-t pt-3">
-                <Select value={newDirectEmp} onValueChange={setNewDirectEmp}>
-                  <SelectTrigger className="flex-1 h-9 text-sm"><SelectValue placeholder="Colaborador" /></SelectTrigger>
-                  <SelectContent>{availableUsersForDirect.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}</SelectContent>
-                </Select>
-                <div className="relative w-24">
-                  <Input
-                    className="h-9 text-sm pr-7"
-                    type="number" min="1" max="100" placeholder="50"
-                    value={newDirectPct}
-                    onChange={e => setNewDirectPct(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') addDirectAssignment(); }}
-                  />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                </div>
-                <Button size="sm" className="h-9 px-2" onClick={addDirectAssignment} disabled={!newDirectEmp || !newDirectPct}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-
-            {directAssignments.length === 0 && availableUsersForDirect.length === 0 && (
-              <p className="text-sm text-muted-foreground py-2">Nenhum colaborador disponível.</p>
-            )}
-
-            <DialogFooter className="pt-2">
+                    {group.users.length > 0 ? (
+                      <div className="border-t pt-2 space-y-1.5">
+                        {group.users.map(u => {
+                          const userDays = workedDaysMap.get(`${group.id}:${u.id}`) ?? 0;
+                          const userFrac = totalDaysInShift > 0
+                            ? userDays / totalDaysInShift
+                            : 1 / group.users.length;
+                          const userPctOfTotal = shiftPct * userFrac;
+                          const userTarget = (userPctOfTotal / 100) * revenueConfig.targetValue;
+                          return (
+                            <div key={u.id} className="flex items-center justify-between text-xs pl-1">
+                              <span className="flex items-center gap-1.5 text-muted-foreground">
+                                {u.username ?? u.id}
+                                <Badge variant="secondary" className="px-1.5 py-0 h-4">
+                                  {userDays} de {totalDaysInShift}d
+                                </Badge>
+                              </span>
+                              <span className="tabular-nums text-muted-foreground">
+                                {userPctOfTotal.toFixed(1)}% · R$ {userTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground pt-1 border-t pl-1">Nenhum colaborador neste turno</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <DialogFooter>
               <Button variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" />Voltar</Button>
               {isLastStep
-                ? <Button onClick={handleSubmit} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>
+                ? <Button disabled={saving} onClick={handleSubmit}>{saving ? 'Salvando...' : 'Salvar'}</Button>
                 : <Button onClick={handleNext}>Próximo <ChevronRight className="ml-1 h-4 w-4" /></Button>
               }
             </DialogFooter>
