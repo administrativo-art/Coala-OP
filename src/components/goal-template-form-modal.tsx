@@ -158,6 +158,25 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   // Overrides de % por turno digitados pelo usuário (chave = shiftDefinitionId)
   const [shiftPctOverrides, setShiftPctOverrides] = useState<Record<string, string>>({});
 
+  // Fallback manual quando não há escala DP para o quiosque/mês
+  const [manualShiftCount, setManualShiftCount] = useState(2);
+  const [manualShiftDrafts, setManualShiftDrafts] = useState<ShiftDraft[]>([
+    { id: 'shift-0', label: '1º Turno', pct: '50' },
+    { id: 'shift-1', label: '2º Turno', pct: '50' },
+  ]);
+
+  function handleManualShiftCountChange(n: number) {
+    setManualShiftCount(n);
+    const equal = (100 / n).toFixed(1);
+    setManualShiftDrafts(
+      Array.from({ length: n }, (_, i) => ({
+        id: `shift-${i}`,
+        label: ordinalLabel(i),
+        pct: equal,
+      }))
+    );
+  }
+
   const { reports: revenueSalesReports, loading: revenueSalesLoading } = useShiftRevenueSalesReports(kioskId || null);
 
   // Mapa de shiftDefinition para lookup rápido
@@ -251,7 +270,8 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
 
   // Derivado puro — nunca fica desatualizado, sem useEffect
   const shifts = useMemo<ShiftDraft[]>(() => {
-    if (shiftGroups.length === 0) return [];
+    // Sem escala DP: usa entradas manuais
+    if (shiftGroups.length === 0) return manualShiftDrafts;
     const equalPct = (100 / shiftGroups.length).toFixed(1);
     return shiftGroups.map(g => ({
       id: g.id,
@@ -259,23 +279,37 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       pct: shiftPctOverrides[g.id]
         ?? (shiftSuggestion?.[g.id] != null ? shiftSuggestion[g.id].toFixed(1) : equalPct),
     }));
-  }, [shiftGroups, shiftPctOverrides, shiftSuggestion]);
+  }, [shiftGroups, shiftPctOverrides, shiftSuggestion, manualShiftDrafts]);
+
+  // Colaboradores do quiosque para fallback manual
+  const kioskUsers = useMemo(
+    () => users.filter(u => kioskId && (u.assignedKioskIds?.includes(kioskId) || u.participatesInGoals === true)),
+    [users, kioskId]
+  );
 
   const assignments = useMemo<EmployeeAssignment[]>(() => {
-    const result: EmployeeAssignment[] = [];
-    for (const g of shiftGroups) {
-      if (g.users.length === 0) continue;
-      const totalDays = g.users.reduce((sum, u) => sum + (workedDaysMap.get(`${g.id}:${u.id}`) ?? 0), 0);
-      for (const u of g.users) {
-        const userDays = workedDaysMap.get(`${g.id}:${u.id}`) ?? 0;
-        const pct = totalDays > 0
-          ? ((userDays / totalDays) * 100).toFixed(1)
-          : (100 / g.users.length).toFixed(1);
-        result.push({ shiftId: g.id, employeeId: u.id, pct });
+    // Modo escala DP: usa dias trabalhados por turno
+    if (shiftGroups.length > 0) {
+      const result: EmployeeAssignment[] = [];
+      for (const g of shiftGroups) {
+        if (g.users.length === 0) continue;
+        const totalDays = g.users.reduce((sum, u) => sum + (workedDaysMap.get(`${g.id}:${u.id}`) ?? 0), 0);
+        for (const u of g.users) {
+          const userDays = workedDaysMap.get(`${g.id}:${u.id}`) ?? 0;
+          const pct = totalDays > 0
+            ? ((userDays / totalDays) * 100).toFixed(1)
+            : (100 / g.users.length).toFixed(1);
+          result.push({ shiftId: g.id, employeeId: u.id, pct });
+        }
       }
+      return result;
     }
-    return result;
-  }, [shiftGroups, workedDaysMap]);
+    // Modo manual: distribui os usuários do quiosque igualmente pelo 1º turno
+    if (manualShiftDrafts.length === 0 || kioskUsers.length === 0) return [];
+    const firstShift = manualShiftDrafts[0]!;
+    const equalPct = (100 / kioskUsers.length).toFixed(1);
+    return kioskUsers.map(u => ({ shiftId: firstShift.id, employeeId: u.id, pct: equalPct }));
+  }, [shiftGroups, workedDaysMap, manualShiftDrafts, kioskUsers]);
 
   const steps = useMemo(() => buildSteps(selectedTypes), [selectedTypes]);
   const currentStep = steps[stepIdx];
@@ -586,6 +620,11 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     setRevenueConfig({ targetValue: 0, upValue: 0 });
     setRevenueConfigError('');
     setShiftPctOverrides({});
+    setManualShiftCount(2);
+    setManualShiftDrafts([
+      { id: 'shift-0', label: '1º Turno', pct: '50' },
+      { id: 'shift-1', label: '2º Turno', pct: '50' },
+    ]);
     setTicketConfig({ targetValue: 0 });
     setTicketError('');
     setProductLineConfig({});
@@ -751,10 +790,47 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
             {dpShiftsLoading || shiftDefsLoading ? (
               <p className="text-sm text-muted-foreground">Carregando escala...</p>
             ) : shiftGroups.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nenhum turno encontrado na escala de {month} para este quiosque. Verifique se a escala foi gerada no módulo de DP.
-              </p>
+              // Fallback manual — sem escala DP para este quiosque/mês
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Escala DP não encontrada para {month}. Configure os turnos manualmente.
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium">Quantos turnos?</span>
+                  <Select value={String(manualShiftCount)} onValueChange={v => handleManualShiftCountChange(parseInt(v))}>
+                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>{[1, 2, 3, 4, 5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  {manualShiftDrafts.map((shift, idx) => {
+                    const shiftPct = parseFloat(shift.pct) || 0;
+                    const shiftTarget = (shiftPct / 100) * revenueConfig.targetValue;
+                    return (
+                      <div key={shift.id} className="flex items-center gap-3">
+                        <span className="text-sm w-20 shrink-0 font-medium">{shift.label}</span>
+                        <div className="relative flex-1">
+                          <Input
+                            type="number" min="0" max="100" step="0.1" placeholder="0"
+                            className="pr-8"
+                            value={shift.pct}
+                            onChange={e => setManualShiftDrafts(prev => prev.map((s, i) => i === idx ? { ...s, pct: e.target.value } : s))}
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground w-28 text-right shrink-0">
+                          = R$ {shiftTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className={`text-sm font-medium ${pctSumOk ? 'text-green-600' : 'text-destructive'}`}>
+                  Soma: {pctSum.toFixed(1)}%{pctSumOk ? ' ✓' : ` — faltam ${(100 - pctSum).toFixed(1)}%`}
+                </div>
+              </>
             ) : (
+              // Automático — escala DP encontrada
               <>
                 <p className="text-sm text-muted-foreground">
                   {shiftGroups.length} turno(s) encontrado(s) na escala de {month}. Defina a distribuição percentual da meta entre eles.
@@ -797,7 +873,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
             )}
             <DialogFooter>
               <Button variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" />Voltar</Button>
-              <Button disabled={!pctSumOk || shiftGroups.length === 0} onClick={handleNext}>
+              <Button disabled={!pctSumOk} onClick={handleNext}>
                 Próximo <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             </DialogFooter>
