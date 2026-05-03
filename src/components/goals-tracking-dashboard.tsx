@@ -89,7 +89,7 @@ function GoalBar({ value, alvo, up, compact }: { value: number; alvo: number; up
     <div className={`relative ${h} bg-muted rounded-full overflow-visible`}>
       <div className={`${h} rounded-full transition-all ${color}`} style={{ width: `${filled}%` }} />
       <div className="absolute top-0 bottom-0 w-px bg-green-500/60" style={{ left: `${markerAlvo}%` }} title={`Alvo: R$ ${fmt(alvo)}`} />
-      <div className="absolute top-0 bottom-0 w-px bg-amber-400/60" style={{ left: `${markerUp}%` }} title={`UP: R$ ${fmt(up)}`} />
+      <div className="absolute top-0 bottom-0 w-px bg-amber-400/60" style={{ left: `${markerUp}%` }} title={`Meta UP: R$ ${fmt(up)}`} />
     </div>
   );
 }
@@ -278,7 +278,7 @@ function MainGoalProgress({ value, alvo, up, linearMarker }: {
           </div>
           <div className="flex justify-between items-center text-[10px] text-muted-foreground">
              <span className="font-bold text-foreground">Realizado R$ {fmt(value)}</span>
-             <span className="font-bold text-blue-500">UP R$ {fmt(up)}</span>
+             <span className="font-bold text-blue-500">Meta UP R$ {fmt(up)}</span>
           </div>
         </div>
       )}
@@ -460,10 +460,11 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
   );
 }
 
-function EmployeeDailyModal({
+export function EmployeeDailyModal({
   open,
   onOpenChange,
   employeeGoal,
+  originalEgs,
   period,
   userName,
   distributionSnapshot,
@@ -471,6 +472,7 @@ function EmployeeDailyModal({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   employeeGoal: EmployeeGoal | null;
+  originalEgs?: EmployeeGoal[] | null;
   period: GoalPeriodDoc | null;
   userName?: string | null;
   distributionSnapshot?: GoalDistributionSnapshot | null;
@@ -488,8 +490,6 @@ function EmployeeDailyModal({
   const elapsedActiveDays = allPeriodDays.filter(day => day <= refDate && activeDateSet.has(dateKey(day)));
   const elapsedCount = elapsedActiveDays.length;
   const hitCount = elapsedActiveDays.filter(day => (progress[dateKey(day)] ?? 0) >= dailyTarget).length;
-  const noSaleCount = elapsedActiveDays.filter(day => (progress[dateKey(day)] ?? 0) <= 0).length;
-  const bestDayValue = elapsedActiveDays.reduce((best, day) => Math.max(best, progress[dateKey(day)] ?? 0), 0);
   const averagePerElapsedDay = elapsedCount > 0 ? employeeGoal.currentValue / elapsedCount : 0;
   const currentPace = averagePerElapsedDay;
   const remainingActiveDays = Math.max(activeDateKeys.length - elapsedCount, 0);
@@ -498,201 +498,207 @@ function EmployeeDailyModal({
   const upPct = pct(employeeGoal.currentValue, upTarget);
   const paceOk = currentPace >= requiredPace;
 
-  const weekStart = startOfWeek(refDate, { weekStartsOn: 1 });
-  const weekEndRaw = endOfWeek(refDate, { weekStartsOn: 1 });
-  const monthEnd = endOfMonth(refDate);
-  const weekEnd = weekEndRaw > monthEnd ? monthEnd : weekEndRaw;
-  const effectiveEnd = weekEnd > periodEnd ? periodEnd : weekEnd;
-  const effectiveStart = weekStart < startOfMonth(refDate) ? startOfMonth(refDate) : weekStart;
-  const weekDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
+  const allActiveDays = allPeriodDays.filter(day => activeDateSet.has(dateKey(day)));
+  const dailyUpTarget = upTarget / Math.max(activeDateKeys.length, 1);
+
+  // Dias trabalhados conforme a escala (se disponível no snapshot)
+  const workedDaysFromEscala = distributionSnapshot?.workedDaysByKioskAndUser?.[`${period.kioskId}__${employeeGoal.employeeId}`];
+  const workedDaySet = workedDaysFromEscala?.length ? new Set(workedDaysFromEscala) : null;
+  const displayDays = workedDaySet
+    ? allPeriodDays.filter(day => workedDaySet.has(dateKey(day)))
+    : allActiveDays;
+
+  const elapsedDisplayDays = displayDays.filter(day => day <= refDate);
+  const noSaleCount = elapsedDisplayDays.filter(day => (progress[dateKey(day)] ?? 0) <= 0).length;
+  const bestDayValue = elapsedDisplayDays.reduce((best, day) => Math.max(best, progress[dateKey(day)] ?? 0), 0);
 
   const initials = getInitials(userName);
   const avatarClass = collaboratorAvatarClass(employeeGoal.employeeId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[1000px] w-[min(94vw,1000px)] overflow-hidden rounded-[30px] border border-zinc-200 bg-white p-0 shadow-[0_40px_100px_-50px_rgba(15,23,42,0.55)]">
-        <div className="flex items-center gap-5 border-b border-zinc-200 px-7 py-6 md:px-8">
-          <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-extrabold ${avatarClass}`}>
+      <DialogContent className="!max-w-[620px] w-[min(96vw,620px)] overflow-hidden rounded-[22px] border border-zinc-200 bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
+        {/* Cabeçalho */}
+        <div className="flex items-center gap-4 border-b border-zinc-100 px-5 py-4">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${avatarClass}`}>
             {initials}
           </div>
-          <div className="min-w-0">
-            <DialogTitle className="text-[2rem] font-bold tracking-[-0.05em] text-zinc-950">{userName}</DialogTitle>
-            <DialogDescription className="mt-1 text-[1rem] font-medium text-slate-500">
-              Acompanhamento diário · {format(refDate, 'MMMM yyyy', { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="text-base font-bold tracking-tight text-zinc-900 truncate">{userName}</DialogTitle>
+            <DialogDescription className="text-[11px] font-medium text-slate-400">
+              {format(refDate, 'MMMM yyyy', { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
             </DialogDescription>
           </div>
         </div>
 
-        <ScrollArea className="h-[min(78vh,980px)]">
-          <div className="space-y-8 px-7 py-6 md:px-8 md:pb-8">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
-                <p className="text-center text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">Acumulado</p>
-                <p className="mt-3 text-center text-[1.2rem] font-extrabold text-rose-500 md:text-[1.45rem]">R$ {fmt(employeeGoal.currentValue)}</p>
+        <ScrollArea className="h-[min(72vh,600px)]">
+          <div className="space-y-4 px-5 py-4">
+
+            {/* KPIs compactos */}
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'Acumulado', value: `R$ ${fmt(employeeGoal.currentValue)}`, color: 'text-zinc-900' },
+                { label: '% Meta', value: `${currentPct.toFixed(1)}%`, color: currentPct >= 100 ? 'text-emerald-600' : 'text-amber-500' },
+                { label: '% Meta UP', value: `${upPct.toFixed(1)}%`, color: upPct >= 100 ? 'text-emerald-600' : 'text-blue-500' },
+                { label: 'Dias batidos', value: `${hitCount}/${elapsedCount}`, color: 'text-zinc-700' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="rounded-[14px] border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">{label}</p>
+                  <p className={`mt-1 text-sm font-extrabold tabular-nums ${color}`}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Barra de progresso única */}
+            <div className="rounded-[14px] border border-zinc-200 bg-zinc-50 px-4 py-3 space-y-2">
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] font-bold text-zinc-500">
+                  <span>Meta · R$ {fmt(employeeGoal.targetValue)}</span>
+                  <span className={currentPct >= 100 ? 'text-emerald-600' : 'text-amber-500'}>{currentPct.toFixed(1)}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-zinc-200 overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${getStatusColor(currentPct).bar}`} style={{ width: `${Math.min(currentPct, 100)}%` }} />
+                </div>
               </div>
-              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
-                <p className="text-center text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">% Meta</p>
-                <p className="mt-3 text-center text-[1.2rem] font-extrabold text-rose-500 md:text-[1.45rem]">{currentPct.toFixed(1)}%</p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] font-bold text-zinc-500">
+                  <span>Meta UP · R$ {fmt(upTarget)}</span>
+                  <span className="text-blue-500">{upPct.toFixed(1)}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-blue-100 overflow-hidden">
+                  <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${Math.min(upPct, 100)}%` }} />
+                </div>
               </div>
-              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
-                <p className="text-center text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">% UP</p>
-                <p className="mt-3 text-center text-[1.2rem] font-extrabold text-blue-500 md:text-[1.45rem]">{upPct.toFixed(1)}%</p>
-              </div>
-              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
-                <p className="text-center text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">Dias batidos</p>
-                <p className="mt-3 text-center text-[1.2rem] font-extrabold text-amber-500 md:text-[1.45rem]">{hitCount}/{elapsedCount}</p>
+              <div className="flex items-center justify-between pt-1 text-[10px] font-semibold text-zinc-500">
+                <span>Pace atual: <span className={paceOk ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>R$ {fmt(currentPace)}/dia</span></span>
+                <span>Necessário: R$ {fmt(requiredPace)}/dia</span>
+                <span>Média: R$ {fmt(averagePerElapsedDay)}/dia</span>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[0.98rem] font-bold text-slate-700">
-                    <span className="h-3 w-3 rounded-full bg-slate-400" />
-                    <span>Meta Alvo</span>
-                  </div>
-                  <span className="text-[1rem] font-extrabold text-rose-500">{currentPct.toFixed(1)}% · R$ {fmt(employeeGoal.targetValue)}</span>
-                </div>
-                <div className="relative h-4 rounded-full bg-slate-200 overflow-hidden">
-                  <div className="absolute inset-y-0 left-0 rounded-full bg-rose-400" style={{ width: `${Math.min(currentPct, 100)}%` }} />
-                  <div className="absolute inset-y-0 left-[6.5%] w-[3px] bg-slate-400/60" />
-                </div>
-                <div className="mt-2 flex items-center justify-between text-[0.86rem] font-semibold text-slate-400">
-                  <span>R$ {fmt(employeeGoal.currentValue)} realizado</span>
-                  <span>▲ ritmo esperado</span>
-                  <span>R$ {fmt(employeeGoal.targetValue)} meta</span>
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[0.98rem] font-bold text-blue-600">
-                    <span className="h-3 w-3 rounded-full bg-blue-400" />
-                    <span>Super Meta (UP)</span>
-                  </div>
-                  <span className="text-[1rem] font-extrabold text-blue-500">{upPct.toFixed(1)}% · R$ {fmt(upTarget)}</span>
-                </div>
-                <div className="relative h-4 rounded-full bg-blue-100 overflow-hidden">
-                  <div className="absolute inset-y-0 left-0 rounded-full bg-blue-400" style={{ width: `${Math.min(upPct, 100)}%` }} />
-                  <div className="absolute inset-y-0 left-[6.5%] w-[3px] bg-blue-300/90" />
-                </div>
-                <div className="mt-2 flex items-center justify-between text-[0.86rem] font-semibold text-slate-400">
-                  <span>R$ {fmt(employeeGoal.currentValue)} realizado</span>
-                  <span>R$ {fmt(upTarget)} UP</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between rounded-[18px] border border-emerald-200 bg-emerald-50 px-6 py-4">
-              <p className="text-[1rem] font-extrabold text-emerald-700">✓ Pace no ritmo</p>
-              <div className="text-right text-[0.95rem] font-extrabold leading-tight text-emerald-700">
-                <p>Atual: R$ {fmt(currentPace)}/dia</p>
-                <p>Necessário: R$ {fmt(requiredPace)}/dia</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
-                <p className="text-center text-[0.95rem] font-medium text-slate-400">Dias sem venda</p>
-                <p className="mt-2 text-center text-[1.05rem] font-extrabold text-emerald-600 md:text-[1.2rem]">{noSaleCount}</p>
-              </div>
-              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
-                <p className="text-center text-[0.95rem] font-medium text-slate-400">Melhor dia</p>
-                <p className="mt-2 text-center text-[1.05rem] font-extrabold text-blue-600 md:text-[1.2rem]">R$ {fmt(bestDayValue)}</p>
-              </div>
-              <div className="rounded-[20px] border border-zinc-200 bg-zinc-50 px-6 py-5">
-                <p className="text-center text-[0.95rem] font-medium text-slate-400">Média/dia</p>
-                <p className="mt-2 text-center text-[1.05rem] font-extrabold text-slate-700 md:text-[1.2rem]">R$ {fmt(averagePerElapsedDay)}</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
+            {/* Tabela semanal */}
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="text-[1.1rem] font-extrabold tracking-[-0.03em] text-slate-800">Detalhe por dia</h3>
-                <div className="flex items-center gap-4">
-                  <Button variant="outline" size="icon" className="h-11 w-11 rounded-[16px] border-zinc-200 bg-white text-slate-700 hover:bg-zinc-50">
-                    <ChevronLeft className="h-5 w-5" />
-                  </Button>
-                  <span className="text-[0.95rem] font-bold text-slate-600">
-                    Semana atual · {format(effectiveStart, 'dd/MM', { locale: ptBR })} – {format(effectiveEnd, 'dd/MM', { locale: ptBR })}
-                  </span>
-                  <Button variant="outline" size="icon" disabled className="h-11 w-11 rounded-[16px] border-zinc-200 bg-white text-slate-300">
-                    <ChevronRight className="h-5 w-5" />
-                  </Button>
-                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                  Detalhe por dia · {format(periodStart, 'dd/MM', { locale: ptBR })} – {format(periodEnd, 'dd/MM', { locale: ptBR })}
+                </p>
+                <p className="text-[10px] text-zinc-400">
+                  Sem venda: <span className="font-bold text-zinc-700">{noSaleCount}</span> · Melhor: <span className="font-bold text-zinc-700">R$ {fmt(bestDayValue)}</span>
+                </p>
               </div>
 
-              <div className="overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
-                <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-4 border-b border-zinc-200 bg-zinc-50 px-6 py-4 text-[0.9rem] font-bold text-slate-400">
-                  <span>Dia</span>
-                  <span className="text-center">Meta/dia</span>
-                  <span className="text-center">Realizado</span>
-                  <span className="text-center">Variação</span>
-                  <span className="text-center">Status</span>
-                </div>
+              {(() => {
+                // Labels de turno por dia: preferência para dados reais da escala (startTime–endTime),
+                // com fallback para o label do shift do goal (antes do merge)
+                const escalaLabels = distributionSnapshot?.shiftLabelByKioskUserAndDate?.[`${period.kioskId}__${employeeGoal.employeeId}`] ?? {};
+                const shiftsByDay = new Map<string, string>(Object.entries(escalaLabels));
 
-                {weekDays.map((day) => {
-                  const key = dateKey(day);
-                  const value = progress[key] ?? 0;
-                  const isToday = isSameDay(day, refDate);
-                  const isPastOrToday = day <= refDate;
-                  const isActive = activeDateSet.has(key);
-                  const variation = dailyTarget > 0 ? ((value - dailyTarget) / dailyTarget) * 100 : 0;
-
-                  let statusLabel = 'sem venda';
-                  let statusClass = 'bg-slate-100 text-slate-400';
-                  if (!isActive || !isPastOrToday) {
-                    statusLabel = '—';
-                    statusClass = 'bg-transparent text-slate-300';
-                  } else if (value >= dailyTarget) {
-                    statusLabel = '✓ batida';
-                    statusClass = 'bg-emerald-50 text-emerald-600';
-                  } else if (value > 0) {
-                    statusLabel = '✗ abaixo';
-                    statusClass = 'bg-amber-50 text-amber-600';
+                if (shiftsByDay.size === 0) {
+                  for (const og of (originalEgs ?? [])) {
+                    const ogLabel = og.shiftId ? period.shifts?.find(s => s.id === og.shiftId)?.label : null;
+                    if (!ogLabel) continue;
+                    const ogActiveKeys = getEmployeeDistributionDateKeys(og, period, distributionSnapshot);
+                    for (const k of ogActiveKeys) {
+                      const existing = shiftsByDay.get(k);
+                      shiftsByDay.set(k, existing ? `${existing} · ${ogLabel}` : ogLabel);
+                    }
                   }
+                }
 
-                  return (
-                    <div
-                      key={key}
-                      className={`grid grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-4 border-b border-zinc-100 px-6 py-5 text-[1rem] last:border-b-0 ${isToday ? 'bg-rose-50/40' : 'bg-white'}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className={`font-extrabold ${isToday ? 'text-pink-500' : 'text-slate-700'}`}>
-                          {format(day, "eee dd/MM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
-                        </span>
-                        {isToday ? (
-                          <span className="rounded-full bg-pink-100 px-3 py-1 text-[0.88rem] font-bold text-pink-500">hoje</span>
-                        ) : null}
-                      </div>
-                      <span className="text-center font-medium text-slate-500">R$ {fmt(dailyTarget)}</span>
-                      <span className={`text-center font-extrabold ${!isActive || !isPastOrToday ? 'text-slate-300' : value > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
-                        {!isActive || !isPastOrToday ? '—' : `R$ ${fmt(value)}`}
-                      </span>
-                      <span className={`text-center font-extrabold ${!isActive || !isPastOrToday ? 'text-slate-300' : variation >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                        {!isActive || !isPastOrToday ? '—' : `${variation >= 0 ? '+' : ''}${variation.toFixed(0)}%`}
-                      </span>
-                      <div className="flex justify-center">
-                        <span className={`inline-flex min-w-[118px] items-center justify-center rounded-full px-4 py-1.5 text-[0.95rem] font-bold ${statusClass}`}>
-                          {statusLabel}
-                        </span>
-                      </div>
+                const hasShiftCol = shiftsByDay.size > 0;
+                const cols = hasShiftCol
+                  ? 'grid-cols-[1.1fr_0.75fr_0.8fr_0.8fr_0.9fr_56px]'
+                  : 'grid-cols-[1.3fr_0.85fr_0.85fr_1fr_56px]';
+
+                return (
+                  <div className="overflow-hidden rounded-[14px] border border-zinc-200 bg-white">
+                    <div className={`grid ${cols} border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-slate-400`}>
+                      <span>Dia</span>
+                      {hasShiftCol && <span>Turno</span>}
+                      <span className="text-right">Alvo/dia</span>
+                      <span className="text-right">UP/dia</span>
+                      <span className="text-right">Realizado</span>
+                      <span className="text-center">Status</span>
                     </div>
-                  );
-                })}
-              </div>
+
+                    {displayDays.map((day) => {
+                      const key = dateKey(day);
+                      const value = progress[key] ?? 0;
+                      const isToday = isSameDay(day, refDate);
+                      const isPastOrToday = day <= refDate;
+                      const shiftLabel = shiftsByDay.get(key);
+
+                      let statusLabel = isPastOrToday ? 'zero' : '—';
+                      let statusClass = isPastOrToday ? 'bg-zinc-100 text-zinc-400' : 'text-zinc-300';
+                      if (isPastOrToday && value >= dailyTarget) {
+                        statusLabel = '✓';
+                        statusClass = 'bg-emerald-100 text-emerald-600 font-black';
+                      } else if (isPastOrToday && value > 0) {
+                        statusLabel = '↓';
+                        statusClass = 'bg-amber-100 text-amber-600 font-black';
+                      }
+
+                      return (
+                        <div
+                          key={key}
+                          className={`grid ${cols} border-b border-zinc-100 px-4 py-2.5 text-xs last:border-b-0 ${isToday ? 'bg-pink-50/50' : ''}`}
+                        >
+                          <span className={`font-semibold ${isToday ? 'text-pink-500' : 'text-zinc-700'}`}>
+                            {format(day, "eee dd/MM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
+                            {isToday && <span className="ml-1.5 text-[9px] font-bold text-pink-400">hoje</span>}
+                          </span>
+                          {hasShiftCol && (
+                            <span className="text-[10px] font-medium text-zinc-400 truncate">
+                              {shiftLabel ?? '—'}
+                            </span>
+                          )}
+                          <span className="text-right font-medium text-zinc-400">
+                            R$ {fmt(dailyTarget)}
+                          </span>
+                          <span className="text-right font-medium text-blue-400">
+                            R$ {fmt(dailyUpTarget)}
+                          </span>
+                          <span className={`text-right font-bold ${!isPastOrToday ? 'text-zinc-300' : value > 0 ? 'text-zinc-800' : 'text-zinc-300'}`}>
+                            {!isPastOrToday ? '—' : `R$ ${fmt(value)}`}
+                          </span>
+                          <div className="flex justify-center">
+                            <span className={`inline-flex w-7 items-center justify-center rounded-full text-[11px] ${statusClass}`}>
+                              {statusLabel}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </ScrollArea>
 
-        <div className="flex justify-end border-t border-zinc-200 bg-white px-7 py-4 md:px-8">
-          <Button onClick={() => onOpenChange(false)} className="h-14 rounded-[16px] bg-pink-500 px-8 text-[1rem] font-bold hover:bg-pink-600">
+        <div className="flex justify-end border-t border-zinc-100 bg-white px-5 py-3">
+          <Button onClick={() => onOpenChange(false)} variant="outline" className="h-9 rounded-full px-5 text-xs font-bold">
             Fechar
           </Button>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function WeekRow({ label, pctValue, barColor }: { label: string; pctValue: number; barColor: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-center">
+        <span className="text-[9px] font-black uppercase tracking-[0.12em] text-zinc-400">{label}</span>
+        <span className={`text-[10px] font-bold tabular-nums ${pctValue >= 100 ? 'text-emerald-500' : 'text-zinc-500'}`}>
+          {pctValue.toFixed(1)}%
+        </span>
+      </div>
+      <div className="h-[3px] rounded-full bg-[#e8edf5] overflow-hidden">
+        <div className={`h-full transition-all duration-500 ${barColor}`} style={{ width: `${Math.min(pctValue, 100)}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -705,92 +711,161 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
 }) {
   const initials = getInitials(userName);
   const avatarClass = collaboratorAvatarClass(eg.employeeId);
-  const mPct = pct(eg.currentValue, eg.targetValue);
-  const weekly = calcEgWeekly(eg, period, refDate, periodEnd, distributionSnapshot);
-  
-  // Detalhamento da semana atual
-  const weekStart = startOfWeek(refDate, { weekStartsOn: 1 });
-  const weekDays = eachDayOfInterval({ start: weekStart, end: endOfWeek(refDate, { weekStartsOn: 1 }) });
+
   const activeDateKeys = getEmployeeDistributionDateKeys(eg, period, distributionSnapshot);
   const activeDateSet = new Set(activeDateKeys);
   const dailyTarget = eg.targetValue / Math.max(activeDateKeys.length, 1);
+  const periodStart = period.startDate?.toDate?.() ?? refDate;
 
-  // Score de batida de meta no mês
-  const monthDays = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
-  const hitCount = monthDays.filter(d => activeDateSet.has(dateKey(d)) && (eg.dailyProgress?.[dateKey(d)] ?? 0) >= dailyTarget).length;
-  const totalDays = activeDateKeys.length;
+  const monthDays = eachDayOfInterval({ start: periodStart, end: periodEnd });
+  const elapsedActiveDays = monthDays.filter(d => d <= refDate && activeDateSet.has(dateKey(d)));
+  const elapsedCount = elapsedActiveDays.length;
+
+  const mPct = pct(eg.currentValue, eg.targetValue);
+  const upTarget = eg.targetValue * 1.2;
+  const upPct = pct(eg.currentValue, upTarget);
+  const expectedPct = (elapsedCount / Math.max(activeDateKeys.length, 1)) * 100;
+
+  // Semana atual — dots
+  const weekStart = startOfWeek(refDate, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(refDate, { weekStartsOn: 1 });
+  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  const DAY_LABELS = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
+
+  const metaColor = mPct >= 100 ? 'text-emerald-600' : 'text-rose-500';
+  const metaBarColor = mPct >= 100 ? 'bg-emerald-500' : 'bg-rose-400';
 
   return (
-    <div 
-      className="group cursor-pointer rounded-[22px] border border-[#dbe3ef] bg-white px-6 py-5 shadow-[0_18px_50px_-42px_rgba(15,23,42,0.45)] transition-all hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-42px_rgba(15,23,42,0.55)]"
-      onClick={onOpenDaily}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className={`h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold shadow-sm ${avatarClass}`}>
+    <div className="flex flex-col rounded-[18px] border border-[#dbe3ef] bg-white overflow-hidden shadow-[0_8px_30px_-20px_rgba(15,23,42,0.2)]">
+
+      {/* Cabeçalho */}
+      <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={`h-9 w-9 rounded-full shrink-0 flex items-center justify-center text-xs font-bold ${avatarClass}`}>
             {initials}
           </div>
-          <div className="flex flex-col">
-            <span className="text-[0.98rem] font-bold leading-none text-zinc-900">{userName}</span>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              {shiftLabel && <Badge variant="secondary" className="h-5 rounded-full bg-slate-100 px-2.5 py-0 text-[10px] font-bold uppercase text-slate-600">{shiftLabel}</Badge>}
-              <span className="text-[11px] font-medium text-zinc-500">
-                Meta: R$ {fmt(eg.targetValue)} · UP: R$ {fmt(eg.targetValue * 1.2)} · Diária: R$ {fmt(dailyTarget)}
-              </span>
-            </div>
+          <div className="min-w-0">
+            <span className="text-sm font-bold text-zinc-900 block truncate">{userName}</span>
+            <p className="text-[10px] text-zinc-500 mt-0.5 truncate">
+              Meta <span className="font-semibold text-zinc-700">R$ {fmt(eg.targetValue)}</span>
+              {' · '}
+              <span className="font-semibold text-blue-600">UP R$ {fmt(upTarget)}</span>
+            </p>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-[1rem] font-extrabold tabular-nums text-zinc-900">R$ {fmt(eg.currentValue)}</p>
-          <div className="mt-0.5 flex items-center justify-end gap-1">
-            <span className="text-[11px] font-bold uppercase text-zinc-700">{hitCount}/{totalDays}</span>
-            <span className="text-[10px] font-medium uppercase tracking-tight text-zinc-400">dias batidos</span>
+        <p className={`text-xl font-black tabular-nums shrink-0 ${metaColor}`}>
+          {Math.round(mPct)}%
+        </p>
+      </div>
+
+      <div className="mx-4 h-px bg-zinc-100" />
+
+      {/* Meta Alvo */}
+      <div className="px-4 pt-3 pb-2 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-full bg-zinc-400 shrink-0" />
+            <span className="text-[11px] font-semibold text-zinc-600">Meta Alvo</span>
           </div>
+          <span className={`text-[11px] font-bold tabular-nums ${metaColor}`}>
+            {mPct.toFixed(1)}% · R$ {fmt(eg.targetValue)}
+          </span>
+        </div>
+        <div className="relative h-2.5 rounded-full bg-zinc-100">
+          <div
+            className={`absolute inset-y-0 left-0 rounded-full ${metaBarColor}`}
+            style={{ width: `${Math.min(mPct, 100)}%` }}
+          />
+          {expectedPct > 2 && expectedPct <= 100 && (
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-0.5 h-4 bg-zinc-400/70 rounded-full"
+              style={{ left: `${expectedPct}%` }}
+            />
+          )}
+        </div>
+        <div className="flex items-center justify-between text-[9px] text-zinc-400 font-medium">
+          <span>R$ {fmt(eg.currentValue)} realizado</span>
+          {expectedPct > 2 && expectedPct < 98 && (
+            <span className="text-zinc-500">▲ ritmo esperado</span>
+          )}
+          <span>R$ {fmt(eg.targetValue)} meta</span>
         </div>
       </div>
 
-      <div className="mt-5 space-y-4">
-        <div className="space-y-1.5 text-[10px] uppercase font-bold tracking-[0.16em] text-zinc-400">
-          <div className="flex justify-between">
-            <span>Progresso Mês</span>
-            <span className={mPct >= 100 ? 'text-emerald-500' : 'text-zinc-500'}>{mPct.toFixed(1)}%</span>
+      {/* Super Meta (UP) */}
+      <div className="px-4 pb-3 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+            <span className="text-[11px] font-bold text-blue-600">Super Meta (UP)</span>
           </div>
-          <div className="h-[6px] rounded-full bg-[#d8dde5] overflow-hidden">
-            <div className={`h-full transition-all duration-500 ${getStatusColor(mPct).bar}`} style={{ width: `${Math.min(mPct, 100)}%` }} />
-          </div>
+          <span className="text-[11px] font-bold tabular-nums text-blue-500">
+            {upPct.toFixed(1)}% · R$ {fmt(upTarget)}
+          </span>
         </div>
-
-        <div className="space-y-1.5 text-[10px] uppercase font-bold tracking-[0.16em] text-zinc-400">
-          <div className="flex justify-between">
-            <span>Performance Semanal</span>
-            <span className={pct(weekly.value, weekly.alvo) >= 100 ? 'text-emerald-500' : 'text-zinc-500'}>{pct(weekly.value, weekly.alvo).toFixed(1)}%</span>
-          </div>
-          <div className="h-[6px] rounded-full bg-[#d8dde5] overflow-hidden">
-            <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.min(pct(weekly.value, weekly.alvo), 100)}%` }} />
-          </div>
+        <div className="h-2 rounded-full bg-blue-100 overflow-hidden">
+          <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${Math.min(upPct, 100)}%` }} />
         </div>
+        <div className="flex items-center justify-between text-[9px] text-zinc-400 font-medium">
+          <span>R$ {fmt(eg.currentValue)} realizado</span>
+          <span>R$ {fmt(upTarget)} UP</span>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-7 gap-1.5 pt-1">
-          {weekDays.map(d => {
-            const key = dateKey(d);
-            const val = eg.dailyProgress?.[key] ?? 0;
-            const isActive = activeDateSet.has(key);
-            const isHit = val >= dailyTarget;
-            const isToday = isSameDay(d, refDate);
+      <div className="mx-4 h-px bg-zinc-100" />
+
+      {/* Semana atual */}
+      <div className="px-4 pt-3 pb-4 space-y-2">
+        <span className="text-[10px] font-semibold text-zinc-500">Semana atual</span>
+
+        <div className="flex items-end justify-between">
+          {weekDays.map((day, i) => {
+            const dk = dateKey(day);
+            const val = eg.dailyProgress?.[dk] ?? 0;
+            const isActive = activeDateSet.has(dk);
+            const isToday = isSameDay(day, refDate);
+            const isPast = day <= refDate;
+
+            let dotClass = 'bg-zinc-200';
+            let dotTitle = '';
+            if (isActive && isPast) {
+              if (val >= dailyTarget) {
+                dotClass = 'bg-emerald-400';
+                dotTitle = `R$ ${fmt(val)} · bateu meta`;
+              } else if (val > 0) {
+                dotClass = 'bg-amber-400';
+                dotTitle = `R$ ${fmt(val)}`;
+              } else {
+                dotClass = 'bg-rose-300';
+                dotTitle = 'Sem venda';
+              }
+            } else if (!isActive && isPast) {
+              dotClass = 'bg-zinc-100';
+              dotTitle = 'Folga';
+            }
+
             return (
-              <div key={key} className="flex flex-col items-center gap-1">
-                <span className={`text-[8px] uppercase font-bold ${isToday ? 'text-primary' : 'text-zinc-400'}`}>
-                  {format(d, 'eee', { locale: ptBR }).substring(0, 1)}
+              <div key={dk} className="flex flex-col items-center gap-1" title={dotTitle || undefined}>
+                <span className={`text-[9px] font-bold ${isToday ? 'text-zinc-800' : 'text-zinc-400'}`}>
+                  {DAY_LABELS[i]}
                 </span>
-                <div 
-                  className={`h-1.5 w-full rounded-full transition-all ${!isActive ? 'bg-slate-200 opacity-40' : val > 0 ? (isHit ? 'bg-emerald-500' : 'bg-amber-400') : 'bg-[#d8dde5]'}`}
-                  title={!isActive ? `${format(d, 'dd/MM')}: fora da escala` : `${format(d, 'dd/MM')}: R$ ${fmt(val)}`}
-                />
+                <div className={`h-2.5 w-2.5 rounded-full transition-colors ${dotClass} ${isToday ? 'ring-2 ring-offset-1 ring-amber-300' : ''}`} />
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Rodapé */}
+      <button
+        onClick={onOpenDaily}
+        className="flex items-center justify-between bg-[#f4f7fc] px-4 py-2.5 border-t border-[#edf1f6] hover:bg-[#eaeff9] transition-colors mt-auto"
+      >
+        <span className="text-[10px] font-bold tabular-nums text-zinc-600">R$ {fmt(eg.currentValue)} acumulado</span>
+        <span className="text-[10px] font-bold text-primary flex items-center gap-0.5">
+          Ver detalhes →
+        </span>
+      </button>
     </div>
   );
 }
@@ -832,22 +907,42 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
   const paceNeeded = remainingDays > 0 ? Math.max(stats.alvo - stats.value, 0) / remainingDays : 0;
   const paceActual = elapsedDays > 0 ? stats.value / elapsedDays : 0;
 
-  // Colaboradores com dados
-  const empRows = employeeGoals
-    .filter(eg => eg.periodId === mainPeriod.id)
-    .map(eg => {
-      const name = getUserName(eg.employeeId);
-      const dp = eg.dailyProgress ?? {};
-      const employeeActiveDateKeys = getEmployeeDistributionDateKeys(eg, mainPeriod, distributionSnapshot);
-      const employeeActiveDateSet = new Set(employeeActiveDateKeys);
-      const empDailyAlvo = eg.targetValue / Math.max(employeeActiveDateKeys.length, 1);
+  // Colaboradores com dados — agrupados por employeeId
+  const empRows = (() => {
+    const byEmployee = new Map<string, EmployeeGoal[]>();
+    for (const eg of employeeGoals.filter(eg => eg.periodId === mainPeriod.id)) {
+      const arr = byEmployee.get(eg.employeeId) ?? [];
+      arr.push(eg);
+      byEmployee.set(eg.employeeId, arr);
+    }
+    return Array.from(byEmployee.entries()).map(([empId, goals]) => {
+      const name = getUserName(empId);
+      const dp: Record<string, number> = {};
+      for (const g of goals) {
+        for (const [k, v] of Object.entries(g.dailyProgress ?? {})) {
+          dp[k] = (dp[k] ?? 0) + v;
+        }
+      }
+      const mergedCurrentValue = goals.reduce((s, g) => s + g.currentValue, 0);
+      const mergedTargetValue = goals.reduce((s, g) => s + g.targetValue, 0);
+      const allActiveKeys = new Set<string>();
+      for (const g of goals) {
+        for (const k of getEmployeeDistributionDateKeys(g, mainPeriod, distributionSnapshot)) {
+          allActiveKeys.add(k);
+        }
+      }
+      const employeeActiveDateKeys = Array.from(allActiveKeys);
+      const employeeActiveDateSet = allActiveKeys;
+      const empDailyAlvo = mergedTargetValue / Math.max(employeeActiveDateKeys.length, 1);
       const daysWithSale = monthDays.filter(d => employeeActiveDateSet.has(dateKey(d)) && (dp[dateKey(d)] ?? 0) > 0).length;
       const daysHit = monthDays.filter(d => employeeActiveDateSet.has(dateKey(d)) && (dp[dateKey(d)] ?? 0) >= empDailyAlvo).length;
-      const empPace = elapsedDays > 0 ? eg.currentValue / elapsedDays : 0;
-      const empPaceNeeded = remainingDays > 0 ? Math.max(eg.targetValue - eg.currentValue, 0) / remainingDays : 0;
-      const empPct = pct(eg.currentValue, eg.targetValue);
+      const empPace = elapsedDays > 0 ? mergedCurrentValue / elapsedDays : 0;
+      const empPaceNeeded = remainingDays > 0 ? Math.max(mergedTargetValue - mergedCurrentValue, 0) / remainingDays : 0;
+      const empPct = pct(mergedCurrentValue, mergedTargetValue);
+      const eg: EmployeeGoal = { ...goals[0], currentValue: mergedCurrentValue, targetValue: mergedTargetValue, dailyProgress: dp, shiftId: undefined };
       return { eg, name, dp, empDailyAlvo, daysWithSale, daysHit, empPace, empPaceNeeded, empPct, employeeActiveDateSet, employeeActiveDateKeys };
     });
+  })();
 
   // Alertas / badges
   const alerts: { label: string; color: string }[] = [];
@@ -904,7 +999,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
           <div>
             <DialogTitle className="text-xl font-bold tracking-tight">Situação Geral — {group.monthLabel}</DialogTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              {kioskName} · Meta: R$ {fmt(stats.alvo)} · Meta/dia: R$ {fmt(dailyAlvo)}
+              {kioskName} · Meta alvo: R$ {fmt(stats.alvo)} · Meta UP: R$ {fmt(stats.up)} · Meta/dia: R$ {fmt(dailyAlvo)}
             </p>
           </div>
           <PdfDownloadButton data={pdfData} fileName={`relatorio-${group.groupKey}.pdf`} />
@@ -962,7 +1057,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
             <div className="space-y-3 p-4 rounded-xl border border-border/40 bg-card/30">
               <div className="space-y-1.5">
                 <div className="flex justify-between text-[10px] text-muted-foreground font-bold uppercase">
-                  <span>Meta base</span>
+                  <span>Meta alvo</span>
                   <span className={actualPct >= 100 ? 'text-green-500' : 'text-amber-500'}>{actualPct.toFixed(1)}%</span>
                 </div>
                 <div className="relative h-2.5 bg-muted/40 rounded-full overflow-visible">
@@ -978,7 +1073,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
               {stats.up > stats.alvo && (
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-[10px] text-muted-foreground font-bold uppercase">
-                    <span>Super meta</span>
+                    <span>Meta UP</span>
                     <span className="text-blue-500">{pct(stats.value, stats.up).toFixed(1)}%</span>
                   </div>
                   <div className="h-2 bg-slate-300 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -1096,7 +1191,6 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">Diagnóstico Individual</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {empRows.map((e, i) => {
-                    const fraction = e.eg.fraction ?? 1;
                     const statusOk = e.empPace >= e.empPaceNeeded;
                     return (
                       <div key={i} className={`p-4 rounded-xl border-2 bg-card/60 space-y-3 ${e.empPct >= 100 ? 'border-green-500/40' : e.daysWithSale === 0 ? 'border-rose-500/40' : 'border-border/40'}`}>
@@ -1107,7 +1201,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                           <div>
                             <p className="font-black text-sm leading-tight">{e.name}</p>
                             <p className="text-[9px] text-muted-foreground">
-                              Fração {(fraction * 100).toFixed(0)}% · Meta R$ {fmt(e.eg.targetValue)} · R$ {fmt(e.empDailyAlvo)}/dia
+                              Meta alvo R$ {fmt(e.eg.targetValue)} · R$ {fmt(e.empDailyAlvo)}/dia
                             </p>
                           </div>
                         </div>
@@ -1117,7 +1211,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                             <p className="font-black text-base">R$ {fmt(e.eg.currentValue)}</p>
                           </div>
                           <div>
-                            <p className="text-muted-foreground text-[9px] uppercase font-bold">% meta</p>
+                            <p className="text-muted-foreground text-[9px] uppercase font-bold">% Meta alvo</p>
                             <p className={`font-black text-base ${e.empPct >= 100 ? 'text-green-500' : e.empPct >= 70 ? 'text-amber-500' : 'text-rose-500'}`}>{e.empPct.toFixed(1)}%</p>
                           </div>
                           <div>
@@ -1179,6 +1273,8 @@ export function GoalsTrackingDashboard() {
   const [distributionSnapshot, setDistributionSnapshot] = useState<GoalDistributionSnapshot>({
     periodDateKeysById: {},
     employeeDateKeysByGoalId: {},
+    workedDaysByKioskAndUser: {},
+    shiftLabelByKioskUserAndDate: {},
   });
 
   const isManager = (permissions.goals?.manage ?? false) || (permissions.settings?.manageUsers ?? false);
@@ -1262,7 +1358,7 @@ export function GoalsTrackingDashboard() {
   const [dailyModalOpen, setDailyModalOpen] = useState(false);
   const [dailyModalPeriod, setDailyModalPeriod] = useState<GoalPeriodDoc | null>(null);
   const [dailyEmpModalOpen, setDailyEmpModalOpen] = useState(false);
-  const [dailyEmpModalData, setDailyEmpModalData] = useState<{eg: EmployeeGoal, period: GoalPeriodDoc, userName: string} | null>(null);
+  const [dailyEmpModalData, setDailyEmpModalData] = useState<{eg: EmployeeGoal, originalEgs: EmployeeGoal[], period: GoalPeriodDoc, userName: string} | null>(null);
 
   // IA Analysis
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -1361,7 +1457,8 @@ export function GoalsTrackingDashboard() {
     let cancelled = false;
 
     void (async () => {
-      const snapshot = await loadGoalDistributionSnapshot(activePeriods, employeeGoals);
+      const kioskNameById = Object.fromEntries(kiosks.map(k => [k.id, k.name]));
+      const snapshot = await loadGoalDistributionSnapshot(activePeriods, employeeGoals, kioskNameById);
       if (!cancelled) {
         setDistributionSnapshot(snapshot);
       }
@@ -1400,6 +1497,23 @@ export function GoalsTrackingDashboard() {
     return Array.from(map.values());
   }, [activePeriods, templates]);
 
+  const globalRevenueStats = useMemo(() => {
+    const mainPeriods = periodGroups.map(g => {
+      const revPeriods = g.periods.filter(p => templates.find(t => t.id === p.templateId)?.type === 'revenue');
+      return revPeriods[0] ?? null;
+    }).filter((p): p is GoalPeriodDoc => p !== null);
+
+    const totalAcumulado = mainPeriods.reduce((s, p) => s + p.currentValue, 0);
+    const totalTarget = mainPeriods.reduce((s, p) => s + p.targetValue, 0);
+    const avgAting = totalTarget > 0 ? (totalAcumulado / totalTarget) * 100 : 0;
+    const totalProjection = mainPeriods.reduce((s, p) => {
+      const stats = calcMonthlyStats(p, distributionSnapshot);
+      return s + stats.projection;
+    }, 0);
+
+    return { totalAcumulado, totalTarget, avgAting, totalProjection, activeCount: periodGroups.length };
+  }, [periodGroups, templates, distributionSnapshot]);
+
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const isCardOpen = (id: string) => openCards[id] !== false; // default: open
 
@@ -1420,6 +1534,31 @@ export function GoalsTrackingDashboard() {
           )}
         </div>
       </div>
+
+      {periodGroups.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-1">
+          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Total Acumulado</p>
+            <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">R$ {fmt(globalRevenueStats.totalAcumulado)}</p>
+          </div>
+          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Atingimento Médio</p>
+            <p className={`mt-1 text-lg font-black tabular-nums ${globalRevenueStats.avgAting >= 100 ? 'text-emerald-600' : 'text-amber-500'}`}>
+              {globalRevenueStats.avgAting.toFixed(1)}%
+            </p>
+          </div>
+          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Unidades Ativas</p>
+            <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">{globalRevenueStats.activeCount}</p>
+          </div>
+          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Projeção Total</p>
+            <p className={`mt-1 text-lg font-black tabular-nums ${globalRevenueStats.totalProjection >= globalRevenueStats.totalTarget ? 'text-emerald-600' : 'text-rose-500'}`}>
+              R$ {fmt(globalRevenueStats.totalProjection)}
+            </p>
+          </div>
+        </div>
+      )}
 
       {!loading && periodGroups.length === 0 && (
          <Card className="p-20 text-center bg-card/50 border-dashed border-2">
@@ -1446,23 +1585,34 @@ export function GoalsTrackingDashboard() {
           >
             <Card className="overflow-hidden rounded-[24px] border border-[#cfd9e6] bg-[#eef3f9] shadow-[0_28px_70px_-52px_rgba(15,23,42,0.45)] transition-all">
               <CollapsibleTrigger asChild>
-                <div className="flex cursor-pointer items-center justify-between px-6 py-5 transition-colors hover:bg-white/25">
-                  <div className="flex items-center gap-4">
-                    <div className="rounded-full bg-primary/10 p-2.5">
-                      <Target className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h2 className="text-[1.08rem] font-bold tracking-[-0.03em] text-zinc-900">{kioskName}</h2>
+                <div className="flex cursor-pointer items-center gap-4 px-6 py-5 transition-colors hover:bg-white/25">
+                  <div className="rounded-full bg-primary/10 p-2.5 shrink-0">
+                    <Target className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-[1.08rem] font-bold tracking-[-0.03em] text-zinc-900 truncate">{kioskName}</h2>
+                    <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">{group.monthLabel}</p>
+                      {mainPeriod && (
+                        <span className="text-[10px] text-zinc-400">· Meta: R$ {fmt(mainPeriod.targetValue)}</span>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-8">
-                    <div className="text-right">
-                       <span className={`text-[1.55rem] font-black ${pctPrincipal >= 100 ? 'text-emerald-500' : 'text-amber-500'}`}>
-                         {pctPrincipal.toFixed(1)}%
-                       </span>
-                       <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-zinc-500">da meta faturamento</p>
-                    </div>
+                  <div className="flex flex-col items-center shrink-0">
+                    <span className={`text-[1.55rem] font-black leading-none ${pctPrincipal >= 100 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                      {pctPrincipal.toFixed(1)}%
+                    </span>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-zinc-400 mt-0.5">da meta</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); setSummaryGroup(group); setKioskSummaryOpen(true); }}
+                      className="h-9 rounded-full border-blue-500/25 bg-white px-3 text-xs font-bold text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      <BarChart2 className="mr-1.5 h-3.5 w-3.5" /> Situação Geral
+                    </Button>
                     <div className={`rounded-full bg-white/80 p-1.5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
                       <ChevronDown className="h-5 w-5 text-zinc-500" />
                     </div>
@@ -1472,20 +1622,11 @@ export function GoalsTrackingDashboard() {
               
               <CollapsibleContent>
                 <div className="space-y-8 border-t border-white/70 px-6 pb-7 pt-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="mb-2 flex items-center justify-between rounded-[18px] bg-white/55 px-4 py-3">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={(e) => { e.stopPropagation(); setSummaryGroup(group); setKioskSummaryOpen(true); }}
-                      className="h-10 rounded-full border-blue-500/25 bg-white px-4 text-xs font-bold text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                    >
-                      <BarChart2 className="mr-2 h-4 w-4" /> Situação Geral & PDF
-                    </Button>
-
-                    {isManager && mainPeriod && (
+                  {isManager && mainPeriod && (
+                    <div className="mb-2 flex items-center justify-end rounded-[18px] bg-white/55 px-4 py-2">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-10 rounded-full px-3 hover:bg-white/75"><Menu className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" className="h-9 rounded-full px-3 hover:bg-white/75"><Menu className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
                            <DropdownMenuItem onClick={() => { setEmployeeGoalPeriod(mainPeriod); setEmployeeGoalOpen(true); }}>
@@ -1505,19 +1646,23 @@ export function GoalsTrackingDashboard() {
                            >
                              <Trash2 className="mr-2 h-4 w-4" /> Excluir Meta
                            </DropdownMenuItem>
-                           <DropdownMenuSeparator />
-                           {process.env.NODE_ENV === 'development' && group.periods.map(p => {
-                             const template = templates.find(t => t.id === p.templateId);
-                             return (
-                               <DropdownMenuItem key={p.id} onClick={() => handleAnalyzeWithAi(p)} className="text-primary font-medium">
-                                 <Sparkles className="mr-2 h-4 w-4" /> Analisar {getTypeStyle(template?.type).label} com IA
-                               </DropdownMenuItem>
-                             );
-                           })}
+                           {process.env.NODE_ENV === 'development' && (
+                             <>
+                               <DropdownMenuSeparator />
+                               {group.periods.map(p => {
+                                 const template = templates.find(t => t.id === p.templateId);
+                                 return (
+                                   <DropdownMenuItem key={p.id} onClick={() => handleAnalyzeWithAi(p)} className="text-primary font-medium">
+                                     <Sparkles className="mr-2 h-4 w-4" /> Analisar {getTypeStyle(template?.type).label} com IA
+                                   </DropdownMenuItem>
+                                 );
+                               })}
+                             </>
+                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* ── Resumo do Período ── */}
                   <div className="space-y-4">
@@ -1532,7 +1677,7 @@ export function GoalsTrackingDashboard() {
                                <StatItem 
                                  title="Acumulado"
                                  value={fmt(stats.value)}
-                                 subLabel={`Meta base: R$ ${fmt(stats.alvo)}`}
+                                 subLabel={`Meta alvo: R$ ${fmt(stats.alvo)}`}
                                  trend={`${pct(stats.value, stats.alvo).toFixed(1)}%`}
                                  trendColor={stats.value >= stats.alvo ? 'text-green-500' : 'text-muted-foreground'}
                                />
@@ -1550,7 +1695,7 @@ export function GoalsTrackingDashboard() {
                                <StatItem 
                                  title="Projeção"
                                  value={fmt(stats.projection)}
-                                 subLabel={`Super meta: R$ ${fmt(stats.up)}`}
+                                 subLabel={`Meta UP: R$ ${fmt(stats.up)}`}
                                  trend={diff >= 0 ? `+${diff.toFixed(0)}%` : `${diff.toFixed(0)}%`}
                                  trendColor={diff >= 0 ? 'text-green-500' : 'text-rose-500'}
                                />
@@ -1596,35 +1741,76 @@ export function GoalsTrackingDashboard() {
                         </Card>
 
                         {/* ── Por Colaborador ── */}
-                        <div className="space-y-5">
-                          <div className="flex items-center justify-between">
-                             <h3 className="px-1 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-500">Ranking & Consistência</h3>
-                          </div>
-                          <div className="space-y-3">
-                               {employeeGoals
-                                 .filter(eg => eg.periodId === period.id)
-                                 .sort((a, b) => b.currentValue - a.currentValue)
-                                 .map(eg => {
-                                   const shift = eg.shiftId ? period.shifts?.find(s => s.id === eg.shiftId) : null;
-                                   return (
-                                     <CollaboratorCard 
-                                       key={eg.id}
-                                       eg={eg}
-                                       period={period}
-                                       userName={getUserName(eg.employeeId)}
-                                       shiftLabel={shift?.label}
-                                       refDate={refDate}
-                                       periodEnd={periodEnd}
-                                       distributionSnapshot={distributionSnapshot}
-                                       onOpenDaily={() => {
-                                         setDailyEmpModalData({ eg, period, userName: getUserName(eg.employeeId) });
-                                         setDailyEmpModalOpen(true);
-                                       }}
-                                     />
-                                   );
-                                 })
-                               }
-                          </div>
+                        <div className="space-y-4">
+                          <h3 className="px-1 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-500">Ranking & Consistência</h3>
+                          {(() => {
+                            const periodEgs = employeeGoals.filter(eg => eg.periodId === period.id);
+                            if (periodEgs.length === 0) {
+                              return (
+                                <div className="rounded-[18px] border border-dashed border-[#cfd9e6] bg-[#f8fafc] px-5 py-8 text-center">
+                                  <p className="text-sm font-medium text-zinc-500">Sem meta cadastrada para este período</p>
+                                  {isManager && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => { setEmployeeGoalPeriod(period); setEmployeeGoalOpen(true); }}
+                                      className="mt-3 h-8 rounded-full px-4 text-xs font-bold"
+                                    >
+                                      <Plus className="mr-1.5 h-3 w-3" /> Cadastrar meta
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            }
+                            // Agrupar por employeeId e mesclar goals
+                            const byEmployee = new Map<string, EmployeeGoal[]>();
+                            for (const eg of periodEgs) {
+                              const arr = byEmployee.get(eg.employeeId) ?? [];
+                              arr.push(eg);
+                              byEmployee.set(eg.employeeId, arr);
+                            }
+                            const merged = Array.from(byEmployee.entries()).map(([empId, goals]) => {
+                              const mergedDp: Record<string, number> = {};
+                              for (const g of goals) {
+                                for (const [k, v] of Object.entries(g.dailyProgress ?? {})) {
+                                  mergedDp[k] = (mergedDp[k] ?? 0) + v;
+                                }
+                              }
+                              const mergedGoal: EmployeeGoal = {
+                                ...goals[0],
+                                currentValue: goals.reduce((s, g) => s + g.currentValue, 0),
+                                targetValue: goals.reduce((s, g) => s + g.targetValue, 0),
+                                dailyProgress: mergedDp,
+                                shiftId: undefined,
+                              };
+                              const shiftLabels = goals
+                                .map(g => g.shiftId ? period.shifts?.find(s => s.id === g.shiftId)?.label : null)
+                                .filter((l): l is string => Boolean(l));
+                              return { empId, mergedGoal, shiftLabels };
+                            });
+                            merged.sort((a, b) => b.mergedGoal.currentValue - a.mergedGoal.currentValue);
+                            return (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {merged.map(({ empId, mergedGoal, shiftLabels }) => (
+                                  <CollaboratorCard
+                                    key={empId}
+                                    eg={mergedGoal}
+                                    period={period}
+                                    userName={getUserName(empId)}
+                                    shiftLabel={shiftLabels.join(' · ') || undefined}
+                                    refDate={refDate}
+                                    periodEnd={periodEnd}
+                                    distributionSnapshot={distributionSnapshot}
+                                    onOpenDaily={() => {
+                                      const originalGoals = employeeGoals.filter(eg => eg.periodId === period.id && eg.employeeId === empId);
+                                      setDailyEmpModalData({ eg: mergedGoal, originalEgs: originalGoals, period, userName: getUserName(empId) });
+                                      setDailyEmpModalOpen(true);
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
@@ -1703,6 +1889,7 @@ export function GoalsTrackingDashboard() {
         open={dailyEmpModalOpen}
         onOpenChange={setDailyEmpModalOpen}
         employeeGoal={dailyEmpModalData?.eg ?? null}
+        originalEgs={dailyEmpModalData?.originalEgs}
         period={dailyEmpModalData?.period ?? null}
         userName={dailyEmpModalData?.userName}
         distributionSnapshot={distributionSnapshot}

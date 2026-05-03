@@ -1,19 +1,25 @@
-import { collectionGroup, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { eachDayOfInterval } from 'date-fns';
 
 import { db } from '@/lib/firebase';
-import type { EmployeeGoal, GoalClosureSnapshot, GoalDistributionMode, GoalPeriodDoc } from '@/types';
+import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
+import type { DPUnit, EmployeeGoal, GoalClosureSnapshot, GoalDistributionMode, GoalPeriodDoc } from '@/types';
 
 type ShiftRecord = {
   unitId?: string;
   userId?: string;
   date?: string;
   type?: 'work' | 'day_off';
+  startTime?: string;
+  endTime?: string;
 };
 
 export interface GoalDistributionSnapshot {
   periodDateKeysById: Record<string, string[]>;
   employeeDateKeysByGoalId: Record<string, string[]>;
+  // key: `${kioskId}__${userId}` — scoped to kiosk so employees in multiple units don't bleed over
+  workedDaysByKioskAndUser: Record<string, string[]>;
+  shiftLabelByKioskUserAndDate: Record<string, Record<string, string>>;
 }
 
 function dateKey(date: Date) {
@@ -32,19 +38,6 @@ function getPeriodEndKey(period: GoalPeriodDoc) {
   return dateKey(period.endDate?.toDate?.() ?? new Date());
 }
 
-function groupPeriodsByKioskAndMonth(periods: GoalPeriodDoc[]) {
-  const grouped = new Map<string, GoalPeriodDoc[]>();
-
-  for (const period of periods) {
-    const start = period.startDate?.toDate?.() ?? new Date();
-    const monthKey = `${period.kioskId}__${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
-    const existing = grouped.get(monthKey);
-    if (existing) existing.push(period);
-    else grouped.set(monthKey, [period]);
-  }
-
-  return grouped;
-}
 
 export function resolveGoalDistributionMode(entity: { distributionMode?: GoalDistributionMode | null | undefined }) {
   return entity.distributionMode ?? 'calendar_days';
@@ -88,113 +81,178 @@ export function getEmployeeDistributionDayCount(
   return Math.max(getEmployeeDistributionDateKeys(employeeGoal, period, snapshot).length, 1);
 }
 
+const IN_CHUNK_SIZE = 30;
+
+// kioskNameById: optional map from kiosk Firestore ID → kiosk display name.
+// When provided, shifts are scoped per-kiosk using dp_unit name matching,
+// so employees working in multiple units don't bleed shifts across kiosks.
 export async function loadGoalDistributionSnapshot(
   periods: GoalPeriodDoc[],
-  employeeGoals: EmployeeGoal[]
+  employeeGoals: EmployeeGoal[],
+  kioskNameById?: Record<string, string>
 ): Promise<GoalDistributionSnapshot> {
-  const scheduledPeriods = periods.filter(period => resolveGoalDistributionMode(period) === 'scheduled_days');
-  if (scheduledPeriods.length === 0) {
-    return { periodDateKeysById: {}, employeeDateKeysByGoalId: {} };
-  }
+  const empty: GoalDistributionSnapshot = {
+    periodDateKeysById: {},
+    employeeDateKeysByGoalId: {},
+    workedDaysByKioskAndUser: {},
+    shiftLabelByKioskUserAndDate: {},
+  };
 
-  const employeeGoalsByPeriodId = new Map<string, EmployeeGoal[]>();
+  if (periods.length === 0 || employeeGoals.length === 0) return empty;
+
+  const allStartKeys = periods.map(getPeriodStartKey).sort();
+  const allEndKeys = periods.map(getPeriodEndKey).sort();
+  const globalRangeStart = allStartKeys[0]!;
+  const globalRangeEnd = allEndKeys[allEndKeys.length - 1]!;
+
+  const periodById = new Map(periods.map(p => [p.id, p]));
+
+  // Scheduled goals indexed by employee (for scheduled_days distribution)
+  const scheduledGoalsByUserId = new Map<string, EmployeeGoal[]>();
   for (const goal of employeeGoals) {
-    const bucket = employeeGoalsByPeriodId.get(goal.periodId);
+    const period = periodById.get(goal.periodId);
+    if (!period) continue;
+    if (resolveGoalDistributionMode(goal) !== 'scheduled_days' && resolveGoalDistributionMode(period) !== 'scheduled_days') continue;
+    const bucket = scheduledGoalsByUserId.get(goal.employeeId);
     if (bucket) bucket.push(goal);
-    else employeeGoalsByPeriodId.set(goal.periodId, [goal]);
+    else scheduledGoalsByUserId.set(goal.employeeId, [goal]);
   }
 
   const periodDateSetsById = new Map<string, Set<string>>();
   const employeeDateSetsByGoalId = new Map<string, Set<string>>();
-  const groupedPeriods = groupPeriodsByKioskAndMonth(scheduledPeriods);
+  const workedDateSetsByKioskAndUser = new Map<string, Set<string>>();
+  const shiftLabelsByKioskUserAndDate = new Map<string, Record<string, string>>();
 
-  for (const grouped of groupedPeriods.values()) {
-    const kioskId = grouped[0]?.kioskId;
-    if (!kioskId) continue;
-
-    const rangeStart = grouped
-      .map(getPeriodStartKey)
-      .sort()[0];
-    const rangeEnd = grouped
-      .map(getPeriodEndKey)
-      .sort()
-      .slice(-1)[0];
-
-    if (!rangeStart || !rangeEnd) continue;
-
-    const scheduledGoals = grouped.flatMap(period =>
-      (employeeGoalsByPeriodId.get(period.id) ?? []).filter(goal =>
-        resolveGoalDistributionMode(goal) === 'scheduled_days' || resolveGoalDistributionMode(period) === 'scheduled_days'
-      )
-    );
-
-    const scheduledGoalsByUserId = new Map<string, EmployeeGoal[]>();
-    for (const goal of scheduledGoals) {
-      const bucket = scheduledGoalsByUserId.get(goal.employeeId);
-      if (bucket) bucket.push(goal);
-      else scheduledGoalsByUserId.set(goal.employeeId, [goal]);
-    }
-
+  // Build unitId → kioskId mapping when kiosk names are available.
+  // Fetches dp_units once to match by name (fuzzy).
+  const unitIdToKioskId = new Map<string, string>();
+  if (kioskNameById && Object.keys(kioskNameById).length > 0) {
     try {
-      const shiftsSnap = await getDocs(
-        query(
-          collectionGroup(db, 'shifts'),
-          where('unitId', '==', kioskId),
-          where('date', '>=', rangeStart),
-          where('date', '<=', rangeEnd),
-          where('type', '==', 'work')
-        )
-      );
-
-      const periodRanges = grouped.map(period => ({
-        period,
-        startKey: getPeriodStartKey(period),
-        endKey: getPeriodEndKey(period),
-      }));
-
-      for (const docSnap of shiftsSnap.docs) {
-        const shift = docSnap.data() as ShiftRecord;
-        if (!shift.date || !shift.userId) continue;
-
-        for (const { period, startKey, endKey } of periodRanges) {
-          if (shift.date < startKey || shift.date > endKey) continue;
-
-          let periodSet = periodDateSetsById.get(period.id);
-          if (!periodSet) {
-            periodSet = new Set<string>();
-            periodDateSetsById.set(period.id, periodSet);
-          }
-          periodSet.add(shift.date);
-        }
-
-        const goalsForUser = scheduledGoalsByUserId.get(shift.userId) ?? [];
-        for (const goal of goalsForUser) {
-          const goalPeriod = grouped.find(period => period.id === goal.periodId);
-          if (!goalPeriod) continue;
-          const startKey = getPeriodStartKey(goalPeriod);
-          const endKey = getPeriodEndKey(goalPeriod);
-          if (shift.date < startKey || shift.date > endKey) continue;
-
-          let goalSet = employeeDateSetsByGoalId.get(goal.id);
-          if (!goalSet) {
-            goalSet = new Set<string>();
-            employeeDateSetsByGoalId.set(goal.id, goalSet);
-          }
-          goalSet.add(shift.date);
-        }
+      const dpUnitsSnap = await getDocs(collection(db, 'dp_units'));
+      const dpUnits = dpUnitsSnap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit));
+      for (const [kioskId, kioskName] of Object.entries(kioskNameById)) {
+        const matched = matchDPUnitForKiosk(kioskName, dpUnits);
+        if (matched) unitIdToKioskId.set(matched.id, kioskId);
       }
     } catch (error) {
-      console.warn('[goals-distribution] failed to load scheduled days', { kioskId, rangeStart, rangeEnd, error });
+      console.warn('[goals-distribution] failed to load dp_units for kiosk matching', error);
+    }
+  }
+
+  const allEmployeeIds = [...new Set(employeeGoals.map(g => g.employeeId))];
+
+  // Step 1: Find dp_schedules for the relevant year(s) + month(s).
+  const years = [...new Set(periods.map(p => p.startDate?.toDate?.()?.getFullYear() ?? new Date().getFullYear()))];
+  const neededMonthYears = new Set(periods.map(p => {
+    const d = p.startDate?.toDate?.() ?? new Date();
+    return `${d.getFullYear()}-${d.getMonth() + 1}`;
+  }));
+
+  // scheduleId → kioskId (resolved from unitId, or null if unknown)
+  const scheduleKioskId = new Map<string, string | null>();
+  for (const year of years) {
+    try {
+      const schedulesSnap = await getDocs(
+        query(collection(db, 'dp_schedules'), where('year', '==', year))
+      );
+      for (const doc of schedulesSnap.docs) {
+        const data = doc.data() as { month?: number; year?: number; unitId?: string };
+        if (!neededMonthYears.has(`${data.year}-${data.month}`)) continue;
+        const kioskId = data.unitId ? (unitIdToKioskId.get(data.unitId) ?? null) : null;
+        scheduleKioskId.set(doc.id, kioskId);
+      }
+    } catch (error) {
+      console.warn('[goals-distribution] failed to load dp_schedules', { year, error });
+    }
+  }
+
+  // Step 2: For each schedule, query shifts by userId and process.
+  const periodRanges = periods.map(period => ({
+    period,
+    startKey: getPeriodStartKey(period),
+    endKey: getPeriodEndKey(period),
+  }));
+
+  function processShift(shift: ShiftRecord, scheduleId: string) {
+    if (!shift.date || !shift.userId || shift.type !== 'work') return;
+    if (shift.date < globalRangeStart || shift.date > globalRangeEnd) return;
+
+    const resolvedKioskId = scheduleKioskId.get(scheduleId) ?? null;
+
+    // Determine which kiosks this shift should contribute to.
+    // If we resolved a kiosk from the unit, use only that one.
+    // Otherwise (no mapping available), attribute to all kiosks for this employee.
+    const targetKioskIds: string[] = resolvedKioskId
+      ? [resolvedKioskId]
+      : [...new Set(
+          employeeGoals
+            .filter(g => g.employeeId === shift.userId)
+            .map(g => periodById.get(g.periodId)?.kioskId)
+            .filter((k): k is string => Boolean(k))
+        )];
+
+    for (const kioskId of targetKioskIds) {
+      const key = `${kioskId}__${shift.userId}`;
+      let dates = workedDateSetsByKioskAndUser.get(key);
+      if (!dates) { dates = new Set(); workedDateSetsByKioskAndUser.set(key, dates); }
+      dates.add(shift.date);
+
+      if (shift.startTime && shift.endTime) {
+        let labels = shiftLabelsByKioskUserAndDate.get(key);
+        if (!labels) { labels = {}; shiftLabelsByKioskUserAndDate.set(key, labels); }
+        labels[shift.date] = `${shift.startTime}–${shift.endTime}`;
+      }
+    }
+
+    // Scheduled distribution date keys (existing logic)
+    for (const { period, startKey, endKey } of periodRanges) {
+      if (resolveGoalDistributionMode(period) !== 'scheduled_days') continue;
+      if (resolvedKioskId && period.kioskId !== resolvedKioskId) continue;
+      if (shift.date < startKey || shift.date > endKey) continue;
+      let periodSet = periodDateSetsById.get(period.id);
+      if (!periodSet) { periodSet = new Set(); periodDateSetsById.set(period.id, periodSet); }
+      periodSet.add(shift.date);
+    }
+
+    const goalsForUser = scheduledGoalsByUserId.get(shift.userId) ?? [];
+    for (const goal of goalsForUser) {
+      const goalPeriod = periodById.get(goal.periodId);
+      if (!goalPeriod) continue;
+      if (resolvedKioskId && goalPeriod.kioskId !== resolvedKioskId) continue;
+      const startKey = getPeriodStartKey(goalPeriod);
+      const endKey = getPeriodEndKey(goalPeriod);
+      if (shift.date < startKey || shift.date > endKey) continue;
+      let goalSet = employeeDateSetsByGoalId.get(goal.id);
+      if (!goalSet) { goalSet = new Set(); employeeDateSetsByGoalId.set(goal.id, goalSet); }
+      goalSet.add(shift.date);
+    }
+  }
+
+  for (const [scheduleId] of scheduleKioskId) {
+    for (let i = 0; i < allEmployeeIds.length; i += IN_CHUNK_SIZE) {
+      const chunk = allEmployeeIds.slice(i, i + IN_CHUNK_SIZE);
+      try {
+        const shiftsSnap = await getDocs(
+          query(collection(db, 'dp_schedules', scheduleId, 'shifts'), where('userId', 'in', chunk))
+        );
+        shiftsSnap.docs.forEach(d => processShift(d.data() as ShiftRecord, scheduleId));
+      } catch (error) {
+        console.warn('[goals-distribution] failed to load shifts', { scheduleId, error });
+      }
     }
   }
 
   return {
     periodDateKeysById: Object.fromEntries(
-      Array.from(periodDateSetsById.entries()).map(([periodId, dateKeys]) => [periodId, Array.from(dateKeys).sort()])
+      Array.from(periodDateSetsById.entries()).map(([id, dates]) => [id, Array.from(dates).sort()])
     ),
     employeeDateKeysByGoalId: Object.fromEntries(
-      Array.from(employeeDateSetsByGoalId.entries()).map(([goalId, dateKeys]) => [goalId, Array.from(dateKeys).sort()])
+      Array.from(employeeDateSetsByGoalId.entries()).map(([id, dates]) => [id, Array.from(dates).sort()])
     ),
+    workedDaysByKioskAndUser: Object.fromEntries(
+      Array.from(workedDateSetsByKioskAndUser.entries()).map(([key, dates]) => [key, Array.from(dates).sort()])
+    ),
+    shiftLabelByKioskUserAndDate: Object.fromEntries(shiftLabelsByKioskUserAndDate.entries()),
   };
 }
 
