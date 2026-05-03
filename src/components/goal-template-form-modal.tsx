@@ -7,7 +7,7 @@ import { ptBR } from 'date-fns/locale';
 import { useGoals } from '@/contexts/goals-context';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
-import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
+import { useDPStore } from '@/store/use-dp-store';
 import { useDPShifts } from '@/hooks/use-dp-shifts';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
 import { useShiftRevenueSalesReports } from '@/hooks/use-shift-revenue-suggestion';
@@ -132,7 +132,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   const { addTemplate, addPeriod, addEmployeeGoal, periods, employeeGoals, templates } = useGoals();
   const { kiosks } = useKiosks();
   const { user, permissions, users } = useAuth();
-  const { shiftDefinitions, shiftDefsLoading, schedules, units } = useDPBootstrap();
+  const { shiftDefinitions, shiftDefsLoading, schedules, units } = useDPStore();
   const { toast } = useToast();
   const { categories } = useProductSimulationCategories();
   const simCtx = useContext(ProductSimulationContext);
