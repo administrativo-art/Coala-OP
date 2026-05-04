@@ -922,7 +922,7 @@ export function SignageAdmin() {
         </Card>
 
         {selectedKiosk && selectedKioskStatus ? (
-          <div className="grid gap-6 lg:grid-cols-[1.45fr_0.95fr]">
+          <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
             <Card className="border shadow-sm">
               <CardHeader>
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -988,11 +988,8 @@ export function SignageAdmin() {
             </Card>
 
             <Card className="border shadow-sm">
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <CardTitle>Publicação da unidade</CardTitle>
-                <CardDescription>
-                  O player publico consome apenas `publishedPlayers/{'{kioskId}'}`. Publique sempre apos alterar os slides da unidade selecionada.
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-xl border p-4">
