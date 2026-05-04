@@ -88,7 +88,7 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/registration": "Cadastros",
   "/dashboard/settings": "Configurações",
   "/dashboard/help": "Ajuda",
-  "/signage": "Coala Signage",
+  "/dashboard/signage": "Coala Signage",
 };
 
 function getBreadcrumb(pathname: string): { section: string | null; current: string } {
@@ -218,7 +218,7 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Acesso por Escala", href: "/dashboard/settings?department=pessoal&tab=login-access", section: "Departamento Pessoal" },
   { label: "Turnos do DP", href: "/dashboard/settings?department=pessoal&tab=shifts", section: "Departamento Pessoal" },
   { label: "Calendários do DP", href: "/dashboard/settings?department=pessoal&tab=calendars", section: "Departamento Pessoal" },
-  { label: "Coala Signage", href: "/signage", section: "Departamento de Marketing" },
+  { label: "Coala Signage", href: "/dashboard/signage", section: "Departamento de Marketing" },
   { label: "Painel Financeiro", href: "/dashboard/financial", section: "Departamento Financeiro" },
   { label: "Despesas", href: "/dashboard/financial/expenses", section: "Departamento Financeiro" },
   { label: "Nova Despesa", href: "/dashboard/financial/expenses/new", section: "Departamento Financeiro" },
@@ -364,7 +364,7 @@ export function Header({ onMenuClick, tasks }: HeaderProps) {
   const [checklistTasks, setChecklistTasks] = useState<OperationalTask[]>([]);
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [legacyChecklistAlertsEnabled, setLegacyChecklistAlertsEnabled] =
-    useState(true);
+    useState(false);
   const checklistFetchInFlightRef = useRef(false);
 
   const canViewChecklistAlerts =

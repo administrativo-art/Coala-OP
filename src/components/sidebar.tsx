@@ -107,7 +107,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         label: "Marketing",
         color: SECTION_COLORS.midia,
         items: [
-          { label: "Coala Signage", href: "/signage", icon: MonitorPlay, show: permissions.signage?.view || permissions.signage?.manage },
+          { label: "Coala Signage", href: "/dashboard/signage", icon: MonitorPlay, show: permissions.signage?.view || permissions.signage?.manage },
         ],
       },
       {

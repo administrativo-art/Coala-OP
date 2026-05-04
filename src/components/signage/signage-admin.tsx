@@ -790,8 +790,7 @@ export function SignageAdmin() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#0f172a]">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
 
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1088,7 +1087,6 @@ export function SignageAdmin() {
             </Alert>
           </div>
         )}
-      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-[660px]">
