@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Building2, Clock, Copy, ExternalLink, GripVertical, ImageIcon, KeyRound, Loader2, Maximize2, MonitorPlay, Pencil, PlayCircle, Plus, Save, Trash2, UploadCloud, VideoIcon, Type, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import { ArrowLeft, Building2, Clock, Copy, GripVertical, ImageIcon, KeyRound, Loader2, MonitorPlay, Pencil, Plus, Save, Trash2, UploadCloud, VideoIcon, Type, RefreshCw, ShieldAlert, X } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -17,10 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -48,6 +46,7 @@ type SlideFormState = {
   text?: string;
   background?: string;
   scheduleEnabled: boolean;
+  scheduleTimeEnabled: boolean;
   scheduleStartTime: string;
   scheduleEndTime: string;
   scheduleDateEnabled: boolean;
@@ -113,6 +112,7 @@ const defaultFormState: SlideFormState = {
   text: '',
   background: '#0f172a',
   scheduleEnabled: false,
+  scheduleTimeEnabled: false,
   scheduleStartTime: '08:00',
   scheduleEndTime: '18:00',
   scheduleDateEnabled: false,
@@ -164,84 +164,113 @@ type SortableSlideRowProps = {
   onToggleActive: (slide: SignageSlide, isActive: boolean) => void;
 };
 
-function SortableSlideRow({ slide, position, kioskMap, canManage, onEdit, onDelete, onToggleActive }: SortableSlideRowProps) {
+const SLIDE_ROW_GRID = 'grid grid-cols-[20px_minmax(0,1fr)_72px_72px_52px_64px] items-center gap-3 border-b px-4 py-2.5 last:border-b-0';
+
+function SortableSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdit, onDelete, onToggleActive }: SortableSlideRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: slide.id });
+  const scheduleActive = slide.schedule ? isSlideScheduleActive(slide) : null;
 
   return (
-    <TableRow
+    <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className={SLIDE_ROW_GRID}
     >
-      <TableCell className="w-8 pr-0">
+      <div>
         {canManage && (
           <button
             {...attributes}
             {...listeners}
-            className="cursor-grab touch-none p-1 text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            className="cursor-grab touch-none p-0.5 text-muted-foreground hover:text-foreground active:cursor-grabbing"
             aria-label="Reordenar"
           >
             <GripVertical className="h-4 w-4" />
           </button>
         )}
-      </TableCell>
-      <TableCell>
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 font-medium text-slate-900">
-            {slide.title}
-            {slide.schedule && (
-              <span title={isSlideScheduleActive(slide) ? 'Agendado — ativo agora' : 'Agendado — fora do horário'}>
-                <Clock className={`h-3.5 w-3.5 ${isSlideScheduleActive(slide) ? 'text-success' : 'text-muted-foreground'}`} />
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-slate-500">Posição {position + 1}</div>
+      </div>
+      <div>
+        <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+          {slide.title}
+          {scheduleActive !== null && (
+            <span title={scheduleActive ? 'Agendado — ativo agora' : 'Agendado — fora do horário'}>
+              <Clock className={`h-3 w-3 ${scheduleActive ? 'text-success' : 'text-muted-foreground'}`} />
+            </span>
+          )}
         </div>
-      </TableCell>
-      <TableCell>
-        <Badge variant="outline" className="inline-flex gap-1">
+        <div className="text-[11px] text-muted-foreground">Posição {position + 1}</div>
+      </div>
+      <div>
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
           {getTypeIcon(slide.type)}
           {slide.type}
-        </Badge>
-      </TableCell>
-      <TableCell>
-        <div className="flex flex-wrap gap-1.5">
-          {slide.kioskIds.map((kioskId) => (
-            <Badge key={kioskId} variant="secondary">
-              {kioskMap.get(kioskId)?.name ?? kioskId}
-            </Badge>
-          ))}
-        </div>
-      </TableCell>
-      <TableCell>{formatDuration(slide.durationMs)}</TableCell>
-      <TableCell>
-        <div className="flex items-center gap-2">
-          {canManage ? (
-            <Switch
-              checked={slide.isActive}
-              onCheckedChange={(checked) => onToggleActive(slide, checked)}
-            />
-          ) : (
-            <Badge variant={slide.isActive ? 'default' : 'outline'}>
-              {slide.isActive ? 'Ativo' : 'Pausado'}
-            </Badge>
+        </span>
+      </div>
+      <div className="text-[13px] text-muted-foreground">{formatDuration(slide.durationMs)}</div>
+      <div>
+        {canManage ? (
+          <Switch checked={slide.isActive} onCheckedChange={(checked) => onToggleActive(slide, checked)} />
+        ) : (
+          <Badge variant="default">Ativo</Badge>
+        )}
+      </div>
+      <div className="flex justify-end gap-1">
+        {canManage && (
+          <>
+            <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onEdit(slide)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onDelete(slide)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StaticSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdit, onDelete, onToggleActive }: SortableSlideRowProps) {
+  return (
+    <div className={`${SLIDE_ROW_GRID} opacity-60`}>
+      <div />
+      <div>
+        <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+          {slide.title}
+          {slide.schedule && (
+            <span title="Agendado">
+              <Clock className="h-3 w-3 text-muted-foreground" />
+            </span>
           )}
         </div>
-      </TableCell>
-      <TableCell className="text-right">
-        <div className="flex justify-end gap-2">
-          {canManage && (
-            <>
-              <Button size="icon" variant="outline" onClick={() => onEdit(slide)}>
-                <Pencil className="h-4 w-4" />
-              </Button>
-              <Button size="icon" variant="outline" onClick={() => onDelete(slide)}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </>
-          )}
-        </div>
-      </TableCell>
-    </TableRow>
+        <div className="text-[11px] text-muted-foreground">Posição {position + 1}</div>
+      </div>
+      <div>
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+          {getTypeIcon(slide.type)}
+          {slide.type}
+        </span>
+      </div>
+      <div className="text-[13px] text-muted-foreground">{formatDuration(slide.durationMs)}</div>
+      <div>
+        {canManage ? (
+          <Switch checked={slide.isActive} onCheckedChange={(checked) => onToggleActive(slide, checked)} />
+        ) : (
+          <Badge variant="outline">Pausado</Badge>
+        )}
+      </div>
+      <div className="flex justify-end gap-1">
+        {canManage && (
+          <>
+            <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onEdit(slide)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onDelete(slide)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -489,6 +518,7 @@ export function SignageAdmin() {
       text: slide.text,
       background: slide.background ?? '#0f172a',
       scheduleEnabled: !!slide.schedule,
+      scheduleTimeEnabled: !!(slide.schedule?.startTime || slide.schedule?.endTime),
       scheduleStartTime: slide.schedule?.startTime ?? '08:00',
       scheduleEndTime: slide.schedule?.endTime ?? '18:00',
       scheduleDateEnabled: !!(slide.schedule?.startDate || slide.schedule?.endDate),
@@ -543,8 +573,8 @@ export function SignageAdmin() {
       setSaving(true);
       const schedule = form.scheduleEnabled
         ? Object.fromEntries(Object.entries({
-            startTime: form.scheduleStartTime || undefined,
-            endTime: form.scheduleEndTime || undefined,
+            startTime: form.scheduleTimeEnabled ? form.scheduleStartTime || undefined : undefined,
+            endTime: form.scheduleTimeEnabled ? form.scheduleEndTime || undefined : undefined,
             startDate: form.scheduleDateEnabled ? form.scheduleStartDate || undefined : undefined,
             endDate: form.scheduleDateEnabled ? form.scheduleEndDate || undefined : undefined,
           }).filter(([, v]) => v !== undefined))
@@ -731,6 +761,9 @@ export function SignageAdmin() {
     return counts;
   }, [slides]);
 
+  const activeVisibleSlides = useMemo(() => visibleSlides.filter(s => s.isActive), [visibleSlides]);
+  const inactiveVisibleSlides = useMemo(() => visibleSlides.filter(s => !s.isActive), [visibleSlides]);
+
   if (authLoading || kiosksLoading) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
@@ -759,370 +792,326 @@ export function SignageAdmin() {
   return (
     <div className="min-h-screen">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-        <Card className="overflow-hidden border shadow-sm">
-          <CardHeader className="border-b border-white/10 bg-gradient-to-br from-slate-900 via-slate-800 to-rose-900 text-white">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div className="space-y-2">
-                <Badge variant="secondary" className="w-fit bg-white/10 text-white">Coala Signage</Badge>
-                <CardTitle className="text-3xl">Painel de unidades com signage</CardTitle>
-                <CardDescription className="max-w-2xl text-slate-200">
-                  Ative somente as unidades que possuem tela, acompanhe a saúde do player e organize a programação por unidade.
-                </CardDescription>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Button variant="outline" className="border-white/30 bg-white/5 text-white hover:bg-white/10" onClick={() => router.back()}>
-                  <ArrowLeft className="h-4 w-4" />
-                  Voltar
-                </Button>
-                {canManage && (
-                  <Button
-                    variant="outline"
-                    className="border-white/30 bg-white/5 text-white hover:bg-white/10"
-                    onClick={() => setUnitsDialogOpen(true)}
-                  >
-                    <Building2 className="h-4 w-4" />
-                    Gerenciar unidades
-                  </Button>
-                )}
-                <Button variant="outline" className="border-white/30 bg-white/5 text-white hover:bg-white/10" onClick={() => void loadSlides()}>
-                  <RefreshCw className="h-4 w-4" />
-                  Atualizar
-                </Button>
-                {process.env.NODE_ENV === 'development' && enabledKiosks.length > 1 && (
-                  <Button
-                    variant="outline"
-                    className="border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20"
-                    disabled={!canManage || publishingKioskIds.length > 0}
-                    onClick={() => void publishForKiosks(enabledKiosks.map(kiosk => kiosk.id))}
-                  >
-                    {publishingKioskIds.length > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Publicar todas [DEV]
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="grid p-0 divide-y md:divide-y-0 md:divide-x divide-border md:grid-cols-3">
-            <div className="space-y-1 p-6">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unidades com signage</p>
-              <p className="text-4xl font-bold tabular-nums">{enabledKiosks.length}</p>
-            </div>
-            <div className="space-y-1 p-6">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unidades online</p>
-              <p className="text-4xl font-bold tabular-nums text-success">{onlineUnitsCount}</p>
-            </div>
-            <div className="space-y-1 p-6">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sem resposta</p>
-              <p className="text-4xl font-bold tabular-nums text-destructive">{offlineUnitsCount}</p>
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card className="border shadow-sm">
-          <CardHeader>
-            <CardTitle>Resumo geral</CardTitle>
-            <CardDescription>
-              Visão consolidada do signage em todas as unidades ativas. Clique em uma unidade para abrir os detalhes e a programação.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border bg-muted p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unidades ativas</div>
-              <div className="mt-2 text-3xl font-bold tabular-nums">{enabledKiosks.length}</div>
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              <MonitorPlay className="h-3.5 w-3.5" />
+              Coala Signage
             </div>
-            <div className="rounded-2xl border bg-muted p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Slides cadastrados</div>
-              <div className="mt-2 text-3xl font-bold tabular-nums">{slides.length}</div>
-            </div>
-            <div className="rounded-2xl border bg-muted p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Slides ativos</div>
-              <div className="mt-2 text-3xl font-bold tabular-nums">{totalActiveSlides}</div>
-            </div>
-            <div className="rounded-2xl border bg-muted p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unidade selecionada</div>
-              <div className="mt-2 text-lg font-bold truncate">
-                {selectedKiosk?.name ?? 'Nenhuma'}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            <p className="text-xl font-medium text-foreground">Painel de unidades</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">Gerencie a programação e monitore o status das TVs.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => router.back()}>
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </Button>
+            {canManage && (
+              <Button variant="outline" size="sm" onClick={() => setUnitsDialogOpen(true)}>
+                <Building2 className="h-4 w-4" />
+                Gerenciar unidades
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => void loadSlides()}>
+              <RefreshCw className="h-4 w-4" />
+              Atualizar
+            </Button>
+            {process.env.NODE_ENV === 'development' && enabledKiosks.length > 1 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                disabled={!canManage || publishingKioskIds.length > 0}
+                onClick={() => void publishForKiosks(enabledKiosks.map(kiosk => kiosk.id))}
+              >
+                {publishingKioskIds.length > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Publicar todas [DEV]
+              </Button>
+            )}
+          </div>
+        </div>
 
-        <Card className="border shadow-sm">
-          <CardHeader>
-            <CardTitle>Unidades</CardTitle>
-            <CardDescription>
-              Aqui aparecem apenas as unidades com signage ativo. A ativacao e desativacao fica no modal de gerenciamento.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="rounded-xl bg-muted p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Com signage</p>
+            <p className="mt-1.5 text-[26px] font-medium tabular-nums">{enabledKiosks.length}</p>
+          </div>
+          <div className="rounded-xl bg-muted p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Online</p>
+            <p className="mt-1.5 text-[26px] font-medium tabular-nums text-success">{onlineUnitsCount}</p>
+          </div>
+          <div className="rounded-xl bg-muted p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Sem resposta</p>
+            <p className="mt-1.5 text-[26px] font-medium tabular-nums text-destructive">{offlineUnitsCount}</p>
+          </div>
+          <div className="rounded-xl bg-muted p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Slides ativos</p>
+            <p className="mt-1.5 text-[26px] font-medium tabular-nums">{totalActiveSlides}</p>
+          </div>
+        </div>
+
+        {/* Units */}
+        <div>
+          <p className="mb-3 text-[13px] font-medium text-foreground">Unidades</p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {kioskStatuses
               .filter(({ signageEnabled }) => signageEnabled)
               .map(({ kiosk, slideCount, activeSlideCount, health, lastSeenAt }) => {
-              const isSelected = kiosk.id === selectedKioskId;
+                const isSelected = kiosk.id === selectedKioskId;
+                const badgeClass = health.variant === 'default'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : health.variant === 'destructive'
+                    ? 'bg-red-50 text-red-800 border-red-200'
+                    : 'bg-amber-50 text-amber-800 border-amber-200';
+                const dotClass = health.variant === 'default' ? 'bg-emerald-500' : health.variant === 'destructive' ? 'bg-red-500' : 'bg-amber-500';
 
-              return (
-                <div
-                  key={kiosk.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedKioskId(kiosk.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setSelectedKioskId(kiosk.id);
-                    }
-                  }}
-                  className={`rounded-2xl border p-4 text-left transition-all focus:outline-none focus:ring-2 focus:ring-ring ${
-                    isSelected
-                      ? 'border-2 border-primary/50 bg-primary/5 shadow-sm shadow-primary/10'
-                      : 'border-border bg-card hover:shadow-sm'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <div className="font-medium">{kiosk.name}</div>
+                return (
+                  <div
+                    key={kiosk.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedKioskId(kiosk.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedKioskId(kiosk.id); } }}
+                    className={`cursor-pointer rounded-xl border p-4 text-left transition-all focus:outline-none focus:ring-2 focus:ring-ring ${
+                      isSelected ? 'border-[1.5px] border-primary bg-primary/5' : 'border-border bg-card hover:border-border/80'
+                    }`}
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[13px] font-medium text-foreground">{kiosk.name}</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{kiosk.id}</p>
                       </div>
-                      <div className="text-xs text-muted-foreground">{kiosk.id}</div>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+                        {health.label}
+                      </span>
                     </div>
-                    <StatusDot variant={health.variant} label={health.label} />
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-xl bg-muted p-3">
-                      <div className="text-xs text-muted-foreground">Slides</div>
-                      <div className="mt-1 font-semibold">{slideCount}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg bg-muted p-2.5">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Slides</p>
+                        <p className="mt-0.5 text-lg font-medium">{slideCount}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted p-2.5">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Ativos</p>
+                        <p className="mt-0.5 text-lg font-medium">{activeSlideCount}</p>
+                      </div>
                     </div>
-                    <div className="rounded-xl bg-muted p-3">
-                      <div className="text-xs text-muted-foreground">Ativos</div>
-                      <div className="mt-1 font-semibold">{activeSlideCount}</div>
-                    </div>
+                    <p className="mt-3 text-[11px] text-muted-foreground">
+                      {lastSeenAt ? `Último sinal ${formatRelativeTime(lastSeenAt)}` : 'A TV desta unidade ainda não enviou status.'}
+                    </p>
                   </div>
-
-                  <div className="mt-4 text-xs text-muted-foreground">
-                    {lastSeenAt
-                      ? `Último sinal ${formatRelativeTime(lastSeenAt)}`
-                      : 'A TV desta unidade ainda não enviou status.'}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
 
             {enabledKiosks.length === 0 && (
               <Alert className="md:col-span-2 xl:col-span-3">
                 <MonitorPlay className="h-4 w-4" />
                 <AlertTitle>Nenhuma unidade ativa</AlertTitle>
-                <AlertDescription>
-                  Abra “Gerenciar unidades” para ativar as unidades que possuem tela.
-                </AlertDescription>
+                <AlertDescription>Abra "Gerenciar unidades" para ativar as unidades que possuem tela.</AlertDescription>
               </Alert>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
+        {/* Slides + sidebar */}
         {selectedKiosk && selectedKioskStatus ? (
-          <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-            <Card className="border shadow-sm">
-              <CardHeader>
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="space-y-2">
-                    <CardTitle>Slides de {selectedKiosk.name}</CardTitle>
-                    <CardDescription>
-                      A lista abaixo mostra apenas os slides vinculados a unidade selecionada. A ordem final publicada segue o campo de ordem.
-                    </CardDescription>
-                  </div>
-                  {canManage && (
-                    <Button onClick={openCreateDialog}>
-                      <Plus className="h-4 w-4" />
-                      Novo slide
-                    </Button>
-                  )}
+          <div className="grid gap-4 lg:grid-cols-[1fr_200px]">
+
+            {/* Slides panel */}
+            <div className="overflow-hidden rounded-xl border bg-card">
+              <div className="flex items-center justify-between gap-4 border-b px-4 py-3.5">
+                <div>
+                  <p className="text-[14px] font-medium text-foreground">Slides — {selectedKiosk.name}</p>
+                  <p className="mt-0.5 text-[12px] text-muted-foreground">Reordene arrastando. A ordem é salva automaticamente.</p>
                 </div>
-              </CardHeader>
-              <CardContent>
-                {loadingSlides ? (
-                  <Skeleton className="h-72 w-full" />
-                ) : visibleSlides.length === 0 ? (
+                {canManage && (
+                  <Button size="sm" onClick={openCreateDialog}>
+                    <Plus className="h-4 w-4" />
+                    Novo slide
+                  </Button>
+                )}
+              </div>
+
+              {loadingSlides ? (
+                <div className="p-4">
+                  <Skeleton className="h-56 w-full" />
+                </div>
+              ) : visibleSlides.length === 0 ? (
+                <div className="p-4">
                   <Alert>
                     <MonitorPlay className="h-4 w-4" />
                     <AlertTitle>Nenhum slide nesta unidade</AlertTitle>
-                    <AlertDescription>
-                      Crie o primeiro slide desta unidade para começar a programar o conteudo da TV.
-                    </AlertDescription>
+                    <AlertDescription>Crie o primeiro slide desta unidade para começar a programar o conteúdo da TV.</AlertDescription>
                   </Alert>
-                ) : (
+                </div>
+              ) : (
+                <>
+                  {/* Header row */}
+                  <div className="grid grid-cols-[20px_minmax(0,1fr)_72px_72px_52px_64px] items-center gap-3 border-b px-4 py-2">
+                    <span />
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Slide</span>
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Tipo</span>
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Duração</span>
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</span>
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Ações</span>
+                  </div>
+
+                  {/* Active slides with drag & drop */}
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleReorder(e)}>
-                    <SortableContext items={visibleSlides.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-8" />
-                            <TableHead>Slide</TableHead>
-                            <TableHead>Tipo</TableHead>
-                            <TableHead>Quiosques</TableHead>
-                            <TableHead>Duração</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Ações</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {visibleSlides.map((slide, i) => (
-                            <SortableSlideRow
-                              key={slide.id}
-                              slide={slide}
-                              position={i}
-                              kioskMap={kioskMap}
-                              canManage={canManage}
-                              onEdit={openEditDialog}
-                              onDelete={(s) => void handleDelete(s)}
-                              onToggleActive={(s, checked) => void handleToggleActive(s, checked)}
-                            />
-                          ))}
-                        </TableBody>
-                      </Table>
+                    <SortableContext items={activeVisibleSlides.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                      {activeVisibleSlides.map((slide, i) => (
+                        <SortableSlideRow
+                          key={slide.id}
+                          slide={slide}
+                          position={visibleSlides.indexOf(slide)}
+                          kioskMap={kioskMap}
+                          canManage={canManage}
+                          onEdit={openEditDialog}
+                          onDelete={(s) => void handleDelete(s)}
+                          onToggleActive={(s, checked) => void handleToggleActive(s, checked)}
+                        />
+                      ))}
                     </SortableContext>
                   </DndContext>
-                )}
-              </CardContent>
-            </Card>
 
-            <Card className="border shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle>Publicação da unidade</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-xl border p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="font-medium">{selectedKiosk.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {kioskSlideCount.get(selectedKiosk.id) ?? 0} slide(s) vinculado(s)
+                  {/* Inactive slides */}
+                  {inactiveVisibleSlides.length > 0 && (
+                    <>
+                      <div className="border-t border-dashed px-4 py-2">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Pausados</span>
                       </div>
-                      <div className="mt-2">
-                        <StatusDot variant={selectedKioskStatus.health.variant} label={selectedKioskStatus.health.label} />
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() => void publishForKiosks([selectedKiosk.id])}
-                      disabled={!canManage || publishingKioskIds.includes(selectedKiosk.id)}
-                    >
-                      {publishingKioskIds.includes(selectedKiosk.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                      Publicar unidade
-                    </Button>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    <div className="rounded-lg bg-muted p-3 text-xs">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-1.5 font-medium text-foreground">
-                          <KeyRound className="h-3 w-3" />
-                          Código de acesso
-                        </span>
-                        {canManage && (
-                          <div className="flex gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6"
-                              title="Gerar novo código"
-                              onClick={() => void handleSetToken(selectedKiosk.id)}
-                            >
-                              <RefreshCw className="h-3 w-3" />
-                            </Button>
-                            {selectedKiosk.deviceToken && (
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6 text-destructive hover:text-destructive"
-                                title="Remover código"
-                                onClick={() => void handleClearToken(selectedKiosk.id)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      {selectedKiosk.deviceToken ? (
-                        <span className="font-mono text-lg font-bold tracking-widest text-foreground">
-                          {selectedKiosk.deviceToken}
-                        </span>
-                      ) : (
-                        <span className="italic text-muted-foreground">Sem código — acesso livre</span>
+                      {inactiveVisibleSlides.map((slide) => (
+                        <StaticSlideRow
+                          key={slide.id}
+                          slide={slide}
+                          position={visibleSlides.indexOf(slide)}
+                          kioskMap={kioskMap}
+                          canManage={canManage}
+                          onEdit={openEditDialog}
+                          onDelete={(s) => void handleDelete(s)}
+                          onToggleActive={(s, checked) => void handleToggleActive(s, checked)}
+                        />
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Right sidebar */}
+            <div className="flex flex-col gap-3">
+              {/* Publish */}
+              <div className="rounded-xl border bg-card p-4">
+                <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Publicação</p>
+                <p className="text-[14px] font-medium text-foreground">{selectedKiosk.name}</p>
+                <p className="mt-0.5 text-[12px] text-muted-foreground">{kioskSlideCount.get(selectedKiosk.id) ?? 0} slide(s) vinculado(s)</p>
+                <div className="my-3 flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${selectedKioskStatus.health.variant === 'default' ? 'bg-emerald-500' : selectedKioskStatus.health.variant === 'destructive' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                  <span className="text-[12px] text-muted-foreground">{selectedKioskStatus.health.label}</span>
+                </div>
+                <Button
+                  className="w-full"
+                  size="sm"
+                  onClick={() => void publishForKiosks([selectedKiosk.id])}
+                  disabled={!canManage || publishingKioskIds.includes(selectedKiosk.id)}
+                >
+                  {publishingKioskIds.includes(selectedKiosk.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Publicar unidade
+                </Button>
+              </div>
+
+              {/* Access code + URL */}
+              <div className="rounded-xl bg-muted p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    <KeyRound className="mr-1 inline-block h-3 w-3" />
+                    Código de acesso
+                  </p>
+                  {canManage && (
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" className="h-6 w-6" title="Gerar novo código" onClick={() => void handleSetToken(selectedKiosk.id)}>
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                      {selectedKiosk.deviceToken && (
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive" title="Remover código" onClick={() => void handleClearToken(selectedKiosk.id)}>
+                          <X className="h-3 w-3" />
+                        </Button>
                       )}
                     </div>
-
-                    <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                      <div className="mb-1">TV URL</div>
-                      {(() => {
-                        const origin = typeof window !== 'undefined' ? window.location.origin : '';
-                        const token = selectedKiosk.deviceToken;
-                        const href = `/tv/${selectedKiosk.id}${token ? `?token=${token}` : ''}`;
-                        const fullUrl = `${origin}${href}`;
-                        return (
-                          <div className="flex items-start justify-between gap-2">
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1.5 break-all font-mono text-foreground underline underline-offset-2 hover:text-primary"
-                            >
-                              {fullUrl}
-                              <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                            </a>
-                            <button
-                              type="button"
-                              title="Copiar URL"
-                              className="flex-shrink-0 rounded p-1 hover:bg-accent"
-                              onClick={() => void navigator.clipboard.writeText(fullUrl).then(() => toast({ title: 'URL copiada' }))}
-                            >
-                              <Copy className="h-3 w-3" />
-                            </button>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
+                  )}
                 </div>
+                {selectedKiosk.deviceToken ? (
+                  <span className="font-mono text-base font-bold tracking-widest text-foreground">{selectedKiosk.deviceToken}</span>
+                ) : (
+                  <span className="text-[12px] italic text-muted-foreground">Sem código — acesso livre</span>
+                )}
 
-              </CardContent>
-            </Card>
+                <p className="mb-1.5 mt-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">TV URL</p>
+                {(() => {
+                  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                  const token = selectedKiosk.deviceToken;
+                  const href = `/tv/${selectedKiosk.id}${token ? `?token=${token}` : ''}`;
+                  const fullUrl = `${origin}${href}`;
+                  return (
+                    <div className="flex items-start gap-1">
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-all font-mono text-[11px] text-primary underline underline-offset-2"
+                      >
+                        {fullUrl}
+                      </a>
+                      <button
+                        type="button"
+                        title="Copiar URL"
+                        className="mt-0.5 flex-shrink-0 rounded p-0.5 hover:bg-accent"
+                        onClick={() => void navigator.clipboard.writeText(fullUrl).then(() => toast({ title: 'URL copiada' }))}
+                      >
+                        <Copy className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
           </div>
         ) : (
-          <Card className="border shadow-sm">
-            <CardContent className="flex min-h-52 items-center justify-center p-6">
-              <Alert className="max-w-2xl">
-                <MonitorPlay className="h-4 w-4" />
-                <AlertTitle>Escolha uma unidade para continuar</AlertTitle>
-                <AlertDescription>
-                  A tela inicial mostra apenas o resumo geral. Clique em uma unidade acima para abrir seus slides, publicacoes e detalhes da TV.
-                </AlertDescription>
-              </Alert>
-            </CardContent>
-          </Card>
+          <div className="flex min-h-52 items-center justify-center rounded-xl border bg-card p-6">
+            <Alert className="max-w-2xl">
+              <MonitorPlay className="h-4 w-4" />
+              <AlertTitle>Escolha uma unidade para continuar</AlertTitle>
+              <AlertDescription>Clique em uma unidade acima para abrir seus slides e opções de publicação.</AlertDescription>
+            </Alert>
+          </div>
         )}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{editingSlide ? 'Editar slide' : 'Novo slide'}</DialogTitle>
-            <DialogDescription>
-              Configure o conteúdo, vincule os quiosques e publique quando estiver pronto.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-[660px]">
+          {/* Header */}
+          <div className="flex items-start justify-between border-b px-6 py-5">
+            <div>
+              <DialogTitle className="text-base font-medium">{editingSlide ? 'Editar slide' : 'Novo slide'}</DialogTitle>
+              <DialogDescription className="mt-0.5 text-[13px]">Configure, vincule e publique o conteúdo.</DialogDescription>
+            </div>
+          </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Título</Label>
-                <Input id="title" value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} />
+          {/* Body */}
+          <div className="grid max-h-[calc(92vh-130px)] grid-cols-2 divide-x overflow-y-auto">
+            {/* Left column */}
+            <div className="space-y-4 p-6">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Título</label>
+                <Input value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Tipo</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Tipo</label>
                   <Select value={form.type} onValueChange={(value: SignageSlideType) => setForm(prev => ({
                     ...prev,
                     type: value,
@@ -1130,9 +1119,7 @@ export function SignageAdmin() {
                     assetUrl: value === 'text' ? '' : prev.assetUrl,
                     assetPath: value === 'text' ? '' : prev.assetPath,
                   }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="image">Imagem</SelectItem>
                       <SelectItem value="video">Vídeo</SelectItem>
@@ -1140,12 +1127,10 @@ export function SignageAdmin() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Duração</Label>
-                  <div className="space-y-2">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Duração</label>
+                  <div className="flex gap-1.5">
                     <Input
-                      id="durationMs"
                       type="number"
                       min={1}
                       max={getMaxDurationValue(form.type, durationParts.unit)}
@@ -1154,93 +1139,59 @@ export function SignageAdmin() {
                         const nextValue = Math.max(1, Number(e.target.value) || 1);
                         setForm(prev => ({ ...prev, durationMs: toDurationMs(nextValue, durationParts.unit) }));
                       }}
+                      className="w-16"
                     />
                     <Select
                       value={durationParts.unit}
                       onValueChange={(value: DurationUnit) => {
-                        setForm(prev => {
-                          const current = getDurationParts(prev.durationMs);
-                          return {
-                            ...prev,
-                            durationMs: toDurationMs(current.value, value),
-                          };
-                        });
+                        setForm(prev => ({ ...prev, durationMs: toDurationMs(getDurationParts(prev.durationMs).value, value) }));
                       }}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="flex-1 text-[13px]"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="seconds">Segundos</SelectItem>
-                        <SelectItem value="minutes">Minutos</SelectItem>
+                        <SelectItem value="seconds">seg</SelectItem>
+                        <SelectItem value="minutes">min</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-slate-500">
-                      {form.type === 'video'
-                        ? 'Videos usam a duracao real do arquivo e podem chegar a 30 minutos.'
-                        : 'Imagens e textos podem ficar no ar por ate 2 minutos.'}
-                    </p>
                   </div>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="order">Ordem</Label>
-                  <Input
-                    id="order"
-                    type="number"
-                    min={0}
-                    value={form.order}
-                    onChange={e => setForm(prev => ({ ...prev, order: Number(e.target.value) }))}
-                  />
-                </div>
-
-                <div className="rounded-lg border bg-muted p-3 text-sm text-muted-foreground">
-                  O status ativo/pausado é controlado diretamente na lista do painel.
                 </div>
               </div>
 
               {form.type === 'text' ? (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="text">Texto</Label>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Texto</label>
                     <Textarea
-                      id="text"
+                      rows={3}
                       value={form.text ?? ''}
                       onChange={e => setForm(prev => ({ ...prev, text: e.target.value }))}
                       placeholder="Mensagem que a TV vai exibir."
+                      className="resize-none"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="background">Cor de fundo</Label>
-                    <div className="flex gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Cor de fundo</label>
+                    <div className="flex items-center gap-2">
                       <input
                         type="color"
-                        id="background-picker"
                         value={form.background ?? '#0f172a'}
                         onChange={e => setForm(prev => ({ ...prev, background: e.target.value }))}
-                        className="h-10 w-12 cursor-pointer rounded-lg border bg-transparent p-1"
+                        className="h-8 w-8 cursor-pointer rounded-md border bg-transparent p-0.5"
                       />
                       <Input
-                        id="background"
                         value={form.background ?? '#0f172a'}
                         onChange={e => setForm(prev => ({ ...prev, background: e.target.value }))}
-                        className="font-mono"
+                        className="font-mono text-[13px]"
                       />
                     </div>
                   </div>
                 </>
               ) : (
-                <div className="space-y-3 rounded-xl border border-dashed p-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="asset">Mídia</Label>
-                    <p className="text-xs text-slate-500">
-                      Imagens até 2 MB. Vídeos MP4/H.264 até 30 MB.
-                    </p>
-                  </div>
+                <div className="space-y-2 rounded-lg border border-dashed p-4">
+                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Mídia <span className="normal-case font-normal text-muted-foreground/70">— imagens até 2 MB, vídeos até 30 MB</span>
+                  </label>
                   <Input
-                    id="asset"
                     type="file"
                     accept={form.type === 'video' ? 'video/mp4,video/*' : 'image/webp,image/jpeg,image/png,image/*'}
                     onChange={async (event) => {
@@ -1250,11 +1201,7 @@ export function SignageAdmin() {
                         await handleUpload(file);
                       } catch (error) {
                         setUploadProgress(null);
-                        toast({
-                          title: 'Falha no upload',
-                          description: error instanceof Error ? error.message : 'Erro inesperado.',
-                          variant: 'destructive',
-                        });
+                        toast({ title: 'Falha no upload', description: error instanceof Error ? error.message : 'Erro inesperado.', variant: 'destructive' });
                       } finally {
                         event.target.value = '';
                       }
@@ -1262,187 +1209,167 @@ export function SignageAdmin() {
                   />
                   {uploadProgress !== null && <Progress value={uploadProgress} />}
                   {form.assetUrl && (
-                    <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-2 font-medium text-foreground">
-                        <UploadCloud className="h-4 w-4 text-success" />
-                        Arquivo enviado com sucesso
-                      </div>
-                      <p className="mt-1">Mídia pronta para publicação.</p>
+                    <div className="flex items-center gap-2 text-[13px] text-success">
+                      <UploadCloud className="h-4 w-4" />
+                      Arquivo enviado com sucesso
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="rounded-xl border p-4">
-                <label className="flex cursor-pointer items-center justify-between gap-3">
-                  <div>
-                    <div className="font-medium">Agendamento</div>
-                    <p className="text-xs text-muted-foreground">Restringe quando este slide aparece na TV.</p>
-                  </div>
-                  <Switch
-                    checked={form.scheduleEnabled}
-                    onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleEnabled: checked }))}
-                  />
-                </label>
-
-                {form.scheduleEnabled && (
-                  <div className="mt-4 space-y-3 border-t pt-4">
-                    <div className="space-y-1.5">
-                      <Label>Horário de exibição</Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="time"
-                          value={form.scheduleStartTime}
-                          onChange={e => setForm(prev => ({ ...prev, scheduleStartTime: e.target.value }))}
-                          className="w-full"
-                        />
-                        <span className="flex-shrink-0 text-sm text-muted-foreground">até</span>
-                        <Input
-                          type="time"
-                          value={form.scheduleEndTime}
-                          onChange={e => setForm(prev => ({ ...prev, scheduleEndTime: e.target.value }))}
-                          className="w-full"
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {form.scheduleEndTime && form.scheduleStartTime && form.scheduleEndTime < form.scheduleStartTime
-                          ? 'Intervalo noturno — ativo das ' + form.scheduleStartTime + ' até ' + form.scheduleEndTime + ' do dia seguinte.'
-                          : 'Exibido todos os dias neste intervalo.'}
-                      </p>
-                    </div>
-
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <Checkbox
-                        checked={form.scheduleDateEnabled}
-                        onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleDateEnabled: !!checked }))}
-                      />
-                      <span className="text-sm font-medium">Limitar por período</span>
-                    </label>
-
-                    {form.scheduleDateEnabled && (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">De</Label>
-                            <Input
-                              type="date"
-                              value={form.scheduleStartDate}
-                              onChange={e => setForm(prev => ({ ...prev, scheduleStartDate: e.target.value }))}
-                            />
-                          </div>
-                          <div className="flex-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">Até</Label>
-                            <Input
-                              type="date"
-                              value={form.scheduleEndDate}
-                              onChange={e => setForm(prev => ({ ...prev, scheduleEndDate: e.target.value }))}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+              {/* Schedule */}
+              <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-2.5">
+                <div>
+                  <p className="text-[13px] font-medium">Agendamento</p>
+                  <p className="text-[12px] text-muted-foreground">Controlar quando este slide aparece</p>
+                </div>
+                <Switch
+                  checked={form.scheduleEnabled}
+                  onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleEnabled: checked }))}
+                />
               </div>
+
+              {form.scheduleEnabled && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <label className="flex cursor-pointer items-center gap-2.5">
+                    <Checkbox
+                      checked={form.scheduleTimeEnabled}
+                      onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleTimeEnabled: !!checked }))}
+                    />
+                    <span className="text-[13px] font-medium">Limitar por horário</span>
+                  </label>
+                  {form.scheduleTimeEnabled && (
+                    <div className="space-y-1 pl-6">
+                      <div className="flex items-center gap-2">
+                        <Input type="time" value={form.scheduleStartTime} onChange={e => setForm(prev => ({ ...prev, scheduleStartTime: e.target.value }))} />
+                        <span className="flex-shrink-0 text-[13px] text-muted-foreground">até</span>
+                        <Input type="time" value={form.scheduleEndTime} onChange={e => setForm(prev => ({ ...prev, scheduleEndTime: e.target.value }))} />
+                      </div>
+                      {form.scheduleEndTime && form.scheduleStartTime && form.scheduleEndTime < form.scheduleStartTime && (
+                        <p className="text-[11px] text-muted-foreground">Intervalo noturno — vai até {form.scheduleEndTime} do dia seguinte.</p>
+                      )}
+                    </div>
+                  )}
+                  <label className="flex cursor-pointer items-center gap-2.5">
+                    <Checkbox
+                      checked={form.scheduleDateEnabled}
+                      onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleDateEnabled: !!checked }))}
+                    />
+                    <span className="text-[13px] font-medium">Limitar por período</span>
+                  </label>
+                  {form.scheduleDateEnabled && (
+                    <div className="flex gap-2 pl-6">
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[11px] text-muted-foreground">De</label>
+                        <Input type="date" value={form.scheduleStartDate} onChange={e => setForm(prev => ({ ...prev, scheduleStartDate: e.target.value }))} />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[11px] text-muted-foreground">Até</label>
+                        <Input type="date" value={form.scheduleEndDate} onChange={e => setForm(prev => ({ ...prev, scheduleEndDate: e.target.value }))} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="space-y-4">
-              <div className="rounded-xl border p-4">
-                <div className="mb-3">
-                  <h3 className="font-medium">Quiosques</h3>
-                  <p className="text-xs text-muted-foreground">Selecione onde esse slide poderá ser publicado.</p>
-                </div>
-                <div className="space-y-3">
-                  {allowedKiosks.map((kiosk) => {
-                    const checked = form.kioskIds.includes(kiosk.id);
-                    const signageEnabled = kiosk.signageEnabled !== false;
-                    return (
-                      <label key={kiosk.id} className={`flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${checked ? 'border-primary/30 bg-primary/5' : ''} ${!signageEnabled ? 'opacity-60' : ''}`}>
-                        <Checkbox
-                          checked={checked}
-                          disabled={!signageEnabled}
-                          onCheckedChange={(nextChecked) => {
-                            setForm(prev => ({
-                              ...prev,
-                              kioskIds: nextChecked
-                                ? [...prev.kioskIds, kiosk.id]
-                                : prev.kioskIds.filter(id => id !== kiosk.id),
-                            }));
-                          }}
-                        />
-                        <div>
-                          <div className="font-medium">{kiosk.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {kiosk.id}
-                            {!signageEnabled ? ' · signage desativado' : ''}
-                          </div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="rounded-xl border p-4">
-                <div className="mb-3">
-                  <h3 className="font-medium">Preview do player</h3>
-                  <p className="text-xs text-muted-foreground">Prévia rápida do que será publicado.</p>
-                </div>
+            {/* Right column */}
+            <div className="flex flex-col gap-4 p-6">
+              {/* Preview */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Preview</label>
                 <button
                   type="button"
                   onClick={() => form.assetUrl && setPreviewOpen(true)}
-                  className="group relative block aspect-video w-full overflow-hidden rounded-2xl border border-slate-200 shadow-inner"
-                  style={{ background: form.type === 'text' ? (form.background || '#0f172a') : '#0f172a' }}
+                  className="relative block w-full overflow-hidden rounded-lg"
+                  style={{ aspectRatio: '16/9', background: form.type === 'text' ? (form.background || '#0f172a') : '#0f172a' }}
                 >
-                  <div className="pointer-events-none absolute left-4 top-4 z-10 flex items-center gap-2">
-                    <Badge variant="secondary" className="bg-black/45 text-white backdrop-blur">
-                      {form.type === 'video' ? 'Video' : form.type === 'image' ? 'Imagem' : 'Texto'}
-                    </Badge>
-                    {form.assetUrl && (
-                      <span className="rounded-full bg-black/45 p-2 text-white backdrop-blur transition-opacity group-hover:opacity-100 md:opacity-70">
-                        {form.type === 'video' ? <PlayCircle className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                      </span>
-                    )}
-                  </div>
+                  <span className="absolute left-3 top-3 text-[9px] font-medium uppercase tracking-widest text-white/40">
+                    {form.type === 'video' ? 'Vídeo' : form.type === 'image' ? 'Imagem' : 'Texto'}
+                  </span>
                   {form.type === 'text' ? (
-                    <div className="flex h-full items-center justify-center p-8 text-center text-2xl font-semibold text-white">
-                      {form.text || 'Seu texto aparecerá aqui'}
-                    </div>
+                    <span className="absolute bottom-3 left-3 right-3 text-[18px] font-medium leading-tight text-white">
+                      {form.text || 'Seu texto aqui'}
+                    </span>
                   ) : form.assetUrl ? (
                     form.type === 'image' ? (
-                      <img src={form.assetUrl} alt="" className="h-full w-full rounded-2xl object-cover" />
+                      <img src={form.assetUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <video
-                        src={form.assetUrl}
-                        className="h-full w-full rounded-2xl object-cover"
-                        muted
-                        loop
-                        playsInline
-                        autoPlay
-                      />
+                      <video src={form.assetUrl} className="h-full w-full object-cover" muted loop playsInline autoPlay />
                     )
                   ) : (
-                    <div className="flex h-full items-center justify-center text-sm text-slate-300">
-                      Envie uma mídia para visualizar.
-                    </div>
+                    <span className="absolute inset-0 flex items-center justify-center text-[13px] text-white/30">
+                      Envie uma mídia para visualizar
+                    </span>
                   )}
                 </button>
-                {form.assetUrl && (
-                  <p className="mt-3 text-xs text-slate-500">
-                    Clique na prévia para ampliar {form.type === 'video' ? 'e ver os controles do vídeo' : 'o conteúdo'}.
-                  </p>
-                )}
+              </div>
+
+              {/* Kiosques — only show picker when multiple kiosks exist */}
+              {allowedKiosks.length > 1 ? (
+                <div className="space-y-2">
+                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Quiosques</label>
+                  <div className="flex flex-col gap-1.5">
+                    {allowedKiosks.map((kiosk) => {
+                      const checked = form.kioskIds.includes(kiosk.id);
+                      const signageEnabled = kiosk.signageEnabled !== false;
+                      return (
+                        <button
+                          key={kiosk.id}
+                          type="button"
+                          disabled={!signageEnabled}
+                          onClick={() => {
+                            if (!signageEnabled) return;
+                            setForm(prev => ({
+                              ...prev,
+                              kioskIds: checked
+                                ? prev.kioskIds.filter(id => id !== kiosk.id)
+                                : [...prev.kioskIds, kiosk.id],
+                            }));
+                          }}
+                          className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${
+                            checked
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border bg-background hover:bg-muted/50'
+                          } ${!signageEnabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                        >
+                          <div className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${checked ? 'border-primary bg-primary' : 'border-muted-foreground/40'}`}>
+                            {checked && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                          </div>
+                          <div>
+                            <p className={`text-[13px] font-medium ${checked ? 'text-primary' : 'text-foreground'}`}>{kiosk.name}</p>
+                            <p className={`text-[11px] ${checked ? 'text-primary/70' : 'text-muted-foreground'}`}>
+                              {kiosk.id}{!signageEnabled ? ' · signage desativado' : ''}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg bg-muted px-3 py-2.5 text-[13px] text-muted-foreground">
+                  Unidade: <span className="font-medium text-foreground">{allowedKiosks[0]?.name ?? '—'}</span>
+                </div>
+              )}
+
+              {/* Ordem */}
+              <div className="mt-auto flex items-center gap-2 rounded-lg bg-muted px-3 py-2">
+                <span className="text-[12px] text-muted-foreground">Posição</span>
+                <span className="font-mono text-[13px] font-medium tabular-nums">{form.order + 1}</span>
+                <span className="text-[11px] text-muted-foreground/70">Ajuste pela lista com drag & drop</span>
               </div>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => void handleSave()} disabled={saving || !canManage}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {/* Footer */}
+          <div className="flex justify-end gap-2 border-t px-6 py-3.5">
+            <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button size="sm" onClick={() => void handleSave()} disabled={saving || !canManage}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Salvar slide
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
