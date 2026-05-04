@@ -2,13 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, ImageIcon, Loader2, Maximize2, MonitorPlay, Pencil, PlayCircle, Plus, Save, Trash2, UploadCloud, VideoIcon, Type, RefreshCw, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Building2, Copy, ExternalLink, GripVertical, ImageIcon, KeyRound, Loader2, Maximize2, MonitorPlay, Pencil, PlayCircle, Plus, Save, Trash2, UploadCloud, VideoIcon, Type, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { fetchWithTimeout } from '@/lib/fetch-utils';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useToast } from '@/hooks/use-toast';
-import { type PlayerHeartbeat, type SignageSlide, type SignageSlideType } from '@/types';
+import { type Kiosk, type PlayerHeartbeat, type SignageSlide, type SignageSlideType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -137,6 +141,90 @@ function StatusDot({ label, variant }: { label: string; variant: 'default' | 'se
   );
 }
 
+type SortableSlideRowProps = {
+  slide: SignageSlide;
+  position: number;
+  kioskMap: Map<string, Kiosk>;
+  canManage: boolean;
+  onEdit: (slide: SignageSlide) => void;
+  onDelete: (slide: SignageSlide) => void;
+  onToggleActive: (slide: SignageSlide, isActive: boolean) => void;
+};
+
+function SortableSlideRow({ slide, position, kioskMap, canManage, onEdit, onDelete, onToggleActive }: SortableSlideRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: slide.id });
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+    >
+      <TableCell className="w-8 pr-0">
+        {canManage && (
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab touch-none p-1 text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            aria-label="Reordenar"
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        )}
+      </TableCell>
+      <TableCell>
+        <div className="space-y-1">
+          <div className="font-medium text-slate-900">{slide.title}</div>
+          <div className="text-xs text-slate-500">Posição {position + 1}</div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <Badge variant="outline" className="inline-flex gap-1">
+          {getTypeIcon(slide.type)}
+          {slide.type}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-wrap gap-1.5">
+          {slide.kioskIds.map((kioskId) => (
+            <Badge key={kioskId} variant="secondary">
+              {kioskMap.get(kioskId)?.name ?? kioskId}
+            </Badge>
+          ))}
+        </div>
+      </TableCell>
+      <TableCell>{formatDuration(slide.durationMs)}</TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          {canManage ? (
+            <Switch
+              checked={slide.isActive}
+              onCheckedChange={(checked) => onToggleActive(slide, checked)}
+            />
+          ) : (
+            <Badge variant={slide.isActive ? 'default' : 'outline'}>
+              {slide.isActive ? 'Ativo' : 'Pausado'}
+            </Badge>
+          )}
+        </div>
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex justify-end gap-2">
+          {canManage && (
+            <>
+              <Button size="icon" variant="outline" onClick={() => onEdit(slide)}>
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button size="icon" variant="outline" onClick={() => onDelete(slide)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export function SignageAdmin() {
   const router = useRouter();
   const { toast } = useToast();
@@ -217,9 +305,56 @@ export function SignageAdmin() {
   );
 
   const visibleSlides = useMemo(() => {
-    if (!selectedKioskId) return slides;
-    return slides.filter((slide) => slide.kioskIds.includes(selectedKioskId));
+    const filtered = selectedKioskId
+      ? slides.filter((slide) => slide.kioskIds.includes(selectedKioskId))
+      : slides;
+    return [...filtered].sort((a, b) => a.order - b.order);
   }, [selectedKioskId, slides]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  async function handleReorder(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = visibleSlides.findIndex((s) => s.id === active.id);
+    const newIndex = visibleSlides.findIndex((s) => s.id === over.id);
+    const reordered = arrayMove(visibleSlides, oldIndex, newIndex).map((slide, i) => ({ ...slide, order: i }));
+
+    setSlides((prev) => {
+      const map = new Map(reordered.map((s) => [s.id, s]));
+      return prev.map((s) => map.get(s.id) ?? s);
+    });
+
+    try {
+      await Promise.all(
+        reordered.map((slide) =>
+          authedFetch(`/api/signage/slides/${slide.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: slide.title,
+              type: slide.type,
+              durationMs: slide.durationMs,
+              order: slide.order,
+              kioskIds: slide.kioskIds,
+              isActive: slide.isActive,
+              assetPath: slide.assetPath,
+              assetKind: slide.assetKind,
+              text: slide.text,
+              background: slide.background,
+            }),
+          })
+        )
+      );
+    } catch {
+      toast({ title: 'Falha ao salvar ordem', variant: 'destructive' });
+      await loadSlides();
+    }
+  }
 
   const onlineUnitsCount = useMemo(
     () => kioskStatuses.filter(({ signageEnabled, health }) => signageEnabled && health.label !== 'Offline' && health.label !== 'Sem sinal').length,
@@ -521,6 +656,34 @@ export function SignageAdmin() {
     }
   }
 
+  function generateDeviceToken(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  }
+
+  async function handleSetToken(kioskId: string) {
+    const kiosk = kiosks.find((k) => k.id === kioskId);
+    if (!kiosk) return;
+    const token = generateDeviceToken();
+    try {
+      await updateKiosk({ ...kiosk, deviceToken: token });
+      toast({ title: 'Código gerado', description: `Código de acesso definido para ${kiosk.name}.` });
+    } catch {
+      toast({ title: 'Falha ao salvar código', variant: 'destructive' });
+    }
+  }
+
+  async function handleClearToken(kioskId: string) {
+    const kiosk = kiosks.find((k) => k.id === kioskId);
+    if (!kiosk) return;
+    try {
+      await updateKiosk({ ...kiosk, deviceToken: undefined });
+      toast({ title: 'Código removido', description: `${kiosk.name} voltou a ser de acesso livre.` });
+    } catch {
+      toast({ title: 'Falha ao remover código', variant: 'destructive' });
+    }
+  }
+
   const kioskMap = useMemo(() => new Map(kiosks.map(kiosk => [kiosk.id, kiosk])), [kiosks]);
   const kioskSlideCount = useMemo(() => {
     const counts = new Map<string, number>();
@@ -571,6 +734,10 @@ export function SignageAdmin() {
                 </CardDescription>
               </div>
               <div className="flex flex-wrap gap-3">
+                <Button variant="outline" className="border-white/30 bg-white/5 text-white hover:bg-white/10" onClick={() => router.back()}>
+                  <ArrowLeft className="h-4 w-4" />
+                  Voltar
+                </Button>
                 {canManage && (
                   <Button
                     variant="outline"
@@ -738,74 +905,37 @@ export function SignageAdmin() {
                     </AlertDescription>
                   </Alert>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Slide</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Quiosques</TableHead>
-                        <TableHead>Duração</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {visibleSlides.map((slide) => (
-                        <TableRow key={slide.id}>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div className="font-medium text-slate-900">{slide.title}</div>
-                              <div className="text-xs text-slate-500">Ordem {slide.order}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="inline-flex gap-1">
-                              {getTypeIcon(slide.type)}
-                              {slide.type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1.5">
-                      {slide.kioskIds.map((kioskId) => (
-                                <Badge key={kioskId} variant="secondary">
-                                  {kioskMap.get(kioskId)?.name ?? kioskId}
-                                </Badge>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell>{formatDuration(slide.durationMs)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {canManage ? (
-                                <Switch
-                                  checked={slide.isActive}
-                                  onCheckedChange={(checked) => void handleToggleActive(slide, checked)}
-                                />
-                              ) : (
-                                <Badge variant={slide.isActive ? 'default' : 'outline'}>
-                                  {slide.isActive ? 'Ativo' : 'Pausado'}
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              {canManage && (
-                                <>
-                                  <Button size="icon" variant="outline" onClick={() => openEditDialog(slide)}>
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                  <Button size="icon" variant="outline" onClick={() => void handleDelete(slide)}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleReorder(e)}>
+                    <SortableContext items={visibleSlides.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-8" />
+                            <TableHead>Slide</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead>Quiosques</TableHead>
+                            <TableHead>Duração</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Ações</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {visibleSlides.map((slide, i) => (
+                            <SortableSlideRow
+                              key={slide.id}
+                              slide={slide}
+                              position={i}
+                              kioskMap={kioskMap}
+                              canManage={canManage}
+                              onEdit={openEditDialog}
+                              onDelete={(s) => void handleDelete(s)}
+                              onToggleActive={(s, checked) => void handleToggleActive(s, checked)}
+                            />
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </SortableContext>
+                  </DndContext>
                 )}
               </CardContent>
             </Card>
@@ -838,8 +968,77 @@ export function SignageAdmin() {
                       Publicar unidade
                     </Button>
                   </div>
-                  <div className="mt-3 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                    TV URL: <span className="font-mono text-foreground">/tv/{selectedKiosk.id}</span>
+                  <div className="mt-3 space-y-2">
+                    <div className="rounded-lg bg-muted p-3 text-xs">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 font-medium text-foreground">
+                          <KeyRound className="h-3 w-3" />
+                          Código de acesso
+                        </span>
+                        {canManage && (
+                          <div className="flex gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6"
+                              title="Gerar novo código"
+                              onClick={() => void handleSetToken(selectedKiosk.id)}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                            </Button>
+                            {selectedKiosk.deviceToken && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-destructive hover:text-destructive"
+                                title="Remover código"
+                                onClick={() => void handleClearToken(selectedKiosk.id)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {selectedKiosk.deviceToken ? (
+                        <span className="font-mono text-lg font-bold tracking-widest text-foreground">
+                          {selectedKiosk.deviceToken}
+                        </span>
+                      ) : (
+                        <span className="italic text-muted-foreground">Sem código — acesso livre</span>
+                      )}
+                    </div>
+
+                    <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                      <div className="mb-1">TV URL</div>
+                      {(() => {
+                        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                        const token = selectedKiosk.deviceToken;
+                        const href = `/tv/${selectedKiosk.id}${token ? `?token=${token}` : ''}`;
+                        const fullUrl = `${origin}${href}`;
+                        return (
+                          <div className="flex items-start justify-between gap-2">
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 break-all font-mono text-foreground underline underline-offset-2 hover:text-primary"
+                            >
+                              {fullUrl}
+                              <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                            </a>
+                            <button
+                              type="button"
+                              title="Copiar URL"
+                              className="flex-shrink-0 rounded p-1 hover:bg-accent"
+                              onClick={() => void navigator.clipboard.writeText(fullUrl).then(() => toast({ title: 'URL copiada' }))}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
 

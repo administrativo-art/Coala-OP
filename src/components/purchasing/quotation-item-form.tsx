@@ -117,7 +117,7 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
   // Warm up offline cache whenever base products load
   useEffect(() => {
     if (baseProducts.length > 0) {
-      cacheBaseProducts(baseProducts as Array<{ id: string; name: string; unit: string; barcode?: string }>);
+      cacheBaseProducts(baseProducts as Array<{ id: string; name: string; unit: string; barcode?: string; barcodes?: string[] }>);
     }
   }, [baseProducts]);
 

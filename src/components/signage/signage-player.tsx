@@ -19,6 +19,7 @@ function getCacheKey(kioskId: string) {
 export function SignagePlayer() {
   const searchParams = useSearchParams();
   const kioskId = searchParams.get('kiosk')?.trim() ?? '';
+  const deviceToken = searchParams.get('token')?.trim() ?? '';
   const isDebug = searchParams.get('debug') === '1';
   const [published, setPublished] = useState<PublishedPlayerDocument | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -73,7 +74,8 @@ export function SignagePlayer() {
   }
 
   async function loadPublishedFromHttp(targetKioskId: string) {
-    const response = await fetchWithTimeout(`/api/signage/public/${targetKioskId}`, { cache: 'no-store' }, SIGNAGE_FETCH_TIMEOUT_MS);
+    const qs = deviceToken ? `?token=${encodeURIComponent(deviceToken)}` : '';
+    const response = await fetchWithTimeout(`/api/signage/public/${targetKioskId}${qs}`, { cache: 'no-store' }, SIGNAGE_FETCH_TIMEOUT_MS);
     if (!response.ok) {
       throw new Error('Nenhum conteúdo publicado para este quiosque.');
     }

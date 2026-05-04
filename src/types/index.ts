@@ -14,6 +14,7 @@ export type Kiosk = {
   pdvFilialId?: string;
   bizneoId?: string;
   signageEnabled?: boolean;
+  deviceToken?: string;
 };
 
 export type Location = {

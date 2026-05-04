@@ -1,5 +1,5 @@
 const DB_NAME = 'coala-purchasing';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'baseProducts';
 
 function openDb(): Promise<IDBDatabase> {
@@ -7,10 +7,12 @@ function openDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        const store = db.createObjectStore(STORE, { keyPath: 'id' });
-        store.createIndex('barcode', 'barcode', { unique: false });
+      if (db.objectStoreNames.contains(STORE)) {
+        db.deleteObjectStore(STORE);
       }
+      const store = db.createObjectStore(STORE, { keyPath: 'id' });
+      // multiEntry: true allows indexing each element of the array individually
+      store.createIndex('allBarcodes', 'allBarcodes', { unique: false, multiEntry: true });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -18,14 +20,20 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 export async function cacheBaseProducts(
-  products: Array<{ id: string; name: string; unit: string; barcode?: string; [k: string]: unknown }>,
+  products: Array<{ id: string; name: string; unit: string; barcode?: string; barcodes?: string[]; [k: string]: unknown }>,
 ): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
     const db = await openDb();
     const tx = db.transaction(STORE, 'readwrite');
     const store = tx.objectStore(STORE);
-    for (const p of products) store.put(p);
+    for (const p of products) {
+      const allBarcodes = Array.from(new Set([
+        ...(p.barcode ? [p.barcode] : []),
+        ...(p.barcodes ?? []),
+      ]));
+      store.put({ ...p, allBarcodes });
+    }
     await new Promise<void>((res, rej) => {
       tx.oncomplete = () => { db.close(); res(); };
       tx.onerror = () => { db.close(); rej(tx.error); };
@@ -42,7 +50,7 @@ export async function lookupByBarcode(
   try {
     const db = await openDb();
     const tx = db.transaction(STORE, 'readonly');
-    const index = tx.objectStore(STORE).index('barcode');
+    const index = tx.objectStore(STORE).index('allBarcodes');
     return await new Promise((resolve, reject) => {
       const req = index.get(barcode);
       req.onsuccess = () => { db.close(); resolve((req.result as { id: string; name: string; unit: string }) ?? null); };
