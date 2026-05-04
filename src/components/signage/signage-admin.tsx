@@ -790,7 +790,7 @@ export function SignageAdmin() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#0f172a]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
 
         {/* Header */}
