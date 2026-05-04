@@ -788,6 +788,17 @@ export function SignageAdmin() {
                   <RefreshCw className="h-4 w-4" />
                   Atualizar
                 </Button>
+                {process.env.NODE_ENV === 'development' && enabledKiosks.length > 1 && (
+                  <Button
+                    variant="outline"
+                    className="border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20"
+                    disabled={!canManage || publishingKioskIds.length > 0}
+                    onClick={() => void publishForKiosks(enabledKiosks.map(kiosk => kiosk.id))}
+                  >
+                    {publishingKioskIds.length > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Publicar todas [DEV]
+                  </Button>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -1078,16 +1089,6 @@ export function SignageAdmin() {
                   </div>
                 </div>
 
-                {enabledKiosks.length > 1 && (
-                  <Button
-                    className="w-full"
-                    disabled={!canManage || publishingKioskIds.length > 0}
-                    onClick={() => void publishForKiosks(enabledKiosks.map(kiosk => kiosk.id))}
-                  >
-                    {publishingKioskIds.length > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Publicar todas as unidades com signage
-                  </Button>
-                )}
               </CardContent>
             </Card>
           </div>
