@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Building2, Clock, Copy, GripVertical, ImageIcon, KeyRound, Loader2, MonitorPlay, Pencil, Plus, Save, Trash2, UploadCloud, VideoIcon, Type, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import { ArrowLeft, Building2, Clock, Copy, Eye, GripVertical, ImageIcon, KeyRound, Loader2, MonitorPlay, Pencil, Plus, Save, Trash2, UploadCloud, VideoIcon, Type, RefreshCw, ShieldAlert, X } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -162,11 +162,12 @@ type SortableSlideRowProps = {
   onEdit: (slide: SignageSlide) => void;
   onDelete: (slide: SignageSlide) => void;
   onToggleActive: (slide: SignageSlide, isActive: boolean) => void;
+  onPreview: (slide: SignageSlide) => void;
 };
 
-const SLIDE_ROW_GRID = 'grid grid-cols-[20px_minmax(0,1fr)_72px_72px_52px_64px] items-center gap-3 border-b px-4 py-2.5 last:border-b-0';
+const SLIDE_ROW_GRID = 'grid grid-cols-[20px_minmax(0,1fr)_72px_72px_52px_96px] items-center gap-3 border-b px-4 py-2.5 last:border-b-0';
 
-function SortableSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdit, onDelete, onToggleActive }: SortableSlideRowProps) {
+function SortableSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdit, onDelete, onToggleActive, onPreview }: SortableSlideRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: slide.id });
   const scheduleActive = slide.schedule ? isSlideScheduleActive(slide) : null;
 
@@ -214,6 +215,9 @@ function SortableSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onE
         )}
       </div>
       <div className="flex justify-end gap-1">
+        <Button size="icon" variant="ghost" className="h-7 w-7" title="Visualizar" onClick={() => onPreview(slide)}>
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
         {canManage && (
           <>
             <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onEdit(slide)}>
@@ -229,7 +233,7 @@ function SortableSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onE
   );
 }
 
-function StaticSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdit, onDelete, onToggleActive }: SortableSlideRowProps) {
+function StaticSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdit, onDelete, onToggleActive, onPreview }: SortableSlideRowProps) {
   return (
     <div className={`${SLIDE_ROW_GRID} opacity-60`}>
       <div />
@@ -259,6 +263,9 @@ function StaticSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdi
         )}
       </div>
       <div className="flex justify-end gap-1">
+        <Button size="icon" variant="ghost" className="h-7 w-7" title="Visualizar" onClick={() => onPreview(slide)}>
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
         {canManage && (
           <>
             <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onEdit(slide)}>
@@ -289,6 +296,7 @@ export function SignageAdmin() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [unitsDialogOpen, setUnitsDialogOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewingSlide, setPreviewingSlide] = useState<SignageSlide | null>(null);
   const [editingSlide, setEditingSlide] = useState<SignageSlide | null>(null);
   const [selectedKioskId, setSelectedKioskId] = useState<string | null>(null);
   const [form, setForm] = useState<SlideFormState>(defaultFormState);
@@ -949,7 +957,7 @@ export function SignageAdmin() {
               ) : (
                 <>
                   {/* Header row */}
-                  <div className="grid grid-cols-[20px_minmax(0,1fr)_72px_72px_52px_64px] items-center gap-3 border-b px-4 py-2">
+                  <div className="grid grid-cols-[20px_minmax(0,1fr)_72px_72px_52px_96px] items-center gap-3 border-b px-4 py-2">
                     <span />
                     <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Slide</span>
                     <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Tipo</span>
@@ -961,7 +969,7 @@ export function SignageAdmin() {
                   {/* Active slides with drag & drop */}
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleReorder(e)}>
                     <SortableContext items={activeVisibleSlides.map(s => s.id)} strategy={verticalListSortingStrategy}>
-                      {activeVisibleSlides.map((slide, i) => (
+                      {activeVisibleSlides.map((slide) => (
                         <SortableSlideRow
                           key={slide.id}
                           slide={slide}
@@ -971,6 +979,7 @@ export function SignageAdmin() {
                           onEdit={openEditDialog}
                           onDelete={(s) => void handleDelete(s)}
                           onToggleActive={(s, checked) => void handleToggleActive(s, checked)}
+                          onPreview={setPreviewingSlide}
                         />
                       ))}
                     </SortableContext>
@@ -992,6 +1001,7 @@ export function SignageAdmin() {
                           onEdit={openEditDialog}
                           onDelete={(s) => void handleDelete(s)}
                           onToggleActive={(s, checked) => void handleToggleActive(s, checked)}
+                          onPreview={setPreviewingSlide}
                         />
                       ))}
                     </>
@@ -1087,6 +1097,43 @@ export function SignageAdmin() {
             </Alert>
           </div>
         )}
+
+      {/* Quick preview modal */}
+      <Dialog open={!!previewingSlide} onOpenChange={(open) => { if (!open) setPreviewingSlide(null); }}>
+        <DialogContent className="max-w-3xl gap-0 overflow-hidden p-0 bg-slate-950 text-white">
+          <div className="flex items-center justify-between gap-3 px-5 py-4">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white/60">
+                {previewingSlide && getTypeIcon(previewingSlide.type)}
+                {previewingSlide?.type}
+              </span>
+              <DialogTitle className="text-sm font-medium text-white">{previewingSlide?.title}</DialogTitle>
+            </div>
+            <span className="text-[12px] text-white/40">{previewingSlide ? formatDuration(previewingSlide.durationMs) : ''}</span>
+          </div>
+          <DialogDescription className="sr-only">Preview do slide {previewingSlide?.title}</DialogDescription>
+          <div
+            className="mx-5 mb-5 overflow-hidden rounded-xl"
+            style={{ aspectRatio: '16/9', background: previewingSlide?.type === 'text' ? (previewingSlide.background || '#0f172a') : '#020617' }}
+          >
+            {previewingSlide?.type === 'text' ? (
+              <div className="flex h-full items-center justify-center p-10 text-center">
+                <p className="font-semibold leading-tight text-white" style={{ fontSize: 'clamp(1.5rem, 5vw, 3.5rem)' }}>
+                  {previewingSlide.text}
+                </p>
+              </div>
+            ) : previewingSlide?.assetUrl ? (
+              previewingSlide.type === 'image' ? (
+                <img src={previewingSlide.assetUrl} alt={previewingSlide.title} className="h-full w-full object-contain" />
+              ) : (
+                <video src={previewingSlide.assetUrl} className="h-full w-full object-contain" autoPlay muted loop playsInline controls />
+              )
+            ) : (
+              <div className="flex h-full items-center justify-center text-white/30 text-sm">Nenhuma mídia carregada</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-[660px]">
