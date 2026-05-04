@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { type Kiosk, type PublishedPlayerDocument, type PublishedPlayerSlide, type SignageSlide } from '@/types';
+import { type Kiosk, type PublishedPlayerDocument, type PublishedPlayerSlide, type SignageSchedule, type SignageSlide } from '@/types';
 
 export const SIGNAGE_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 export const SIGNAGE_VIDEO_MAX_BYTES = 30 * 1024 * 1024;
@@ -14,6 +14,16 @@ export const PLAYER_HEARTBEAT_STALE_MS = 2 * PLAYER_HEARTBEAT_MS + 30 * 1000;
 export const SIGNAGE_FETCH_TIMEOUT_MS = 30 * 1000;
 export const SIGNAGE_STORAGE_BUCKET = 'smart-converter-752gf.firebasestorage.app';
 
+const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+export const signageScheduleSchema = z.object({
+  startTime: z.string().regex(timeRegex).optional(),
+  endTime: z.string().regex(timeRegex).optional(),
+  startDate: z.string().regex(dateRegex).optional(),
+  endDate: z.string().regex(dateRegex).optional(),
+}).optional();
+
 export const signageSlideSchema = z.object({
   title: z.string().trim().min(2).max(120),
   type: z.enum(['image', 'video', 'text']),
@@ -25,6 +35,7 @@ export const signageSlideSchema = z.object({
   assetKind: z.enum(['image', 'video']).optional(),
   text: z.string().trim().max(1200).optional(),
   background: z.string().trim().max(32).optional(),
+  schedule: signageScheduleSchema,
 }).superRefine((value, ctx) => {
   if (value.type === 'text' && !value.text) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Slides de texto precisam de conteúdo.', path: ['text'] });
@@ -72,6 +83,35 @@ export function sanitizeKioskIds(input: string[], allowedKioskIds: string[], isA
   return isAdmin ? unique : unique.filter(kioskId => allowedKioskIds.includes(kioskId));
 }
 
+export function isSlideScheduleActive(slide: { schedule?: SignageSchedule }): boolean {
+  const s = slide.schedule;
+  if (!s) return true;
+
+  const now = new Date();
+  const currentDate = now.toISOString().slice(0, 10);
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const currentTime = `${hh}:${mm}`;
+
+  if (s.startDate && currentDate < s.startDate) return false;
+  if (s.endDate && currentDate > s.endDate) return false;
+
+  if (s.startTime && s.endTime) {
+    if (s.startTime < s.endTime) {
+      if (currentTime < s.startTime || currentTime >= s.endTime) return false;
+    } else {
+      // overnight range e.g. 22:00 → 06:00
+      if (currentTime < s.startTime && currentTime >= s.endTime) return false;
+    }
+  } else if (s.startTime && currentTime < s.startTime) {
+    return false;
+  } else if (s.endTime && currentTime >= s.endTime) {
+    return false;
+  }
+
+  return true;
+}
+
 export function buildPublishedPlayerDocument(
   kiosk: Kiosk,
   slides: SignageSlide[],
@@ -90,6 +130,7 @@ export function buildPublishedPlayerDocument(
       assetKind: slide.assetKind,
       text: slide.text,
       background: slide.background,
+      schedule: slide.schedule,
     }));
 
   return {

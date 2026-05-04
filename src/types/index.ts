@@ -603,6 +603,13 @@ export type JobFunction = {
 
 export type SignageSlideType = 'image' | 'video' | 'text';
 
+export type SignageSchedule = {
+  startTime?: string;  // "HH:MM"
+  endTime?: string;    // "HH:MM"
+  startDate?: string;  // "YYYY-MM-DD"
+  endDate?: string;    // "YYYY-MM-DD"
+};
+
 export type SignageSlide = {
   id: string;
   title: string;
@@ -616,6 +623,7 @@ export type SignageSlide = {
   assetKind?: 'image' | 'video';
   text?: string;
   background?: string;
+  schedule?: SignageSchedule;
   createdAt: string;
   updatedAt: string;
   createdBy: {
@@ -638,6 +646,7 @@ export type PublishedPlayerSlide = {
   assetKind?: 'image' | 'video';
   text?: string;
   background?: string;
+  schedule?: SignageSchedule;
 };
 
 export type PublishedPlayerDocument = {

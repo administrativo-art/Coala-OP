@@ -20,6 +20,7 @@ function normalizeSlide(id: string, data: FirebaseFirestore.DocumentData): Signa
     assetKind: data.assetKind,
     text: data.text,
     background: data.background,
+    schedule: data.schedule,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
     createdBy: data.createdBy,

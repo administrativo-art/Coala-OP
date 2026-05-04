@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Building2, Copy, ExternalLink, GripVertical, ImageIcon, KeyRound, Loader2, Maximize2, MonitorPlay, Pencil, PlayCircle, Plus, Save, Trash2, UploadCloud, VideoIcon, Type, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import { ArrowLeft, Building2, Clock, Copy, ExternalLink, GripVertical, ImageIcon, KeyRound, Loader2, Maximize2, MonitorPlay, Pencil, PlayCircle, Plus, Save, Trash2, UploadCloud, VideoIcon, Type, RefreshCw, ShieldAlert, X } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -28,6 +28,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import {
+  isSlideScheduleActive,
   PLAYER_HEARTBEAT_STALE_MS,
   SIGNAGE_FETCH_TIMEOUT_MS,
   SIGNAGE_IMAGE_TEXT_MAX_DURATION_MS,
@@ -46,6 +47,12 @@ type SlideFormState = {
   assetKind?: 'image' | 'video';
   text?: string;
   background?: string;
+  scheduleEnabled: boolean;
+  scheduleStartTime: string;
+  scheduleEndTime: string;
+  scheduleDateEnabled: boolean;
+  scheduleStartDate: string;
+  scheduleEndDate: string;
 };
 
 type DurationUnit = 'seconds' | 'minutes';
@@ -105,6 +112,12 @@ const defaultFormState: SlideFormState = {
   assetKind: 'image',
   text: '',
   background: '#0f172a',
+  scheduleEnabled: false,
+  scheduleStartTime: '08:00',
+  scheduleEndTime: '18:00',
+  scheduleDateEnabled: false,
+  scheduleStartDate: '',
+  scheduleEndDate: '',
 };
 
 function getTypeIcon(type: SignageSlideType) {
@@ -173,7 +186,14 @@ function SortableSlideRow({ slide, position, kioskMap, canManage, onEdit, onDele
       </TableCell>
       <TableCell>
         <div className="space-y-1">
-          <div className="font-medium text-slate-900">{slide.title}</div>
+          <div className="flex items-center gap-1.5 font-medium text-slate-900">
+            {slide.title}
+            {slide.schedule && (
+              <span title={isSlideScheduleActive(slide) ? 'Agendado — ativo agora' : 'Agendado — fora do horário'}>
+                <Clock className={`h-3.5 w-3.5 ${isSlideScheduleActive(slide) ? 'text-success' : 'text-muted-foreground'}`} />
+              </span>
+            )}
+          </div>
           <div className="text-xs text-slate-500">Posição {position + 1}</div>
         </div>
       </TableCell>
@@ -468,6 +488,12 @@ export function SignageAdmin() {
       assetKind: slide.assetKind,
       text: slide.text,
       background: slide.background ?? '#0f172a',
+      scheduleEnabled: !!slide.schedule,
+      scheduleStartTime: slide.schedule?.startTime ?? '08:00',
+      scheduleEndTime: slide.schedule?.endTime ?? '18:00',
+      scheduleDateEnabled: !!(slide.schedule?.startDate || slide.schedule?.endDate),
+      scheduleStartDate: slide.schedule?.startDate ?? '',
+      scheduleEndDate: slide.schedule?.endDate ?? '',
     });
     setDialogOpen(true);
   }
@@ -515,10 +541,20 @@ export function SignageAdmin() {
   async function handleSave() {
     try {
       setSaving(true);
+      const schedule = form.scheduleEnabled
+        ? Object.fromEntries(Object.entries({
+            startTime: form.scheduleStartTime || undefined,
+            endTime: form.scheduleEndTime || undefined,
+            startDate: form.scheduleDateEnabled ? form.scheduleStartDate || undefined : undefined,
+            endDate: form.scheduleDateEnabled ? form.scheduleEndDate || undefined : undefined,
+          }).filter(([, v]) => v !== undefined))
+        : undefined;
+
       const payload = {
         ...form,
         durationMs: Number(form.durationMs),
         order: Number(form.order),
+        schedule,
       };
 
       const response = await authedFetch(
@@ -1238,6 +1274,78 @@ export function SignageAdmin() {
                   )}
                 </div>
               )}
+
+              <div className="rounded-xl border p-4">
+                <label className="flex cursor-pointer items-center justify-between gap-3">
+                  <div>
+                    <div className="font-medium">Agendamento</div>
+                    <p className="text-xs text-muted-foreground">Restringe quando este slide aparece na TV.</p>
+                  </div>
+                  <Switch
+                    checked={form.scheduleEnabled}
+                    onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleEnabled: checked }))}
+                  />
+                </label>
+
+                {form.scheduleEnabled && (
+                  <div className="mt-4 space-y-3 border-t pt-4">
+                    <div className="space-y-1.5">
+                      <Label>Horário de exibição</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="time"
+                          value={form.scheduleStartTime}
+                          onChange={e => setForm(prev => ({ ...prev, scheduleStartTime: e.target.value }))}
+                          className="w-full"
+                        />
+                        <span className="flex-shrink-0 text-sm text-muted-foreground">até</span>
+                        <Input
+                          type="time"
+                          value={form.scheduleEndTime}
+                          onChange={e => setForm(prev => ({ ...prev, scheduleEndTime: e.target.value }))}
+                          className="w-full"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {form.scheduleEndTime && form.scheduleStartTime && form.scheduleEndTime < form.scheduleStartTime
+                          ? 'Intervalo noturno — ativo das ' + form.scheduleStartTime + ' até ' + form.scheduleEndTime + ' do dia seguinte.'
+                          : 'Exibido todos os dias neste intervalo.'}
+                      </p>
+                    </div>
+
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <Checkbox
+                        checked={form.scheduleDateEnabled}
+                        onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleDateEnabled: !!checked }))}
+                      />
+                      <span className="text-sm font-medium">Limitar por período</span>
+                    </label>
+
+                    {form.scheduleDateEnabled && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-xs text-muted-foreground">De</Label>
+                            <Input
+                              type="date"
+                              value={form.scheduleStartDate}
+                              onChange={e => setForm(prev => ({ ...prev, scheduleStartDate: e.target.value }))}
+                            />
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-xs text-muted-foreground">Até</Label>
+                            <Input
+                              type="date"
+                              value={form.scheduleEndDate}
+                              onChange={e => setForm(prev => ({ ...prev, scheduleEndDate: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-4">

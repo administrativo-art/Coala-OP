@@ -7,7 +7,7 @@ import { AlertTriangle, Expand, Loader2, Wifi, WifiOff } from 'lucide-react';
 
 import { fetchWithTimeout } from '@/lib/fetch-utils';
 import { signageDb } from '@/lib/firebase-signage';
-import { getPublishedTimestamp, PLAYER_DAILY_RELOAD_HOUR, PLAYER_HEARTBEAT_MS, PLAYER_WATCHDOG_MS, SIGNAGE_FETCH_TIMEOUT_MS } from '@/lib/signage';
+import { getPublishedTimestamp, isSlideScheduleActive, PLAYER_DAILY_RELOAD_HOUR, PLAYER_HEARTBEAT_MS, PLAYER_WATCHDOG_MS, SIGNAGE_FETCH_TIMEOUT_MS } from '@/lib/signage';
 import { type PublishedPlayerDocument, type PublishedPlayerSlide } from '@/types';
 
 const cacheKeyPrefix = 'coala-signage-player:';
@@ -161,12 +161,22 @@ export function SignagePlayer() {
     return () => unsubscribe();
   }, [kioskId]);
 
-  const slides = published?.slides ?? [];
-  const activeSlide = slides[activeIndex] ?? null;
+  const allSlides = published?.slides ?? [];
+  const [scheduleTick, setScheduleTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setScheduleTick((t) => t + 1), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Re-evaluated every minute and on new publications
+  const slides = allSlides.filter(isSlideScheduleActive);
+  const activeSlide = slides[activeIndex % Math.max(slides.length, 1)] ?? null;
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [published?.updatedAt, slides.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [published?.updatedAt, allSlides.length, scheduleTick]);
 
   useEffect(() => {
     if (rotationTimeoutRef.current) clearTimeout(rotationTimeoutRef.current);
