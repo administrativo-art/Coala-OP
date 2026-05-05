@@ -334,17 +334,17 @@ function getInitials(name: string): string {
   return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
 }
 
-function DailyStatusPill({ label, tone }: { label: string; tone: 'ok' | 'zero' | 'miss' | 'na' }) {
-  const toneClass = {
-    ok: 'border-emerald-500 bg-emerald-500 text-white shadow-[0_8px_20px_-14px_rgba(34,197,94,0.9)]',
-    zero: 'border-zinc-300 bg-white text-zinc-700',
-    miss: 'border-zinc-200 bg-zinc-100 text-zinc-500',
-    na: 'border-slate-200 bg-slate-100 text-slate-500',
+function DailyStatusPill({ tone }: { tone: 'ok' | 'zero' | 'miss' | 'na' }) {
+  const config = {
+    ok:   { label: '✓', cls: 'border-emerald-400 bg-emerald-500 text-white shadow-[0_6px_16px_-10px_rgba(34,197,94,0.8)]' },
+    miss: { label: '✗', cls: 'border-amber-300 bg-amber-100 text-amber-700' },
+    zero: { label: '⚠', cls: 'border-zinc-300 bg-zinc-50 text-zinc-500' },
+    na:   { label: '—', cls: 'border-slate-200 bg-slate-100 text-slate-400' },
   }[tone];
 
   return (
-    <span className={`inline-flex min-w-[62px] items-center justify-center rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${toneClass}`}>
-      {label}
+    <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full border text-[13px] font-bold ${config.cls}`}>
+      {config.label}
     </span>
   );
 }
@@ -430,13 +430,13 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
                     <span className="text-right font-bold text-zinc-900">R$ {fmt(r.value)}</span>
                     <span className="flex justify-center">
                       {!r.isActive ? (
-                        <DailyStatusPill label="N/A" tone="na" />
+                        <DailyStatusPill tone="na" />
                       ) : r.value > 0 ? (
-                        r.hit ? <DailyStatusPill label="OK" tone="ok" /> : <DailyStatusPill label="MISS" tone="miss" />
+                        r.hit ? <DailyStatusPill tone="ok" /> : <DailyStatusPill tone="miss" />
                       ) : r.isPast ? (
-                        <DailyStatusPill label="ZERO" tone="zero" />
+                        <DailyStatusPill tone="zero" />
                       ) : (
-                        <DailyStatusPill label="N/A" tone="na" />
+                        <DailyStatusPill tone="na" />
                       )}
                     </span>
                   </div>
@@ -628,14 +628,14 @@ export function EmployeeDailyModal({
                       const isPastOrToday = day <= refDate;
                       const shiftLabel = shiftsByDay.get(key);
 
-                      let statusLabel = isPastOrToday ? 'zero' : '—';
-                      let statusClass = isPastOrToday ? 'bg-zinc-100 text-zinc-400' : 'text-zinc-300';
+                      let statusLabel = isPastOrToday ? '⚠' : '—';
+                      let statusClass = isPastOrToday ? 'bg-zinc-50 border border-zinc-300 text-zinc-400' : 'text-zinc-300';
                       if (isPastOrToday && value >= dailyTarget) {
                         statusLabel = '✓';
-                        statusClass = 'bg-emerald-100 text-emerald-600 font-black';
+                        statusClass = 'bg-emerald-500 text-white shadow-[0_4px_10px_-6px_rgba(34,197,94,0.8)]';
                       } else if (isPastOrToday && value > 0) {
-                        statusLabel = '↓';
-                        statusClass = 'bg-amber-100 text-amber-600 font-black';
+                        statusLabel = '✗';
+                        statusClass = 'bg-amber-100 border border-amber-300 text-amber-700';
                       }
 
                       return (
