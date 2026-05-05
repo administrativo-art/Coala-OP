@@ -6,6 +6,12 @@ function getEnv(name: string): string {
 
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
+// Extrai horários de início/fim do label do turno, ex: "Manhã (10:00–16:15)" → {start:"10:00",end:"16:15"}
+function extractShiftTimes(label: string): { start: string; end: string } | null {
+  const match = label.match(/\((\d{2}:\d{2})[–\-](\d{2}:\d{2})\)/u);
+  return match ? { start: match[1], end: match[2] } : null;
+}
+
 function extractPdvTime(dateStr: string): string {
   if (!dateStr) return '00:00';
   const match = dateStr.trim().match(/[T ](\d{2}):(\d{2})/);
@@ -243,24 +249,103 @@ export async function syncGoalsForDay(
       .where('periodId', '==', periodDoc.id)
       .get();
 
+    // Revenue por employeeId (evita re-lookup do opId no loop interno)
+    const revenueByEmployeeId: Record<string, number> = {};
+    for (const [opId, userId] of Object.entries(operatorIdToUserId)) {
+      revenueByEmployeeId[userId] = revenueByOperator[opId] ?? 0;
+    }
+
+    // Agrupar goals por employeeId para detectar funcionários com múltiplos turnos
+    type EgEntry = { doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>; eg: Record<string, any> };
+    const goalsByEmployee = new Map<string, EgEntry[]>();
     for (const egDoc of empGoalsSnap.docs) {
-      const eg = egDoc.data();
-      const opId = Object.entries(operatorIdToUserId)
-        .find(([, uid]) => uid === eg.employeeId)?.[0];
-      if (!opId) continue;
+      const eg = egDoc.data() as Record<string, any>;
+      if (!revenueByEmployeeId.hasOwnProperty(eg.employeeId)) continue;
+      const list = goalsByEmployee.get(eg.employeeId) ?? [];
+      list.push({ doc: egDoc, eg });
+      goalsByEmployee.set(eg.employeeId, list);
+    }
 
-      const empDailyRevenue = revenueByOperator[opId] ?? 0;
+    // Para funcionários com múltiplos goals de turno, determinar qual turno foi trabalhado em dateStr
+    const workedShiftByEmployee: Record<string, string> = {};
+    const multiShiftEmployeeIds = [...goalsByEmployee.entries()]
+      .filter(([, list]) => list.length > 1 && list.some(e => e.eg.shiftId))
+      .map(([uid]) => uid);
 
-      // Accumulate: add today's revenue to existing currentValue minus any previous value for this date
-      const prevDayValue = (eg.dailyProgress ?? {})[dateStr] ?? 0;
-      const updatedEgProgress = { ...(eg.dailyProgress ?? {}), [dateStr]: empDailyRevenue };
-      const newEgCurrentValue = (eg.currentValue ?? 0) - prevDayValue + empDailyRevenue;
+    if (multiShiftEmployeeIds.length > 0 && Array.isArray(period.shifts) && period.shifts.length > 0) {
+      // Mapa de "HH:MM-HH:MM" → shiftId extraído dos labels do período
+      const timeKeyToShiftId: Record<string, string> = {};
+      for (const sh of period.shifts as Array<{ id: string; label: string }>) {
+        const times = extractShiftTimes(sh.label ?? '');
+        if (times) timeKeyToShiftId[`${times.start}-${times.end}`] = sh.id;
+      }
 
-      await db.collection('employeeGoals').doc(egDoc.id).update({
-        currentValue: newEgCurrentValue,
-        dailyProgress: updatedEgProgress,
-        updatedAt: new Date(),
-      });
+      if (Object.keys(timeKeyToShiftId).length > 0) {
+        const [yearStr, monthStr] = dateStr.split('-');
+        try {
+          const schedSnap = await db.collection('dp_schedules')
+            .where('year', '==', Number(yearStr))
+            .where('month', '==', Number(monthStr))
+            .get();
+
+          for (const schedDoc of schedSnap.docs) {
+            for (let i = 0; i < multiShiftEmployeeIds.length; i += 30) {
+              const chunk = multiShiftEmployeeIds.slice(i, i + 30);
+              try {
+                const shiftsSnap = await db.collection('dp_schedules').doc(schedDoc.id)
+                  .collection('shifts')
+                  .where('userId', 'in', chunk)
+                  .get();
+                for (const sd of shiftsSnap.docs) {
+                  const s = sd.data() as Record<string, any>;
+                  if (s.date !== dateStr || s.type !== 'work' || !s.startTime || !s.endTime || !s.userId) continue;
+                  const tKey = `${s.startTime}-${s.endTime}`;
+                  const shiftId = timeKeyToShiftId[tKey];
+                  if (shiftId) workedShiftByEmployee[s.userId as string] = shiftId;
+                }
+              } catch (e) {
+                console.warn(`[Goals Sync] Falha ao carregar shifts de ${schedDoc.id}`, e);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[Goals Sync] Falha ao carregar dp_schedules', e);
+        }
+      }
+
+      // Log de funcionários sem dados de escala (fallback: atualiza todos os goals)
+      const semEscala = multiShiftEmployeeIds.filter(uid => !workedShiftByEmployee[uid]);
+      if (semEscala.length > 0) {
+        console.warn(`[Goals Sync] ${kioskId} ${dateStr}: ${semEscala.length} funcionário(s) com múltiplos turnos sem dados de escala — revenue será atribuído a todos os goals (possível duplicação).`, semEscala);
+      }
+    }
+
+    // Atualizar cada goal com o revenue correto
+    for (const [employeeId, goals] of goalsByEmployee) {
+      const empDailyRevenue = revenueByEmployeeId[employeeId] ?? 0;
+      const isMultiShift = goals.length > 1 && goals.some(e => e.eg.shiftId);
+      const workedShiftId = workedShiftByEmployee[employeeId] ?? null;
+
+      for (const { doc: egDoc, eg } of goals) {
+        // Se funcionário tem múltiplos goals de turno e sabemos qual turno trabalhou:
+        // atribui revenue apenas ao goal do turno correto; os demais ficam com 0.
+        let revenueForGoal = empDailyRevenue;
+        if (isMultiShift && eg.shiftId && workedShiftId !== null) {
+          revenueForGoal = eg.shiftId === workedShiftId ? empDailyRevenue : 0;
+        }
+
+        const prevDayValue = (eg.dailyProgress ?? {})[dateStr] ?? 0;
+        if (prevDayValue === revenueForGoal) continue;
+
+        const updatedEgProgress = { ...(eg.dailyProgress ?? {}), [dateStr]: revenueForGoal };
+        const newEgCurrentValue = (eg.currentValue ?? 0) - prevDayValue + revenueForGoal;
+
+        await db.collection('employeeGoals').doc(egDoc.id).update({
+          currentValue: newEgCurrentValue,
+          dailyProgress: updatedEgProgress,
+          updatedAt: new Date(),
+        });
+      }
     }
 
     console.log(`[Goals Sync] ${kioskId} ${dateStr}: período ${periodDoc.id} atualizado. Faturamento: R$ ${dailyRevenue.toFixed(2)}`);
