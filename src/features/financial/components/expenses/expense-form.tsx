@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { addMonths, addWeeks, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { addDoc, getDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarIcon, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Plus, PlusCircle, Trash2, UserRound } from "lucide-react";
+import { Building2, CalendarIcon, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, CreditCard, FileText, Loader2, Plus, PlusCircle, Trash2, UserRound } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useEntities } from "@/hooks/use-entities";
@@ -35,7 +35,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +47,17 @@ type InstallmentPreview = {
 type RecurringPreview = InstallmentPreview & {
   competenceDate: Date;
 };
+
+const ACCOUNT_GROUP_COLORS = [
+  "#22c55e",
+  "#3b82f6",
+  "#8b5cf6",
+  "#eab308",
+  "#ef4444",
+  "#ec4899",
+  "#14b8a6",
+  "#f97316",
+];
 
 function toOptionalDate(value: any): Date | undefined {
   if (!value) return undefined;
@@ -90,6 +100,7 @@ function buildRecurringOccurrences(
 function buildAccountTree(items: any[], parentId: string | null = null): any[] {
   return items
     .filter((item) => item.parentId === parentId)
+    .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
     .map((item) => ({ ...item, children: buildAccountTree(items, item.id) }));
 }
 
@@ -101,6 +112,164 @@ function flattenAccountTree(nodes: any[], level = 0, prefix = ""): any[] {
       ...flattenAccountTree(node.children, level + 1, order),
     ];
   });
+}
+
+function collectAccountParentPath(items: any[], targetId: string) {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const path: string[] = [];
+  let current = byId.get(targetId);
+
+  while (current?.parentId) {
+    path.unshift(current.parentId);
+    current = byId.get(current.parentId);
+  }
+
+  return path;
+}
+
+function filterAccountTree(nodes: any[], query: string): any[] {
+  if (!query.trim()) return nodes;
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return nodes.flatMap((node) => {
+    const children = filterAccountTree(node.children ?? [], normalizedQuery);
+    const matchesSelf = [node.order, node.name, node.description]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(normalizedQuery));
+
+    if (!matchesSelf && children.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        ...node,
+        children: matchesSelf ? node.children ?? [] : children,
+      },
+    ];
+  });
+}
+
+function AccountPlanTreeRow({
+  node,
+  depth,
+  topLevelIndex,
+  expanded,
+  selectedId,
+  searching,
+  onToggle,
+  onSelect,
+}: {
+  node: any;
+  depth: number;
+  topLevelIndex: number;
+  expanded: Set<string>;
+  selectedId: string;
+  searching: boolean;
+  onToggle: (id: string) => void;
+  onSelect: (id: string) => void;
+}) {
+  const hasChildren = (node.children?.length ?? 0) > 0;
+  const isExpanded = searching || expanded.has(node.id);
+  const isSelected = selectedId === node.id;
+  const color = ACCOUNT_GROUP_COLORS[topLevelIndex % ACCOUNT_GROUP_COLORS.length];
+
+  return (
+    <div>
+      <div
+        className={cn(
+          "flex items-center gap-2 rounded-md border border-transparent px-3 py-2 text-sm transition-colors hover:bg-muted/40",
+          isSelected && "border-border bg-muted/30"
+        )}
+      >
+        {depth === 0 ? (
+          <>
+            <button
+              type="button"
+              className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
+              onClick={() => hasChildren && onToggle(node.id)}
+            >
+              {hasChildren ? (
+                isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
+              ) : (
+                <span className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+          </>
+        ) : (
+          <div className="relative h-5 shrink-0" style={{ width: `${18 + (depth - 1) * 18}px` }}>
+            <span
+              className="absolute border-b border-l border-border/70"
+              style={{
+                left: `${8 + (depth - 1) * 18}px`,
+                top: 0,
+                height: 14,
+                width: 12,
+                borderBottomLeftRadius: 6,
+              }}
+            />
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          onClick={() => onSelect(node.id)}
+        >
+          <span className={cn("shrink-0 font-mono text-xs", depth === 0 ? "text-foreground/80" : "text-muted-foreground")}>
+            {node.order}
+          </span>
+          <span className={cn("truncate", depth === 0 ? "font-semibold" : "font-medium")}>{node.name}</span>
+        </button>
+
+        {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+      </div>
+
+      {hasChildren && isExpanded && (
+        <div className="mt-0.5 space-y-0.5">
+          {node.children.map((child: any) => (
+            <AccountPlanTreeRow
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              topLevelIndex={topLevelIndex}
+              expanded={expanded}
+              selectedId={selectedId}
+              searching={searching}
+              onToggle={onToggle}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionHeading({
+  icon,
+  iconClassName,
+  title,
+  description,
+}: {
+  icon: ReactNode;
+  iconClassName: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 border-b pb-4">
+      <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", iconClassName)}>
+        {icon}
+      </div>
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  );
 }
 
 async function parseFinancialApiError(response: Response) {
@@ -363,7 +532,10 @@ export function ExpenseForm() {
   const [isLoadingExpense, setIsLoadingExpense] = useState(false);
   const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
+  const [accountPlanSearch, setAccountPlanSearch] = useState("");
+  const [expandedAccountPlans, setExpandedAccountPlans] = useState<Set<string>>(new Set());
   const [supplierOpen, setSupplierOpen] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const { data: accountPlans, loading: accountPlansLoading } = useFinancialCollection<any>(
@@ -378,6 +550,7 @@ export function ExpenseForm() {
     if (!accountPlans) return [];
     return flattenAccountTree(buildAccountTree(accountPlans));
   }, [accountPlans]);
+  const accountTree = useMemo(() => buildAccountTree(accountPlans || []), [accountPlans]);
 
   const form = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseFormSchema),
@@ -417,6 +590,39 @@ export function ExpenseForm() {
     () => flattenedAccounts.find((account) => account.id === accountPlanValue),
     [accountPlanValue, flattenedAccounts]
   );
+  const filteredAccountTree = useMemo(
+    () => filterAccountTree(accountTree, accountPlanSearch),
+    [accountPlanSearch, accountTree]
+  );
+
+  useEffect(() => {
+    if (!accountPlanOpen) {
+      setAccountPlanSearch("");
+      return;
+    }
+
+    if (!accountPlanValue || !accountPlans?.length) return;
+
+    setExpandedAccountPlans(new Set(collectAccountParentPath(accountPlans, accountPlanValue)));
+  }, [accountPlanOpen, accountPlanValue, accountPlans]);
+
+  const filteredEntities = useMemo(() => {
+    const normalizedSearch = supplierSearch.trim().toLowerCase();
+    if (!normalizedSearch) return entities;
+    return entities.filter((entity) => {
+      const label = entity.fantasyName || entity.name;
+      return label.toLowerCase().includes(normalizedSearch);
+    });
+  }, [entities, supplierSearch]);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = supplierSearch.trim().toLowerCase();
+    if (!normalizedSearch) return users || [];
+    return (users || []).filter((user) => {
+      const label = user.username || user.email;
+      return label.toLowerCase().includes(normalizedSearch);
+    });
+  }, [supplierSearch, users]);
 
   const {
     fields: apportionmentFields,
@@ -606,6 +812,10 @@ export function ExpenseForm() {
         : [],
     [paymentMethod, recurrenceEndDate, recurrenceFirstDueDate, totalValue]
   );
+  const recurringPreviewTotal = useMemo(
+    () => recurringPreview.reduce((sum, occurrence) => sum + (occurrence.value || 0), 0),
+    [recurringPreview]
+  );
 
   const rateioTotal = useMemo(
     () => (apportionments || []).reduce((sum, item) => sum + (Number(item.percentage) || 0), 0),
@@ -623,6 +833,10 @@ export function ExpenseForm() {
         value: installment.value || 0,
       }));
   }, [equalInstallments, installmentType, paymentMethod, variedInstallments]);
+  const installmentsPreviewTotal = useMemo(
+    () => (installmentsSummary || []).reduce((sum, installment) => sum + (installment.value || 0), 0),
+    [installmentsSummary]
+  );
 
   function buildInstallmentsFromValues(values: ExpenseFormValues) {
     if (values.paymentMethod === "installments" && values.installmentType === "equal") {
@@ -861,13 +1075,16 @@ export function ExpenseForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-6 xl:grid-cols-[1.5fr,0.9fr]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Classificação</CardTitle>
-              <CardDescription>Defina conta, descrição e valor base da despesa.</CardDescription>
-            </CardHeader>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="mx-auto max-w-5xl space-y-4">
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader className="pb-4">
+            <SectionHeading
+              icon={<FileText className="h-4 w-4 text-violet-600" />}
+              iconClassName="bg-violet-100"
+              title="Classificação"
+              description="Plano de contas, descrição e valor base"
+            />
+          </CardHeader>
             <CardContent className="space-y-4">
               <FormField
                 control={form.control}
@@ -895,47 +1112,47 @@ export function ExpenseForm() {
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[420px] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Buscar plano de contas..." />
-                          <CommandList>
-                            <CommandEmpty>Nenhum plano encontrado.</CommandEmpty>
-                            <CommandGroup>
-                              {flattenedAccounts.map((account) => (
-                                <CommandItem
-                                  key={account.id}
-                                  value={`${account.order} ${account.name} ${account.description ?? ""}`}
-                                  onSelect={() => {
-                                    field.onChange(account.id);
-                                    setAccountPlanOpen(false);
-                                  }}
-                                  className="items-start"
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 mt-0.5 h-4 w-4 shrink-0",
-                                      field.value === account.id ? "opacity-100" : "opacity-0"
-                                    )}
+                      <PopoverContent className="w-[440px] p-2" align="start">
+                        <div className="space-y-2">
+                          <Input
+                            placeholder="Buscar plano de contas..."
+                            value={accountPlanSearch}
+                            onChange={(event) => setAccountPlanSearch(event.target.value)}
+                          />
+                          <ScrollArea className="h-80">
+                            <div className="space-y-1 pr-2">
+                              {filteredAccountTree.length === 0 ? (
+                                <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                                  Nenhum plano encontrado.
+                                </div>
+                              ) : (
+                                filteredAccountTree.map((account, index) => (
+                                  <AccountPlanTreeRow
+                                    key={account.id}
+                                    node={account}
+                                    depth={0}
+                                    topLevelIndex={index}
+                                    expanded={expandedAccountPlans}
+                                    selectedId={field.value}
+                                    searching={accountPlanSearch.trim().length > 0}
+                                    onToggle={(id) =>
+                                      setExpandedAccountPlans((current) => {
+                                        const next = new Set(current);
+                                        if (next.has(id)) next.delete(id);
+                                        else next.add(id);
+                                        return next;
+                                      })
+                                    }
+                                    onSelect={(id) => {
+                                      field.onChange(id);
+                                      setAccountPlanOpen(false);
+                                    }}
                                   />
-                                  <div className="min-w-0">
-                                    <div className="flex min-w-0 items-baseline gap-2">
-                                      <span className="shrink-0 text-[11px] font-mono text-muted-foreground">
-                                        {account.order}
-                                      </span>
-                                      <span className="truncate">
-                                        {"— ".repeat(account.level)}
-                                        {account.name}
-                                      </span>
-                                    </div>
-                                    {account.description ? (
-                                      <p className="truncate text-xs text-muted-foreground">{account.description}</p>
-                                    ) : null}
-                                  </div>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
+                                ))
+                              )}
+                            </div>
+                          </ScrollArea>
+                        </div>
                       </PopoverContent>
                     </Popover>
                     <FormMessage />
@@ -993,45 +1210,49 @@ export function ExpenseForm() {
                 />
               </div>
             </CardContent>
-          </Card>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Pagamento</CardTitle>
-              <CardDescription>Escolha se a despesa será paga em parcela única, parcelada ou recorrente.</CardDescription>
-            </CardHeader>
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader className="pb-4">
+            <SectionHeading
+              icon={<CreditCard className="h-4 w-4 text-sky-600" />}
+              iconClassName="bg-sky-100"
+              title="Pagamento"
+              description="Forma, data e parcelas"
+            />
+          </CardHeader>
             <CardContent className="space-y-4">
               <FormField
                 control={form.control}
                 name="paymentMethod"
                 render={({ field }) => (
                   <FormItem className="space-y-3">
-                    <FormLabel>Forma de pagamento</FormLabel>
+                    <FormLabel className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Forma de pagamento</FormLabel>
                     <FormControl>
                       <RadioGroup
                         value={field.value}
                         onValueChange={field.onChange}
                         className="grid gap-3 md:grid-cols-3"
                       >
-                        <label className="flex cursor-pointer items-center gap-3 rounded-lg border p-4">
+                        <label className={cn("flex cursor-pointer flex-col items-center rounded-lg border px-4 py-3 text-center", field.value === "single" && "border-primary bg-primary/5")}>
                           <RadioGroupItem value="single" />
                           <div>
                             <p className="font-medium">Pagamento único</p>
-                            <p className="text-sm text-muted-foreground">Uma parcela com vencimento único.</p>
+                            <p className="text-xs text-muted-foreground">Uma parcela</p>
                           </div>
                         </label>
-                        <label className="flex cursor-pointer items-center gap-3 rounded-lg border p-4">
+                        <label className={cn("flex cursor-pointer flex-col items-center rounded-lg border px-4 py-3 text-center", field.value === "installments" && "border-primary bg-primary/5")}>
                           <RadioGroupItem value="installments" />
                           <div>
                             <p className="font-medium">Parcelado</p>
-                            <p className="text-sm text-muted-foreground">Distribua em parcelas iguais ou variáveis.</p>
+                            <p className="text-xs text-muted-foreground">Parcelas iguais ou variáveis</p>
                           </div>
                         </label>
-                        <label className="flex cursor-pointer items-center gap-3 rounded-lg border p-4">
+                        <label className={cn("flex cursor-pointer flex-col items-center rounded-lg border px-4 py-3 text-center", field.value === "recurring" && "border-primary bg-primary/5")}>
                           <RadioGroupItem value="recurring" />
                           <div>
                             <p className="font-medium">Recorrente</p>
-                            <p className="text-sm text-muted-foreground">Gera cobranças mensais do mesmo valor até a data final.</p>
+                            <p className="text-xs text-muted-foreground">Cobranças mensais</p>
                           </div>
                         </label>
                       </RadioGroup>
@@ -1189,39 +1410,131 @@ export function ExpenseForm() {
                       </div>
                     </div>
                   )}
+
+                  {installmentsSummary && installmentsSummary.length > 0 && (
+                    <div className="rounded-lg border">
+                      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Parcelas geradas</p>
+                          <p className="text-sm text-muted-foreground">
+                            {installmentsSummary.length} parcela(s) serão criadas a partir do preenchimento atual.
+                          </p>
+                        </div>
+                        <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] font-medium text-primary">
+                          {installmentsSummary.length} parcelas · {formatCurrency(installmentsPreviewTotal)}
+                        </Badge>
+                      </div>
+                      <ScrollArea className="h-72">
+                        <div className="grid gap-2 p-4 md:grid-cols-2">
+                          {installmentsSummary.map((installment) => (
+                            <div
+                              key={installment.number}
+                              className="flex items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5"
+                            >
+                              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                                {installment.number}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Parcela</p>
+                                    <p className="text-sm font-medium">{installment.number}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Vencimento</p>
+                                    <p className="text-sm font-medium">{format(installment.dueDate, "dd/MM/yyyy")}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-sm font-semibold text-primary">{formatCurrency(installment.value)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
                 </>
               ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="recurrenceFirstDueDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <DatePickerField label="Primeira cobrança" value={field.value} onChange={field.onChange} />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="recurrenceEndDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <DatePickerField label="Cobrar até" value={field.value} onChange={field.onChange} />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="recurrenceFirstDueDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <DatePickerField label="Primeira cobrança" value={field.value} onChange={field.onChange} />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="recurrenceEndDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <DatePickerField label="Cobrar até" value={field.value} onChange={field.onChange} />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {recurringPreview.length > 0 && (
+                    <div className="rounded-lg border">
+                      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Cobranças geradas</p>
+                          <p className="text-sm text-muted-foreground">
+                            {recurringPreview.length} lançamento(s) serão criados, um por mês, com a competência correspondente.
+                          </p>
+                        </div>
+                        <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] font-medium text-primary">
+                          {recurringPreview.length} lançamentos · {formatCurrency(recurringPreviewTotal)}
+                        </Badge>
+                      </div>
+                      <ScrollArea className="h-72">
+                        <div className="grid gap-2 p-4 md:grid-cols-2">
+                          {recurringPreview.map((occurrence) => (
+                            <div
+                              key={occurrence.number}
+                              className="flex items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5"
+                            >
+                              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                                {occurrence.number}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Competência</p>
+                                    <p className="text-sm font-medium">{format(occurrence.competenceDate, "MM/yyyy")}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Vencimento</p>
+                                    <p className="text-sm font-medium">{format(occurrence.dueDate, "dd/MM/yyyy")}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-sm font-semibold text-primary">{formatCurrency(occurrence.value)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
-          </Card>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Resultado e complemento</CardTitle>
-              <CardDescription>Defina unidade, fornecedor e observações.</CardDescription>
-            </CardHeader>
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader className="pb-4">
+            <SectionHeading
+              icon={<Building2 className="h-4 w-4 text-emerald-600" />}
+              iconClassName="bg-emerald-100"
+              title="Resultado e complemento"
+              description="Unidade, fornecedor e observações"
+            />
+          </CardHeader>
             <CardContent className="space-y-4">
               <FormField
                 control={form.control}
@@ -1357,64 +1670,91 @@ export function ExpenseForm() {
                           </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-[340px] p-0" align="start">
-                          <Command>
-                            <CommandInput
+                          <div className="space-y-2 p-2">
+                            <Input
                               placeholder="Buscar ou digitar..."
-                              value={field.value ?? ""}
-                              onValueChange={(v) => field.onChange(v)}
+                              value={supplierSearch || field.value || ""}
+                              onChange={(event) => {
+                                const nextValue = event.target.value;
+                                setSupplierSearch(nextValue);
+                                field.onChange(nextValue);
+                              }}
                             />
-                            <CommandList>
-                              <CommandEmpty>
-                                <span className="text-sm text-muted-foreground">
-                                  Nenhum cadastro encontrado. Use o texto digitado ou adicione via +.
-                                </span>
-                              </CommandEmpty>
-                              {entities.length > 0 && (
-                                <CommandGroup heading="Entidades">
-                                  {entities.map((entity) => {
-                                    const label = entity.fantasyName || entity.name;
-                                    return (
-                                      <CommandItem
-                                        key={entity.id}
-                                        value={label}
-                                        onSelect={() => {
-                                          field.onChange(label);
-                                          setSupplierOpen(false);
-                                        }}
-                                      >
-                                        <Check className={cn("mr-2 h-4 w-4", field.value === label ? "opacity-100" : "opacity-0")} />
-                                        {label}
-                                      </CommandItem>
-                                    );
-                                  })}
-                                </CommandGroup>
-                              )}
-                              {users && users.length > 0 && (
-                                <CommandGroup heading="Usuários">
-                                  {users.map((user) => {
-                                    const label = user.username || user.email;
-                                    return (
-                                      <CommandItem
-                                        key={user.id}
-                                        value={label}
-                                        onSelect={() => {
-                                          field.onChange(label);
-                                          setSupplierOpen(false);
-                                        }}
-                                      >
-                                        <Check className={cn("mr-2 h-4 w-4", field.value === label ? "opacity-100" : "opacity-0")} />
-                                        {label}
-                                        <Badge variant="secondary" className="ml-auto text-[10px] py-0">
-                                          <UserRound className="mr-1 h-2.5 w-2.5" />
-                                          Usuário
-                                        </Badge>
-                                      </CommandItem>
-                                    );
-                                  })}
-                                </CommandGroup>
-                              )}
-                            </CommandList>
-                          </Command>
+                            <ScrollArea className="h-64">
+                              <div className="space-y-3 pr-2">
+                                {filteredEntities.length === 0 && filteredUsers.length === 0 ? (
+                                  <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                                    Nenhum cadastro encontrado. Use o texto digitado ou adicione via +.
+                                  </div>
+                                ) : (
+                                  <>
+                                    {filteredEntities.length > 0 && (
+                                      <div className="space-y-1">
+                                        <p className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                          Entidades
+                                        </p>
+                                        {filteredEntities.map((entity) => {
+                                          const label = entity.fantasyName || entity.name;
+                                          const isSelected = field.value === label;
+                                          return (
+                                            <button
+                                              key={entity.id}
+                                              type="button"
+                                              className={cn(
+                                                "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left text-sm transition-colors hover:bg-muted/40",
+                                                isSelected && "border-border bg-muted/30"
+                                              )}
+                                              onClick={() => {
+                                                field.onChange(label);
+                                                setSupplierSearch(label);
+                                                setSupplierOpen(false);
+                                              }}
+                                            >
+                                              <span className="truncate">{label}</span>
+                                              {isSelected && <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                    {filteredUsers.length > 0 && (
+                                      <div className="space-y-1">
+                                        <p className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                          Usuários
+                                        </p>
+                                        {filteredUsers.map((user) => {
+                                          const label = user.username || user.email;
+                                          const isSelected = field.value === label;
+                                          return (
+                                            <button
+                                              key={user.id}
+                                              type="button"
+                                              className={cn(
+                                                "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left text-sm transition-colors hover:bg-muted/40",
+                                                isSelected && "border-border bg-muted/30"
+                                              )}
+                                              onClick={() => {
+                                                field.onChange(label);
+                                                setSupplierSearch(label);
+                                                setSupplierOpen(false);
+                                              }}
+                                            >
+                                              <span className="truncate">{label}</span>
+                                              <Badge variant="secondary" className="ml-auto text-[10px] py-0">
+                                                <UserRound className="mr-1 h-2.5 w-2.5" />
+                                                Usuário
+                                              </Badge>
+                                              {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </ScrollArea>
+                          </div>
                         </PopoverContent>
                       </Popover>
                       <Button
@@ -1451,118 +1791,52 @@ export function ExpenseForm() {
                 )}
               />
             </CardContent>
-          </Card>
+        </Card>
+
+        <div className="rounded-2xl border border-border/70 bg-background px-5 py-4 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center">
+            <div className="flex items-center gap-5">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Total</p>
+                <p className="text-sm font-semibold text-primary">{formatCurrency(totalValue || 0)}</p>
+              </div>
+              <div className="h-8 w-px bg-border" />
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Forma</p>
+                <p className="text-sm font-medium">
+                  {paymentMethod === "single"
+                    ? "Pagamento único"
+                    : paymentMethod === "installments"
+                    ? "Parcelado"
+                    : "Recorrente"}
+                </p>
+              </div>
+              <div className="h-8 w-px bg-border" />
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Rateio</p>
+                <p className="text-sm font-medium">{isApportioned ? `${rateioTotal.toFixed(2)}%` : "Centro único"}</p>
+              </div>
+            </div>
+            <div className="ml-auto flex w-full justify-end text-right">
+              <p className="text-sm font-extrabold uppercase tracking-[0.04em] text-red-600">Confira antes de salvar</p>
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-6">
-          <Card className="sticky top-24">
-            <CardHeader>
-              <CardTitle>Resumo financeiro</CardTitle>
-              <CardDescription>Confira a estrutura antes de salvar.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1 text-sm">
-                <div className="flex items-center justify-between">
-                  <span>Valor total</span>
-                  <span className="font-semibold">{formatCurrency(totalValue || 0)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Forma</span>
-                  <span>
-                    {paymentMethod === "single"
-                      ? "Pagamento único"
-                      : paymentMethod === "installments"
-                      ? "Parcelado"
-                      : "Recorrente"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Rateio</span>
-                  <span>{isApportioned ? `${rateioTotal.toFixed(2)}%` : "Centro único"}</span>
-                </div>
-              </div>
-
-              {installmentsSummary && installmentsSummary.length > 0 && (
-                <div className="space-y-3">
-                  <div>
-                    <p className="font-medium">Parcelas previstas</p>
-                    <p className="text-sm text-muted-foreground">
-                      {installmentsSummary.length} parcela(s) geradas a partir do preenchimento atual.
-                    </p>
-                  </div>
-                  <ScrollArea className="h-56 rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Parcela</TableHead>
-                          <TableHead>Vencimento</TableHead>
-                          <TableHead className="text-right">Valor</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {installmentsSummary.map((installment) => (
-                          <TableRow key={installment.number}>
-                            <TableCell>{installment.number}</TableCell>
-                            <TableCell>{format(installment.dueDate, "dd/MM/yyyy")}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(installment.value)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
-                </div>
-              )}
-
-              {recurringPreview.length > 0 && (
-                <div className="space-y-3">
-                  <div>
-                    <p className="font-medium">Cobranças recorrentes</p>
-                    <p className="text-sm text-muted-foreground">
-                      {recurringPreview.length} despesa(s) mensal(is) serão criadas a partir do preenchimento atual.
-                    </p>
-                  </div>
-                  <ScrollArea className="h-56 rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>#</TableHead>
-                          <TableHead>Competência</TableHead>
-                          <TableHead>Vencimento</TableHead>
-                          <TableHead className="text-right">Valor</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {recurringPreview.map((occurrence) => (
-                          <TableRow key={occurrence.number}>
-                            <TableCell>{occurrence.number}</TableCell>
-                            <TableCell>{format(occurrence.competenceDate, "MM/yyyy")}</TableCell>
-                            <TableCell>{format(occurrence.dueDate, "dd/MM/yyyy")}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(occurrence.value)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" className="flex-1" onClick={() => router.push(FINANCIAL_ROUTES.expenses)}>
-                  Cancelar
-                </Button>
-                {(!editId || loadedStatus === "draft") && (
-                  <Button type="button" variant="secondary" className="flex-1" disabled={isSaving} onClick={() => void handleSaveDraft()}>
-                    {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Salvar rascunho
-                  </Button>
-                )}
-                <Button type="submit" className="flex-1" disabled={isSaving}>
-                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {loadedStatus === "draft" ? "Concluir lançamento" : editId ? "Atualizar" : "Salvar"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        <div className={cn("grid gap-2", (!editId || loadedStatus === "draft") ? "md:grid-cols-3" : "md:grid-cols-2")}>
+          <Button type="button" variant="outline" className="h-11" onClick={() => router.push(FINANCIAL_ROUTES.expenses)}>
+            Cancelar
+          </Button>
+          {(!editId || loadedStatus === "draft") && (
+            <Button type="button" variant="secondary" className="h-11" disabled={isSaving} onClick={() => void handleSaveDraft()}>
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar rascunho
+            </Button>
+          )}
+          <Button type="submit" className="h-11" disabled={isSaving}>
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {loadedStatus === "draft" ? "Concluir lançamento" : editId ? "Atualizar" : "Salvar"}
+          </Button>
         </div>
       </form>
     </Form>
