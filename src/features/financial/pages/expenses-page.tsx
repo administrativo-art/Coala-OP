@@ -49,6 +49,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
+  draft: "Rascunho",
   pending_audit: "Pendente auditoria",
   paid: "Pago",
   cancelled: "Cancelado",
@@ -58,6 +59,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
+  draft: "border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-950/30 dark:text-slate-400 dark:border-slate-800",
   pending_audit: "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800",
   paid: "border-green-400 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800",
   cancelled: "border-zinc-300 bg-zinc-50 text-zinc-500 dark:bg-zinc-900/50 dark:text-zinc-400 dark:border-zinc-800",
@@ -281,6 +283,7 @@ export function ExpensesPage() {
                 <SelectItem value="all">Todos os status</SelectItem>
                 <SelectItem value="pending">Em aberto</SelectItem>
                 <SelectItem value="pending_audit">Compras pendentes de auditoria</SelectItem>
+                <SelectItem value="draft">Rascunhos</SelectItem>
                 <SelectItem value="overdue">Vencidos</SelectItem>
                 <SelectItem value="paid">Pagos</SelectItem>
                 <SelectItem value="cancelled">Cancelados</SelectItem>
@@ -391,7 +394,9 @@ export function ExpensesPage() {
                               )}
                               {permissions.financial?.expenses?.edit && (
                                 <DropdownMenuItem asChild>
-                                  <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>Editar</Link>
+                                  <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>
+                                    {expense.status === "draft" ? "Continuar rascunho" : "Editar"}
+                                  </Link>
                                 </DropdownMenuItem>
                               )}
                               {permissions.financial?.expenses?.delete && expense.originModule !== "purchasing" && (

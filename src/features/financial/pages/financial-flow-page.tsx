@@ -63,6 +63,7 @@ export function FinancialFlowPage() {
     const end = endOfMonth(new Date());
 
     const inPeriod = expenses.filter((expense) => {
+      if (expense.status === "draft") return false;
       const date = toDate(expense.competenceDate) || toDate(expense.dueDate);
       if (!date) return false;
       return isAfter(date, start) && isBefore(date, end);

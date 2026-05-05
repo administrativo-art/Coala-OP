@@ -87,7 +87,7 @@ export function DrePage() {
   const topExpensePlans = useMemo(() => {
     const totals: Record<string, number> = {};
     (expenses || []).forEach((expense) => {
-      if (expense.status === "cancelled") return;
+      if (expense.status === "cancelled" || expense.status === "draft") return;
       const name = accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "Sem classificação";
       totals[name] = (totals[name] || 0) + (expense.totalValue || 0);
     });

@@ -49,6 +49,17 @@ type RecurringPreview = InstallmentPreview & {
   competenceDate: Date;
 };
 
+function toOptionalDate(value: any): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? undefined : value;
+  if (typeof value?.toDate === "function") {
+    const parsed = value.toDate();
+    return Number.isNaN(parsed?.getTime?.()) ? undefined : parsed;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
 function buildRecurringOccurrences(
   firstDueDate: Date | undefined,
   endDate: Date | undefined,
@@ -350,6 +361,7 @@ export function ExpenseForm() {
   const editId = searchParams.get("edit");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingExpense, setIsLoadingExpense] = useState(false);
+  const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -502,8 +514,8 @@ export function ExpenseForm() {
           supplier: data.supplier,
           notes: data.notes,
           totalValue: data.totalValue,
-          competenceDate: data.competenceDate?.toDate?.() ?? new Date(data.competenceDate),
-          paymentMethod: data.paymentMethod,
+          competenceDate: toOptionalDate(data.competenceDate),
+          paymentMethod: data.paymentMethod || "single",
           isApportioned: data.isApportioned,
           resultCenter: data.resultCenter || "",
           apportionments: data.apportionments || [{ resultCenter: "", percentage: 100 }],
@@ -511,32 +523,26 @@ export function ExpenseForm() {
         };
 
         if (data.paymentMethod === "single") {
-          resetData.dueDate = data.dueDate?.toDate?.() ?? new Date(data.dueDate);
+          resetData.dueDate = toOptionalDate(data.dueDate);
         } else if (data.paymentMethod === "recurring") {
-          resetData.recurrenceFirstDueDate =
-            data.recurrenceFirstDueDate?.toDate?.() ??
-            data.dueDate?.toDate?.() ??
-            new Date(data.dueDate);
-          resetData.recurrenceEndDate =
-            data.recurrenceEndDate?.toDate?.() ??
-            data.dueDate?.toDate?.() ??
-            new Date(data.dueDate);
+          resetData.recurrenceFirstDueDate = toOptionalDate(data.recurrenceFirstDueDate) ?? toOptionalDate(data.dueDate);
+          resetData.recurrenceEndDate = toOptionalDate(data.recurrenceEndDate) ?? toOptionalDate(data.dueDate);
         } else {
           const installments = data.installments || [];
           const equalValues = installments.every((installment: any) => installment.value === installments[0]?.value);
           resetData.installmentType = data.installmentType || (equalValues ? "equal" : "varied");
           if (resetData.installmentType === "equal" && installments[0]) {
-            resetData.firstInstallmentDueDate =
-              installments[0].dueDate?.toDate?.() ?? new Date(installments[0].dueDate);
+            resetData.firstInstallmentDueDate = toOptionalDate(installments[0].dueDate);
           } else {
             resetData.variedInstallments = installments.map((installment: any) => ({
-              dueDate: installment.dueDate?.toDate?.() ?? new Date(installment.dueDate),
+              dueDate: toOptionalDate(installment.dueDate),
               value: installment.value,
             }));
           }
         }
 
         form.reset(resetData);
+        setLoadedStatus(data.status ?? null);
       } catch (error) {
         console.error(error);
         toast({ variant: "destructive", title: "Erro ao carregar despesa." });
@@ -618,6 +624,137 @@ export function ExpenseForm() {
       }));
   }, [equalInstallments, installmentType, paymentMethod, variedInstallments]);
 
+  function buildInstallmentsFromValues(values: ExpenseFormValues) {
+    if (values.paymentMethod === "installments" && values.installmentType === "equal") {
+      return equalInstallments.map((installment) => ({
+        number: installment.number,
+        dueDate: Timestamp.fromDate(installment.dueDate),
+        value: installment.value,
+        status: "pending",
+      }));
+    }
+
+    if (values.paymentMethod === "installments" && values.installmentType === "varied") {
+      return (values.variedInstallments || [])
+        .filter((installment) => installment?.dueDate && installment?.value)
+        .map((installment, index) => ({
+          number: index + 1,
+          dueDate: Timestamp.fromDate(installment.dueDate),
+          value: installment.value,
+          status: "pending",
+        }));
+    }
+
+    if (values.paymentMethod === "single" && values.dueDate) {
+      return [
+        {
+          number: 1,
+          dueDate: Timestamp.fromDate(values.dueDate),
+          value: values.totalValue,
+          status: "pending",
+        },
+      ];
+    }
+
+    if (values.paymentMethod === "recurring" && values.recurrenceFirstDueDate) {
+      return [
+        {
+          number: 1,
+          dueDate: Timestamp.fromDate(values.recurrenceFirstDueDate),
+          value: values.totalValue,
+          status: "pending",
+        },
+      ];
+    }
+
+    return [];
+  }
+
+  function buildExpensePayload(values: ExpenseFormValues) {
+    const accountPlan = accountPlans?.find((item) => item.id === values.accountPlan);
+    const installmentsToSave = buildInstallmentsFromValues(values);
+
+    return {
+      accountPlan: values.accountPlan || "",
+      accountPlanName: accountPlan?.name || values.accountPlan || "",
+      description: values.description || "",
+      supplier: values.supplier ?? "",
+      notes: values.notes ?? "",
+      totalValue: values.totalValue || 0,
+      competenceDate: values.competenceDate ? Timestamp.fromDate(values.competenceDate) : null,
+      dueDate:
+        values.paymentMethod === "installments"
+          ? values.installmentType === "equal"
+            ? values.firstInstallmentDueDate
+              ? Timestamp.fromDate(values.firstInstallmentDueDate)
+              : null
+            : values.variedInstallments?.[0]?.dueDate
+            ? Timestamp.fromDate(values.variedInstallments[0].dueDate)
+            : null
+          : values.paymentMethod === "recurring"
+          ? values.recurrenceFirstDueDate
+            ? Timestamp.fromDate(values.recurrenceFirstDueDate)
+            : null
+          : values.dueDate
+          ? Timestamp.fromDate(values.dueDate)
+          : null,
+      paymentMethod: values.paymentMethod,
+      installmentType: values.paymentMethod === "installments" ? values.installmentType ?? null : null,
+      installmentPeriodicity:
+        values.paymentMethod === "installments" ? values.installmentPeriodicity ?? null : null,
+      isApportioned: values.isApportioned,
+      resultCenter: values.isApportioned ? null : values.resultCenter ?? null,
+      apportionments: values.isApportioned ? values.apportionments : null,
+      installments: installmentsToSave,
+      recurrenceFirstDueDate:
+        values.paymentMethod === "recurring" && values.recurrenceFirstDueDate
+          ? Timestamp.fromDate(values.recurrenceFirstDueDate)
+          : null,
+      recurrenceEndDate:
+        values.paymentMethod === "recurring" && values.recurrenceEndDate
+          ? Timestamp.fromDate(values.recurrenceEndDate)
+          : null,
+      updatedAt: Timestamp.now(),
+    };
+  }
+
+  async function handleSaveDraft() {
+    if (!firebaseUser) return;
+    setIsSaving(true);
+
+    try {
+      const values = form.getValues();
+      const payload = {
+        ...buildExpensePayload(values),
+        status: "draft",
+        createdBy: firebaseUser.uid,
+        draftSavedAt: Timestamp.now(),
+      };
+
+      if (editId) {
+        await updateDoc(financialDoc("expenses", editId), payload);
+      } else {
+        await addDoc(financialCollection("expenses"), {
+          ...payload,
+          createdAt: Timestamp.now(),
+        });
+      }
+
+      toast({ title: "Rascunho salvo." });
+      router.push(`${FINANCIAL_ROUTES.expenses}?status=draft`);
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao salvar rascunho",
+        description: "Não foi possível guardar o preenchimento atual.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function onSubmit(values: ExpenseFormValues) {
     if (!firebaseUser) return;
     setIsSaving(true);
@@ -632,74 +769,40 @@ export function ExpenseForm() {
             )
           : [];
 
-      const installmentsToSave =
-        values.paymentMethod === "installments" && values.installmentType === "equal"
-          ? equalInstallments.map((installment) => ({
-              number: installment.number,
-              dueDate: Timestamp.fromDate(installment.dueDate),
-              value: installment.value,
-              status: "pending",
-            }))
-          : values.paymentMethod === "installments" && values.installmentType === "varied"
-          ? values.variedInstallments!.map((installment, index) => ({
-              number: index + 1,
-              dueDate: Timestamp.fromDate(installment.dueDate),
-              value: installment.value,
-              status: "pending",
-            }))
-          : [
-              {
-                number: 1,
-                dueDate: Timestamp.fromDate(
-                  values.paymentMethod === "recurring"
-                    ? values.recurrenceFirstDueDate!
-                    : values.dueDate!
-                ),
-                value: values.totalValue,
-                status: "pending",
-              },
-            ];
-
-      const accountPlan = accountPlans?.find((item) => item.id === values.accountPlan);
       const payload = {
-        accountPlan: values.accountPlan,
-        accountPlanName: accountPlan?.name || values.accountPlan,
-        description: values.description,
-        supplier: values.supplier ?? "",
-        notes: values.notes ?? "",
-        totalValue: values.totalValue,
-        competenceDate: Timestamp.fromDate(values.competenceDate),
-        dueDate: Timestamp.fromDate(
-          values.paymentMethod === "installments"
-            ? values.installmentType === "equal"
-              ? values.firstInstallmentDueDate!
-              : values.variedInstallments![0].dueDate
-            : values.paymentMethod === "recurring"
-            ? values.recurrenceFirstDueDate!
-            : values.dueDate!
-        ),
-        paymentMethod: values.paymentMethod,
-        installmentType: values.paymentMethod === "installments" ? values.installmentType ?? null : null,
-        installmentPeriodicity:
-          values.paymentMethod === "installments" ? values.installmentPeriodicity ?? null : null,
-        isApportioned: values.isApportioned,
-        resultCenter: values.isApportioned ? null : values.resultCenter ?? null,
-        apportionments: values.isApportioned ? values.apportionments : null,
-        installments: installmentsToSave,
-        recurrenceFirstDueDate:
-          values.paymentMethod === "recurring" ? Timestamp.fromDate(values.recurrenceFirstDueDate!) : null,
-        recurrenceEndDate:
-          values.paymentMethod === "recurring" ? Timestamp.fromDate(values.recurrenceEndDate!) : null,
-        updatedAt: Timestamp.now(),
+        ...buildExpensePayload(values),
+        status: "pending",
       };
 
-      if (editId) {
+      if (editId && values.paymentMethod !== "recurring") {
         await updateDoc(financialDoc("expenses", editId), payload);
         toast({ title: "Despesa atualizada." });
       } else if (values.paymentMethod === "recurring") {
         const recurrenceGroupId = crypto.randomUUID();
+        const [firstOccurrence, ...remainingOccurrences] = recurringOccurrences;
+
+        if (editId && firstOccurrence) {
+          await updateDoc(financialDoc("expenses", editId), {
+            ...payload,
+            totalValue: firstOccurrence.value,
+            competenceDate: Timestamp.fromDate(firstOccurrence.competenceDate),
+            dueDate: Timestamp.fromDate(firstOccurrence.dueDate),
+            installments: [
+              {
+                number: 1,
+                dueDate: Timestamp.fromDate(firstOccurrence.dueDate),
+                value: firstOccurrence.value,
+                status: "pending",
+              },
+            ],
+            recurrenceGroupId,
+            recurrenceIndex: firstOccurrence.number,
+            recurrenceTotal: recurringOccurrences.length,
+          });
+        }
+
         await Promise.all(
-          recurringOccurrences.map((occurrence) =>
+          (editId ? remainingOccurrences : recurringOccurrences).map((occurrence) =>
             addDoc(financialCollection("expenses"), {
               ...payload,
               totalValue: occurrence.value,
@@ -728,7 +831,6 @@ export function ExpenseForm() {
       } else {
         await addDoc(financialCollection("expenses"), {
           ...payload,
-          status: "pending",
           createdBy: firebaseUser.uid,
           createdAt: Timestamp.now(),
         });
@@ -1448,9 +1550,15 @@ export function ExpenseForm() {
                 <Button type="button" variant="outline" className="flex-1" onClick={() => router.push(FINANCIAL_ROUTES.expenses)}>
                   Cancelar
                 </Button>
+                {(!editId || loadedStatus === "draft") && (
+                  <Button type="button" variant="secondary" className="flex-1" disabled={isSaving} onClick={() => void handleSaveDraft()}>
+                    {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Salvar rascunho
+                  </Button>
+                )}
                 <Button type="submit" className="flex-1" disabled={isSaving}>
                   {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {editId ? "Atualizar" : "Salvar"}
+                  {loadedStatus === "draft" ? "Concluir lançamento" : editId ? "Atualizar" : "Salvar"}
                 </Button>
               </div>
             </CardContent>
