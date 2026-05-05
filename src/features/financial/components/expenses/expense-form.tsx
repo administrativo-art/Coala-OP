@@ -45,6 +45,38 @@ type InstallmentPreview = {
   value: number;
 };
 
+type RecurringPreview = InstallmentPreview & {
+  competenceDate: Date;
+};
+
+function buildRecurringOccurrences(
+  firstDueDate: Date | undefined,
+  endDate: Date | undefined,
+  competenceDate: Date | undefined,
+  value: number
+): RecurringPreview[] {
+  if (!firstDueDate || !endDate || !competenceDate || !value || endDate < firstDueDate) {
+    return [];
+  }
+
+  const occurrences: RecurringPreview[] = [];
+  let cursor = new Date(firstDueDate);
+  let index = 0;
+
+  while (cursor <= endDate && index < 120) {
+    occurrences.push({
+      number: index + 1,
+      dueDate: new Date(cursor),
+      competenceDate: addMonths(competenceDate, index),
+      value,
+    });
+    cursor = addMonths(firstDueDate, index + 1);
+    index += 1;
+  }
+
+  return occurrences;
+}
+
 function buildAccountTree(items: any[], parentId: string | null = null): any[] {
   return items
     .filter((item) => item.parentId === parentId)
@@ -220,6 +252,8 @@ export function ExpenseForm() {
       installments: 2,
       installmentType: "equal",
       installmentPeriodicity: "monthly",
+      recurrenceFirstDueDate: undefined,
+      recurrenceEndDate: undefined,
     },
     mode: "onChange",
   });
@@ -230,6 +264,9 @@ export function ExpenseForm() {
   const totalValue = form.watch("totalValue");
   const firstInstallmentDueDate = form.watch("firstInstallmentDueDate");
   const installmentPeriodicity = form.watch("installmentPeriodicity");
+  const competenceDate = form.watch("competenceDate");
+  const recurrenceFirstDueDate = form.watch("recurrenceFirstDueDate");
+  const recurrenceEndDate = form.watch("recurrenceEndDate");
   const variedInstallments = form.watch("variedInstallments");
   const isApportioned = form.watch("isApportioned");
   const apportionments = form.watch("apportionments");
@@ -340,6 +377,15 @@ export function ExpenseForm() {
 
         if (data.paymentMethod === "single") {
           resetData.dueDate = data.dueDate?.toDate?.() ?? new Date(data.dueDate);
+        } else if (data.paymentMethod === "recurring") {
+          resetData.recurrenceFirstDueDate =
+            data.recurrenceFirstDueDate?.toDate?.() ??
+            data.dueDate?.toDate?.() ??
+            new Date(data.dueDate);
+          resetData.recurrenceEndDate =
+            data.recurrenceEndDate?.toDate?.() ??
+            data.dueDate?.toDate?.() ??
+            new Date(data.dueDate);
         } else {
           const installments = data.installments || [];
           const equalValues = installments.every((installment: any) => installment.value === installments[0]?.value);
@@ -408,13 +454,26 @@ export function ExpenseForm() {
     totalValue,
   ]);
 
+  const recurringPreview = useMemo(
+    () =>
+      paymentMethod === "recurring"
+        ? buildRecurringOccurrences(
+            recurrenceFirstDueDate,
+            recurrenceEndDate,
+            competenceDate,
+            totalValue || 0
+          )
+        : [],
+    [competenceDate, paymentMethod, recurrenceEndDate, recurrenceFirstDueDate, totalValue]
+  );
+
   const rateioTotal = useMemo(
     () => (apportionments || []).reduce((sum, item) => sum + (Number(item.percentage) || 0), 0),
     [apportionments]
   );
 
   const installmentsSummary = useMemo(() => {
-    if (paymentMethod === "single") return null;
+    if (paymentMethod === "single" || paymentMethod === "recurring") return null;
     if (installmentType === "equal") return equalInstallments;
     return (variedInstallments || [])
       .filter((installment) => installment?.dueDate)
@@ -430,6 +489,16 @@ export function ExpenseForm() {
     setIsSaving(true);
 
     try {
+      const recurringOccurrences =
+        values.paymentMethod === "recurring"
+          ? buildRecurringOccurrences(
+              values.recurrenceFirstDueDate,
+              values.recurrenceEndDate,
+              values.competenceDate,
+              values.totalValue
+            )
+          : [];
+
       const installmentsToSave =
         values.paymentMethod === "installments" && values.installmentType === "equal"
           ? equalInstallments.map((installment) => ({
@@ -448,7 +517,11 @@ export function ExpenseForm() {
           : [
               {
                 number: 1,
-                dueDate: Timestamp.fromDate(values.dueDate!),
+                dueDate: Timestamp.fromDate(
+                  values.paymentMethod === "recurring"
+                    ? values.recurrenceFirstDueDate!
+                    : values.dueDate!
+                ),
                 value: values.totalValue,
                 status: "pending",
               },
@@ -468,21 +541,57 @@ export function ExpenseForm() {
             ? values.installmentType === "equal"
               ? values.firstInstallmentDueDate!
               : values.variedInstallments![0].dueDate
+            : values.paymentMethod === "recurring"
+            ? values.recurrenceFirstDueDate!
             : values.dueDate!
         ),
         paymentMethod: values.paymentMethod,
-        installmentType: values.installmentType ?? null,
-        installmentPeriodicity: values.installmentPeriodicity ?? null,
+        installmentType: values.paymentMethod === "installments" ? values.installmentType ?? null : null,
+        installmentPeriodicity:
+          values.paymentMethod === "installments" ? values.installmentPeriodicity ?? null : null,
         isApportioned: values.isApportioned,
         resultCenter: values.isApportioned ? null : values.resultCenter ?? null,
         apportionments: values.isApportioned ? values.apportionments : null,
         installments: installmentsToSave,
+        recurrenceFirstDueDate:
+          values.paymentMethod === "recurring" ? Timestamp.fromDate(values.recurrenceFirstDueDate!) : null,
+        recurrenceEndDate:
+          values.paymentMethod === "recurring" ? Timestamp.fromDate(values.recurrenceEndDate!) : null,
         updatedAt: Timestamp.now(),
       };
 
       if (editId) {
         await updateDoc(financialDoc("expenses", editId), payload);
         toast({ title: "Despesa atualizada." });
+      } else if (values.paymentMethod === "recurring") {
+        const recurrenceGroupId = crypto.randomUUID();
+        await Promise.all(
+          recurringOccurrences.map((occurrence) =>
+            addDoc(financialCollection("expenses"), {
+              ...payload,
+              totalValue: occurrence.value,
+              competenceDate: Timestamp.fromDate(occurrence.competenceDate),
+              dueDate: Timestamp.fromDate(occurrence.dueDate),
+              installments: [
+                {
+                  number: 1,
+                  dueDate: Timestamp.fromDate(occurrence.dueDate),
+                  value: occurrence.value,
+                  status: "pending",
+                },
+              ],
+              recurrenceGroupId,
+              recurrenceIndex: occurrence.number,
+              recurrenceTotal: recurringOccurrences.length,
+              recurrenceFirstDueDate: Timestamp.fromDate(values.recurrenceFirstDueDate!),
+              recurrenceEndDate: Timestamp.fromDate(values.recurrenceEndDate!),
+              status: "pending",
+              createdBy: firebaseUser.uid,
+              createdAt: Timestamp.now(),
+            })
+          )
+        );
+        toast({ title: "Despesas recorrentes lançadas." });
       } else {
         await addDoc(financialCollection("expenses"), {
           ...payload,
@@ -596,7 +705,7 @@ export function ExpenseForm() {
           <Card>
             <CardHeader>
               <CardTitle>Pagamento</CardTitle>
-              <CardDescription>Escolha se a despesa será paga em parcela única ou parcelada.</CardDescription>
+              <CardDescription>Escolha se a despesa será paga em parcela única, parcelada ou recorrente.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField
@@ -609,7 +718,7 @@ export function ExpenseForm() {
                       <RadioGroup
                         value={field.value}
                         onValueChange={field.onChange}
-                        className="grid gap-3 md:grid-cols-2"
+                        className="grid gap-3 md:grid-cols-3"
                       >
                         <label className="flex cursor-pointer items-center gap-3 rounded-lg border p-4">
                           <RadioGroupItem value="single" />
@@ -623,6 +732,13 @@ export function ExpenseForm() {
                           <div>
                             <p className="font-medium">Parcelado</p>
                             <p className="text-sm text-muted-foreground">Distribua em parcelas iguais ou variáveis.</p>
+                          </div>
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-3 rounded-lg border p-4">
+                          <RadioGroupItem value="recurring" />
+                          <div>
+                            <p className="font-medium">Recorrente</p>
+                            <p className="text-sm text-muted-foreground">Gera cobranças mensais do mesmo valor até a data final.</p>
                           </div>
                         </label>
                       </RadioGroup>
@@ -643,7 +759,7 @@ export function ExpenseForm() {
                     </FormItem>
                   )}
                 />
-              ) : (
+              ) : paymentMethod === "installments" ? (
                 <>
                   <div className="grid gap-4 md:grid-cols-3">
                     <FormField
@@ -781,6 +897,29 @@ export function ExpenseForm() {
                     </div>
                   )}
                 </>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="recurrenceFirstDueDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <DatePickerField label="Primeira cobrança" value={field.value} onChange={field.onChange} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="recurrenceEndDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <DatePickerField label="Cobrar até" value={field.value} onChange={field.onChange} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -1036,7 +1175,13 @@ export function ExpenseForm() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Forma</span>
-                  <span>{paymentMethod === "single" ? "Pagamento único" : "Parcelado"}</span>
+                  <span>
+                    {paymentMethod === "single"
+                      ? "Pagamento único"
+                      : paymentMethod === "installments"
+                      ? "Parcelado"
+                      : "Recorrente"}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Rateio</span>
@@ -1067,6 +1212,39 @@ export function ExpenseForm() {
                             <TableCell>{installment.number}</TableCell>
                             <TableCell>{format(installment.dueDate, "dd/MM/yyyy")}</TableCell>
                             <TableCell className="text-right">{formatCurrency(installment.value)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </div>
+              )}
+
+              {recurringPreview.length > 0 && (
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-medium">Cobranças recorrentes</p>
+                    <p className="text-sm text-muted-foreground">
+                      {recurringPreview.length} despesa(s) mensal(is) serão criadas a partir do preenchimento atual.
+                    </p>
+                  </div>
+                  <ScrollArea className="h-56 rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>#</TableHead>
+                          <TableHead>Competência</TableHead>
+                          <TableHead>Vencimento</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {recurringPreview.map((occurrence) => (
+                          <TableRow key={occurrence.number}>
+                            <TableCell>{occurrence.number}</TableCell>
+                            <TableCell>{format(occurrence.competenceDate, "MM/yyyy")}</TableCell>
+                            <TableCell>{format(occurrence.dueDate, "dd/MM/yyyy")}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(occurrence.value)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

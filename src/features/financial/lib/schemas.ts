@@ -23,7 +23,7 @@ export const expenseFormSchema = z
         })
       )
       .optional(),
-    paymentMethod: z.enum(["single", "installments"]).default("single"),
+    paymentMethod: z.enum(["single", "installments", "recurring"]).default("single"),
     installments: z.coerce
       .number()
       .int()
@@ -35,6 +35,8 @@ export const expenseFormSchema = z
       .enum(["monthly", "weekly", "biweekly"])
       .default("monthly")
       .optional(),
+    recurrenceFirstDueDate: z.date().optional(),
+    recurrenceEndDate: z.date().optional(),
     variedInstallments: z
       .array(
         z.object({
@@ -134,6 +136,32 @@ export const expenseFormSchema = z
       message:
         "A soma dos valores deve ser igual ao valor total e a quantidade de parcelas deve ser a mesma.",
       path: ["variedInstallments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.paymentMethod !== "recurring") return true;
+      return !!data.recurrenceFirstDueDate && !!data.recurrenceEndDate;
+    },
+    {
+      message: "Informe a primeira cobrança e a data final da recorrência.",
+      path: ["recurrenceFirstDueDate"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (
+        data.paymentMethod !== "recurring" ||
+        !data.recurrenceFirstDueDate ||
+        !data.recurrenceEndDate
+      ) {
+        return true;
+      }
+      return data.recurrenceEndDate >= data.recurrenceFirstDueDate;
+    },
+    {
+      message: "A data final da recorrência deve ser igual ou posterior à primeira cobrança.",
+      path: ["recurrenceEndDate"],
     }
   );
 
