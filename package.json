@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "mcp": "node server.js",
     "migrate:dp": "node scripts/migrate-dp.mjs",
-    "migrate:financial": "node scripts/migrate-financial.mjs"
+    "migrate:financial": "node scripts/migrate-financial.mjs",
+    "reprocess:goals": "node scripts/reprocess-goals-pdv.mjs"
   },
   "overrides": {
     "fast-xml-parser": "^5.7.0",

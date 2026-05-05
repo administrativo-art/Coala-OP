@@ -313,10 +313,10 @@ export async function syncGoalsForDay(
         }
       }
 
-      // Log de funcionários sem dados de escala (fallback: atualiza todos os goals)
+      // Log de funcionários sem dados de escala
       const semEscala = multiShiftEmployeeIds.filter(uid => !workedShiftByEmployee[uid]);
       if (semEscala.length > 0) {
-        console.warn(`[Goals Sync] ${kioskId} ${dateStr}: ${semEscala.length} funcionário(s) com múltiplos turnos sem dados de escala — revenue será atribuído a todos os goals (possível duplicação).`, semEscala);
+        console.warn(`[Goals Sync] ${kioskId} ${dateStr}: ${semEscala.length} funcionário(s) com múltiplos turnos sem dados de escala — revenue será distribuído proporcionalmente entre os goals.`, semEscala);
       }
     }
 
@@ -325,13 +325,19 @@ export async function syncGoalsForDay(
       const empDailyRevenue = revenueByEmployeeId[employeeId] ?? 0;
       const isMultiShift = goals.length > 1 && goals.some(e => e.eg.shiftId);
       const workedShiftId = workedShiftByEmployee[employeeId] ?? null;
+      const totalTargetValue = goals.reduce((sum, { eg }) => sum + (Number(eg.targetValue) || 0), 0);
 
       for (const { doc: egDoc, eg } of goals) {
-        // Se funcionário tem múltiplos goals de turno e sabemos qual turno trabalhou:
-        // atribui revenue apenas ao goal do turno correto; os demais ficam com 0.
+        // Se funcionário tem múltiplos goals de turno e sabemos qual turno trabalhou,
+        // atribui revenue apenas ao goal do turno correto; caso contrário, divide
+        // proporcionalmente ao target para preservar o total sem duplicação.
         let revenueForGoal = empDailyRevenue;
         if (isMultiShift && eg.shiftId && workedShiftId !== null) {
           revenueForGoal = eg.shiftId === workedShiftId ? empDailyRevenue : 0;
+        } else if (isMultiShift) {
+          const goalTargetValue = Number(eg.targetValue) || 0;
+          const fallbackShare = totalTargetValue > 0 ? (goalTargetValue / totalTargetValue) : (1 / goals.length);
+          revenueForGoal = empDailyRevenue * fallbackShare;
         }
 
         const prevDayValue = (eg.dailyProgress ?? {})[dateStr] ?? 0;

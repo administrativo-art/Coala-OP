@@ -334,6 +334,26 @@ function getInitials(name: string): string {
   return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
 }
 
+function getMergedEmployeeActiveDateKeys(
+  employeeGoal: EmployeeGoal,
+  period: GoalPeriodDoc,
+  distributionSnapshot?: GoalDistributionSnapshot | null,
+  originalEgs?: EmployeeGoal[] | null
+) {
+  if (!originalEgs || originalEgs.length <= 1) {
+    return getEmployeeDistributionDateKeys(employeeGoal, period, distributionSnapshot);
+  }
+
+  const mergedKeys = new Set<string>();
+  for (const goal of originalEgs) {
+    for (const key of getEmployeeDistributionDateKeys(goal, period, distributionSnapshot)) {
+      mergedKeys.add(key);
+    }
+  }
+
+  return Array.from(mergedKeys).sort();
+}
+
 function DailyStatusPill({ tone }: { tone: 'ok' | 'zero' | 'miss' | 'na' }) {
   const config = {
     ok:   { label: '✓', cls: 'border-emerald-400 bg-emerald-500 text-white shadow-[0_6px_16px_-10px_rgba(34,197,94,0.8)]' },
@@ -480,7 +500,7 @@ export function EmployeeDailyModal({
   if (!employeeGoal || !period || !userName) return null;
 
   const { refDate, periodEnd } = getPeriodContext(period);
-  const activeDateKeys = getEmployeeDistributionDateKeys(employeeGoal, period, distributionSnapshot);
+  const activeDateKeys = getMergedEmployeeActiveDateKeys(employeeGoal, period, distributionSnapshot, originalEgs);
   const activeDateSet = new Set(activeDateKeys);
   const dailyTarget = employeeGoal.targetValue / Math.max(activeDateKeys.length, 1);
   const upTarget = employeeGoal.targetValue * 1.2;
@@ -702,17 +722,18 @@ function WeekRow({ label, pctValue, barColor }: { label: string; pctValue: numbe
   );
 }
 
-function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period, distributionSnapshot, onOpenDaily }: {
+function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period, distributionSnapshot, originalEgs, onOpenDaily }: {
   eg: EmployeeGoal; shiftLabel?: string; userName: string;
   refDate: Date; periodEnd: Date;
   period: GoalPeriodDoc;
   distributionSnapshot?: GoalDistributionSnapshot | null;
+  originalEgs?: EmployeeGoal[] | null;
   onOpenDaily?: () => void;
 }) {
   const initials = getInitials(userName);
   const avatarClass = collaboratorAvatarClass(eg.employeeId);
 
-  const activeDateKeys = getEmployeeDistributionDateKeys(eg, period, distributionSnapshot);
+  const activeDateKeys = getMergedEmployeeActiveDateKeys(eg, period, distributionSnapshot, originalEgs);
   const activeDateSet = new Set(activeDateKeys);
   const dailyTarget = eg.targetValue / Math.max(activeDateKeys.length, 1);
   const periodStart = period.startDate?.toDate?.() ?? refDate;
@@ -1786,12 +1807,12 @@ export function GoalsTrackingDashboard() {
                               const shiftLabels = goals
                                 .map(g => g.shiftId ? period.shifts?.find(s => s.id === g.shiftId)?.label : null)
                                 .filter((l): l is string => Boolean(l));
-                              return { empId, mergedGoal, shiftLabels };
+                              return { empId, mergedGoal, shiftLabels, originalGoals: goals };
                             });
                             merged.sort((a, b) => b.mergedGoal.currentValue - a.mergedGoal.currentValue);
                             return (
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {merged.map(({ empId, mergedGoal, shiftLabels }) => (
+                                {merged.map(({ empId, mergedGoal, shiftLabels, originalGoals }) => (
                                   <CollaboratorCard
                                     key={empId}
                                     eg={mergedGoal}
@@ -1801,8 +1822,8 @@ export function GoalsTrackingDashboard() {
                                     refDate={refDate}
                                     periodEnd={periodEnd}
                                     distributionSnapshot={distributionSnapshot}
+                                    originalEgs={originalGoals}
                                     onOpenDaily={() => {
-                                      const originalGoals = employeeGoals.filter(eg => eg.periodId === period.id && eg.employeeId === empId);
                                       setDailyEmpModalData({ eg: mergedGoal, originalEgs: originalGoals, period, userName: getUserName(empId) });
                                       setDailyEmpModalOpen(true);
                                     }}

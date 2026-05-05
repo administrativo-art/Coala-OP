@@ -14,6 +14,11 @@ type ShiftRecord = {
   endTime?: string;
 };
 
+function extractShiftTimes(label: string): { start: string; end: string } | null {
+  const match = label.match(/\((\d{2}:\d{2})[–\-](\d{2}:\d{2})\)/u);
+  return match ? { start: match[1], end: match[2] } : null;
+}
+
 export interface GoalDistributionSnapshot {
   periodDateKeysById: Record<string, string[]>;
   employeeDateKeysByGoalId: Record<string, string[]>;
@@ -219,6 +224,13 @@ export async function loadGoalDistributionSnapshot(
       const goalPeriod = periodById.get(goal.periodId);
       if (!goalPeriod) continue;
       if (resolvedKioskId && goalPeriod.kioskId !== resolvedKioskId) continue;
+      if (goal.shiftId) {
+        const matchedShiftId = goalPeriod.shifts?.find(periodShift => {
+          const times = extractShiftTimes(periodShift.label ?? '');
+          return times?.start === shift.startTime && times?.end === shift.endTime;
+        })?.id;
+        if (matchedShiftId && matchedShiftId !== goal.shiftId) continue;
+      }
       const startKey = getPeriodStartKey(goalPeriod);
       const endKey = getPeriodEndKey(goalPeriod);
       if (shift.date < startKey || shift.date > endKey) continue;
