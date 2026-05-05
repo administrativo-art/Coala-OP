@@ -6,7 +6,7 @@ import { ptBR } from "date-fns/locale";
 import { addDoc, getDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, PlusCircle, Trash2, UserRound } from "lucide-react";
+import { CalendarIcon, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Plus, PlusCircle, Trash2, UserRound } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useEntities } from "@/hooks/use-entities";
@@ -110,10 +110,39 @@ function DatePickerField({
   onChange: (value: Date | undefined) => void;
   disabled?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"day" | "month" | "year">("day");
+  const [displayMonth, setDisplayMonth] = useState<Date>(value ?? new Date());
+
+  useEffect(() => {
+    if (open) {
+      setView("day");
+      setDisplayMonth(value ?? new Date());
+    }
+  }, [open, value]);
+
+  const monthOptions = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, index) => {
+        const date = new Date(displayMonth.getFullYear(), index, 1);
+        return {
+          index,
+          label: format(date, "MMMM", { locale: ptBR }).replace(/^\w/, (char) => char.toUpperCase()),
+        };
+      }),
+    [displayMonth]
+  );
+
+  const yearRangeStart = Math.floor(displayMonth.getFullYear() / 12) * 12;
+  const yearOptions = useMemo(
+    () => Array.from({ length: 12 }, (_, index) => yearRangeStart + index),
+    [yearRangeStart]
+  );
+
   return (
     <div className="space-y-2">
       <FormLabel>{label}</FormLabel>
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -125,7 +154,106 @@ function DatePickerField({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
-          <Calendar mode="single" selected={value} onSelect={onChange} initialFocus />
+          <div className="w-[320px]">
+            <div className="flex items-center justify-between border-b px-3 py-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  if (view === "year") {
+                    setDisplayMonth(new Date(displayMonth.getFullYear() - 12, displayMonth.getMonth(), 1));
+                    return;
+                  }
+                  setDisplayMonth(new Date(displayMonth.getFullYear(), displayMonth.getMonth() - 1, 1));
+                }}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-8 px-2 text-sm font-medium"
+                  onClick={() => setView("month")}
+                >
+                  {format(displayMonth, "MMMM", { locale: ptBR }).replace(/^\w/, (char) => char.toUpperCase())}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-8 px-2 text-sm font-medium"
+                  onClick={() => setView("year")}
+                >
+                  {format(displayMonth, "yyyy")}
+                </Button>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  if (view === "year") {
+                    setDisplayMonth(new Date(displayMonth.getFullYear() + 12, displayMonth.getMonth(), 1));
+                    return;
+                  }
+                  setDisplayMonth(new Date(displayMonth.getFullYear(), displayMonth.getMonth() + 1, 1));
+                }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {view === "day" ? (
+              <Calendar
+                mode="single"
+                selected={value}
+                onSelect={(nextValue) => {
+                  onChange(nextValue);
+                  setOpen(false);
+                }}
+                month={displayMonth}
+                onMonthChange={setDisplayMonth}
+                initialFocus
+              />
+            ) : view === "month" ? (
+              <div className="grid grid-cols-3 gap-2 p-3">
+                {monthOptions.map((monthOption) => (
+                  <Button
+                    key={monthOption.index}
+                    type="button"
+                    variant={displayMonth.getMonth() === monthOption.index ? "default" : "outline"}
+                    className="justify-center"
+                    onClick={() => {
+                      setDisplayMonth(new Date(displayMonth.getFullYear(), monthOption.index, 1));
+                      setView("day");
+                    }}
+                  >
+                    {monthOption.label.slice(0, 3)}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 p-3">
+                {yearOptions.map((year) => (
+                  <Button
+                    key={year}
+                    type="button"
+                    variant={displayMonth.getFullYear() === year ? "default" : "outline"}
+                    className="justify-center"
+                    onClick={() => {
+                      setDisplayMonth(new Date(year, displayMonth.getMonth(), 1));
+                      setView("month");
+                    }}
+                  >
+                    {year}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
         </PopoverContent>
       </Popover>
     </div>
