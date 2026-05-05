@@ -52,10 +52,9 @@ type RecurringPreview = InstallmentPreview & {
 function buildRecurringOccurrences(
   firstDueDate: Date | undefined,
   endDate: Date | undefined,
-  competenceDate: Date | undefined,
   value: number
 ): RecurringPreview[] {
-  if (!firstDueDate || !endDate || !competenceDate || !value || endDate < firstDueDate) {
+  if (!firstDueDate || !endDate || !value || endDate < firstDueDate) {
     return [];
   }
 
@@ -67,7 +66,7 @@ function buildRecurringOccurrences(
     occurrences.push({
       number: index + 1,
       dueDate: new Date(cursor),
-      competenceDate: addMonths(competenceDate, index),
+      competenceDate: new Date(cursor.getFullYear(), cursor.getMonth(), 1),
       value,
     });
     cursor = addMonths(firstDueDate, index + 1);
@@ -83,11 +82,14 @@ function buildAccountTree(items: any[], parentId: string | null = null): any[] {
     .map((item) => ({ ...item, children: buildAccountTree(items, item.id) }));
 }
 
-function flattenAccountTree(nodes: any[], level = 0): any[] {
-  return nodes.flatMap((node) => [
-    { ...node, level, isParent: node.children.length > 0 },
-    ...flattenAccountTree(node.children, level + 1),
-  ]);
+function flattenAccountTree(nodes: any[], level = 0, prefix = ""): any[] {
+  return nodes.flatMap((node, index) => {
+    const order = prefix ? `${prefix}.${index + 1}` : `${index + 1}`;
+    return [
+      { ...node, level, order, isParent: node.children.length > 0 },
+      ...flattenAccountTree(node.children, level + 1, order),
+    ];
+  });
 }
 
 async function parseFinancialApiError(response: Response) {
@@ -348,6 +350,7 @@ export function ExpenseForm() {
   const editId = searchParams.get("edit");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingExpense, setIsLoadingExpense] = useState(false);
+  const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
@@ -387,17 +390,21 @@ export function ExpenseForm() {
   });
 
   const paymentMethod = form.watch("paymentMethod");
+  const accountPlanValue = form.watch("accountPlan");
   const installmentType = form.watch("installmentType");
   const installmentsQty = form.watch("installments");
   const totalValue = form.watch("totalValue");
   const firstInstallmentDueDate = form.watch("firstInstallmentDueDate");
   const installmentPeriodicity = form.watch("installmentPeriodicity");
-  const competenceDate = form.watch("competenceDate");
   const recurrenceFirstDueDate = form.watch("recurrenceFirstDueDate");
   const recurrenceEndDate = form.watch("recurrenceEndDate");
   const variedInstallments = form.watch("variedInstallments");
   const isApportioned = form.watch("isApportioned");
   const apportionments = form.watch("apportionments");
+  const selectedAccountPlan = useMemo(
+    () => flattenedAccounts.find((account) => account.id === accountPlanValue),
+    [accountPlanValue, flattenedAccounts]
+  );
 
   const {
     fields: apportionmentFields,
@@ -588,11 +595,10 @@ export function ExpenseForm() {
         ? buildRecurringOccurrences(
             recurrenceFirstDueDate,
             recurrenceEndDate,
-            competenceDate,
             totalValue || 0
           )
         : [],
-    [competenceDate, paymentMethod, recurrenceEndDate, recurrenceFirstDueDate, totalValue]
+    [paymentMethod, recurrenceEndDate, recurrenceFirstDueDate, totalValue]
   );
 
   const rateioTotal = useMemo(
@@ -622,7 +628,6 @@ export function ExpenseForm() {
           ? buildRecurringOccurrences(
               values.recurrenceFirstDueDate,
               values.recurrenceEndDate,
-              values.competenceDate,
               values.totalValue
             )
           : [];
@@ -768,21 +773,69 @@ export function ExpenseForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Plano de contas</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o plano de contas" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {flattenedAccounts.map((account) => (
-                          <SelectItem key={account.id} value={account.id}>
-                            {"— ".repeat(account.level)}
-                            {account.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={accountPlanOpen} onOpenChange={setAccountPlanOpen}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={accountPlanOpen}
+                            className={cn("w-full justify-between font-normal", !field.value && "text-muted-foreground")}
+                          >
+                            {selectedAccountPlan ? (
+                              <span className="truncate">
+                                {selectedAccountPlan.order} · {selectedAccountPlan.name}
+                              </span>
+                            ) : (
+                              "Selecione o plano de contas"
+                            )}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[420px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Buscar plano de contas..." />
+                          <CommandList>
+                            <CommandEmpty>Nenhum plano encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              {flattenedAccounts.map((account) => (
+                                <CommandItem
+                                  key={account.id}
+                                  value={`${account.order} ${account.name} ${account.description ?? ""}`}
+                                  onSelect={() => {
+                                    field.onChange(account.id);
+                                    setAccountPlanOpen(false);
+                                  }}
+                                  className="items-start"
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 mt-0.5 h-4 w-4 shrink-0",
+                                      field.value === account.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="flex min-w-0 items-baseline gap-2">
+                                      <span className="shrink-0 text-[11px] font-mono text-muted-foreground">
+                                        {account.order}
+                                      </span>
+                                      <span className="truncate">
+                                        {"— ".repeat(account.level)}
+                                        {account.name}
+                                      </span>
+                                    </div>
+                                    {account.description ? (
+                                      <p className="truncate text-xs text-muted-foreground">{account.description}</p>
+                                    ) : null}
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -821,7 +874,17 @@ export function ExpenseForm() {
                   name="competenceDate"
                   render={({ field }) => (
                     <FormItem>
-                      <DatePickerField label="Competência" value={field.value} onChange={field.onChange} />
+                      <DatePickerField
+                        label="Competência"
+                        value={field.value}
+                        onChange={field.onChange}
+                        disabled={paymentMethod === "recurring"}
+                      />
+                      {paymentMethod === "recurring" ? (
+                        <p className="text-xs text-muted-foreground">
+                          Na recorrência, a competência acompanha automaticamente o mês de cada cobrança.
+                        </p>
+                      ) : null}
                       <FormMessage />
                     </FormItem>
                   )}
