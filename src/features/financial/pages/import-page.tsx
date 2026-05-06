@@ -130,7 +130,8 @@ export function FinancialImportPage() {
     try {
       const now = Timestamp.now();
       for (const transaction of confirmed) {
-        await addDoc(financialCollection("transactions"), {
+        const linkedExpenseId = transaction.linkedExpenseId || transaction.suggestedExpenseId || null;
+        const createdTransaction = await addDoc(financialCollection("transactions"), {
           type: transaction.amount >= 0 ? "revenue" : "expense_payment",
           direction: transaction.amount >= 0 ? "in" : "out",
           amount: Math.abs(transaction.amount),
@@ -143,16 +144,19 @@ export function FinancialImportPage() {
           supplier: transaction.supplier || null,
           importedFrom: "bank_statement",
           rawBankDescription: transaction.rawDescription,
-          linkedExpenseId: transaction.linkedExpenseId || transaction.suggestedExpenseId || null,
+          linkedExpenseId,
+          auditStatus: transaction.amount < 0 ? (linkedExpenseId ? "resolved" : "pending") : null,
           createdBy: firebaseUser.uid,
           createdAt: now,
         });
 
-        if (transaction.linkedExpenseId || transaction.suggestedExpenseId) {
-          await updateDoc(financialDoc("expenses", transaction.linkedExpenseId || transaction.suggestedExpenseId!), {
+        if (linkedExpenseId) {
+          await updateDoc(financialDoc("expenses", linkedExpenseId), {
             status: "paid",
             paidAt: Timestamp.fromDate(transaction.date),
             paidByImport: true,
+            linkedBankTransactionId: createdTransaction.id,
+            updatedAt: now,
           });
         }
       }

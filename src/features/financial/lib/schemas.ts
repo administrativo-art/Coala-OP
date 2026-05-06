@@ -7,19 +7,15 @@ export const expenseFormSchema = z
       .string()
       .min(10, "A descrição deve ter pelo menos 10 caracteres."),
     totalValue: z.coerce.number().positive("O valor total deve ser positivo."),
-    competenceDate: z.date({
-      required_error: "Data de competência é obrigatória.",
-    }),
+    competenceDate: z.date().optional(),
     dueDate: z.date().optional(),
     isApportioned: z.boolean().default(false),
     resultCenter: z.string().optional(),
     apportionments: z
       .array(
         z.object({
-          resultCenter: z.string().min(1, "Centro de resultado é obrigatório."),
-          percentage: z.coerce
-            .number()
-            .min(1, "Porcentagem deve ser maior que 0."),
+          resultCenter: z.string(),
+          percentage: z.coerce.number(),
         })
       )
       .optional(),
@@ -27,7 +23,6 @@ export const expenseFormSchema = z
     installments: z.coerce
       .number()
       .int()
-      .min(2, "O número mínimo de parcelas é 2.")
       .optional(),
     installmentType: z.enum(["equal", "varied"]).optional(),
     firstInstallmentDueDate: z.date().optional(),
@@ -48,6 +43,18 @@ export const expenseFormSchema = z
     supplier: z.string().optional(),
     notes: z.string().optional(),
   })
+  .refine(
+    (data) => {
+      if (data.paymentMethod === "recurring") {
+        return true;
+      }
+      return !!data.competenceDate;
+    },
+    {
+      message: "Data de competência é obrigatória.",
+      path: ["competenceDate"],
+    }
+  )
   .refine(
     (data) => {
       if (data.paymentMethod === "single") {
@@ -74,6 +81,9 @@ export const expenseFormSchema = z
   )
   .refine(
     (data) => {
+      if (!data.isApportioned) {
+        return true;
+      }
       if (data.isApportioned && data.apportionments) {
         const totalPercentage = data.apportionments.reduce(
           (sum, item) => sum + item.percentage,
@@ -85,6 +95,30 @@ export const expenseFormSchema = z
     },
     {
       message: "A soma dos percentuais do rateio deve ser 100%.",
+      path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned) {
+        return true;
+      }
+      return (data.apportionments || []).every((item) => item.resultCenter.trim().length > 0);
+    },
+    {
+      message: "Centro de resultado é obrigatório.",
+      path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned) {
+        return true;
+      }
+      return (data.apportionments || []).every((item) => item.percentage >= 1);
+    },
+    {
+      message: "Porcentagem deve ser maior que 0.",
       path: ["apportionments"],
     }
   )

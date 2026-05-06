@@ -5,6 +5,7 @@ import { addMonths, addWeeks, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { addDoc, getDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
+import type { FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2, CalendarIcon, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, CreditCard, FileText, Loader2, Plus, PlusCircle, Trash2, UserRound } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -272,6 +273,23 @@ function SectionHeading({
   );
 }
 
+function flattenFormErrors(errors: FieldErrors<ExpenseFormValues>, prefix = ""): Array<{ path: string; message: string }> {
+  return Object.entries(errors).flatMap(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (!value) return [];
+
+    if (typeof value === "object" && "message" in value && typeof value.message === "string") {
+      return [{ path, message: value.message }];
+    }
+
+    if (typeof value === "object") {
+      return flattenFormErrors(value as FieldErrors<ExpenseFormValues>, path);
+    }
+
+    return [];
+  });
+}
+
 async function parseFinancialApiError(response: Response) {
   try {
     const payload = await response.json();
@@ -528,9 +546,12 @@ export function ExpenseForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
+  const returnTo = searchParams.get("returnTo");
+  const importTransactionId = searchParams.get("importTransaction");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingExpense, setIsLoadingExpense] = useState(false);
   const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
+  const [importTransactionData, setImportTransactionData] = useState<any | null>(null);
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [accountPlanSearch, setAccountPlanSearch] = useState("");
   const [expandedAccountPlans, setExpandedAccountPlans] = useState<Set<string>>(new Set());
@@ -579,6 +600,9 @@ export function ExpenseForm() {
   const installmentType = form.watch("installmentType");
   const installmentsQty = form.watch("installments");
   const totalValue = form.watch("totalValue");
+  const descriptionValue = form.watch("description");
+  const supplierValue = form.watch("supplier");
+  const resultCenterValue = form.watch("resultCenter");
   const firstInstallmentDueDate = form.watch("firstInstallmentDueDate");
   const installmentPeriodicity = form.watch("installmentPeriodicity");
   const recurrenceFirstDueDate = form.watch("recurrenceFirstDueDate");
@@ -674,6 +698,55 @@ export function ExpenseForm() {
     totalValue,
     variedInstallments,
   ]);
+
+  useEffect(() => {
+    if (paymentMethod === "recurring") {
+      form.clearErrors("competenceDate");
+    }
+  }, [form, paymentMethod]);
+
+  useEffect(() => {
+    if (editId || !importTransactionId) return;
+
+    let active = true;
+    const transactionId = importTransactionId;
+
+    async function loadImportTransaction() {
+      try {
+        const snapshot = await getDoc(financialDoc("transactions", transactionId));
+        if (!snapshot.exists() || !active) return;
+        const data = snapshot.data();
+        const transactionDate = toOptionalDate(data.date);
+        const competenceDate =
+          transactionDate ? new Date(transactionDate.getFullYear(), transactionDate.getMonth(), 1) : undefined;
+
+        form.reset({
+          ...form.getValues(),
+          paymentMethod: "single",
+          accountPlan: data.accountPlanId || "",
+          description: data.description || "",
+          supplier: data.supplier || "",
+          resultCenter: data.resultCenterName || "",
+          notes: data.rawBankDescription || "",
+          totalValue: Number(data.amount) || 0,
+          competenceDate,
+          dueDate: transactionDate,
+          isApportioned: false,
+          apportionments: [{ resultCenter: "", percentage: 100 }],
+        });
+        setImportTransactionData({ id: snapshot.id, ...data });
+      } catch (error) {
+        console.error(error);
+        toast({ variant: "destructive", title: "Erro ao carregar a transação importada." });
+      }
+    }
+
+    void loadImportTransaction();
+
+    return () => {
+      active = false;
+    };
+  }, [editId, form, importTransactionId, toast]);
 
   useEffect(() => {
     if (!editId) return;
@@ -983,10 +1056,26 @@ export function ExpenseForm() {
             )
           : [];
 
+      const importPaymentMetadata =
+        importTransactionId && importTransactionData
+          ? {
+              status: "paid",
+              paidAt: importTransactionData.date,
+              paidByImport: true,
+              linkedBankTransactionId: importTransactionId,
+              importedFrom: "bank_statement",
+              rawBankDescription: importTransactionData.rawBankDescription || importTransactionData.description || "",
+            }
+          : {
+              status: "pending",
+            };
+
       const payload = {
         ...buildExpensePayload(values),
-        status: "pending",
+        ...importPaymentMetadata,
       };
+
+      let savedExpenseId = editId || "";
 
       if (editId && values.paymentMethod !== "recurring") {
         await updateDoc(financialDoc("expenses", editId), payload);
@@ -1043,15 +1132,23 @@ export function ExpenseForm() {
         );
         toast({ title: "Despesas recorrentes lançadas." });
       } else {
-        await addDoc(financialCollection("expenses"), {
+        const createdExpense = await addDoc(financialCollection("expenses"), {
           ...payload,
           createdBy: firebaseUser.uid,
           createdAt: Timestamp.now(),
         });
+        savedExpenseId = createdExpense.id;
         toast({ title: "Despesa lançada." });
       }
 
-      router.push(FINANCIAL_ROUTES.expenses);
+      if (importTransactionId && savedExpenseId) {
+        await updateDoc(financialDoc("transactions", importTransactionId), {
+          auditStatus: "resolved",
+          linkedExpenseId: savedExpenseId,
+        });
+      }
+
+      router.push(returnTo || FINANCIAL_ROUTES.expenses);
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -1063,6 +1160,26 @@ export function ExpenseForm() {
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function handleFinalizeClick() {
+    if (paymentMethod === "recurring") {
+      form.clearErrors("competenceDate");
+      form.setValue("competenceDate", undefined, { shouldDirty: false, shouldValidate: false });
+    }
+
+    await form.handleSubmit(
+      onSubmit,
+      (errors: FieldErrors<ExpenseFormValues>) => {
+        const flattenedErrors = flattenFormErrors(errors);
+        console.error("Expense form validation errors:", flattenedErrors, errors);
+        toast({
+          variant: "destructive",
+          title: "Revise os campos obrigatórios.",
+          description: flattenedErrors[0]?.message || "Há campos pendentes no formulário.",
+        });
+      }
+    )();
   }
 
   if (isLoadingExpense || accountPlansLoading || unitsLoading) {
@@ -1794,30 +1911,48 @@ export function ExpenseForm() {
         </Card>
 
         <div className="rounded-2xl border border-border/70 bg-background px-5 py-4 shadow-sm">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="flex items-center gap-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+            <div className="grid flex-1 gap-4 sm:grid-cols-3 xl:grid-cols-7">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Total</p>
                 <p className="text-sm font-semibold text-primary">{formatCurrency(totalValue || 0)}</p>
               </div>
-              <div className="h-8 w-px bg-border" />
               <div>
                 <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Forma</p>
                 <p className="text-sm font-medium">
                   {paymentMethod === "single"
                     ? "Pagamento único"
                     : paymentMethod === "installments"
-                    ? "Parcelado"
+                    ? installmentsSummary?.length
+                      ? `Parcelado · ${installmentsSummary.length}x`
+                      : "Parcelado"
+                    : recurringPreview.length
+                    ? `Recorrente · ${recurringPreview.length}x`
                     : "Recorrente"}
                 </p>
               </div>
-              <div className="h-8 w-px bg-border" />
               <div>
                 <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Rateio</p>
-                <p className="text-sm font-medium">{isApportioned ? `${rateioTotal.toFixed(2)}%` : "Centro único"}</p>
+                <p className="text-sm font-medium">{isApportioned ? `${rateioTotal.toFixed(2)}%` : "Sem rateio"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Plano de contas</p>
+                <p className="truncate text-sm font-medium">{selectedAccountPlan?.name || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Centro de custo</p>
+                <p className="truncate text-sm font-medium">{isApportioned ? "Rateado" : resultCenterValue || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Fornecedor</p>
+                <p className="truncate text-sm font-medium">{supplierValue || "—"}</p>
+              </div>
+              <div className="sm:col-span-3 xl:col-span-1">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Descrição</p>
+                <p className="truncate text-sm font-medium">{descriptionValue || "—"}</p>
               </div>
             </div>
-            <div className="ml-auto flex w-full justify-end text-right">
+            <div className="ml-auto flex w-full justify-end text-right xl:w-auto xl:pl-4">
               <p className="text-sm font-extrabold uppercase tracking-[0.04em] text-red-600">Confira antes de salvar</p>
             </div>
           </div>
@@ -1833,7 +1968,7 @@ export function ExpenseForm() {
               Salvar rascunho
             </Button>
           )}
-          <Button type="submit" className="h-11" disabled={isSaving}>
+          <Button type="button" className="h-11" disabled={isSaving} onClick={() => void handleFinalizeClick()}>
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {loadedStatus === "draft" ? "Concluir lançamento" : editId ? "Atualizar" : "Salvar"}
           </Button>

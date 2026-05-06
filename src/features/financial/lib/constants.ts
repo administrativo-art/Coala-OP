@@ -19,6 +19,7 @@ export const FINANCIAL_ROUTES = {
   financialFlow: "/dashboard/financial/financial-flow",
   dre: "/dashboard/financial/dre",
   expenses: "/dashboard/financial/expenses",
+  pendingAuditExpenses: "/dashboard/financial/expenses/pending-audit",
   newExpense: "/dashboard/financial/expenses/new",
   importExpenses: "/dashboard/financial/expenses/import",
   settings: "/dashboard/financial/settings",

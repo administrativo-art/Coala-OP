@@ -18,7 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 import {
   AlertDialog,
@@ -122,6 +122,8 @@ function fmt(value?: number | null) {
 export default function PurchaseOrderPage() {
   const params = useParams<{ orderId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get('returnTo');
   const { permissions, firebaseUser } = useAuth();
   const { orders, loading, cancelOrder, updateOrder, confirmOrder, fetchOrderItems } = usePurchaseOrders();
   const { financials, markAsPaid } = usePurchaseFinancials();
@@ -428,7 +430,7 @@ export default function PurchaseOrderPage() {
                   </Link>
                   {order.linkedExpenseId && (
                     <Link
-                      href={`/dashboard/financial/expenses/new?edit=${order.linkedExpenseId}`}
+                      href={`/dashboard/financial/expenses/new?edit=${order.linkedExpenseId}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`}
                       className="inline-flex text-xs text-primary hover:underline"
                     >
                       Abrir despesa no financeiro
