@@ -114,6 +114,24 @@ service cloud.firestore {
         || (hasFinancialClaims() && request.auth.token.financial.settings.manageImportAliases == true);
     }
 
+    function canManageExpenseDescriptions() {
+      return isFinancialAdmin()
+        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageExpenseDescriptions == true)
+        || (hasFinancialClaims() && request.auth.token.financial.settings.manageExpenseDescriptions == true);
+    }
+
+    function canReadExpenseDescriptions() {
+      return canCreateExpenses()
+        || canEditExpenses()
+        || canManageExpenseDescriptions();
+    }
+
+    function canCreateExpenseDescriptions() {
+      return canCreateExpenses()
+        || canEditExpenses()
+        || canManageExpenseDescriptions();
+    }
+
     match /users/{userId} {
       allow get: if hasFinancialAccess() && request.auth.uid == userId;
       allow list: if isFinancialAdmin();
@@ -138,6 +156,12 @@ service cloud.firestore {
     match /importAliases/{aliasId} {
       allow read: if hasFinancialAccess();
       allow create, update, delete: if canManageImportAliases();
+    }
+
+    match /expenseDescriptions/{descriptionId} {
+      allow read: if canReadExpenseDescriptions();
+      allow create: if canCreateExpenseDescriptions();
+      allow update, delete: if canManageExpenseDescriptions();
     }
 
     match /expenses/{expenseId} {

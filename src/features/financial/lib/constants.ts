@@ -2,6 +2,7 @@ export const FINANCIAL_COLLECTIONS = {
   users: "users",
   accountPlans: "accountPlans",
   resultCenters: "resultCenters",
+  expenseDescriptions: "expenseDescriptions",
   expenses: "expenses",
   bankAccounts: "bankAccounts",
   payments: "payments",

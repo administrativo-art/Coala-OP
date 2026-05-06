@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import AccountPlansManagement from "@/features/financial/components/settings/account-plans-management";
 import BankAccountsManagement from "@/features/financial/components/settings/bank-accounts-management";
+import ExpenseDescriptionsManagement from "@/features/financial/components/settings/expense-descriptions-management";
 import ImportAliasesManagement from "@/features/financial/components/settings/import-aliases-management";
 import ResultCentersManagement from "@/features/financial/components/settings/result-centers-management";
 import { useAuth } from "@/hooks/use-auth";
@@ -31,6 +32,9 @@ export function FinancialSettingsPage() {
         <TabsContent value="accounting" className="space-y-6">
           <AccountPlansManagement canManage={permissions.financial?.settings?.manageAccountPlans} />
           <ResultCentersManagement canManage={permissions.financial?.settings?.manageResultCenters} />
+          {permissions.financial?.settings?.manageExpenseDescriptions ? (
+            <ExpenseDescriptionsManagement canManage={permissions.financial?.settings?.manageExpenseDescriptions} />
+          ) : null}
         </TabsContent>
         <TabsContent value="accounts">
           <BankAccountsManagement canManage={permissions.financial?.settings?.manageBankAccounts} />

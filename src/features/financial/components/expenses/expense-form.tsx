@@ -14,6 +14,7 @@ import { useEntities } from "@/hooks/use-entities";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import {
+  expenseDescriptionFormSchema,
   expenseFormSchema,
   type ExpenseFormValues,
 } from "@/features/financial/lib/schemas";
@@ -26,7 +27,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -69,6 +69,10 @@ function toOptionalDate(value: any): Date | undefined {
   }
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+function normalizeExpenseDescriptionLabel(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
 }
 
 function buildRecurringOccurrences(
@@ -539,7 +543,7 @@ function QuickAddEntityDialog({
 }
 
 export function ExpenseForm() {
-  const { firebaseUser, users } = useAuth();
+  const { firebaseUser, users, permissions } = useAuth();
   const { entities } = useEntities();
   const { kiosks, loading: unitsLoading } = useKiosks();
   const { toast } = useToast();
@@ -555,12 +559,16 @@ export function ExpenseForm() {
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [accountPlanSearch, setAccountPlanSearch] = useState("");
   const [expandedAccountPlans, setExpandedAccountPlans] = useState<Set<string>>(new Set());
+  const [descriptionFocused, setDescriptionFocused] = useState(false);
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const { data: accountPlans, loading: accountPlansLoading } = useFinancialCollection<any>(
     financialCollection("accountPlans")
+  );
+  const { data: expenseDescriptions, refresh: refreshExpenseDescriptions } = useFinancialCollection<any>(
+    financialCollection("expenseDescriptions")
   );
   const units = useMemo(
     () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
@@ -618,6 +626,44 @@ export function ExpenseForm() {
     () => filterAccountTree(accountTree, accountPlanSearch),
     [accountPlanSearch, accountTree]
   );
+  const activeExpenseDescriptions = useMemo(
+    () =>
+      [...(expenseDescriptions || [])]
+        .filter((item) => item.active !== false && typeof item.label === "string" && item.label.trim().length > 0)
+        .sort((left, right) => left.label.localeCompare(right.label, "pt-BR", { sensitivity: "base" })),
+    [expenseDescriptions]
+  );
+  const canManageExpenseDescriptions = !!permissions.financial?.settings?.manageExpenseDescriptions;
+  const canQuickAddExpenseDescriptions =
+    !!permissions.financial?.expenses?.create ||
+    !!permissions.financial?.expenses?.edit ||
+    canManageExpenseDescriptions;
+  const normalizedDescriptionValue = useMemo(
+    () => normalizeExpenseDescriptionLabel(descriptionValue || ""),
+    [descriptionValue]
+  );
+  const hasMatchingExpenseDescription = useMemo(
+    () =>
+      activeExpenseDescriptions.some(
+        (item) => normalizeExpenseDescriptionLabel(item.label) === normalizedDescriptionValue
+      ),
+    [activeExpenseDescriptions, normalizedDescriptionValue]
+  );
+  const filteredExpenseDescriptions = useMemo(() => {
+    const normalizedSearch = descriptionValue.trim().toLowerCase();
+    if (!normalizedSearch) return activeExpenseDescriptions;
+
+    return activeExpenseDescriptions.filter((item) =>
+      item.label.toLowerCase().includes(normalizedSearch)
+    );
+  }, [activeExpenseDescriptions, descriptionValue]);
+  const visibleExpenseDescriptions = useMemo(
+    () =>
+      filteredExpenseDescriptions
+        .filter((item) => normalizeExpenseDescriptionLabel(item.label) !== normalizedDescriptionValue)
+        .slice(0, 6),
+    [filteredExpenseDescriptions, normalizedDescriptionValue]
+  );
 
   useEffect(() => {
     if (!accountPlanOpen) {
@@ -629,6 +675,65 @@ export function ExpenseForm() {
 
     setExpandedAccountPlans(new Set(collectAccountParentPath(accountPlans, accountPlanValue)));
   }, [accountPlanOpen, accountPlanValue, accountPlans]);
+
+  async function handleQuickAddExpenseDescription() {
+    if (!firebaseUser) return;
+
+    if (!canQuickAddExpenseDescriptions) {
+      toast({
+        variant: "destructive",
+        title: "Sem permissão para cadastrar sugestões.",
+        description: "Seu perfil precisa poder lançar ou editar despesas para usar esse atalho.",
+      });
+      return;
+    }
+
+    const rawLabel = descriptionValue || "";
+    const parsed = expenseDescriptionFormSchema.safeParse({
+      label: rawLabel,
+      active: true,
+    });
+
+    if (!parsed.success) {
+      toast({
+        variant: "destructive",
+        title: "Descrição inválida.",
+        description: parsed.error.issues[0]?.message || "Revise o texto antes de adicionar a sugestão.",
+      });
+      return;
+    }
+
+    if (hasMatchingExpenseDescription) {
+      toast({
+        title: "Sugestão já cadastrada.",
+        description: "Essa descrição já está disponível na lista de sugestões.",
+      });
+      return;
+    }
+
+    try {
+      const trimmedLabel = parsed.data.label.trim();
+      await addDoc(financialCollection("expenseDescriptions"), {
+        label: trimmedLabel,
+        active: true,
+        createdAt: Timestamp.now(),
+        createdBy: firebaseUser.uid,
+        updatedAt: Timestamp.now(),
+        updatedBy: firebaseUser.uid,
+      });
+      await refreshExpenseDescriptions();
+      toast({
+        title: "Sugestão adicionada.",
+        description: "A descrição foi salva e já pode ser reutilizada nos próximos lançamentos.",
+      });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Erro ao adicionar sugestão.",
+        description: "Não foi possível salvar a descrição no catálogo. Se a regra já deveria permitir isso, publique as regras financeiras atualizadas.",
+      });
+    }
+  }
 
   const filteredEntities = useMemo(() => {
     const normalizedSearch = supplierSearch.trim().toLowerCase();
@@ -1283,9 +1388,64 @@ export function ExpenseForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Descrição</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: aluguel da unidade, manutenção de freezer..." {...field} />
-                    </FormControl>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <FormControl>
+                          <Input
+                            placeholder="Ex: aluguel da unidade, manutenção de freezer..."
+                            {...field}
+                            autoComplete="off"
+                            onFocus={() => setDescriptionFocused(true)}
+                            onBlur={() => {
+                              window.setTimeout(() => setDescriptionFocused(false), 120);
+                            }}
+                          />
+                        </FormControl>
+                        {descriptionFocused && visibleExpenseDescriptions.length > 0 ? (
+                          <div className="absolute z-20 mt-1 max-h-64 w-full overflow-hidden rounded-md border bg-popover shadow-md">
+                            <ScrollArea className="max-h-64">
+                              <div className="p-1">
+                                {visibleExpenseDescriptions.map((item) => (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      field.onChange(item.label);
+                                      setDescriptionFocused(false);
+                                    }}
+                                  >
+                                    <Check className="h-4 w-4 opacity-40" />
+                                    <span className="truncate">{item.label}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                          </div>
+                        ) : null}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0"
+                        title={
+                          hasMatchingExpenseDescription
+                            ? "Essa descrição já está cadastrada"
+                            : canQuickAddExpenseDescriptions
+                            ? "Adicionar texto atual como sugestão"
+                            : "Sem permissão para cadastrar sugestões"
+                        }
+                        onClick={() => void handleQuickAddExpenseDescription()}
+                        disabled={!descriptionValue?.trim() || hasMatchingExpenseDescription}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Enquanto digita, você pode escolher uma sugestão ou continuar com o texto livre. Use `+` para salvar no catálogo.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}

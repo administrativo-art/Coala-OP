@@ -532,6 +532,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.financial.settings.manageAccountPlans" as any, "Gerenciar plano de contas", "Permite criar, editar e excluir planos de contas.", !financialSettingsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.settings.manageResultCenters" as any, "Gerenciar centros de resultado", "Permite criar, editar e excluir centros de resultado.", !financialSettingsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.settings.manageBankAccounts" as any, "Gerenciar contas bancárias", "Permite manter contas e métodos de pagamento.", !financialSettingsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.settings.manageExpenseDescriptions" as any, "Gerenciar descrições de despesas", "Permite manter o catálogo de descrições reutilizáveis do financeiro.", !financialSettingsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.settings.manageImportAliases" as any, "Gerenciar aliases de importação", "Permite manter regras automáticas de classificação de extratos.", !financialSettingsViewWatch, true)}
                                   </div>
                                 </div>

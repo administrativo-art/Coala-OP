@@ -69,6 +69,10 @@ const BankAccountsManagement = dynamic(
   () => import("@/features/financial/components/settings/bank-accounts-management"),
   { ssr: false }
 );
+const ExpenseDescriptionsManagement = dynamic(
+  () => import("@/features/financial/components/settings/expense-descriptions-management"),
+  { ssr: false }
+);
 const ImportAliasesManagement = dynamic(
   () => import("@/features/financial/components/settings/import-aliases-management"),
   { ssr: false }
@@ -576,6 +580,9 @@ export default function SettingsPage() {
         <div className="space-y-6">
           <AccountPlansManagement canManage={permissions.financial?.settings?.manageAccountPlans} />
           <ResultCentersManagement canManage={permissions.financial?.settings?.manageResultCenters} />
+          {permissions.financial?.settings?.manageExpenseDescriptions ? (
+            <ExpenseDescriptionsManagement canManage={permissions.financial?.settings?.manageExpenseDescriptions} />
+          ) : null}
         </div>
       ),
     },

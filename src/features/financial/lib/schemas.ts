@@ -201,6 +201,16 @@ export const expenseFormSchema = z
 
 export type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
 
+export const expenseDescriptionFormSchema = z.object({
+  label: z
+    .string()
+    .trim()
+    .min(3, "A descrição deve ter pelo menos 3 caracteres.")
+    .max(160, "A descrição deve ter no máximo 160 caracteres."),
+  active: z.boolean().default(true),
+});
+export type ExpenseDescriptionFormValues = z.infer<typeof expenseDescriptionFormSchema>;
+
 export const accountPlanFormSchema = z.object({
   name: z.string().min(3, "O nome da conta deve ter pelo menos 3 caracteres."),
   description: z.string().optional(),

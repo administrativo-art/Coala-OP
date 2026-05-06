@@ -423,7 +423,7 @@ export type PermissionSet = {
     financialFlow: boolean;
     dre: boolean;
     expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
-    settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; };
+    settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; manageExpenseDescriptions: boolean; };
   };
   purchasing: {
     view: boolean;
@@ -1244,7 +1244,7 @@ export const defaultGuestPermissions: PermissionSet = {
       financialFlow: false,
       dre: false,
       expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
-      settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false },
+      settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false, manageExpenseDescriptions: false },
     },
     purchasing: {
       view: false,
@@ -1311,7 +1311,7 @@ export const defaultAdminPermissions: PermissionSet = {
       financialFlow: true,
       dre: true,
       expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
-      settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true },
+      settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true, manageExpenseDescriptions: true },
     },
     purchasing: {
       view: true,

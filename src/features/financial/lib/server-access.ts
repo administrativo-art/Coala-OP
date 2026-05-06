@@ -140,6 +140,12 @@ export function canReadFinancialPath(
     case "resultCenters":
     case "bankAccounts":
       return permissions.view;
+    case "expenseDescriptions":
+      return (
+        permissions.expenses.create ||
+        permissions.expenses.edit ||
+        permissions.settings.manageExpenseDescriptions
+      );
     case "importAliases":
     case "importDrafts":
       return permissions.expenses.import || permissions.settings.manageImportAliases;
