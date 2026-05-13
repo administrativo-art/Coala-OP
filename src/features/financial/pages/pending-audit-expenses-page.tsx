@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Timestamp, updateDoc } from "firebase/firestore";
 import { format, startOfDay } from "date-fns";
-import { ArrowLeft, Search } from "lucide-react";
+import { Search } from "lucide-react";
+import { BackButton } from "@/components/navigation/back-button";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
@@ -201,12 +202,7 @@ export function PendingAuditExpensesPage() {
           <h1 className="text-3xl font-bold tracking-tight">Pendências de auditoria</h1>
           <p className="text-muted-foreground">Fila dedicada para tratar despesas de compras e despesas reconhecidas via importação de extrato.</p>
         </div>
-        <Button asChild variant="outline">
-          <Link href={FINANCIAL_ROUTES.expenses}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar para despesas
-          </Link>
-        </Button>
+        <BackButton fallbackHref={FINANCIAL_ROUTES.expenses} label="Voltar para despesas" />
       </div>
 
       <Card>

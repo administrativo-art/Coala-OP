@@ -7,7 +7,7 @@ import { addDoc, getDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import type { FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2, CalendarIcon, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, CreditCard, FileText, Loader2, Plus, PlusCircle, Trash2, UserRound } from "lucide-react";
+import { Building2, CalendarIcon, Check, ChevronLeft, ChevronRight, ChevronsUpDown, CreditCard, FileText, Loader2, Plus, PlusCircle, Trash2, UserRound, X } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useEntities } from "@/hooks/use-entities";
@@ -49,16 +49,6 @@ type RecurringPreview = InstallmentPreview & {
   competenceDate: Date;
 };
 
-const ACCOUNT_GROUP_COLORS = [
-  "#22c55e",
-  "#3b82f6",
-  "#8b5cf6",
-  "#eab308",
-  "#ef4444",
-  "#ec4899",
-  "#14b8a6",
-  "#f97316",
-];
 
 function toOptionalDate(value: any): Date | undefined {
   if (!value) return undefined;
@@ -102,156 +92,21 @@ function buildRecurringOccurrences(
   return occurrences;
 }
 
-function buildAccountTree(items: any[], parentId: string | null = null): any[] {
-  return items
-    .filter((item) => item.parentId === parentId)
-    .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
-    .map((item) => ({ ...item, children: buildAccountTree(items, item.id) }));
-}
+const ACCOUNT_GROUP_LABELS: Record<string, string> = {
+  receita: "Receita",
+  fiscal: "Impostos e Deduções",
+  insumos: "Custos Variáveis",
+  rh: "Recursos Humanos",
+  administrativo: "Administrativo",
+  marketing: "Marketing",
+  tecnologia: "Tecnologia",
+  ocupacao: "Ocupação",
+  financeiro: "Financeiro",
+  nao_operacional: "Não Operacional",
+  ir_csll: "IR / CSLL",
+};
 
-function flattenAccountTree(nodes: any[], level = 0, prefix = ""): any[] {
-  return nodes.flatMap((node, index) => {
-    const order = prefix ? `${prefix}.${index + 1}` : `${index + 1}`;
-    return [
-      { ...node, level, order, isParent: node.children.length > 0 },
-      ...flattenAccountTree(node.children, level + 1, order),
-    ];
-  });
-}
-
-function collectAccountParentPath(items: any[], targetId: string) {
-  const byId = new Map(items.map((item) => [item.id, item]));
-  const path: string[] = [];
-  let current = byId.get(targetId);
-
-  while (current?.parentId) {
-    path.unshift(current.parentId);
-    current = byId.get(current.parentId);
-  }
-
-  return path;
-}
-
-function filterAccountTree(nodes: any[], query: string): any[] {
-  if (!query.trim()) return nodes;
-
-  const normalizedQuery = query.trim().toLowerCase();
-
-  return nodes.flatMap((node) => {
-    const children = filterAccountTree(node.children ?? [], normalizedQuery);
-    const matchesSelf = [node.order, node.name, node.description]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(normalizedQuery));
-
-    if (!matchesSelf && children.length === 0) {
-      return [];
-    }
-
-    return [
-      {
-        ...node,
-        children: matchesSelf ? node.children ?? [] : children,
-      },
-    ];
-  });
-}
-
-function AccountPlanTreeRow({
-  node,
-  depth,
-  topLevelIndex,
-  expanded,
-  selectedId,
-  searching,
-  onToggle,
-  onSelect,
-}: {
-  node: any;
-  depth: number;
-  topLevelIndex: number;
-  expanded: Set<string>;
-  selectedId: string;
-  searching: boolean;
-  onToggle: (id: string) => void;
-  onSelect: (id: string) => void;
-}) {
-  const hasChildren = (node.children?.length ?? 0) > 0;
-  const isExpanded = searching || expanded.has(node.id);
-  const isSelected = selectedId === node.id;
-  const color = ACCOUNT_GROUP_COLORS[topLevelIndex % ACCOUNT_GROUP_COLORS.length];
-
-  return (
-    <div>
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-md border border-transparent px-3 py-2 text-sm transition-colors hover:bg-muted/40",
-          isSelected && "border-border bg-muted/30"
-        )}
-      >
-        {depth === 0 ? (
-          <>
-            <button
-              type="button"
-              className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
-              onClick={() => hasChildren && onToggle(node.id)}
-            >
-              {hasChildren ? (
-                isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
-              ) : (
-                <span className="h-3.5 w-3.5" />
-              )}
-            </button>
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-          </>
-        ) : (
-          <div className="relative h-5 shrink-0" style={{ width: `${18 + (depth - 1) * 18}px` }}>
-            <span
-              className="absolute border-b border-l border-border/70"
-              style={{
-                left: `${8 + (depth - 1) * 18}px`,
-                top: 0,
-                height: 14,
-                width: 12,
-                borderBottomLeftRadius: 6,
-              }}
-            />
-          </div>
-        )}
-
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          onClick={() => onSelect(node.id)}
-        >
-          <span className={cn("shrink-0 font-mono text-xs", depth === 0 ? "text-foreground/80" : "text-muted-foreground")}>
-            {node.order}
-          </span>
-          <span className={cn("truncate", depth === 0 ? "font-semibold" : "font-medium")}>{node.name}</span>
-        </button>
-
-        {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-      </div>
-
-      {hasChildren && isExpanded && (
-        <div className="mt-0.5 space-y-0.5">
-          {node.children.map((child: any) => (
-            <AccountPlanTreeRow
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              topLevelIndex={topLevelIndex}
-              expanded={expanded}
-              selectedId={selectedId}
-              searching={searching}
-              onToggle={onToggle}
-              onSelect={onSelect}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+const ACCOUNT_GROUP_ORDER = ["fiscal", "insumos", "rh", "administrativo", "marketing", "tecnologia", "ocupacao", "financeiro", "nao_operacional", "ir_csll", "receita"];
 
 function SectionHeading({
   icon,
@@ -558,14 +413,16 @@ export function ExpenseForm() {
   const [importTransactionData, setImportTransactionData] = useState<any | null>(null);
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [accountPlanSearch, setAccountPlanSearch] = useState("");
-  const [expandedAccountPlans, setExpandedAccountPlans] = useState<Set<string>>(new Set());
   const [descriptionFocused, setDescriptionFocused] = useState(false);
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState<"identification" | "classification" | "schedule" | "review">(
+    "identification"
+  );
 
-  const { data: accountPlans, loading: accountPlansLoading } = useFinancialCollection<any>(
-    financialCollection("accountPlans")
+  const { data: accounts, loading: accountPlansLoading } = useFinancialCollection<any>(
+    financialCollection("accounts")
   );
   const { data: expenseDescriptions, refresh: refreshExpenseDescriptions } = useFinancialCollection<any>(
     financialCollection("expenseDescriptions")
@@ -575,11 +432,32 @@ export function ExpenseForm() {
     [kiosks]
   );
 
-  const flattenedAccounts = useMemo(() => {
-    if (!accountPlans) return [];
-    return flattenAccountTree(buildAccountTree(accountPlans));
-  }, [accountPlans]);
-  const accountTree = useMemo(() => buildAccountTree(accountPlans || []), [accountPlans]);
+  const activeAccounts = useMemo(
+    () => (accounts || []).filter((a: any) => a.active !== false),
+    [accounts]
+  );
+
+  const groupedAccounts = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    activeAccounts.forEach((a: any) => {
+      const g = a.group || "outros";
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(a);
+    });
+    return ACCOUNT_GROUP_ORDER.filter((g) => groups[g]?.length).map((g) => ({
+      group: g,
+      label: ACCOUNT_GROUP_LABELS[g] ?? g,
+      accounts: groups[g],
+    }));
+  }, [activeAccounts]);
+
+  const filteredGroupedAccounts = useMemo(() => {
+    const q = accountPlanSearch.trim().toLowerCase();
+    if (!q) return groupedAccounts;
+    return groupedAccounts
+      .map((g) => ({ ...g, accounts: g.accounts.filter((a: any) => a.name.toLowerCase().includes(q) || (ACCOUNT_GROUP_LABELS[a.group] || "").toLowerCase().includes(q)) }))
+      .filter((g) => g.accounts.length > 0);
+  }, [groupedAccounts, accountPlanSearch]);
 
   const form = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseFormSchema),
@@ -611,6 +489,9 @@ export function ExpenseForm() {
   const descriptionValue = form.watch("description");
   const supplierValue = form.watch("supplier");
   const resultCenterValue = form.watch("resultCenter");
+  const dueDateValue = form.watch("dueDate");
+  const notesValue = form.watch("notes");
+  const competenceDateValue = form.watch("competenceDate");
   const firstInstallmentDueDate = form.watch("firstInstallmentDueDate");
   const installmentPeriodicity = form.watch("installmentPeriodicity");
   const recurrenceFirstDueDate = form.watch("recurrenceFirstDueDate");
@@ -619,12 +500,8 @@ export function ExpenseForm() {
   const isApportioned = form.watch("isApportioned");
   const apportionments = form.watch("apportionments");
   const selectedAccountPlan = useMemo(
-    () => flattenedAccounts.find((account) => account.id === accountPlanValue),
-    [accountPlanValue, flattenedAccounts]
-  );
-  const filteredAccountTree = useMemo(
-    () => filterAccountTree(accountTree, accountPlanSearch),
-    [accountPlanSearch, accountTree]
+    () => activeAccounts.find((a: any) => a.id === accountPlanValue),
+    [accountPlanValue, activeAccounts]
   );
   const activeExpenseDescriptions = useMemo(
     () =>
@@ -666,15 +543,8 @@ export function ExpenseForm() {
   );
 
   useEffect(() => {
-    if (!accountPlanOpen) {
-      setAccountPlanSearch("");
-      return;
-    }
-
-    if (!accountPlanValue || !accountPlans?.length) return;
-
-    setExpandedAccountPlans(new Set(collectAccountParentPath(accountPlans, accountPlanValue)));
-  }, [accountPlanOpen, accountPlanValue, accountPlans]);
+    if (!accountPlanOpen) setAccountPlanSearch("");
+  }, [accountPlanOpen]);
 
   async function handleQuickAddExpenseDescription() {
     if (!firebaseUser) return;
@@ -1015,6 +885,32 @@ export function ExpenseForm() {
     () => (installmentsSummary || []).reduce((sum, installment) => sum + (installment.value || 0), 0),
     [installmentsSummary]
   );
+  const steps = useMemo(
+    () => [
+      { id: "identification", label: "Identificação" },
+      { id: "classification", label: "Classificação" },
+      { id: "schedule", label: "Vencimento & parcelas" },
+      { id: "review", label: "Revisão" },
+    ] as const,
+    []
+  );
+  const activeStepIndex = steps.findIndex((step) => step.id === currentStep);
+  const previewDueDate =
+    paymentMethod === "single"
+      ? dueDateValue
+      : paymentMethod === "installments"
+      ? installmentsSummary?.[0]?.dueDate
+      : recurringPreview[0]?.dueDate;
+  const previewCompetence =
+    paymentMethod === "recurring" ? recurringPreview[0]?.competenceDate : competenceDateValue;
+  const validationItems = [
+    { label: "Descrição", ok: (descriptionValue || "").trim().length >= 3 },
+    { label: "Fornecedor", ok: (supplierValue || "").trim().length >= 3 },
+    { label: "Plano de contas", ok: !!accountPlanValue },
+    { label: "Unidade ou rateio", ok: isApportioned ? rateioTotal === 100 : !!resultCenterValue },
+    { label: "Valor", ok: Number(totalValue || 0) > 0 },
+    { label: "Vencimento", ok: !!previewDueDate },
+  ];
 
   function buildInstallmentsFromValues(values: ExpenseFormValues) {
     if (values.paymentMethod === "installments" && values.installmentType === "equal") {
@@ -1063,12 +959,13 @@ export function ExpenseForm() {
   }
 
   function buildExpensePayload(values: ExpenseFormValues) {
-    const accountPlan = accountPlans?.find((item) => item.id === values.accountPlan);
+    const account = activeAccounts.find((item: any) => item.id === values.accountPlan);
     const installmentsToSave = buildInstallmentsFromValues(values);
 
     return {
       accountPlan: values.accountPlan || "",
-      accountPlanName: accountPlan?.name || values.accountPlan || "",
+      accountId: values.accountPlan || "",
+      accountPlanName: account?.name || values.accountPlan || "",
       description: values.description || "",
       supplier: values.supplier ?? "",
       notes: values.notes ?? "",
@@ -1295,844 +1192,772 @@ export function ExpenseForm() {
     );
   }
 
+  const isDraftFlow = !editId || loadedStatus === "draft";
+  const drawerTitle = editId ? "Editar despesa" : "Lançar nova despesa";
+  const drawerSubtitle = "Provisione um compromisso financeiro do plano de contas.";
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="mx-auto max-w-5xl space-y-4">
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader className="pb-4">
-            <SectionHeading
-              icon={<FileText className="h-4 w-4 text-violet-600" />}
-              iconClassName="bg-violet-100"
-              title="Classificação"
-              description="Plano de contas, descrição e valor base"
-            />
-          </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="accountPlan"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Plano de contas</FormLabel>
-                    <Popover open={accountPlanOpen} onOpenChange={setAccountPlanOpen}>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={accountPlanOpen}
-                            className={cn("w-full justify-between font-normal", !field.value && "text-muted-foreground")}
-                          >
-                            {selectedAccountPlan ? (
-                              <span className="truncate">
-                                {selectedAccountPlan.order} · {selectedAccountPlan.name}
-                              </span>
-                            ) : (
-                              "Selecione o plano de contas"
-                            )}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[440px] p-2" align="start">
-                        <div className="space-y-2">
-                          <Input
-                            placeholder="Buscar plano de contas..."
-                            value={accountPlanSearch}
-                            onChange={(event) => setAccountPlanSearch(event.target.value)}
-                          />
-                          <ScrollArea className="h-80">
-                            <div className="space-y-1 pr-2">
-                              {filteredAccountTree.length === 0 ? (
-                                <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                                  Nenhum plano encontrado.
-                                </div>
-                              ) : (
-                                filteredAccountTree.map((account, index) => (
-                                  <AccountPlanTreeRow
-                                    key={account.id}
-                                    node={account}
-                                    depth={0}
-                                    topLevelIndex={index}
-                                    expanded={expandedAccountPlans}
-                                    selectedId={field.value}
-                                    searching={accountPlanSearch.trim().length > 0}
-                                    onToggle={(id) =>
-                                      setExpandedAccountPlans((current) => {
-                                        const next = new Set(current);
-                                        if (next.has(id)) next.delete(id);
-                                        else next.add(id);
-                                        return next;
-                                      })
-                                    }
-                                    onSelect={(id) => {
-                                      field.onChange(id);
-                                      setAccountPlanOpen(false);
-                                    }}
-                                  />
-                                ))
-                              )}
-                            </div>
-                          </ScrollArea>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+      <form onSubmit={form.handleSubmit(onSubmit)} className="min-h-[calc(100vh-5rem)]">
+        <div className="flex min-h-[calc(100vh-5rem)] bg-black/25 backdrop-blur-[2px]">
+          <div className="hidden flex-1 xl:block" />
 
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição</FormLabel>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <FormControl>
-                          <Input
-                            placeholder="Ex: aluguel da unidade, manutenção de freezer..."
-                            {...field}
-                            autoComplete="off"
-                            onFocus={() => setDescriptionFocused(true)}
-                            onBlur={() => {
-                              window.setTimeout(() => setDescriptionFocused(false), 120);
-                            }}
-                          />
-                        </FormControl>
-                        {descriptionFocused && visibleExpenseDescriptions.length > 0 ? (
-                          <div className="absolute z-20 mt-1 max-h-64 w-full overflow-hidden rounded-md border bg-popover shadow-md">
-                            <ScrollArea className="max-h-64">
-                              <div className="p-1">
-                                {visibleExpenseDescriptions.map((item) => (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
-                                    onMouseDown={(event) => {
-                                      event.preventDefault();
-                                      field.onChange(item.label);
-                                      setDescriptionFocused(false);
-                                    }}
+          <div className="ml-auto flex w-full max-w-[1220px] overflow-hidden rounded-l-[32px] border border-border/70 bg-background shadow-2xl">
+            <div className="flex min-w-0 flex-1 flex-col border-r">
+              <div className="border-b px-6 py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Despesas / {editId ? "Editar" : "Lançar nova"}</p>
+                    <h1 className="mt-2 text-[2rem] font-semibold leading-none">{drawerTitle}</h1>
+                    <p className="text-sm text-muted-foreground">{drawerSubtitle}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px]">Rascunho · auto-save</Badge>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full"
+                      onClick={() => router.push(returnTo || FINANCIAL_ROUTES.expenses)}
+                    >
+                      <X className="h-4 w-4" />
+                      <span className="sr-only">Fechar</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                  {steps.map((step, index) => {
+                    const isActive = currentStep === step.id;
+                    const isDone = activeStepIndex > index;
+
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => setCurrentStep(step.id)}
+                        className={cn(
+                          "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                          isActive
+                            ? "border-foreground bg-foreground text-background"
+                            : isDone
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-transparent bg-transparent text-muted-foreground hover:border-border hover:bg-muted/40"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold",
+                            isActive ? "bg-background/15 text-background" : isDone ? "bg-emerald-100 text-emerald-700" : "bg-muted text-foreground"
+                          )}
+                        >
+                          {isDone ? <Check className="h-3 w-3" /> : index + 1}
+                        </span>
+                        {step.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <ScrollArea className="flex-1">
+                <div className="space-y-6 px-6 py-6">
+                  {currentStep === "identification" && (
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-base font-semibold">Identificação</h2>
+                        <p className="text-sm text-muted-foreground">Quem cobra, do que se trata e quanto.</p>
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Descrição da despesa</FormLabel>
+                            <div className="flex gap-2">
+                              <div className="relative flex-1">
+                                <FormControl>
+                                  <Input
+                                    placeholder="Ex: aluguel — setembro/26"
+                                    {...field}
+                                    autoComplete="off"
+                                    onFocus={() => setDescriptionFocused(true)}
+                                    onBlur={() => window.setTimeout(() => setDescriptionFocused(false), 120)}
+                                  />
+                                </FormControl>
+                                {descriptionFocused && visibleExpenseDescriptions.length > 0 ? (
+                                  <div className="absolute z-20 mt-1 max-h-64 w-full overflow-hidden rounded-md border bg-popover shadow-md">
+                                    <ScrollArea className="max-h-64">
+                                      <div className="p-1">
+                                        {visibleExpenseDescriptions.map((item) => (
+                                          <button
+                                            key={item.id}
+                                            type="button"
+                                            className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
+                                            onMouseDown={(event) => {
+                                              event.preventDefault();
+                                              field.onChange(item.label);
+                                              setDescriptionFocused(false);
+                                            }}
+                                          >
+                                            <Check className="h-4 w-4 opacity-40" />
+                                            <span className="truncate">{item.label}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </ScrollArea>
+                                  </div>
+                                ) : null}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="shrink-0"
+                                onClick={() => void handleQuickAddExpenseDescription()}
+                                disabled={!descriptionValue?.trim() || hasMatchingExpenseDescription}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="supplier"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Fornecedor</FormLabel>
+                            <div className="flex gap-2">
+                              <Popover open={supplierOpen} onOpenChange={setSupplierOpen}>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant="outline"
+                                      role="combobox"
+                                      aria-expanded={supplierOpen}
+                                      className={cn("flex-1 justify-between font-normal", !field.value && "text-muted-foreground")}
+                                    >
+                                      {field.value || "Buscar fornecedor"}
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[340px] p-0" align="start">
+                                  <div className="space-y-2 p-2">
+                                    <Input
+                                      placeholder="Buscar ou digitar..."
+                                      value={supplierSearch || field.value || ""}
+                                      onChange={(event) => {
+                                        const nextValue = event.target.value;
+                                        setSupplierSearch(nextValue);
+                                        field.onChange(nextValue);
+                                      }}
+                                    />
+                                    <ScrollArea className="h-64">
+                                      <div className="space-y-3 pr-2">
+                                        {filteredEntities.length === 0 && filteredUsers.length === 0 ? (
+                                          <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                                            Nenhum cadastro encontrado. Use o texto digitado ou adicione via +.
+                                          </div>
+                                        ) : (
+                                          <>
+                                            {filteredEntities.length > 0 && (
+                                              <div className="space-y-1">
+                                                <p className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Entidades</p>
+                                                {filteredEntities.map((entity) => {
+                                                  const label = entity.fantasyName || entity.name;
+                                                  const isSelected = field.value === label;
+                                                  return (
+                                                    <button
+                                                      key={entity.id}
+                                                      type="button"
+                                                      className={cn(
+                                                        "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left text-sm transition-colors hover:bg-muted/40",
+                                                        isSelected && "border-border bg-muted/30"
+                                                      )}
+                                                      onClick={() => {
+                                                        field.onChange(label);
+                                                        setSupplierSearch(label);
+                                                        setSupplierOpen(false);
+                                                      }}
+                                                    >
+                                                      <span className="truncate">{label}</span>
+                                                      {isSelected && <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                            {filteredUsers.length > 0 && (
+                                              <div className="space-y-1">
+                                                <p className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Usuários</p>
+                                                {filteredUsers.map((user) => {
+                                                  const label = user.username || user.email;
+                                                  const isSelected = field.value === label;
+                                                  return (
+                                                    <button
+                                                      key={user.id}
+                                                      type="button"
+                                                      className={cn(
+                                                        "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left text-sm transition-colors hover:bg-muted/40",
+                                                        isSelected && "border-border bg-muted/30"
+                                                      )}
+                                                      onClick={() => {
+                                                        field.onChange(label);
+                                                        setSupplierSearch(label);
+                                                        setSupplierOpen(false);
+                                                      }}
+                                                    >
+                                                      <span className="truncate">{label}</span>
+                                                      <Badge variant="secondary" className="ml-auto text-[10px] py-0">
+                                                        <UserRound className="mr-1 h-2.5 w-2.5" />
+                                                        Usuário
+                                                      </Badge>
+                                                      {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    </ScrollArea>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                              <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => setQuickAddOpen(true)}>
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="totalValue"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Valor total</FormLabel>
+                              <FormControl>
+                                <CurrencyInput value={field.value} onChange={field.onChange} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <div className="space-y-2">
+                          <FormLabel>Tipo de lançamento</FormLabel>
+                          <Input value="Despesa manual" disabled />
+                        </div>
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="notes"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Observações (opcional)</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="Notas internas, número de boleto, contrato vinculado..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {currentStep === "classification" && (
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-base font-semibold">Classificação contábil</h2>
+                        <p className="text-sm text-muted-foreground">Plano de contas, centro de resultado e rateio.</p>
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="accountPlan"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Plano de contas</FormLabel>
+                            <Popover open={accountPlanOpen} onOpenChange={setAccountPlanOpen}>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={accountPlanOpen}
+                                    className={cn("w-full justify-between font-normal", !field.value && "text-muted-foreground")}
                                   >
-                                    <Check className="h-4 w-4 opacity-40" />
-                                    <span className="truncate">{item.label}</span>
+                                    {selectedAccountPlan ? (
+                                      <span className="truncate">
+                                        <span className="mr-1 text-xs text-muted-foreground">{ACCOUNT_GROUP_LABELS[selectedAccountPlan.group] ?? selectedAccountPlan.group} ·</span>
+                                        {selectedAccountPlan.name}
+                                      </span>
+                                    ) : (
+                                      "Selecione o plano de contas"
+                                    )}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[440px] p-2" align="start">
+                                <div className="space-y-2">
+                                  <Input
+                                    placeholder="Buscar plano de contas..."
+                                    value={accountPlanSearch}
+                                    onChange={(event) => setAccountPlanSearch(event.target.value)}
+                                  />
+                                  <ScrollArea className="h-80">
+                                    <div className="space-y-1 pr-2">
+                                      {filteredGroupedAccounts.length === 0 ? (
+                                        <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                                          Nenhum plano encontrado.
+                                        </div>
+                                      ) : filteredGroupedAccounts.map((group) => (
+                                        <div key={group.group}>
+                                          <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                            {group.label}
+                                          </div>
+                                          {group.accounts.map((account: any) => (
+                                            <button
+                                              key={account.id}
+                                              type="button"
+                                              className={cn(
+                                                "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
+                                                field.value === account.id && "bg-muted/30 font-medium"
+                                              )}
+                                              onClick={() => { field.onChange(account.id); setAccountPlanOpen(false); }}
+                                            >
+                                              <span className="truncate">{account.name}</span>
+                                              {field.value === account.id && <Check className="ml-2 h-4 w-4 shrink-0 text-primary" />}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </ScrollArea>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {!isApportioned && (
+                        <FormField
+                          control={form.control}
+                          name="resultCenter"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Centro de resultado / Unidade</FormLabel>
+                              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                {units.map((unit) => (
+                                  <button
+                                    key={unit.id}
+                                    type="button"
+                                    onClick={() => field.onChange(unit.name)}
+                                    className={cn(
+                                      "rounded-xl border px-3 py-3 text-left transition-colors hover:border-primary/40",
+                                      field.value === unit.name && "border-primary bg-primary/5"
+                                    )}
+                                  >
+                                    <p className="text-sm font-medium">{unit.name}</p>
                                   </button>
                                 ))}
                               </div>
-                            </ScrollArea>
-                          </div>
-                        ) : null}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="shrink-0"
-                        title={
-                          hasMatchingExpenseDescription
-                            ? "Essa descrição já está cadastrada"
-                            : canQuickAddExpenseDescriptions
-                            ? "Adicionar texto atual como sugestão"
-                            : "Sem permissão para cadastrar sugestões"
-                        }
-                        onClick={() => void handleQuickAddExpenseDescription()}
-                        disabled={!descriptionValue?.trim() || hasMatchingExpenseDescription}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Enquanto digita, você pode escolher uma sugestão ou continuar com o texto livre. Use `+` para salvar no catálogo.
-                    </p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="totalValue"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Valor total</FormLabel>
-                      <FormControl>
-                        <CurrencyInput value={field.value} onChange={field.onChange} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="competenceDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <DatePickerField
-                        label="Competência"
-                        value={field.value}
-                        onChange={field.onChange}
-                        disabled={paymentMethod === "recurring"}
+                      <FormField
+                        control={form.control}
+                        name="isApportioned"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-xl border p-4">
+                            <div>
+                              <FormLabel>Ratear entre unidades</FormLabel>
+                              <p className="text-sm text-muted-foreground">Distribua o valor proporcionalmente entre centros de resultado.</p>
+                            </div>
+                            <FormControl>
+                              <Switch checked={field.value} onCheckedChange={field.onChange} />
+                            </FormControl>
+                          </FormItem>
+                        )}
                       />
-                      {paymentMethod === "recurring" ? (
-                        <p className="text-xs text-muted-foreground">
-                          Na recorrência, a competência acompanha automaticamente o mês de cada cobrança.
-                        </p>
-                      ) : null}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CardContent>
-        </Card>
 
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader className="pb-4">
-            <SectionHeading
-              icon={<CreditCard className="h-4 w-4 text-sky-600" />}
-              iconClassName="bg-sky-100"
-              title="Pagamento"
-              description="Forma, data e parcelas"
-            />
-          </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="paymentMethod"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Forma de pagamento</FormLabel>
-                    <FormControl>
-                      <RadioGroup
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        className="grid gap-3 md:grid-cols-3"
-                      >
-                        <label className={cn("flex cursor-pointer flex-col items-center rounded-lg border px-4 py-3 text-center", field.value === "single" && "border-primary bg-primary/5")}>
-                          <RadioGroupItem value="single" />
-                          <div>
-                            <p className="font-medium">Pagamento único</p>
-                            <p className="text-xs text-muted-foreground">Uma parcela</p>
+                      {isApportioned && (
+                        <div className="space-y-4 rounded-xl border p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">Rateio</p>
+                              <p className="text-sm text-muted-foreground">A soma deve fechar em 100%.</p>
+                            </div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => appendApportionment({ resultCenter: "", percentage: 0 })}>
+                              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar
+                            </Button>
                           </div>
-                        </label>
-                        <label className={cn("flex cursor-pointer flex-col items-center rounded-lg border px-4 py-3 text-center", field.value === "installments" && "border-primary bg-primary/5")}>
-                          <RadioGroupItem value="installments" />
-                          <div>
-                            <p className="font-medium">Parcelado</p>
-                            <p className="text-xs text-muted-foreground">Parcelas iguais ou variáveis</p>
-                          </div>
-                        </label>
-                        <label className={cn("flex cursor-pointer flex-col items-center rounded-lg border px-4 py-3 text-center", field.value === "recurring" && "border-primary bg-primary/5")}>
-                          <RadioGroupItem value="recurring" />
-                          <div>
-                            <p className="font-medium">Recorrente</p>
-                            <p className="text-xs text-muted-foreground">Cobranças mensais</p>
-                          </div>
-                        </label>
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
-              {paymentMethod === "single" ? (
-                <FormField
-                  control={form.control}
-                  name="dueDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <DatePickerField label="Vencimento" value={field.value} onChange={field.onChange} />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ) : paymentMethod === "installments" ? (
-                <>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <FormField
-                      control={form.control}
-                      name="installments"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Quantidade de parcelas</FormLabel>
-                          <FormControl>
-                            <Input type="number" min="2" max="48" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="installmentType"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tipo</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="equal">Parcelas iguais</SelectItem>
-                              <SelectItem value="varied">Parcelas variáveis</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="installmentPeriodicity"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Periodicidade</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="monthly">Mensal</SelectItem>
-                              <SelectItem value="weekly">Semanal</SelectItem>
-                              <SelectItem value="biweekly">Quinzenal</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  {installmentType === "equal" ? (
-                    <FormField
-                      control={form.control}
-                      name="firstInstallmentDueDate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <DatePickerField label="Primeiro vencimento" value={field.value} onChange={field.onChange} />
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  ) : (
-                    <div className="space-y-3 rounded-lg border p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Parcelas variáveis</p>
-                          <p className="text-sm text-muted-foreground">Ajuste valor e vencimento de cada parcela.</p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            appendVariedInstallment({
-                              dueDate: firstInstallmentDueDate || new Date(),
-                              value: 0,
-                            } as any)
-                          }
-                        >
-                          <PlusCircle className="mr-2 h-4 w-4" /> Adicionar
-                        </Button>
-                      </div>
-
-                      <div className="space-y-4">
-                        {variedFields.map((field, index) => (
-                          <div key={field.id} className="rounded-lg border border-dashed p-3">
-                            <div className="grid gap-4 md:grid-cols-[1fr,220px,48px]">
+                          {apportionmentFields.map((field, index) => (
+                            <div key={field.id} className="grid gap-4 md:grid-cols-[1fr,180px,48px]">
                               <FormField
                                 control={form.control}
-                                name={`variedInstallments.${index}.dueDate`}
+                                name={`apportionments.${index}.resultCenter`}
                                 render={({ field }) => (
                                   <FormItem>
-                                    <DatePickerField label={`Parcela ${index + 1}`} value={field.value} onChange={field.onChange} />
+                                    <FormLabel>Unidade</FormLabel>
+                                    <Select value={field.value} onValueChange={field.onChange}>
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Selecione a unidade" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {units.map((unit) => (
+                                          <SelectItem key={unit.id} value={unit.name}>
+                                            {unit.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                     <FormMessage />
                                   </FormItem>
                                 )}
                               />
                               <FormField
                                 control={form.control}
-                                name={`variedInstallments.${index}.value`}
+                                name={`apportionments.${index}.percentage`}
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel>Valor</FormLabel>
+                                    <FormLabel>Percentual</FormLabel>
                                     <FormControl>
-                                      <CurrencyInput value={field.value ?? 0} onChange={field.onChange} />
+                                      <Input type="number" min="0" max="100" step="0.01" {...field} />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
                                 )}
                               />
                               <div className="flex items-end">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => removeVariedInstallment(index)}
-                                >
+                                <Button type="button" variant="ghost" size="icon" onClick={() => removeApportionment(index)}>
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
                             </div>
+                          ))}
+
+                          <p className={cn("text-sm font-medium", rateioTotal === 100 ? "text-emerald-600" : "text-amber-600")}>
+                            Rateio atual: {rateioTotal.toFixed(2)}%
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {currentStep === "schedule" && (
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-base font-semibold">Vencimento e parcelas</h2>
+                        <p className="text-sm text-muted-foreground">Quando pagar e como dividir.</p>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {paymentMethod === "single" ? (
+                          <FormField
+                            control={form.control}
+                            name="dueDate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <DatePickerField label="Vencimento" value={field.value} onChange={field.onChange} />
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        ) : (
+                          <FormField
+                            control={form.control}
+                            name="firstInstallmentDueDate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <DatePickerField label="Vencimento" value={field.value} onChange={field.onChange} />
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        )}
+
+                        <FormField
+                          control={form.control}
+                          name="competenceDate"
+                          render={({ field }) => (
+                            <FormItem>
+                              <DatePickerField label="Competência" value={field.value} onChange={field.onChange} disabled={paymentMethod === "recurring"} />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <FormLabel>Parcelamento</FormLabel>
+                        <div className="flex flex-wrap gap-2">
+                          {[1, 2, 3, 4, 6, 12].map((qty) => {
+                            const active = qty === 1 ? paymentMethod === "single" : paymentMethod === "installments" && Number(installmentsQty) === qty;
+                            return (
+                              <Button
+                                key={qty}
+                                type="button"
+                                variant={active ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => {
+                                  if (qty === 1) {
+                                    form.setValue("paymentMethod", "single");
+                                  } else {
+                                    form.setValue("paymentMethod", "installments");
+                                    form.setValue("installments", qty);
+                                    form.setValue("installmentType", "equal");
+                                  }
+                                }}
+                              >
+                                {qty === 1 ? "à vista" : `${qty}x`}
+                              </Button>
+                            );
+                          })}
+                          <Button
+                            type="button"
+                            variant={paymentMethod === "recurring" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => form.setValue("paymentMethod", "recurring")}
+                          >
+                            recorrente
+                          </Button>
+                        </div>
+                      </div>
+
+                      {paymentMethod === "installments" && installmentsSummary && installmentsSummary.length > 0 && (
+                        <div className="rounded-xl border">
+                          <div className="border-b px-4 py-3">
+                            <p className="text-sm font-medium">Pré-visualização das parcelas</p>
                           </div>
-                        ))}
-                      </div>
+                          <div className="space-y-2 p-4">
+                            {installmentsSummary.map((installment) => (
+                              <div key={installment.number} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+                                <span>{installment.number}/{installmentsSummary.length}</span>
+                                <span>{format(installment.dueDate, "dd/MM/yyyy")}</span>
+                                <span className="font-mono font-semibold">{formatCurrency(installment.value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {paymentMethod === "recurring" && (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <FormField
+                            control={form.control}
+                            name="recurrenceFirstDueDate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <DatePickerField label="Primeira cobrança" value={field.value} onChange={field.onChange} />
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="recurrenceEndDate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <DatePickerField label="Cobrar até" value={field.value} onChange={field.onChange} />
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {installmentsSummary && installmentsSummary.length > 0 && (
-                    <div className="rounded-lg border">
-                      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Parcelas geradas</p>
-                          <p className="text-sm text-muted-foreground">
-                            {installmentsSummary.length} parcela(s) serão criadas a partir do preenchimento atual.
-                          </p>
-                        </div>
-                        <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] font-medium text-primary">
-                          {installmentsSummary.length} parcelas · {formatCurrency(installmentsPreviewTotal)}
-                        </Badge>
+                  {currentStep === "review" && (
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-base font-semibold">Revisão final</h2>
+                        <p className="text-sm text-muted-foreground">Confira antes de salvar.</p>
                       </div>
-                      <ScrollArea className="h-72">
-                        <div className="grid gap-2 p-4 md:grid-cols-2">
-                          {installmentsSummary.map((installment) => (
-                            <div
-                              key={installment.number}
-                              className="flex items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5"
-                            >
-                              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                                {installment.number}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div>
-                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Parcela</p>
-                                    <p className="text-sm font-medium">{installment.number}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Vencimento</p>
-                                    <p className="text-sm font-medium">{format(installment.dueDate, "dd/MM/yyyy")}</p>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="shrink-0 text-sm font-semibold text-primary">{formatCurrency(installment.value)}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="recurrenceFirstDueDate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <DatePickerField label="Primeira cobrança" value={field.value} onChange={field.onChange} />
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="recurrenceEndDate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <DatePickerField label="Cobrar até" value={field.value} onChange={field.onChange} />
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
 
-                  {recurringPreview.length > 0 && (
-                    <div className="rounded-lg border">
-                      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Cobranças geradas</p>
-                          <p className="text-sm text-muted-foreground">
-                            {recurringPreview.length} lançamento(s) serão criados, um por mês, com a competência correspondente.
-                          </p>
+                      <div className="rounded-xl border p-4">
+                        <div className="flex items-start justify-between gap-4 border-b pb-4">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Descrição</p>
+                            <p className="text-lg font-semibold">{descriptionValue || "—"}</p>
+                            <p className="text-sm text-muted-foreground">{supplierValue || "—"}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</p>
+                            <p className="font-mono text-3xl font-bold">{formatCurrency(totalValue || 0)}</p>
+                          </div>
                         </div>
-                        <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] font-medium text-primary">
-                          {recurringPreview.length} lançamentos · {formatCurrency(recurringPreviewTotal)}
-                        </Badge>
+
+                        <div className="mt-4 grid gap-4 md:grid-cols-4">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Plano de contas</p>
+                            <p className="text-sm font-medium">{selectedAccountPlan?.name || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unidade</p>
+                            <p className="text-sm font-medium">{isApportioned ? "Rateado" : resultCenterValue || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vencimento</p>
+                            <p className="text-sm font-medium">{previewDueDate ? format(previewDueDate, "dd/MM/yyyy") : "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Parcelamento</p>
+                            <p className="text-sm font-medium">
+                              {paymentMethod === "single"
+                                ? "à vista"
+                                : paymentMethod === "installments"
+                                ? `${installmentsSummary?.length || installmentsQty}x`
+                                : "recorrente"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {notesValue ? (
+                          <div className="mt-4 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                            <span className="font-medium text-foreground">Obs.:</span> {notesValue}
+                          </div>
+                        ) : null}
                       </div>
-                      <ScrollArea className="h-72">
-                        <div className="grid gap-2 p-4 md:grid-cols-2">
-                          {recurringPreview.map((occurrence) => (
-                            <div
-                              key={occurrence.number}
-                              className="flex items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5"
-                            >
-                              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                                {occurrence.number}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div>
-                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Competência</p>
-                                    <p className="text-sm font-medium">{format(occurrence.competenceDate, "MM/yyyy")}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Vencimento</p>
-                                    <p className="text-sm font-medium">{format(occurrence.dueDate, "dd/MM/yyyy")}</p>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="shrink-0 text-sm font-semibold text-primary">{formatCurrency(occurrence.value)}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
+
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                        Tudo certo. Ao salvar, a despesa entrará na fila {editId ? "atualizada" : "em aberto"} e ficará disponível para pagamento.
+                      </div>
                     </div>
                   )}
                 </div>
-              )}
-            </CardContent>
-        </Card>
+              </ScrollArea>
 
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader className="pb-4">
-            <SectionHeading
-              icon={<Building2 className="h-4 w-4 text-emerald-600" />}
-              iconClassName="bg-emerald-100"
-              title="Resultado e complemento"
-              description="Unidade, fornecedor e observações"
-            />
-          </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="isApportioned"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div>
-                      <FormLabel>Ratear entre unidades</FormLabel>
-                      <p className="text-sm text-muted-foreground">
-                        Ative para dividir a despesa entre múltiplas unidades.
-                      </p>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+              <div className="border-t bg-background px-6 py-4">
+                <div className={cn("flex flex-wrap items-center justify-between gap-3")}>
+                  <Button type="button" variant="ghost" onClick={() => router.push(returnTo || FINANCIAL_ROUTES.expenses)}>
+                    Cancelar
+                  </Button>
 
-              {isApportioned ? (
-                <div className="space-y-4 rounded-lg border p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Rateio</p>
-                      <p className="text-sm text-muted-foreground">A soma deve fechar em 100%.</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => appendApportionment({ resultCenter: "", percentage: 0 })}
-                    >
-                      <PlusCircle className="mr-2 h-4 w-4" /> Adicionar
-                    </Button>
-                  </div>
-
-                  {apportionmentFields.map((field, index) => (
-                    <div key={field.id} className="grid gap-4 md:grid-cols-[1fr,180px,48px]">
-                      <FormField
-                        control={form.control}
-                        name={`apportionments.${index}.resultCenter`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Unidade</FormLabel>
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione a unidade" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {units.map((unit) => (
-                                  <SelectItem key={unit.id} value={unit.name}>
-                                    {unit.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`apportionments.${index}.percentage`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Percentual</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" max="100" step="0.01" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <div className="flex items-end">
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeApportionment(index)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  <p className={cn("text-sm font-medium", rateioTotal === 100 ? "text-emerald-600" : "text-amber-600")}>
-                    Rateio atual: {rateioTotal.toFixed(2)}%
-                  </p>
-                </div>
-              ) : (
-                <FormField
-                  control={form.control}
-                  name="resultCenter"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Unidade</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione a unidade" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {units.map((unit) => (
-                            <SelectItem key={unit.id} value={unit.name}>
-                              {unit.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              <FormField
-                control={form.control}
-                name="supplier"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fornecedor</FormLabel>
-                    <div className="flex gap-2">
-                      <Popover open={supplierOpen} onOpenChange={setSupplierOpen}>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              aria-expanded={supplierOpen}
-                              className={cn("flex-1 justify-between font-normal", !field.value && "text-muted-foreground")}
-                            >
-                              {field.value || "Fornecedor ou beneficiário"}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[340px] p-0" align="start">
-                          <div className="space-y-2 p-2">
-                            <Input
-                              placeholder="Buscar ou digitar..."
-                              value={supplierSearch || field.value || ""}
-                              onChange={(event) => {
-                                const nextValue = event.target.value;
-                                setSupplierSearch(nextValue);
-                                field.onChange(nextValue);
-                              }}
-                            />
-                            <ScrollArea className="h-64">
-                              <div className="space-y-3 pr-2">
-                                {filteredEntities.length === 0 && filteredUsers.length === 0 ? (
-                                  <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                                    Nenhum cadastro encontrado. Use o texto digitado ou adicione via +.
-                                  </div>
-                                ) : (
-                                  <>
-                                    {filteredEntities.length > 0 && (
-                                      <div className="space-y-1">
-                                        <p className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                          Entidades
-                                        </p>
-                                        {filteredEntities.map((entity) => {
-                                          const label = entity.fantasyName || entity.name;
-                                          const isSelected = field.value === label;
-                                          return (
-                                            <button
-                                              key={entity.id}
-                                              type="button"
-                                              className={cn(
-                                                "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left text-sm transition-colors hover:bg-muted/40",
-                                                isSelected && "border-border bg-muted/30"
-                                              )}
-                                              onClick={() => {
-                                                field.onChange(label);
-                                                setSupplierSearch(label);
-                                                setSupplierOpen(false);
-                                              }}
-                                            >
-                                              <span className="truncate">{label}</span>
-                                              {isSelected && <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />}
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                    {filteredUsers.length > 0 && (
-                                      <div className="space-y-1">
-                                        <p className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                          Usuários
-                                        </p>
-                                        {filteredUsers.map((user) => {
-                                          const label = user.username || user.email;
-                                          const isSelected = field.value === label;
-                                          return (
-                                            <button
-                                              key={user.id}
-                                              type="button"
-                                              className={cn(
-                                                "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left text-sm transition-colors hover:bg-muted/40",
-                                                isSelected && "border-border bg-muted/30"
-                                              )}
-                                              onClick={() => {
-                                                field.onChange(label);
-                                                setSupplierSearch(label);
-                                                setSupplierOpen(false);
-                                              }}
-                                            >
-                                              <span className="truncate">{label}</span>
-                                              <Badge variant="secondary" className="ml-auto text-[10px] py-0">
-                                                <UserRound className="mr-1 h-2.5 w-2.5" />
-                                                Usuário
-                                              </Badge>
-                                              {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </ScrollArea>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {activeStepIndex > 0 && (
                       <Button
                         type="button"
                         variant="outline"
-                        size="icon"
-                        className="shrink-0"
-                        title="Adicionar novo fornecedor"
-                        onClick={() => setQuickAddOpen(true)}
+                        onClick={() => setCurrentStep(steps[activeStepIndex - 1].id)}
                       >
-                        <Plus className="h-4 w-4" />
+                        <ChevronLeft className="mr-2 h-4 w-4" />
+                        Voltar
                       </Button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <QuickAddEntityDialog
-                open={quickAddOpen}
-                onClose={() => setQuickAddOpen(false)}
-                onCreated={(name) => form.setValue("supplier", name)}
-              />
-              <FormField
-                control={form.control}
-                name="notes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Observações</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Detalhes adicionais" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-        </Card>
+                    )}
+                    {isDraftFlow && (
+                      <Button type="button" variant="secondary" disabled={isSaving} onClick={() => void handleSaveDraft()}>
+                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Salvar rascunho
+                      </Button>
+                    )}
+                    {currentStep !== "review" ? (
+                      <Button type="button" onClick={() => setCurrentStep(steps[activeStepIndex + 1].id)}>
+                        Continuar
+                        <ChevronRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button type="button" disabled={isSaving} onClick={() => void handleFinalizeClick()}>
+                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {editId ? "Atualizar despesa" : "Provisionar despesa"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
 
-        <div className="rounded-2xl border border-border/70 bg-background px-5 py-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-            <div className="grid flex-1 gap-4 sm:grid-cols-3 xl:grid-cols-7">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Total</p>
-                <p className="text-sm font-semibold text-primary">{formatCurrency(totalValue || 0)}</p>
+            <aside className="w-[344px] shrink-0 bg-muted/20">
+              <div className="border-b px-5 py-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pré-visualização</p>
+                <h3 className="mt-1 text-sm font-semibold">Como aparecerá na fila</h3>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Forma</p>
-                <p className="text-sm font-medium">
-                  {paymentMethod === "single"
-                    ? "Pagamento único"
-                    : paymentMethod === "installments"
-                    ? installmentsSummary?.length
-                      ? `Parcelado · ${installmentsSummary.length}x`
-                      : "Parcelado"
-                    : recurringPreview.length
-                    ? `Recorrente · ${recurringPreview.length}x`
-                    : "Recorrente"}
-                </p>
+
+              <div className="space-y-4 p-5">
+                <div className="rounded-2xl border bg-background p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="mt-1 h-9 w-1 rounded-full bg-blue-500" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{descriptionValue || "Descrição da despesa"}</p>
+                      <p className="truncate text-xs text-muted-foreground">{supplierValue || "Sem fornecedor"}</p>
+                    </div>
+                    <p className="font-mono text-lg font-bold">{formatCurrency(totalValue || 0)}</p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] text-blue-700">
+                      {editId ? "Em aberto" : "Rascunho"}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <p className="font-medium text-muted-foreground">Vencimento</p>
+                      <p className="mt-1">{previewDueDate ? format(previewDueDate, "dd/MM/yyyy") : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-muted-foreground">Unidade</p>
+                      <p className="mt-1">{isApportioned ? "Rateado" : resultCenterValue || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-muted-foreground">Competência</p>
+                      <p className="mt-1">{previewCompetence ? format(previewCompetence, "MM/yyyy") : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-muted-foreground">Plano</p>
+                      <p className="mt-1">{selectedAccountPlan?.order || "—"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border bg-background p-4 shadow-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Validações</p>
+                  <div className="mt-3 space-y-2">
+                    {validationItems.map((item) => (
+                      <div key={item.label} className={cn("flex items-center gap-2 text-sm", item.ok ? "text-emerald-600" : "text-muted-foreground")}>
+                        <span className={cn("flex h-5 w-5 items-center justify-center rounded-full", item.ok ? "bg-emerald-50" : "bg-muted")}>
+                          <Check className="h-3.5 w-3.5" />
+                        </span>
+                        <span>{item.label} {item.ok ? "informado" : "pendente"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border bg-background p-4 text-sm text-muted-foreground shadow-sm">
+                  <p className="font-semibold text-foreground">Sugestão</p>
+                  <p className="mt-2">
+                    {paymentMethod === "recurring"
+                      ? "Essa despesa parece recorrente. Confira o período antes de finalizar."
+                      : "Se essa despesa se repete com frequência, considere salvar um rascunho modelo."}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Rateio</p>
-                <p className="text-sm font-medium">{isApportioned ? `${rateioTotal.toFixed(2)}%` : "Sem rateio"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Plano de contas</p>
-                <p className="truncate text-sm font-medium">{selectedAccountPlan?.name || "—"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Centro de custo</p>
-                <p className="truncate text-sm font-medium">{isApportioned ? "Rateado" : resultCenterValue || "—"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Fornecedor</p>
-                <p className="truncate text-sm font-medium">{supplierValue || "—"}</p>
-              </div>
-              <div className="sm:col-span-3 xl:col-span-1">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Descrição</p>
-                <p className="truncate text-sm font-medium">{descriptionValue || "—"}</p>
-              </div>
-            </div>
-            <div className="ml-auto flex w-full justify-end text-right xl:w-auto xl:pl-4">
-              <p className="text-sm font-extrabold uppercase tracking-[0.04em] text-red-600">Confira antes de salvar</p>
-            </div>
+            </aside>
           </div>
         </div>
 
-        <div className={cn("grid gap-2", (!editId || loadedStatus === "draft") ? "md:grid-cols-3" : "md:grid-cols-2")}>
-          <Button type="button" variant="outline" className="h-11" onClick={() => router.push(FINANCIAL_ROUTES.expenses)}>
-            Cancelar
-          </Button>
-          {(!editId || loadedStatus === "draft") && (
-            <Button type="button" variant="secondary" className="h-11" disabled={isSaving} onClick={() => void handleSaveDraft()}>
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar rascunho
-            </Button>
-          )}
-          <Button type="button" className="h-11" disabled={isSaving} onClick={() => void handleFinalizeClick()}>
-            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {loadedStatus === "draft" ? "Concluir lançamento" : editId ? "Atualizar" : "Salvar"}
-          </Button>
-        </div>
+        <QuickAddEntityDialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onCreated={(name) => form.setValue("supplier", name)} />
       </form>
     </Form>
   );

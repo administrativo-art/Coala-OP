@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowLeft, LockKeyhole } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { LockKeyhole } from "lucide-react";
+import { BackButton } from "@/components/navigation/back-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type FinancialAccessGuardProps = {
@@ -28,12 +27,7 @@ export function FinancialAccessGuard({
       <CardContent className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">{description}</p>
         <div>
-          <Button asChild variant="outline" size="sm">
-            <Link href={backHref}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Link>
-          </Button>
+          <BackButton fallbackHref={backHref} />
         </div>
       </CardContent>
     </Card>

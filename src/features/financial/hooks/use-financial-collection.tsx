@@ -46,7 +46,11 @@ async function loadFinancialCollectionFallback<T = DocumentData>(path: string) {
 }
 
 export function useFinancialCollection<T = DocumentData>(
-  reference: Query<T> | CollectionReference<T> | null
+  reference: Query<T> | CollectionReference<T> | null,
+  options?: {
+    fallbackPath?: string;
+    preferFallback?: boolean;
+  }
 ) {
   const [data, setData] = useState<(T & { id: string })[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,26 +78,34 @@ export function useFinancialCollection<T = DocumentData>(
     }
 
     const ref = currentReference;
+    const fallbackPath =
+      options?.fallbackPath ||
+      (ref && "path" in (ref as object)
+        ? (ref as unknown as CollectionReference<T>).path
+        : null);
 
     setLoading(true);
     let cancelled = false;
 
     async function load() {
       try {
+        if (options?.preferFallback && fallbackPath) {
+          const fallbackData = await loadFinancialCollectionFallback<T>(fallbackPath);
+          if (cancelled) return;
+          setData(fallbackData);
+          setError(null);
+          return;
+        }
+
         const snapshot = await getDocs(ref);
         if (cancelled) return;
 
         setData(snapshot.docs.map((doc) => ({ ...(doc.data() as T), id: doc.id })));
         setError(null);
       } catch (snapshotError) {
-        const path =
-          ref && "path" in (ref as object)
-            ? (ref as unknown as CollectionReference<T>).path
-            : null;
-
-        if (path) {
+        if (fallbackPath) {
           try {
-            const fallbackData = await loadFinancialCollectionFallback<T>(path);
+            const fallbackData = await loadFinancialCollectionFallback<T>(fallbackPath);
             if (cancelled) return;
             setData(fallbackData);
             setError(null);
@@ -125,7 +137,7 @@ export function useFinancialCollection<T = DocumentData>(
     return () => {
       cancelled = true;
     };
-  }, [stableKey, reloadToken]);
+  }, [options?.fallbackPath, options?.preferFallback, stableKey, reloadToken]);
 
   return { data, loading, error, refresh };
 }

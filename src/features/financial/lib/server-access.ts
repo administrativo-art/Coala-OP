@@ -136,6 +136,7 @@ export function canReadFinancialPath(
   if (!permissions?.view) return false;
 
   switch (topLevelCollection(path)) {
+    case "accounts":
     case "accountPlans":
     case "resultCenters":
     case "bankAccounts":

@@ -1,87 +1,109 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addDoc, deleteDoc, doc, writeBatch } from "firebase/firestore";
-import { setDoc } from "firebase/firestore";
+import { addDoc, deleteDoc, doc, updateDoc, writeBatch } from "firebase/firestore";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, ChevronDown, ChevronRight, GripVertical, Loader2, MoreHorizontal, PlusCircle } from "lucide-react";
+import { z } from "zod";
 import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
+  AlertCircle, ChevronDown, ChevronRight, GripVertical, Loader2, MoreHorizontal, PlusCircle,
+} from "lucide-react";
+import {
+  DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
+  SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebase";
 import { financialDb } from "@/lib/firebase-financial";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
-import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
-import {
-  accountPlanFormSchema,
-  type AccountPlanFormValues,
-} from "@/features/financial/lib/schemas";
+import { financialCollection } from "@/features/financial/lib/repositories";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
-type AccountPlan = AccountPlanFormValues & {
-  id: string;
-  order?: number;
-  children?: AccountPlan[];
+// ── constants ─────────────────────────────────────────────────────────────────
+
+const DRE_POSITIONS = [
+  { value: "receita_bruta_produto",    label: "Receita bruta — Produto" },
+  { value: "receita_bruta_delivery",   label: "Receita bruta — Delivery" },
+  { value: "receita_bruta_evento",     label: "Receita bruta — Evento" },
+  { value: "deducoes_receita",         label: "Deduções da receita" },
+  { value: "custos_variaveis",         label: "Custos variáveis" },
+  { value: "despesas_pessoal",         label: "Despesas — Pessoal" },
+  { value: "despesas_administrativas", label: "Despesas — Administrativas" },
+  { value: "despesas_comerciais",      label: "Despesas — Comerciais" },
+  { value: "despesas_financeiras",     label: "Despesas financeiras" },
+  { value: "receita_financeira",       label: "Receita financeira" },
+  { value: "receita_nao_operacional",  label: "Receita não operacional" },
+  { value: "despesa_nao_operacional",  label: "Despesa não operacional" },
+  { value: "impostos_resultado",       label: "IR / CSLL" },
+] as const;
+
+const DRE_POS_COLORS: Record<string, string> = {
+  receita_bruta_produto:    "text-emerald-700 bg-emerald-50 border-emerald-200",
+  receita_bruta_delivery:   "text-emerald-700 bg-emerald-50 border-emerald-200",
+  receita_bruta_evento:     "text-emerald-700 bg-emerald-50 border-emerald-200",
+  deducoes_receita:         "text-red-700 bg-red-50 border-red-200",
+  custos_variaveis:         "text-orange-700 bg-orange-50 border-orange-200",
+  despesas_pessoal:         "text-blue-700 bg-blue-50 border-blue-200",
+  despesas_administrativas: "text-purple-700 bg-purple-50 border-purple-200",
+  despesas_comerciais:      "text-pink-700 bg-pink-50 border-pink-200",
+  despesas_financeiras:     "text-rose-700 bg-rose-50 border-rose-200",
+  receita_financeira:       "text-teal-700 bg-teal-50 border-teal-200",
+  receita_nao_operacional:  "text-slate-700 bg-slate-50 border-slate-200",
+  despesa_nao_operacional:  "text-slate-700 bg-slate-50 border-slate-200",
+  impostos_resultado:       "text-amber-700 bg-amber-50 border-amber-200",
 };
 
 const GROUP_COLORS = [
-  "#22c55e",
-  "#3b82f6",
-  "#8b5cf6",
-  "#eab308",
-  "#ef4444",
-  "#ec4899",
-  "#14b8a6",
-  "#f97316",
+  "#22c55e","#3b82f6","#8b5cf6","#eab308",
+  "#ef4444","#ec4899","#14b8a6","#f97316",
 ];
 
-function buildTree(items: AccountPlan[], parentId: string | null = null): AccountPlan[] {
+// ── types & schema ────────────────────────────────────────────────────────────
+
+type Account = {
+  id: string;
+  name: string;
+  description?: string;
+  parentId?: string | null;
+  dre_position?: string | null;
+  order?: number;
+  active?: boolean;
+  isGroup?: boolean;
+  children?: Account[];
+};
+
+const accountFormSchema = z.object({
+  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres."),
+  description: z.string().optional(),
+  parentId: z.string().nullable().optional(),
+  dre_position: z.string().nullable().optional(),
+});
+type AccountFormValues = z.infer<typeof accountFormSchema>;
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function buildTree(items: Account[], parentId: string | null = null): Account[] {
   return items
     .filter((item) => (item.parentId ?? null) === parentId)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -91,31 +113,49 @@ function buildTree(items: AccountPlan[], parentId: string | null = null): Accoun
 async function persistOrder(ids: string[]) {
   const batch = writeBatch(financialDb);
   ids.forEach((id, index) => {
-    batch.update(doc(financialDb, "accountPlans", id), { order: index });
+    batch.update(doc(financialDb, "accounts", id), { order: index });
   });
   await batch.commit();
 }
 
-// ── Sortable child row ────────────────────────────────────────────────────────
+function DreBadge({ position }: { position?: string | null }) {
+  if (!position) return null;
+  const pos = DRE_POSITIONS.find((p) => p.value === position);
+  if (!pos) return null;
+  return (
+    <span className={cn("ml-1.5 shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium", DRE_POS_COLORS[position] ?? "")}>
+      {pos.label}
+    </span>
+  );
+}
 
-function SortableChildRow({
+// ── sortable row (any depth) ──────────────────────────────────────────────────
+
+function SortableRow({
   node,
   number,
-  indentWidth,
+  depth,
+  topLevelIndex,
+  expanded,
   canManage,
+  onToggle,
   onEdit,
   onDelete,
   onAddChild,
 }: {
-  node: AccountPlan;
+  node: Account;
   number: string;
-  indentWidth: number;
+  depth: number;
+  topLevelIndex: number;
+  expanded: Set<string>;
   canManage: boolean;
-  onEdit: (plan: AccountPlan) => void;
-  onDelete: (plan: AccountPlan) => void;
+  onToggle: (id: string) => void;
+  onEdit: (account: Account) => void;
+  onDelete: (account: Account) => void;
   onAddChild: (parentId: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: node.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: node.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -123,530 +163,422 @@ function SortableChildRow({
     opacity: isDragging ? 0.4 : 1,
   };
 
+  const color = GROUP_COLORS[topLevelIndex % GROUP_COLORS.length];
+  const hasChildren = (node.children?.length ?? 0) > 0;
+  const isExpanded = expanded.has(node.id);
+  const isRoot = depth === 0;
+
   return (
     <div ref={setNodeRef} style={style}>
-      <div className="flex items-center justify-between px-4 py-2 hover:bg-muted/30">
-        <div className="flex min-w-0 items-start">
-          {canManage && (
-            <button
-              type="button"
-              className="mr-1 mt-0.5 shrink-0 cursor-grab touch-none text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing"
-              {...attributes}
-              {...listeners}
-            >
-              <GripVertical className="h-4 w-4" />
-            </button>
+      <div
+        className={cn(
+          "flex items-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm transition-colors",
+          isRoot ? "hover:bg-muted/30" : "hover:bg-muted/20",
+          isDragging && "border-border bg-muted/20"
+        )}
+        style={{ paddingLeft: `${8 + depth * 20}px` }}
+      >
+        {/* drag handle */}
+        {canManage && (
+          <button
+            type="button"
+            className="flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        )}
+
+        {/* expand toggle */}
+        <button
+          type="button"
+          className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground"
+          onClick={() => hasChildren && onToggle(node.id)}
+        >
+          {hasChildren ? (
+            isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
+          ) : (
+            <span className="h-3.5 w-3.5" />
           )}
-          <div className="relative mt-0.5 shrink-0" style={{ width: indentWidth + 22, height: 22 }}>
-            <span
-              className="absolute border-b-2 border-l-2 border-border/70"
-              style={{
-                left: indentWidth + 2,
-                top: 0,
-                height: 16,
-                width: 12,
-                borderBottomLeftRadius: 6,
-              }}
-            />
-          </div>
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-baseline gap-2">
-              <span className="shrink-0 text-xs font-mono text-muted-foreground">{number}</span>
-              <p className="truncate text-sm font-medium">{node.name}</p>
-            </div>
-            {node.description && <p className="text-xs text-muted-foreground">{node.description}</p>}
-          </div>
-        </div>
+        </button>
+
+        {/* color dot */}
+        <span
+          className="h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: color, opacity: isRoot ? 1 : 0.5 }}
+        />
+
+        {/* number */}
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{number}</span>
+
+        {/* name */}
+        <span className={cn("min-w-0 flex-1 truncate", isRoot && "font-semibold")}>
+          {node.name}
+        </span>
+
+        {/* dre badge */}
+        <DreBadge position={node.dre_position} />
+
+        {/* actions */}
         {canManage && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button aria-haspopup="true" size="icon" variant="ghost" className="h-7 w-7">
+              <button
+                type="button"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
                 <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">Toggle menu</span>
-              </Button>
+              </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onCloseAutoFocus={(event) => event.preventDefault()}>
-              <DropdownMenuLabel>Ações</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => onAddChild(node.id)}>Adicionar subconta</DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                {node.name}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onAddChild(node.id)}>
+                <PlusCircle className="mr-2 h-3.5 w-3.5" />
+                Adicionar subconta
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onEdit(node)}>Editar</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDelete(node)}>Excluir</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onDelete(node)}
+              >
+                Excluir
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
       </div>
-      {node.children && node.children.length > 0 && (
-        <AccountPlanBranch
-          nodes={node.children}
-          prefix={number}
+
+      {/* children */}
+      {hasChildren && isExpanded && (
+        <ChildrenLevel
+          nodes={node.children!}
+          depth={depth + 1}
+          topLevelIndex={topLevelIndex}
+          expanded={expanded}
+          canManage={canManage}
+          onToggle={onToggle}
           onEdit={onEdit}
           onDelete={onDelete}
           onAddChild={onAddChild}
-          canManage={canManage}
-          depth={2}
-          parentId={node.id}
+          parentNumber={number}
         />
       )}
     </div>
   );
 }
 
-// ── Recursive branch (children, depth ≥ 2) ──────────────────────────────────
+// ── children level (sortable context per parent) ──────────────────────────────
 
-function AccountPlanBranch({
+function ChildrenLevel({
   nodes,
-  prefix,
-  onEdit,
-  onDelete,
-  onAddChild,
-  canManage,
-  depth = 1,
-  parentId,
-  onReorder,
-}: {
-  nodes: AccountPlan[];
-  prefix: string;
-  onEdit: (plan: AccountPlan) => void;
-  onDelete: (plan: AccountPlan) => void;
-  onAddChild: (parentId: string) => void;
-  canManage: boolean;
-  depth?: number;
-  parentId: string;
-  onReorder?: (parentId: string, ids: string[]) => void;
-}) {
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const ids = useMemo(() => nodes.map((n) => n.id), [nodes]);
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = nodes.findIndex((n) => n.id === active.id);
-    const newIndex = nodes.findIndex((n) => n.id === over.id);
-    const reordered = arrayMove(nodes, oldIndex, newIndex);
-    onReorder?.(parentId, reordered.map((n) => n.id));
-  }
-
-  // Depth ≥ 2: plain list (no independent DndContext to avoid nesting conflicts)
-  if (depth > 1) {
-    return (
-      <>
-        {nodes.map((node, index) => {
-          const number = `${prefix}.${index + 1}`;
-          const indentWidth = (depth - 1) * 28;
-          return (
-            <div key={node.id}>
-              <div className="flex items-center justify-between px-4 py-2 hover:bg-muted/30">
-                <div className="flex min-w-0 items-start">
-                  <div className="relative mt-0.5 shrink-0" style={{ width: indentWidth + 22, height: 22 }}>
-                    <span
-                      className="absolute border-b-2 border-l-2 border-border/70"
-                      style={{ left: indentWidth + 2, top: 0, height: 16, width: 12, borderBottomLeftRadius: 6 }}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-baseline gap-2">
-                      <span className="shrink-0 text-xs font-mono text-muted-foreground">{number}</span>
-                      <p className="truncate text-sm font-medium">{node.name}</p>
-                    </div>
-                    {node.description && <p className="text-xs text-muted-foreground">{node.description}</p>}
-                  </div>
-                </div>
-                {canManage && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button aria-haspopup="true" size="icon" variant="ghost" className="h-7 w-7">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Toggle menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onCloseAutoFocus={(event) => event.preventDefault()}>
-                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => onAddChild(node.id)}>Adicionar subconta</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onEdit(node)}>Editar</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onDelete(node)}>Excluir</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
-              {node.children && node.children.length > 0 && (
-                <AccountPlanBranch
-                  nodes={node.children}
-                  prefix={number}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  onAddChild={onAddChild}
-                  canManage={canManage}
-                  depth={depth + 1}
-                  parentId={node.id}
-                />
-              )}
-            </div>
-          );
-        })}
-      </>
-    );
-  }
-
-  // Depth 1: sortable children within a group
-  return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        {nodes.map((node, index) => (
-          <SortableChildRow
-            key={node.id}
-            node={node}
-            number={`${prefix}.${index + 1}`}
-            indentWidth={0}
-            canManage={canManage}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onAddChild={onAddChild}
-          />
-        ))}
-      </SortableContext>
-    </DndContext>
-  );
-}
-
-// ── Sortable top-level group row ─────────────────────────────────────────────
-
-function SortableGroupRow({
-  group,
-  index,
-  color,
-  collapsed,
+  depth,
+  topLevelIndex,
+  expanded,
   canManage,
   onToggle,
   onEdit,
   onDelete,
   onAddChild,
-  onChildReorder,
+  parentNumber,
 }: {
-  group: AccountPlan;
-  index: number;
-  color: string;
-  collapsed: boolean;
+  nodes: Account[];
+  depth: number;
+  topLevelIndex: number;
+  expanded: Set<string>;
   canManage: boolean;
   onToggle: (id: string) => void;
-  onEdit: (plan: AccountPlan) => void;
-  onDelete: (plan: AccountPlan) => void;
+  onEdit: (account: Account) => void;
+  onDelete: (account: Account) => void;
   onAddChild: (parentId: string) => void;
-  onChildReorder: (parentId: string, ids: string[]) => void;
+  parentNumber: string;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: group.id });
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
+  const [items, setItems] = useState(nodes);
+  useEffect(() => { setItems(nodes); }, [nodes]);
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = items.findIndex((i) => i.id === active.id);
+    const newIndex = items.findIndex((i) => i.id === over.id);
+    const reordered = arrayMove(items, oldIndex, newIndex);
+    setItems(reordered);
+    void persistOrder(reordered.map((i) => i.id));
+  }
 
   return (
-    <div ref={setNodeRef} style={style} className="border-b last:border-b-0">
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex min-w-0 items-center gap-1">
-          {canManage && (
-            <button
-              type="button"
-              className="shrink-0 cursor-grab touch-none text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing"
-              {...attributes}
-              {...listeners}
-            >
-              <GripVertical className="h-4 w-4" />
-            </button>
-          )}
-          <button
-            type="button"
-            className="flex items-center gap-3 text-left"
-            onClick={() => onToggle(group.id)}
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-            <div>
-              <div className="flex min-w-0 items-baseline gap-2">
-                <span className="shrink-0 text-xs font-mono text-muted-foreground">{index + 1}</span>
-                <p className="font-semibold">{group.name}</p>
-              </div>
-              {group.description && <p className="text-xs text-muted-foreground">{group.description}</p>}
-            </div>
-          </button>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+        <div className="mt-0.5 space-y-0.5">
+          {items.map((node, index) => (
+            <SortableRow
+              key={node.id}
+              node={node}
+              number={`${parentNumber}.${index + 1}`}
+              depth={depth}
+              topLevelIndex={topLevelIndex}
+              expanded={expanded}
+              canManage={canManage}
+              onToggle={onToggle}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onAddChild={onAddChild}
+            />
+          ))}
         </div>
-        {canManage && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button aria-haspopup="true" size="icon" variant="ghost">
-                <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">Toggle menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onCloseAutoFocus={(event) => event.preventDefault()}>
-              <DropdownMenuLabel>Ações</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => onAddChild(group.id)}>Adicionar subconta</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onEdit(group)}>Editar</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDelete(group)}>Excluir</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-      {!collapsed && group.children && group.children.length > 0 && (
-        <div className="pb-3">
-          <AccountPlanBranch
-            nodes={group.children}
-            prefix={String(index + 1)}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onAddChild={onAddChild}
-            canManage={canManage}
-            depth={1}
-            parentId={group.id}
-            onReorder={onChildReorder}
-          />
-        </div>
-      )}
-    </div>
+      </SortableContext>
+    </DndContext>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── main component ────────────────────────────────────────────────────────────
 
 export default function AccountPlansManagement({ canManage = true }: { canManage?: boolean }) {
   const { toast } = useToast();
-  const [rawPlans, setRawPlans] = useState<AccountPlan[] | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [editingPlan, setEditingPlan] = useState<AccountPlan | null>(null);
-  const [deletingPlan, setDeletingPlan] = useState<AccountPlan | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  const [collapseInitialized, setCollapseInitialized] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [defaultParentId, setDefaultParentId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const refresh = useCallback(async () => {
-    if (!auth.currentUser) {
-      setError(new Error("Usuário não autenticado."));
-      setLoading(false);
-      return;
-    }
-
+  const load = useCallback(async () => {
+    if (!auth.currentUser) return;
     setLoading(true);
-
+    setError(null);
     try {
       const token = await auth.currentUser.getIdToken();
-      const response = await fetchWithTimeout("/api/financial/data?path=accountPlans", {
+      const res = await fetchWithTimeout("/api/financial/data?path=accounts", {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error || "Falha ao carregar o plano de contas.");
-      }
-
-      setRawPlans((payload.docs ?? []) as AccountPlan[]);
-      setError(null);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError : new Error("Falha ao carregar o plano de contas."));
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || "Falha ao carregar contas.");
+      setAccounts((payload.docs ?? []) as Account[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro desconhecido.");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  useEffect(() => { void load(); }, [load]);
 
-  const plans = rawPlans ?? [];
-  const tree = useMemo(() => buildTree(plans), [plans]);
+  const tree = useMemo(() => buildTree(accounts), [accounts]);
 
-  const form = useForm<AccountPlanFormValues>({
-    resolver: zodResolver(accountPlanFormSchema),
-    defaultValues: { name: "", description: "", parentId: null },
-  });
+  // root-level items for DnD
+  const [rootItems, setRootItems] = useState<Account[]>([]);
+  useEffect(() => { setRootItems(tree); }, [tree]);
 
-  const topGroups = useMemo(() => tree.map((node) => node.id), [tree]);
-
-  useEffect(() => {
-    if (!collapseInitialized && topGroups.length > 0) {
-      setCollapsedGroups(new Set(topGroups));
-      setCollapseInitialized(true);
-    }
-  }, [collapseInitialized, topGroups]);
-
-  function handleOpen(plan: AccountPlan | null = null, parentId: string | null = null) {
-    setEditingPlan(plan);
-    form.reset(
-      plan
-        ? { name: plan.name, description: plan.description ?? "", parentId: plan.parentId ?? null }
-        : { name: "", description: "", parentId }
-    );
-    setIsFormOpen(true);
+  function handleRootDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = rootItems.findIndex((i) => i.id === active.id);
+    const newIndex = rootItems.findIndex((i) => i.id === over.id);
+    const reordered = arrayMove(rootItems, oldIndex, newIndex);
+    setRootItems(reordered);
+    void persistOrder(reordered.map((i) => i.id));
   }
 
-  async function onSubmit(values: AccountPlanFormValues) {
-    setIsSaving(true);
-    try {
-      if (editingPlan) {
-        await setDoc(financialDoc("accountPlans", editingPlan.id), values);
-        toast({ title: "Plano de contas atualizado!" });
-      } else {
-        const siblings = plans.filter((p) => (p.parentId ?? null) === (values.parentId ?? null));
-        const order = siblings.length;
-        await addDoc(financialCollection("accountPlans"), { ...values, order });
-        toast({ title: "Plano de contas criado!" });
-      }
-      refresh();
-      setIsFormOpen(false);
-      setEditingPlan(null);
-    } catch (submitError) {
-      console.error(submitError);
-      toast({ variant: "destructive", title: "Erro ao salvar o plano de contas." });
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function handleDelete() {
-    if (!deletingPlan) return;
-    try {
-      await deleteDoc(financialDoc("accountPlans", deletingPlan.id));
-      toast({ title: "Plano de contas removido." });
-      refresh();
-    } catch {
-      toast({ variant: "destructive", title: "Erro ao remover o plano de contas." });
-    } finally {
-      setDeletingPlan(null);
-    }
-  }
-
-  function toggleGroup(id: string) {
-    setCollapsedGroups((previous) => {
-      const next = new Set(previous);
+  function toggleExpand(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
 
-  // Top-level drag end
-  function handleTopDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = tree.findIndex((g) => g.id === active.id);
-    const newIndex = tree.findIndex((g) => g.id === over.id);
-    const reordered = arrayMove(tree, oldIndex, newIndex);
-    // Optimistic update
-    setRawPlans((prev) => {
-      if (!prev) return prev;
-      const children = prev.filter((p) => p.parentId !== null);
-      return [...reordered.map((g, i) => ({ ...g, order: i })), ...children];
-    });
-    persistOrder(reordered.map((g) => g.id)).catch(() => {
-      toast({ variant: "destructive", title: "Erro ao salvar a ordem." });
-      refresh();
-    });
+  function expandAll() {
+    setExpanded(new Set(accounts.map((a) => a.id)));
   }
 
-  // Children drag end (within a group)
-  function handleChildReorder(parentId: string, ids: string[]) {
-    setRawPlans((prev) => {
-      if (!prev) return prev;
-      const idOrder = Object.fromEntries(ids.map((id, i) => [id, i]));
-      return prev.map((p) => (p.id in idOrder ? { ...p, order: idOrder[p.id] } : p));
+  function collapseAll() {
+    setExpanded(new Set());
+  }
+
+  // ── form ────────────────────────────────────────────────────────────────────
+
+  const form = useForm<AccountFormValues>({
+    resolver: zodResolver(accountFormSchema),
+    defaultValues: { name: "", description: "", parentId: null, dre_position: null },
+  });
+
+  const parentOptions = useMemo(
+    () => accounts.filter((a) => !editingAccount || a.id !== editingAccount.id),
+    [accounts, editingAccount]
+  );
+
+  function openAdd(parentId: string | null = null) {
+    setEditingAccount(null);
+    setDefaultParentId(parentId);
+    form.reset({ name: "", description: "", parentId, dre_position: null });
+    setDialogOpen(true);
+  }
+
+  function openEdit(account: Account) {
+    setEditingAccount(account);
+    form.reset({
+      name: account.name,
+      description: account.description ?? "",
+      parentId: account.parentId ?? null,
+      dre_position: account.dre_position ?? null,
     });
-    persistOrder(ids).catch(() => {
-      toast({ variant: "destructive", title: "Erro ao salvar a ordem." });
-      refresh();
-    });
+    setDialogOpen(true);
+  }
+
+  async function onSubmit(values: AccountFormValues) {
+    try {
+      if (editingAccount) {
+        await updateDoc(doc(financialDb, "accounts", editingAccount.id), {
+          name: values.name,
+          description: values.description ?? null,
+          parentId: values.parentId ?? null,
+          dre_position: values.dre_position ?? null,
+        });
+        setAccounts((prev) =>
+          prev.map((a) =>
+            a.id === editingAccount.id
+              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position: values.dre_position ?? null }
+              : a
+          )
+        );
+        toast({ title: "Conta atualizada." });
+      } else {
+        const siblings = accounts.filter((a) => (a.parentId ?? null) === (values.parentId ?? null));
+        const ref = await addDoc(financialCollection("accounts"), {
+          name: values.name,
+          description: values.description ?? null,
+          parentId: values.parentId ?? null,
+          dre_position: values.dre_position ?? null,
+          order: siblings.length,
+          active: true,
+        });
+        setAccounts((prev) => [
+          ...prev,
+          { id: ref.id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position: values.dre_position ?? null, order: siblings.length, active: true },
+        ]);
+        if (values.parentId) setExpanded((prev) => new Set([...prev, values.parentId!]));
+        toast({ title: "Conta criada." });
+      }
+      setDialogOpen(false);
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao salvar." });
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    const hasChildren = accounts.some((a) => a.parentId === deleteTarget.id);
+    if (hasChildren) {
+      toast({ variant: "destructive", title: "Remova as subcontas primeiro." });
+      setDeleteTarget(null);
+      return;
+    }
+    try {
+      await deleteDoc(doc(financialDb, "accounts", deleteTarget.id));
+      setAccounts((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+      toast({ title: "Conta removida." });
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao remover." });
+    } finally {
+      setDeleteTarget(null);
+    }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle>Plano de contas</CardTitle>
-            <CardDescription>Estruture categorias e subcontas para classificar despesas e resultados.</CardDescription>
-          </div>
-          {canManage && (
-            <Button onClick={() => handleOpen()}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Nova conta
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setCollapsedGroups(new Set())}>
-            Expandir tudo
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCollapsedGroups(new Set(topGroups))}>
-            Recolher tudo
-          </Button>
-        </div>
-
-        {error && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <div className="space-y-1">
-                <p className="font-medium">Falha ao carregar o plano de contas.</p>
-                <p>{error.message}</p>
-              </div>
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>Plano de contas</CardTitle>
+              <CardDescription>
+                Estruture categorias e subcontas para classificar despesas e resultados.
+              </CardDescription>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button type="button" onClick={expandAll} className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+                Expandir tudo
+              </button>
+              <button type="button" onClick={collapseAll} className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+                Recolher tudo
+              </button>
             </div>
           </div>
-        )}
+        </CardHeader>
 
-        {loading ? (
-          <div className="flex h-32 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : tree.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Nenhum plano de contas cadastrado.
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopDragEnd}>
-              <SortableContext items={topGroups} strategy={verticalListSortingStrategy}>
-                {tree.map((group, index) => (
-                  <SortableGroupRow
-                    key={group.id}
-                    group={group}
-                    index={index}
-                    color={GROUP_COLORS[index % GROUP_COLORS.length]}
-                    collapsed={collapsedGroups.has(group.id)}
-                    canManage={canManage}
-                    onToggle={toggleGroup}
-                    onEdit={(plan) => handleOpen(plan)}
-                    onDelete={(plan) => setDeletingPlan(plan)}
-                    onAddChild={(parentId) => handleOpen(null, parentId)}
-                    onChildReorder={handleChildReorder}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
-          </div>
-        )}
-      </CardContent>
+        <CardContent className="space-y-3">
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-900">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
-      <Dialog
-        open={isFormOpen}
-        onOpenChange={(open) => {
-          if (!open) { setIsFormOpen(false); setEditingPlan(null); }
-        }}
-      >
-        <DialogContent onCloseAutoFocus={(event) => event.preventDefault()}>
+          {loading ? (
+            <div className="flex h-32 items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRootDragEnd}>
+                <SortableContext items={rootItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-1">
+                    {rootItems.map((node, index) => (
+                      <SortableRow
+                        key={node.id}
+                        node={node}
+                        number={`${index + 1}`}
+                        depth={0}
+                        topLevelIndex={index}
+                        expanded={expanded}
+                        canManage={canManage}
+                        onToggle={toggleExpand}
+                        onEdit={openEdit}
+                        onDelete={setDeleteTarget}
+                        onAddChild={(parentId) => openAdd(parentId)}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => openAdd(null)}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Nova conta raiz
+                </button>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add / Edit dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingPlan ? "Editar conta" : "Nova conta"}</DialogTitle>
-            <DialogDescription>Defina nome, descrição e conta pai, se houver.</DialogDescription>
+            <DialogTitle>{editingAccount ? "Editar conta" : "Nova conta"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -656,63 +588,73 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Nome</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Despesas administrativas" {...field} />
-                    </FormControl>
+                    <FormControl><Input placeholder="Ex: Salários" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descrição <span className="text-muted-foreground">(opcional)</span></FormLabel>
+                    <FormControl><Textarea rows={2} placeholder="Descreva o uso desta conta..." {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="parentId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Conta pai</FormLabel>
-                    <Select
-                      value={field.value ?? "root"}
-                      onValueChange={(value) => field.onChange(value === "root" ? null : value)}
-                    >
+                    <FormLabel>Conta pai <span className="text-muted-foreground">(opcional)</span></FormLabel>
+                    <Select value={field.value ?? "none"} onValueChange={(v) => field.onChange(v === "none" ? null : v)}>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a conta pai" />
-                        </SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Sem pai (raiz)" /></SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="root">Nenhuma</SelectItem>
-                        {plans
-                          .filter((plan) => plan.id !== editingPlan?.id)
-                          .map((plan) => (
-                            <SelectItem key={plan.id} value={plan.id}>
-                              {plan.name}
-                            </SelectItem>
-                          ))}
+                        <SelectItem value="none"><span className="text-muted-foreground">Sem pai (raiz)</span></SelectItem>
+                        {parentOptions.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
-                name="description"
+                name="dre_position"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Descrição</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Contexto opcional da conta" {...field} value={field.value ?? ""} />
-                    </FormControl>
+                    <FormLabel>Posição na DRE <span className="text-muted-foreground">(opcional para grupos)</span></FormLabel>
+                    <Select value={field.value ?? "none"} onValueChange={(v) => field.onChange(v === "none" ? null : v)}>
+                      <FormControl>
+                        <SelectTrigger><SelectValue placeholder="Sem posição" /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none"><span className="text-muted-foreground">Sem posição</span></SelectItem>
+                        {DRE_POSITIONS.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Salvar
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={form.formState.isSubmitting}>
+                  {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {editingAccount ? "Salvar" : "Criar"}
                 </Button>
               </DialogFooter>
             </form>
@@ -720,20 +662,26 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deletingPlan} onOpenChange={(open) => !open && setDeletingPlan(null)}>
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir plano de contas?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir conta?</AlertDialogTitle>
             <AlertDialogDescription>
-              Essa ação remove o plano <strong>{deletingPlan?.name}</strong>. Verifique antes se ele não está em uso em despesas já lançadas.
+              <strong>{deleteTarget?.name}</strong> será removida permanentemente. Despesas já lançadas nessa conta não serão afetadas.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => void handleDelete()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </>
   );
 }

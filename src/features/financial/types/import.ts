@@ -45,3 +45,103 @@ export type ParsedBankEntry = {
   fitId?: string;
   type?: string;
 };
+
+export type ImportSessionStatus = "open" | "completed" | "discarded";
+export type ImportSessionItemStatus = "pending" | "audited" | "ignored" | "completed";
+export type ImportSessionExpenseMode = "new" | "existing" | "purchase" | "split";
+export type ImportSessionPurchaseLinkMode = "goods" | "freight" | "combined";
+
+export type ImportSessionApportionment = {
+  id: string;
+  resultCenterId: string;
+  resultCenterName: string;
+  percentage: number;
+};
+
+export type ImportSessionSplitExpense = {
+  id: string;
+  description: string;
+  supplier: string;
+  accountPlanId: string;
+  accountPlanName: string;
+  resultCenterId: string;
+  resultCenterName: string;
+  competenceDate: string;
+  value: number;
+};
+
+export type ImportSessionExpenseDraft = {
+  mode: ImportSessionExpenseMode;
+  linkedExpenseId: string;
+  purchaseOrderId: string;
+  purchaseLinkMode: ImportSessionPurchaseLinkMode;
+  allocatedAmount: number;
+  description: string;
+  supplier: string;
+  accountPlanId: string;
+  accountPlanName: string;
+  isApportioned: boolean;
+  resultCenterId: string;
+  resultCenterName: string;
+  apportionments: ImportSessionApportionment[];
+  splitExpenses: ImportSessionSplitExpense[];
+  competenceDate: string;
+  notes: string;
+};
+
+export type ImportSessionFinancialDraft = {
+  movementKind: "standard" | "transfer";
+  date: string;
+  description: string;
+  accountId: string;
+  accountName: string;
+  paymentMethodId: string;
+  paymentMethodLabel: string;
+  counterpartyAccountId: string;
+  counterpartyAccountName: string;
+  counterpartyPaymentMethodId: string;
+  counterpartyPaymentMethodLabel: string;
+  notes: string;
+};
+
+export type ImportSessionItem = {
+  id: string;
+  date: string;
+  amount: number;
+  rawDescription: string;
+  matchedAliasId?: string;
+  suggestedExpenseId?: string;
+  suggestedExpenseDescription?: string;
+  suggestedInstallmentNumber?: number;
+  suggestedInstallmentValue?: number;
+  suggestedConfidence?: "high" | "medium";
+  expenseDraft: ImportSessionExpenseDraft;
+  financialDraft: ImportSessionFinancialDraft;
+  status: ImportSessionItemStatus;
+};
+
+export type ImportSessionSummary = {
+  total: number;
+  pending: number;
+  audited: number;
+  ignored: number;
+  completed: number;
+};
+
+export type ImportSession = {
+  id: string;
+  displayName: string;
+  fileName: string;
+  fileType: "ofx" | "csv";
+  bankProfile?: string;
+  statementAccountId: string;
+  statementAccountName: string;
+  createdBy: string;
+  createdByName: string;
+  status: ImportSessionStatus;
+  items: ImportSessionItem[];
+  summary: ImportSessionSummary;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  completedAt?: Timestamp | null;
+};

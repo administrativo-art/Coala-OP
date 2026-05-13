@@ -1,22 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type ComponentType, Fragment, useEffect, useMemo, useState } from "react";
 import { deleteDoc } from "firebase/firestore";
 import { format, startOfDay, addDays, endOfDay, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
+  CheckCheck,
+  ChevronDown,
+  ChevronUp,
   CircleDollarSign,
-  Download,
+  Clock3,
+  Landmark,
   FilePlus2,
   FileUp,
   Filter,
   MoreHorizontal,
+  SearchCheck,
   Search,
   Trash2,
 } from "lucide-react";
 import { PayExpenseDialog } from "@/features/financial/components/pay-expense-dialog";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
+import { FinancialImportPage } from "@/features/financial/pages/import-page";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
@@ -25,7 +32,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +43,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +53,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { cn } from "@/lib/utils";
 
@@ -60,13 +69,54 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-950/30 dark:text-slate-400 dark:border-slate-800",
-  pending_audit: "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800",
+  pending_audit: "border-violet-200 bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-800",
   paid: "border-green-400 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800",
   cancelled: "border-zinc-300 bg-zinc-50 text-zinc-500 dark:bg-zinc-900/50 dark:text-zinc-400 dark:border-zinc-800",
-  overdue: "border-red-300 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800",
+  overdue: "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800",
   pending: "border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800",
   due_soon: "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800",
 };
+
+const STATUS_ACCENT_COLORS: Record<string, string> = {
+  draft: "bg-slate-400",
+  pending_audit: "bg-violet-500",
+  paid: "bg-emerald-500",
+  cancelled: "bg-zinc-300",
+  overdue: "bg-rose-500",
+  pending: "bg-blue-500",
+  due_soon: "bg-amber-500",
+};
+
+const KPI_TONES = {
+  pending: {
+    iconWrap: "bg-blue-50 text-blue-700",
+    bars: "bg-blue-400/80",
+  },
+  overdue: {
+    iconWrap: "bg-rose-50 text-rose-700",
+    bars: "bg-rose-400/80",
+  },
+  dueSoon: {
+    iconWrap: "bg-amber-50 text-amber-700",
+    bars: "bg-amber-400/80",
+  },
+  paid: {
+    iconWrap: "bg-emerald-50 text-emerald-700",
+    bars: "bg-emerald-400/80",
+  },
+  pendingAudit: {
+    iconWrap: "bg-violet-50 text-violet-700",
+    bars: "bg-violet-400/80",
+  },
+} as const;
+
+const UNIT_COLOR_STYLES: Array<{ match: string; dot: string; active: string; soft: string }> = [
+  { match: "iguatemi", dot: "bg-indigo-500", active: "border-indigo-500 bg-indigo-50 text-indigo-700", soft: "border-indigo-200 hover:border-indigo-300" },
+  { match: "higien", dot: "bg-orange-400", active: "border-orange-500 bg-orange-50 text-orange-700", soft: "border-orange-200 hover:border-orange-300" },
+  { match: "jk", dot: "bg-emerald-500", active: "border-emerald-500 bg-emerald-50 text-emerald-700", soft: "border-emerald-200 hover:border-emerald-300" },
+  { match: "morumbi", dot: "bg-violet-500", active: "border-violet-500 bg-violet-50 text-violet-700", soft: "border-violet-200 hover:border-violet-300" },
+  { match: "matriz", dot: "bg-sky-500", active: "border-sky-500 bg-sky-50 text-sky-700", soft: "border-sky-200 hover:border-sky-300" },
+];
 
 const PERIOD_PRESET_OPTIONS = [
   { value: "current_month", label: "Mês atual" },
@@ -85,27 +135,66 @@ function KpiCard({
   description,
   href,
   onClick,
+  count,
+  icon: Icon,
+  iconWrapClass,
+  barsClass,
 }: {
   label: string;
   value: string;
   description: string;
   href?: string;
   onClick?: () => void;
+  count?: number;
+  icon: ComponentType<{ className?: string }>;
+  iconWrapClass: string;
+  barsClass: string;
 }) {
   return (
     <Card
-      className={cn((href || onClick) && "cursor-pointer transition-colors hover:border-primary/40")}
+      className={cn(
+        "overflow-hidden rounded-2xl border-border/70 shadow-sm",
+        (href || onClick) && "cursor-pointer transition-colors hover:border-primary/40"
+      )}
       onClick={onClick}
     >
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+      <CardHeader className="space-y-4 pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className={cn("flex h-7 w-7 items-center justify-center rounded-xl", iconWrapClass)}>
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+            <CardTitle className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</CardTitle>
+          </div>
+          {count !== undefined ? (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{count}</span>
+          ) : null}
+        </div>
+        <div className="grid h-8 grid-cols-8 items-end gap-1">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div
+              key={index}
+              className={cn("block w-full rounded-sm", barsClass)}
+              style={{ height: `${10 + ((index * 7) % 18)}px` }}
+            />
+          ))}
+        </div>
       </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      <CardContent className="pt-0">
+        <div className="font-mono text-[28px] font-bold leading-none tracking-tight">{value}</div>
+        <p className="mt-2 text-xs text-muted-foreground">{description}</p>
       </CardContent>
     </Card>
   );
+}
+
+function getUnitColorStyle(unitName: string) {
+  const normalized = unitName.toLowerCase();
+  return UNIT_COLOR_STYLES.find((style) => normalized.includes(style.match)) ?? {
+    dot: "bg-primary/70",
+    active: "border-primary bg-primary/10 text-primary",
+    soft: "border-border/70 hover:border-primary/40",
+  };
 }
 
 function expenseMatchesUnit(expense: any, unitName: string) {
@@ -215,6 +304,10 @@ export function ExpensesPage() {
   const [unitFilter, setUnitFilter] = useState(searchParams.get("unit") ?? "all");
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const canAccessAudits = !!permissions.financial?.expenses?.import;
+  const currentView = canAccessAudits && searchParams.get("view") === "audits" ? "audits" : "expenses";
 
   if (!permissions.financial?.expenses?.view) {
     return (
@@ -288,14 +381,6 @@ export function ExpensesPage() {
     setCompetenceMonth("");
   }
 
-  const suppliers = useMemo(
-    () =>
-      Array.from(new Set(expenses.map((expense) => expense.supplier).filter(Boolean))).sort((a, b) =>
-        String(a).localeCompare(String(b), "pt-BR")
-      ) as string[],
-    [expenses]
-  );
-
   const accountPlanNames = useMemo(
     () =>
       Array.from(
@@ -363,6 +448,19 @@ export function ExpensesPage() {
       })
     );
   }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, search, supplierFilter, unitFilter]);
+  const unitCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    scopedExpenses.forEach((expense) => {
+      units.forEach((unit) => {
+        if (expenseMatchesUnit(expense, unit.name)) {
+          counts.set(unit.name, (counts.get(unit.name) || 0) + 1);
+        }
+      });
+    });
+    return counts;
+  }, [scopedExpenses, units]);
+
+  const filteredCountLabel = `${filtered.length} de ${scopedExpenses.length}`;
 
   const kpis = useMemo(() => {
     const now = startOfDay(new Date());
@@ -376,7 +474,6 @@ export function ExpensesPage() {
 
     scopedExpenses.forEach((expense) => {
       const due = toDate(expense.dueDate);
-      const computedStatus = getExpenseStatusKey(expense, now);
       if (expense.status === "pending") {
         open += expense.totalValue || 0;
         if (due && due < now) overdue += expense.totalValue || 0;
@@ -407,6 +504,13 @@ export function ExpensesPage() {
     return { open, overdue, paid, dueSoon, pendingAudit };
   }, [expenses, scopedExpenses, transactions]);
 
+  useEffect(() => {
+    if (!expandedExpenseId) return;
+    if (!filtered.some((expense) => expense.id === expandedExpenseId)) {
+      setExpandedExpenseId(null);
+    }
+  }, [expandedExpenseId, filtered]);
+
   async function handleDelete() {
     if (!deleteTarget) return;
 
@@ -427,25 +531,15 @@ export function ExpensesPage() {
     }
   }
 
-  function exportCsv() {
-    const header = "Descrição,Fornecedor,Plano de contas,Valor,Vencimento,Status\n";
-    const rows = filtered
-      .map((expense) =>
-        [
-          `"${expense.description}"`,
-          `"${expense.supplier || ""}"`,
-          `"${accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || ""}"`,
-          (expense.totalValue || 0).toFixed(2),
-          toDate(expense.dueDate) ? format(toDate(expense.dueDate)!, "dd/MM/yyyy") : "",
-          expense.status,
-        ].join(",")
-      )
-      .join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `despesas-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    link.click();
+  function setExpensesView(view: "expenses" | "audits") {
+    const params = new URLSearchParams(searchParams.toString());
+    if (view === "audits") {
+      params.set("view", "audits");
+    } else {
+      params.delete("view");
+    }
+    const nextQuery = params.toString();
+    router.replace(`${FINANCIAL_ROUTES.expenses}${nextQuery ? `?${nextQuery}` : ""}`);
   }
 
   return (
@@ -457,10 +551,8 @@ export function ExpensesPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {permissions.financial?.expenses?.import && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={FINANCIAL_ROUTES.importExpenses}>
-                <FileUp className="mr-2 h-4 w-4" /> Importar extrato
-              </Link>
+            <Button variant="outline" size="sm" onClick={() => setIsImportDialogOpen(true)}>
+              <FileUp className="mr-2 h-4 w-4" /> Importar extrato
             </Button>
           )}
           {permissions.financial?.expenses?.create && (
@@ -473,55 +565,110 @@ export function ExpensesPage() {
         </div>
       </div>
 
+      {canAccessAudits ? (
+        <Tabs value={currentView} onValueChange={(value) => setExpensesView(value as "expenses" | "audits")} className="space-y-6">
+          <TabsList className="grid h-auto w-full max-w-[420px] grid-cols-2 rounded-2xl border bg-background p-1 shadow-sm">
+            <TabsTrigger value="expenses" className="rounded-xl px-4 py-2 text-sm font-medium">
+              Despesas
+            </TabsTrigger>
+            <TabsTrigger value="audits" className="rounded-xl px-4 py-2 text-sm font-medium">
+              Auditorias
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="expenses" className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Em aberto" value={formatCurrency(kpis.open)} description="Total de compromissos pendentes." />
-        <KpiCard label="Vencido" value={formatCurrency(kpis.overdue)} description="Despesas que já passaram do vencimento." />
-        <KpiCard label="Vence em 7 dias" value={formatCurrency(kpis.dueSoon)} description="Monitoramento do curto prazo." />
-        <KpiCard label="Pago" value={formatCurrency(kpis.paid)} description="Histórico já liquidado." />
+        <KpiCard
+          label="Em aberto"
+          value={formatCurrency(kpis.open)}
+          description="Total de compromissos pendentes."
+          icon={Landmark}
+          iconWrapClass={KPI_TONES.pending.iconWrap}
+          barsClass={KPI_TONES.pending.bars}
+        />
+        <KpiCard
+          label="Vencido"
+          value={formatCurrency(kpis.overdue)}
+          description="Despesas que já passaram do vencimento."
+          icon={AlertTriangle}
+          iconWrapClass={KPI_TONES.overdue.iconWrap}
+          barsClass={KPI_TONES.overdue.bars}
+        />
+        <KpiCard
+          label="Vence em 7 dias"
+          value={formatCurrency(kpis.dueSoon)}
+          description="Monitoramento do curto prazo."
+          icon={Clock3}
+          iconWrapClass={KPI_TONES.dueSoon.iconWrap}
+          barsClass={KPI_TONES.dueSoon.bars}
+        />
+        <KpiCard
+          label="Pago"
+          value={formatCurrency(kpis.paid)}
+          description="Histórico já liquidado."
+          icon={CheckCheck}
+          iconWrapClass={KPI_TONES.paid.iconWrap}
+          barsClass={KPI_TONES.paid.bars}
+        />
         <KpiCard
           label="Pendente auditoria"
           value={formatCurrency(kpis.pendingAudit)}
           description="Compras e extratos reconhecidos aguardando tratamento."
+          icon={SearchCheck}
+          iconWrapClass={KPI_TONES.pendingAudit.iconWrap}
+          barsClass={KPI_TONES.pendingAudit.bars}
           href={FINANCIAL_ROUTES.pendingAuditExpenses}
           onClick={() => router.push(FINANCIAL_ROUTES.pendingAuditExpenses)}
         />
       </div>
 
-      <Card className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Unidades</CardTitle>
-          <CardDescription>Cards de acesso rápido para ver as despesas de cada unidade.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <button
-              type="button"
+      <div className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unidade</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+              unitFilter === "all"
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border/70 bg-background hover:border-primary/40"
+            )}
+            onClick={() => setUnitFilter("all")}
+          >
+            Todas
+            <span
               className={cn(
-                "rounded-xl border px-4 py-4 text-left transition-colors hover:border-primary/40",
-                unitFilter === "all" && "border-primary bg-primary/5"
+                "rounded-full px-1.5 py-0.5 text-[10px]",
+                unitFilter === "all" ? "bg-white/20 text-primary-foreground" : "bg-muted text-muted-foreground"
               )}
-              onClick={() => setUnitFilter("all")}
             >
-              <p className="text-sm font-semibold">Todas as unidades</p>
-            </button>
-            {units.map((unit) => {
-              return (
-                <button
-                  key={unit.id}
-                  type="button"
-                  className={cn(
-                    "rounded-xl border px-4 py-4 text-left transition-colors hover:border-primary/40",
-                    unitFilter === unit.name && "border-primary bg-primary/5"
-                  )}
-                  onClick={() => setUnitFilter(unit.name)}
-                >
-                  <p className="text-sm font-semibold">{unit.name}</p>
-                </button>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+              {scopedExpenses.length}
+            </span>
+          </button>
+          {units.map((unit) => {
+            const unitStyle = getUnitColorStyle(unit.name);
+            return (
+              <button
+                key={unit.id}
+                type="button"
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  unitFilter === unit.name
+                    ? unitStyle.active
+                    : cn("bg-background", unitStyle.soft)
+                )}
+                onClick={() => setUnitFilter(unit.name)}
+              >
+                <span className={cn("h-2 w-2 rounded-full", unitStyle.dot)} />
+                {unit.name}
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {unitCounts.get(unit.name) || 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <Card className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
         <CardHeader className="border-b bg-muted/20 px-4 py-3">
@@ -529,7 +676,7 @@ export function ExpensesPage() {
             <div className="relative min-w-[220px] flex-1">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar despesa..."
+                placeholder="Buscar por descrição, fornecedor..."
                 className="h-8 rounded-lg border-border/70 bg-background pl-9 text-xs"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -571,26 +718,6 @@ export function ExpensesPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Input
-              type="month"
-              value={competenceMonth}
-              className="h-8 w-[140px] rounded-lg border-border/70 bg-background text-xs"
-              onChange={(event) => {
-                setPeriodPreset("custom");
-                setCompetenceMonth(event.target.value);
-              }}
-            />
-            <Select value={supplierFilter} onValueChange={setSupplierFilter}>
-              <SelectTrigger className="h-8 w-[170px] rounded-lg border-border/70 bg-background text-xs">
-                <SelectValue placeholder="Fornecedor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os fornecedores</SelectItem>
-                {suppliers.map((supplier) => (
-                  <SelectItem key={supplier} value={supplier}>{supplier}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Select value={accountPlanFilter} onValueChange={setAccountPlanFilter}>
               <SelectTrigger className="h-8 w-[170px] rounded-lg border-border/70 bg-background text-xs">
                 <SelectValue placeholder="Plano de contas" />
@@ -602,9 +729,7 @@ export function ExpensesPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" className="h-8 shrink-0 rounded-lg border-border/70 bg-background text-xs" onClick={exportCsv} disabled={!filtered.length}>
-              <Download className="mr-2 h-3.5 w-3.5" /> Exportar
-            </Button>
+            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{filteredCountLabel}</span>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -614,11 +739,11 @@ export function ExpensesPage() {
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Descrição</th>
                   <th className="px-4 py-3 font-medium">Fornecedor</th>
-                  <th className="px-4 py-3 font-medium">Plano de contas</th>
+                  <th className="px-4 py-3 font-medium">Unidade</th>
                   <th className="px-4 py-3 font-medium">Vencimento</th>
                   <th className="px-4 py-3 text-right font-medium">Valor</th>
                   <th className="w-[160px] px-4 py-3 text-center font-medium">Status</th>
-                  <th className="px-4 py-3 text-right font-medium">Ações</th>
+                  <th className="w-[52px] px-4 py-3 text-right font-medium" />
                 </tr>
               </thead>
               <tbody>
@@ -640,72 +765,166 @@ export function ExpensesPage() {
                   filtered.map((expense) => {
                     const due = toDate(expense.dueDate);
                     const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
+                    const isExpanded = expandedExpenseId === expense.id;
+                    const planName = accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "—";
+                    const primaryUnit = expense.isApportioned
+                      ? expense.apportionments?.[0]?.resultCenter || "Rateado"
+                      : expense.resultCenter || "—";
+                    const installmentLabel = expense.installments?.length
+                      ? `${expense.installments[0]?.number || 1}/${expense.installments.length}`
+                      : "1/1";
 
                     return (
-                      <tr key={expense.id} className="border-b">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-medium">{expense.description}</p>
-                            {expense.originModule === "purchasing" && (
-                              <div className="mt-2 space-y-1.5">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
-                                    Compras
-                                  </span>
-                                  {expense.purchaseOrderId && (
-                                    <Link
-                                      href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(FINANCIAL_ROUTES.pendingAuditExpenses)}`}
-                                      className="text-[11px] text-primary underline underline-offset-2"
-                                    >
-                                      Abrir pedido
-                                    </Link>
+                      <Fragment key={expense.id}>
+                        <tr
+                          className={cn("border-b cursor-pointer transition-colors hover:bg-muted/20", isExpanded && "bg-muted/20")}
+                          onClick={() => setExpandedExpenseId((current) => (current === expense.id ? null : expense.id))}
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-start gap-3">
+                              <span className={cn("mt-1 h-7 w-1 shrink-0 rounded-full", STATUS_ACCENT_COLORS[statusKey] || "bg-border")} />
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium">{expense.description}</p>
+                                  {expense.installments?.length > 1 && (
+                                    <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                      {installmentLabel}
+                                    </span>
                                   )}
-                                  <span className="text-[11px] text-amber-700">Revise parcelamento, conta e liquidação.</span>
+                                  {expense.originModule === "purchasing" && (
+                                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
+                                      Compras
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {primaryUnit !== "—" ? `${primaryUnit} · ` : ""}
+                                  {expense.supplier || "Sem fornecedor"}
+                                  {expense.notes ? ` · ${expense.notes}` : ""}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-1">
+                              <p>{expense.supplier || "—"}</p>
+                              <p className="text-xs text-muted-foreground">{planName}</p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">{primaryUnit}</td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-1 text-center md:text-left">
+                              <p>{due ? format(due, "dd/MM/yyyy") : "—"}</p>
+                              {due ? (
+                                <p className={cn("text-xs", due < startOfDay(new Date()) ? "text-rose-600" : "text-muted-foreground")}>
+                                  {expense.status === "paid"
+                                    ? "Pago"
+                                    : due < startOfDay(new Date())
+                                    ? `${Math.abs(Math.round((startOfDay(new Date()).getTime() - due.getTime()) / 86400000))}d atraso`
+                                    : `em ${Math.round((due.getTime() - startOfDay(new Date()).getTime()) / 86400000)}d`}
+                                </p>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono">{formatCurrency(expense.totalValue || 0)}</td>
+                          <td className="w-[160px] px-4 py-3 text-center">
+                            <span className={cn("inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-[11px]", STATUS_COLORS[statusKey] || "border-border text-foreground")}>
+                              {STATUS_LABELS[statusKey] || statusKey}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {isExpanded ? <ChevronUp className="ml-auto h-4 w-4 text-muted-foreground" /> : <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="border-b bg-muted/10">
+                            <td colSpan={7} className="px-4 pb-4 pt-1">
+                              <div className="grid gap-4 rounded-2xl border border-border/70 bg-background p-4 md:grid-cols-[2fr_1fr]">
+                                <div className="grid gap-4 sm:grid-cols-3">
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fornecedor</p>
+                                    <p className="mt-1 text-sm font-medium">{expense.supplier || "—"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Plano de contas</p>
+                                    <p className="mt-1 text-sm font-medium">{planName}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Centro de resultado</p>
+                                    <p className="mt-1 text-sm font-medium">{expense.isApportioned ? "Rateado" : primaryUnit}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Competência</p>
+                                    <p className="mt-1 text-sm font-medium">
+                                      {toDate(expense.competenceDate) ? format(toDate(expense.competenceDate)!, "MM/yyyy") : "—"}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vencimento</p>
+                                    <p className="mt-1 text-sm font-medium">{due ? format(due, "dd/MM/yyyy") : "—"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Parcela</p>
+                                    <p className="mt-1 text-sm font-medium">{installmentLabel}</p>
+                                  </div>
+                                  {expense.purchaseOrderId && (
+                                    <div className="sm:col-span-3">
+                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pedido vinculado</p>
+                                      <Link
+                                        href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(FINANCIAL_ROUTES.pendingAuditExpenses)}`}
+                                        className="mt-1 inline-block text-sm font-medium text-primary underline underline-offset-2"
+                                      >
+                                        Abrir pedido {expense.purchaseOrderId}
+                                      </Link>
+                                    </div>
+                                  )}
+                                  {expense.notes && (
+                                    <div className="sm:col-span-3 rounded-xl bg-muted/50 p-3 text-sm text-muted-foreground">
+                                      <span className="font-medium text-foreground">Observações:</span> {expense.notes}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex flex-col justify-between gap-4">
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Valor total</p>
+                                    <p className="mt-1 font-mono text-2xl font-bold">{formatCurrency(expense.totalValue || 0)}</p>
+                                  </div>
+                                  <div className="flex flex-wrap justify-end gap-2">
+                                    {permissions.financial?.expenses?.pay && expense.status === "pending" && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          setPayTarget({
+                                            ...expense,
+                                            accountPlanName: planName,
+                                            resultCenter: primaryUnit,
+                                          });
+                                        }}
+                                      >
+                                        Registrar pagamento
+                                      </Button>
+                                    )}
+                                    {permissions.financial?.expenses?.edit && (
+                                      <Button type="button" variant="outline" size="sm" asChild onClick={(event) => event.stopPropagation()}>
+                                        <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>
+                                          {expense.status === "draft" ? "Continuar" : "Editar"}
+                                        </Link>
+                                      </Button>
+                                    )}
+                                    {permissions.financial?.expenses?.delete && expense.originModule !== "purchasing" && (
+                                      <Button type="button" variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); setDeleteTarget(expense); }}>
+                                        Excluir
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            )}
-                            {expense.notes && expense.originModule !== "purchasing" && <p className="text-xs text-muted-foreground">{expense.notes}</p>}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">{expense.supplier || "—"}</td>
-                        <td className="px-4 py-3">
-                          {accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "—"}
-                        </td>
-                        <td className="px-4 py-3">{due ? format(due, "dd/MM/yyyy") : "—"}</td>
-                        <td className="px-4 py-3 text-right font-mono">{formatCurrency(expense.totalValue || 0)}</td>
-                        <td className="w-[160px] px-4 py-3 text-center">
-                          <span className={cn("inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-[11px]", STATUS_COLORS[statusKey] || "border-border text-foreground")}>
-                            {STATUS_LABELS[statusKey] || statusKey}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Ações</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" onCloseAutoFocus={(event) => event.preventDefault()}>
-                              {permissions.financial?.expenses?.pay && expense.status === "pending" && (
-                                <DropdownMenuItem onClick={() => setPayTarget(expense)}>Registrar pagamento</DropdownMenuItem>
-                              )}
-                              {permissions.financial?.expenses?.edit && (
-                                <DropdownMenuItem asChild>
-                                  <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>
-                                    {expense.status === "draft" ? "Continuar rascunho" : "Editar"}
-                                  </Link>
-                                </DropdownMenuItem>
-                              )}
-                              {permissions.financial?.expenses?.delete && expense.originModule !== "purchasing" && (
-                                <DropdownMenuItem onClick={() => setDeleteTarget(expense)}>
-                                  <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })
                 )}
@@ -733,6 +952,9 @@ export function ExpensesPage() {
                   const due = toDate(expense.dueDate);
                   const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                   const planName = accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "—";
+                  const primaryUnit = expense.isApportioned
+                    ? expense.apportionments?.[0]?.resultCenter || "Rateado"
+                    : expense.resultCenter || "—";
 
                   return (
                     <div key={expense.id} className="border-b border-border/50 px-4 py-3 last:border-b-0 hover:bg-muted/10">
@@ -789,7 +1011,17 @@ export function ExpensesPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" onCloseAutoFocus={(event) => event.preventDefault()}>
                             {permissions.financial?.expenses?.pay && expense.status === "pending" && (
-                              <DropdownMenuItem onClick={() => setPayTarget(expense)}>Registrar pagamento</DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setPayTarget({
+                                    ...expense,
+                                    accountPlanName: planName,
+                                    resultCenter: primaryUnit,
+                                  })
+                                }
+                              >
+                                Registrar pagamento
+                              </DropdownMenuItem>
                             )}
                             {permissions.financial?.expenses?.edit && (
                               <DropdownMenuItem asChild>
@@ -814,6 +1046,32 @@ export function ExpensesPage() {
           </div>
         </CardContent>
       </Card>
+          </TabsContent>
+
+          <TabsContent value="audits" className="space-y-6">
+            <FinancialImportPage embedded showImportControls={false} />
+          </TabsContent>
+        </Tabs>
+      ) : null}
+
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="max-w-4xl rounded-3xl p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle>Importar extrato</DialogTitle>
+            <DialogDescription>Selecione a conta do extrato e importe um arquivo OFX ou CSV para abrir uma nova sessão de auditoria.</DialogDescription>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            <FinancialImportPage
+              embedded
+              uploadOnly
+              onImportComplete={() => {
+                setIsImportDialogOpen(false);
+                setExpensesView("audits");
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <PayExpenseDialog expense={payTarget} open={!!payTarget} onOpenChange={(open) => !open && setPayTarget(null)} />
 

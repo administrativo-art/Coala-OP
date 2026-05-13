@@ -1,5 +1,6 @@
 "use client";
 
+import { BookMarked, Building2, Sparkles } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import AccountPlansManagement from "@/features/financial/components/settings/account-plans-management";
@@ -24,22 +25,40 @@ export function FinancialSettingsPage() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="accounting" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="accounting">Contabilidade</TabsTrigger>
-          <TabsTrigger value="accounts">Contas</TabsTrigger>
-          <TabsTrigger value="import">Importação</TabsTrigger>
-        </TabsList>
-        <TabsContent value="accounting" className="space-y-6">
+        <div className="flex justify-end">
+          <TabsList className="grid h-auto w-full max-w-[520px] grid-cols-3 rounded-2xl border bg-background p-1 shadow-sm">
+            <TabsTrigger value="accounting" className="rounded-xl px-4 py-2.5 text-sm font-semibold">
+              <span className="inline-flex items-center gap-2">
+                <BookMarked className="h-4 w-4" />
+                Contabilidade
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="accounts" className="rounded-xl px-4 py-2.5 text-sm font-semibold">
+              <span className="inline-flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Contas
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="import" className="rounded-xl px-4 py-2.5 text-sm font-semibold">
+              <span className="inline-flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Importação
+              </span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="accounting" className="mt-4 space-y-6">
           <AccountPlansManagement canManage={permissions.financial?.settings?.manageAccountPlans} />
           <ResultCentersManagement canManage={permissions.financial?.settings?.manageResultCenters} />
           {permissions.financial?.settings?.manageExpenseDescriptions ? (
             <ExpenseDescriptionsManagement canManage={permissions.financial?.settings?.manageExpenseDescriptions} />
           ) : null}
         </TabsContent>
-        <TabsContent value="accounts">
+        <TabsContent value="accounts" className="mt-4">
           <BankAccountsManagement canManage={permissions.financial?.settings?.manageBankAccounts} />
         </TabsContent>
-        <TabsContent value="import">
+        <TabsContent value="import" className="mt-4">
           <ImportAliasesManagement canManage={permissions.financial?.settings?.manageImportAliases} />
         </TabsContent>
       </Tabs>
