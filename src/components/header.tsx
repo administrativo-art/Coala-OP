@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, Search, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserProfile } from "./user-profile";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +26,7 @@ const SECTION_MAP: Record<string, string> = {
   "/dashboard/tasks": "Operações",
   "/dashboard/forms": "Operações",
   "/dashboard/stock": "Estoque",
+  "/dashboard/expiry": "Estoque",
   "/dashboard/commercial": "Comercial",
   "/dashboard/goals": "Comercial",
   "/dashboard/pricing": "Comercial",
@@ -50,7 +53,7 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/tasks": "Tarefas Gerais",
   "/dashboard/forms": "Formulários",
   "/dashboard/stock": "Gestão de Estoque",
-  "/dashboard/stock/expiry": "Validades",
+  "/dashboard/expiry": "Validades",
   "/dashboard/stock/restock": "Reposição",
   "/dashboard/stock/movement": "Histórico de Movimentos",
   "/dashboard/stock/audit": "Auditoria",
@@ -108,17 +111,21 @@ function getBreadcrumb(pathname: string): { section: string | null; current: str
 
 // ── Status bar ────────────────────────────────────────────────────────────────
 
-function StatusBar({ taskCount }: { taskCount: number }) {
+function StatusBar({ tasks }: { tasks: LegacyTask[] }) {
   const { lots } = useExpiryProducts();
   const [clock, setClock] = useState("");
 
   const now = Date.now();
   const in48h = now + 48 * 60 * 60 * 1000;
-  const expiringCount = lots.filter((l) => {
+  const expiringLots = lots
+    .filter((l) => {
     if (!l.expiryDate || (l.quantity ?? 0) <= 0) return false;
     const d = new Date(l.expiryDate).getTime();
     return d >= now && d <= in48h;
-  }).length;
+    })
+    .sort((a, b) => new Date(a.expiryDate ?? 0).getTime() - new Date(b.expiryDate ?? 0).getTime());
+  const expiringCount = expiringLots.length;
+  const taskCount = tasks.length;
 
   useEffect(() => {
     function tick() {
@@ -132,51 +139,97 @@ function StatusBar({ taskCount }: { taskCount: number }) {
     return () => clearInterval(id);
   }, []);
 
-  const pills = [
-    expiringCount > 0 && {
-      color: "#ef4444",
-      label: (
-        <>
-          <strong className="font-semibold text-foreground">{expiringCount} {expiringCount === 1 ? "validade" : "validades"}</strong>
-          {" "}{expiringCount === 1 ? "vence" : "vencem"} em 48h
-        </>
-      ),
-      href: "/dashboard/stock/expiry",
-    },
-    taskCount > 0 && {
-      color: "#f59e0b",
-      label: (
-        <>
-          <strong className="font-semibold text-foreground">{taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}</strong>
-          {" "}pendente{taskCount !== 1 && "s"}
-        </>
-      ),
-      href: "/dashboard/tasks",
-    },
-  ].filter(Boolean) as { color: string; label: React.ReactNode; href: string }[];
-
-  if (pills.length === 0 && !clock) return null;
+  if (expiringCount === 0 && taskCount === 0 && !clock) return null;
 
   return (
     <div className="flex h-[30px] items-center overflow-hidden border-t border-border/50 bg-muted/30 px-4 lg:px-6">
       <div className="flex min-w-0 flex-1 items-center gap-0">
-        {pills.map((pill, i) => (
+        {expiringCount > 0 ? (
           <div
-            key={i}
             className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground"
             style={{
               paddingRight: 14,
               marginRight: 14,
-              borderRight: i < pills.length - 1 ? "1px solid var(--border)" : undefined,
+              borderRight: taskCount > 0 ? "1px solid var(--border)" : undefined,
             }}
           >
-            <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: pill.color }} />
-            {pill.label}
-            <a href={pill.href} className="ml-1 font-semibold text-primary hover:underline">
-              Ver →
-            </a>
+            <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-500" />
+            <strong className="font-semibold text-foreground">{expiringCount} {expiringCount === 1 ? "validade" : "validades"}</strong>
+            {" "}{expiringCount === 1 ? "vence" : "vencem"} em 48h
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" className="ml-1 font-semibold text-primary hover:underline">
+                  Ver →
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-[340px] p-0">
+                <div className="border-b p-3">
+                  <p className="text-sm font-semibold text-foreground">Validades próximas</p>
+                  <p className="text-xs text-muted-foreground">Lotes com estoque e vencimento nas próximas 48h.</p>
+                </div>
+                <div className="max-h-64 overflow-y-auto p-2">
+                  {expiringLots.slice(0, 6).map((lot) => (
+                    <div key={lot.id} className="rounded-lg px-2 py-2 text-xs hover:bg-muted/60">
+                      <p className="truncate font-medium text-foreground">{lot.productName}</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        {lot.kioskId || "Sem unidade"} · {lot.quantity} un · vence em{" "}
+                        {lot.expiryDate ? new Date(lot.expiryDate).toLocaleDateString("pt-BR") : "—"}
+                      </p>
+                    </div>
+                  ))}
+                  {expiringCount > 6 ? (
+                    <p className="px-2 py-1 text-xs text-muted-foreground">+{expiringCount - 6} validade(s) na página completa.</p>
+                  ) : null}
+                </div>
+                <div className="border-t p-2">
+                  <Button asChild size="sm" className="h-8 w-full rounded-lg text-xs">
+                    <Link href="/dashboard/expiry">Abrir controle de validades</Link>
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
-        ))}
+        ) : null}
+        {taskCount > 0 ? (
+          <div className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
+            <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-500" />
+            <strong className="font-semibold text-foreground">{taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}</strong>
+            {" "}pendente{taskCount !== 1 && "s"}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" className="ml-1 font-semibold text-primary hover:underline">
+                  Ver →
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-[340px] p-0">
+                <div className="border-b p-3">
+                  <p className="text-sm font-semibold text-foreground">Tarefas pendentes</p>
+                  <p className="text-xs text-muted-foreground">Resumo das pendências operacionais atribuídas.</p>
+                </div>
+                <div className="max-h-64 overflow-y-auto p-2">
+                  {tasks.slice(0, 6).map((task) => (
+                    <Link
+                      key={task.id}
+                      href={task.link || "/dashboard/tasks"}
+                      className="block rounded-lg px-2 py-2 text-xs hover:bg-muted/60"
+                    >
+                      <p className="truncate font-medium text-foreground">{task.title}</p>
+                      <p className="mt-0.5 truncate text-muted-foreground">{task.type} · {task.description}</p>
+                    </Link>
+                  ))}
+                  {taskCount > 6 ? (
+                    <p className="px-2 py-1 text-xs text-muted-foreground">+{taskCount - 6} tarefa(s) na página completa.</p>
+                  ) : null}
+                </div>
+                <div className="border-t p-2">
+                  <Button asChild size="sm" className="h-8 w-full rounded-lg text-xs">
+                    <Link href="/dashboard/tasks">Abrir central de tarefas</Link>
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        ) : null}
       </div>
       {clock && (
         <span className="flex-shrink-0 font-mono text-[10px] text-muted-foreground/70">{clock}</span>
@@ -193,7 +246,7 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Tarefas gerais", href: "/dashboard/tasks", section: "Departamento Operacional" },
   { label: "Formulários", href: "/dashboard/forms", section: "Departamento Operacional" },
   { label: "Gestão de Estoque", href: "/dashboard/stock", section: "Departamento Operacional" },
-  { label: "Validades", href: "/dashboard/stock/expiry", section: "Departamento Operacional" },
+  { label: "Validades", href: "/dashboard/expiry", section: "Departamento Operacional" },
   { label: "Reposição", href: "/dashboard/stock/restock", section: "Departamento Operacional" },
   { label: "Histórico de Movimentos", href: "/dashboard/stock/movement", section: "Departamento Operacional" },
   { label: "Auditoria de Estoque", href: "/dashboard/stock/audit", section: "Departamento Operacional" },
@@ -537,7 +590,7 @@ export function Header({ onMenuClick, tasks }: HeaderProps) {
       </div>
 
       {/* Status bar */}
-      <StatusBar taskCount={tasks.length} />
+      <StatusBar tasks={tasks} />
     </header>
   );
 }
