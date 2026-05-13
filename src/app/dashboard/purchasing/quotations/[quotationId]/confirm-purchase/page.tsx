@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { BackButton } from '@/components/navigation/back-button';
 import {
-  ArrowLeft,
   AlertTriangle,
   Loader2,
   StickyNote,
@@ -46,8 +46,7 @@ import { useCompanySettings } from '@/hooks/use-company-settings';
 import { usePurchasingFinancialOptions } from '@/hooks/use-purchasing-financial-options';
 import { canCreatePurchase, canViewPurchasing } from '@/lib/purchasing-permissions';
 import { cn } from '@/lib/utils';
-import { type PaymentMethod, type Quotation } from '@/types';
-import { type PurchasePaymentCondition } from '@/types';
+import { type PaymentMethod, type PurchaseFreightPaymentMode, type PurchasePaymentCondition, type Quotation } from '@/types';
 
 const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: 'pix', label: 'Pix' },
@@ -61,6 +60,11 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
 const PAYMENT_CONDITION_OPTIONS: { value: PurchasePaymentCondition; label: string }[] = [
   { value: 'cash', label: 'À vista' },
   { value: 'installments', label: 'Parcelado' },
+];
+
+const FREIGHT_PAYMENT_MODE_OPTIONS: { value: PurchaseFreightPaymentMode; label: string }[] = [
+  { value: 'included_with_goods', label: 'Frete pago junto com a mercadoria' },
+  { value: 'separate', label: 'Frete pago em separado' },
 ];
 
 function fmt(v: number) {
@@ -137,6 +141,7 @@ export default function ConfirmPurchasePage() {
   const [accountPlanId, setAccountPlanId] = useState('');
   const [resultCenterId, setResultCenterId] = useState('');
   const [freightAccountPlanId, setFreightAccountPlanId] = useState('');
+  const [freightPaymentMode, setFreightPaymentMode] = useState<PurchaseFreightPaymentMode>('separate');
   const [generalNotes, setGeneralNotes] = useState('');
   const [itemNotes, setItemNotes] = useState<Record<string, string>>({});
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
@@ -209,6 +214,7 @@ export default function ConfirmPurchasePage() {
         accountPlanName: selectedAccountPlan?.name,
         freightAccountPlanId: deliveryFee > 0 ? freightAccountPlanId : undefined,
         freightAccountPlanName: deliveryFee > 0 ? selectedFreightAccountPlan?.name : undefined,
+        freightPaymentMode: deliveryFee > 0 ? freightPaymentMode : undefined,
         resultCenterId,
         resultCenterName: selectedResultCenter?.name,
         deliveryFee,
@@ -260,9 +266,7 @@ export default function ConfirmPurchasePage() {
     return (
       <div className="container max-w-5xl py-8 space-y-4">
         <p className="text-muted-foreground">Cotação não encontrada.</p>
-        <Button variant="outline" onClick={() => router.push('/dashboard/purchasing')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
-        </Button>
+        <BackButton fallbackHref="/dashboard/purchasing" />
       </div>
     );
   }
@@ -272,11 +276,13 @@ export default function ConfirmPurchasePage() {
       <div className="container max-w-5xl py-8 space-y-6">
 
         {/* Back */}
-        <Button variant="ghost" size="sm" className="-ml-2"
-          onClick={() => router.push(`/dashboard/purchasing/quotations/${quotation.id}`)}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar à cotação
-        </Button>
+        <BackButton
+          fallbackHref={`/dashboard/purchasing/quotations/${quotation.id}`}
+          label="Voltar à cotação"
+          variant="ghost"
+          size="sm"
+          className="-ml-2"
+        />
 
         {/* Supplier + quotation summary card */}
         <div className="rounded-xl border bg-card p-6 space-y-4">
@@ -561,7 +567,30 @@ export default function ConfirmPurchasePage() {
                   disabled={deliveryFee <= 0}
                 />
                 <p className="text-xs text-muted-foreground">
-                  O frete será lançado no financeiro separado da mercadoria, com este plano de contas.
+                  O frete mantém seu próprio plano de contas mesmo quando a liquidação ocorrer junto com a mercadoria.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Liquidação do frete</Label>
+                <Select
+                  value={deliveryFee > 0 ? freightPaymentMode : 'separate'}
+                  onValueChange={(value) => setFreightPaymentMode(value as PurchaseFreightPaymentMode)}
+                  disabled={deliveryFee <= 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione como o frete será pago" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FREIGHT_PAYMENT_MODE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Se o frete for quitado junto, a compra continua separando mercadoria e frete para classificação contábil.
                 </p>
               </div>
             </div>
@@ -588,6 +617,14 @@ export default function ConfirmPurchasePage() {
                   <span>Frete / entrega</span>
                   <span>{fmt(deliveryFee)}</span>
                 </div>
+                {deliveryFee > 0 && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Liquidação do frete</span>
+                    <span>
+                      {FREIGHT_PAYMENT_MODE_OPTIONS.find((option) => option.value === freightPaymentMode)?.label ?? '—'}
+                    </span>
+                  </div>
+                )}
                 <Separator />
                 <div className="flex justify-between font-bold text-base">
                   <span>Total do pedido</span>

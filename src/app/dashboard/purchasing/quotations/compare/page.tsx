@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { RefreshCw } from 'lucide-react';
 import { collectionGroup, getDocs, query, where } from 'firebase/firestore';
 
+import { BackButton } from '@/components/navigation/back-button';
 import { Button } from '@/components/ui/button';
 import { PermissionGuard } from '@/components/permission-guard';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -41,7 +41,6 @@ type CompareRow = QuotationItem & {
 };
 
 export default function QuotationComparePage() {
-  const router = useRouter();
   const { permissions } = useAuth();
   const { quotations } = useQuotations();
   const { baseProducts } = useBaseProducts();
@@ -113,10 +112,7 @@ export default function QuotationComparePage() {
     <PermissionGuard allowed={canView}>
       <div className="container max-w-5xl py-8 space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/purchasing/quotations')} className="-ml-2">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Cotações
-        </Button>
+        <BackButton fallbackHref="/dashboard/purchasing/quotations" label="Cotações" variant="ghost" size="sm" className="-ml-2" />
       </div>
 
       <div className="flex items-start justify-between gap-4">

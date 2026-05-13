@@ -3,9 +3,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ArrowLeft, RefreshCw, GitBranch } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { RefreshCw, GitBranch } from 'lucide-react';
 
+import { BackButton } from '@/components/navigation/back-button';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -33,7 +33,6 @@ import { canViewPurchasing } from '@/lib/purchasing-permissions';
 import { type EffectiveCostEntry } from '@/types';
 
 export default function EffectiveCostsPage() {
-  const router = useRouter();
   const { permissions } = useAuth();
   const { entries, loading, fetchCosts } = useEffectiveCosts();
   const { baseProducts } = useBaseProducts();
@@ -69,10 +68,7 @@ export default function EffectiveCostsPage() {
     <PermissionGuard allowed={canView}>
       <div className="container max-w-5xl py-8 space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/purchasing')} className="-ml-2">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Compras
-        </Button>
+        <BackButton fallbackHref="/dashboard/purchasing" label="Compras" variant="ghost" size="sm" className="-ml-2" />
       </div>
 
       <div className="flex items-start justify-between">

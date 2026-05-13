@@ -3,10 +3,10 @@
 import { useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, ShoppingCart, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Plus, ShoppingCart, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
+import { BackButton } from '@/components/navigation/back-button';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -82,7 +82,6 @@ function OrderRow({ order }: { order: PurchaseOrder }) {
 }
 
 export default function PurchaseOrdersPage() {
-  const router = useRouter();
   const { permissions } = useAuth();
   const { orders, loading } = usePurchaseOrders();
   const [directOpen, setDirectOpen] = useState(false);
@@ -103,10 +102,7 @@ export default function PurchaseOrdersPage() {
     <PermissionGuard allowed={canView}>
       <div className="container max-w-3xl py-8 space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/purchasing')} className="-ml-2">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Compras
-        </Button>
+        <BackButton fallbackHref="/dashboard/purchasing" label="Compras" variant="ghost" size="sm" className="-ml-2" />
       </div>
 
       <div className="flex items-center justify-between gap-4">

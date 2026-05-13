@@ -7,6 +7,7 @@ import {
   type PurchaseReceipt,
   type PurchaseReceiptItem,
   type PurchaseFinancial,
+  type PurchaseFreightPaymentMode,
   type PurchaseUnitType,
 } from '@/types';
 import { db } from '@/lib/firebase';
@@ -40,6 +41,7 @@ export interface CreatePurchasePayload {
   accountPlanName?: string;
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
+  freightPaymentMode?: PurchaseFreightPaymentMode;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
@@ -68,6 +70,7 @@ export type OrderEdits = {
   accountPlanName?: string;
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
+  freightPaymentMode?: PurchaseFreightPaymentMode;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;

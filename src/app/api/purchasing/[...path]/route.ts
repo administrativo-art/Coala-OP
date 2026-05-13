@@ -54,6 +54,42 @@ function buildExpenseInstallments(totalValue: number, count: number, firstDueDat
   });
 }
 
+function normalizeFreightPaymentMode(
+  deliveryFee: number,
+  rawValue: unknown,
+): 'included_with_goods' | 'separate' | null {
+  if (!(deliveryFee > 0)) return null;
+  return rawValue === 'included_with_goods' ? 'included_with_goods' : 'separate';
+}
+
+function buildPurchaseAuditNotes(orderData: Record<string, any>) {
+  const goodsAmount = Number(orderData.totalEstimated ?? 0) - Number(orderData.deliveryFee ?? 0);
+  const freightAmount = Number(orderData.deliveryFee ?? 0);
+  const freightMode = normalizeFreightPaymentMode(freightAmount, orderData.freightPaymentMode);
+  const modeLabel =
+    freightAmount > 0
+      ? freightMode === 'included_with_goods'
+        ? 'Frete pago junto com a mercadoria.'
+        : 'Frete previsto para pagamento separado.'
+      : 'Pedido sem frete financeiro.';
+  const freightPlanLabel =
+    freightAmount > 0 ? orderData.freightAccountPlanName ?? 'Plano de contas do frete não definido.' : null;
+
+  const auditBlock = [
+    '[AUDITORIA DE COMPRAS PENDENTE] Revise parcelamento, conta financeira e liquidação.',
+    `Mercadorias: ${goodsAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`,
+    freightAmount > 0
+      ? `Frete: ${freightAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`
+      : null,
+    modeLabel,
+    freightPlanLabel,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return orderData.notes ? `${orderData.notes}\n\n${auditBlock}` : auditBlock;
+}
+
 async function readCollection(collectionName: string) {
   const snapshot = await dbAdmin
     .collection(collectionName)
@@ -149,9 +185,7 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     isApportioned: false,
     resultCenter: orderData.resultCenterId ?? null,
     apportionments: null,
-    notes: orderData.notes
-      ? `${orderData.notes}\n\n[AUDITORIA DE COMPRAS PENDENTE] Revise parcelamento, conta financeira e liquidação.`
-      : '[AUDITORIA DE COMPRAS PENDENTE] Revise parcelamento, conta financeira e liquidação.',
+    notes: buildPurchaseAuditNotes(orderData),
     status: 'pending',
     originModule: 'purchasing',
     originStatus: 'pending_audit',
@@ -288,6 +322,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const paymentDueDate = body.paymentDueDate || now;
     const estimatedReceiptDate = body.estimatedReceiptDate || paymentDueDate;
 
+    const freightPaymentMode = normalizeFreightPaymentMode(deliveryFee, body.freightPaymentMode);
+
     const orderData = {
       workspaceId: WORKSPACE_ID,
       supplierId: body.supplierId || '',
@@ -306,6 +342,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       accountPlanName: body.accountPlanName ?? null,
       freightAccountPlanId: body.freightAccountPlanId ?? null,
       freightAccountPlanName: body.freightAccountPlanName ?? null,
+      freightPaymentMode,
       resultCenterId: body.resultCenterId ?? null,
       resultCenterName: body.resultCenterName ?? null,
       notes: body.notes ?? null,
@@ -409,12 +446,22 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       });
     }
 
+    const goodsAmountEstimated = Math.max(totalEstimated - Number(order.deliveryFee ?? 0), 0);
+    const freightAmountEstimated = Number(order.deliveryFee ?? 0);
+    const freightPaymentMode = normalizeFreightPaymentMode(
+      freightAmountEstimated,
+      order.freightPaymentMode,
+    );
+
     batch.set(financialRef, {
       workspaceId: WORKSPACE_ID,
       purchaseOrderId: id,
       supplierId: order.supplierId,
       supplierName: order.supplierName,
       amountEstimated: totalEstimated,
+      goodsAmountEstimated,
+      freightAmountEstimated,
+      freightPaymentMode,
       dueDate: order.paymentDueDate,
       status: 'confirmed',
       createdAt: now,
@@ -801,9 +848,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       isApportioned: false,
       resultCenter: order.resultCenterId ?? null,
       apportionments: null,
-      notes: order.notes
-        ? `${order.notes}\n\n[AUDITORIA DE COMPRAS PENDENTE] Revise parcelamento, conta financeira e liquidação.`
-        : '[AUDITORIA DE COMPRAS PENDENTE] Revise parcelamento, conta financeira e liquidação.',
+      notes: buildPurchaseAuditNotes(order),
       status: 'pending',
       originModule: 'purchasing',
       originStatus: 'pending_audit',
@@ -913,10 +958,60 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
           notes: item.notes ?? null,
         });
       }
+    } else if ('deliveryFee' in rest) {
+      const currentGoodsTotal = Math.max(
+        Number(currentOrder.totalEstimated ?? 0) - Number(currentOrder.deliveryFee ?? 0),
+        0,
+      );
+      rest.totalEstimated = Math.max(currentGoodsTotal + Number(rest.deliveryFee ?? 0), 0);
+    }
+
+    const normalizedDeliveryFee = Number(rest.deliveryFee ?? currentOrder.deliveryFee ?? 0);
+    if ('freightPaymentMode' in rest || 'deliveryFee' in rest) {
+      rest.freightPaymentMode = normalizeFreightPaymentMode(
+        normalizedDeliveryFee,
+        rest.freightPaymentMode ?? currentOrder.freightPaymentMode,
+      );
     }
 
     batch.update(orderRef, { ...rest, updatedAt: now });
     await batch.commit();
+
+    const nextTotalEstimated = Number(rest.totalEstimated ?? currentOrder.totalEstimated ?? 0);
+    const nextDeliveryFee = normalizedDeliveryFee;
+    const nextGoodsAmountEstimated = Math.max(nextTotalEstimated - nextDeliveryFee, 0);
+    const nextFreightPaymentMode =
+      'freightPaymentMode' in rest ? rest.freightPaymentMode : currentOrder.freightPaymentMode ?? null;
+    const financialSnap = await dbAdmin
+      .collection('purchase_financials')
+      .where('purchaseOrderId', '==', id)
+      .get();
+    if (!financialSnap.empty) {
+      await Promise.all(
+        financialSnap.docs.map((financialDoc) =>
+          financialDoc.ref.set(
+            {
+              amountEstimated: nextTotalEstimated,
+              goodsAmountEstimated: nextGoodsAmountEstimated,
+              freightAmountEstimated: nextDeliveryFee,
+              freightPaymentMode: nextFreightPaymentMode,
+              accountPlanId: rest.accountPlanId ?? currentOrder.accountPlanId ?? null,
+              accountPlanName: rest.accountPlanName ?? currentOrder.accountPlanName ?? null,
+              freightAccountPlanId: rest.freightAccountPlanId ?? currentOrder.freightAccountPlanId ?? null,
+              freightAccountPlanName: rest.freightAccountPlanName ?? currentOrder.freightAccountPlanName ?? null,
+              resultCenterId: rest.resultCenterId ?? currentOrder.resultCenterId ?? null,
+              resultCenterName: rest.resultCenterName ?? currentOrder.resultCenterName ?? null,
+              paymentMethod: rest.paymentMethod ?? currentOrder.paymentMethod ?? null,
+              paymentCondition: rest.paymentCondition ?? currentOrder.paymentCondition ?? null,
+              installmentsCount: rest.installmentsCount ?? currentOrder.installmentsCount ?? null,
+              paymentDueDate: rest.paymentDueDate ?? currentOrder.paymentDueDate ?? null,
+              updatedAt: now,
+            },
+            { merge: true },
+          ),
+        ),
+      );
+    }
     return NextResponse.json({ ok: true });
   }
 

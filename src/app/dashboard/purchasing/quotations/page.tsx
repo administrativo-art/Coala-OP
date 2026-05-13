@@ -3,10 +3,10 @@
 import { useState, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { BarChart3, Plus, FileText, CheckCircle2, Clock, ChevronRight, ArrowLeft } from 'lucide-react';
+import { BarChart3, Plus, FileText, CheckCircle2, Clock, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
+import { BackButton } from '@/components/navigation/back-button';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -72,7 +72,6 @@ function QuotationRow({ quotation }: { quotation: Quotation }) {
 }
 
 export default function QuotationsPage() {
-  const router = useRouter();
   const { permissions } = useAuth();
   const { quotations, loading } = useQuotations();
   const [createOpen, setCreateOpen] = useState(false);
@@ -94,10 +93,7 @@ export default function QuotationsPage() {
     <PermissionGuard allowed={canView}>
       <div className="container max-w-3xl py-8 space-y-6">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/purchasing')} className="-ml-2">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Compras
-          </Button>
+          <BackButton fallbackHref="/dashboard/purchasing" label="Compras" variant="ghost" size="sm" className="-ml-2" />
         </div>
 
         <div className="flex items-center justify-between">

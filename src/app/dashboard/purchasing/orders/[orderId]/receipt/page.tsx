@@ -2,10 +2,10 @@
 
 import { useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+import { BackButton } from '@/components/navigation/back-button';
 import { Button } from '@/components/ui/button';
 import { PermissionGuard } from '@/components/permission-guard';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -46,10 +46,7 @@ export default function ReceiptPage() {
     return (
       <div className="container max-w-3xl py-8 space-y-4">
         <p className="text-muted-foreground">Recebimento não encontrado.</p>
-        <Button variant="outline" onClick={() => router.push(`/dashboard/purchasing/orders/${params.orderId}`)}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
-        </Button>
+        <BackButton fallbackHref={`/dashboard/purchasing/orders/${params.orderId}`} />
       </div>
     );
   }
@@ -57,15 +54,7 @@ export default function ReceiptPage() {
   return (
     <PermissionGuard allowed={canView}>
       <div className="container max-w-3xl py-8 space-y-6">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.push(`/dashboard/purchasing/orders/${params.orderId}`)}
-        className="-ml-2"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Compra
-      </Button>
+      <BackButton fallbackHref={`/dashboard/purchasing/orders/${params.orderId}`} label="Compra" variant="ghost" size="sm" className="-ml-2" />
 
       <div>
         <h1 className="text-2xl font-bold">Recebimento</h1>

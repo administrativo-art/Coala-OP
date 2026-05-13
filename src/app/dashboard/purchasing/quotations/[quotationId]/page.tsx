@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
+import { BackButton } from '@/components/navigation/back-button';
 import { Button } from '@/components/ui/button';
 import { PermissionGuard } from '@/components/permission-guard';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -76,10 +76,7 @@ export default function QuotationPage() {
     return (
       <div className="container max-w-4xl py-8 space-y-4">
         <p className="text-muted-foreground">Cotação não encontrada.</p>
-        <Button variant="outline" onClick={() => router.push('/dashboard/purchasing')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar para cotações
-        </Button>
+        <BackButton fallbackHref="/dashboard/purchasing" label="Voltar para cotações" />
       </div>
     );
   }
@@ -87,15 +84,7 @@ export default function QuotationPage() {
   return (
     <PermissionGuard allowed={canView}>
       <div className="container max-w-4xl py-8 space-y-6">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.push('/dashboard/purchasing')}
-        className="-ml-2"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Cotações
-      </Button>
+      <BackButton fallbackHref="/dashboard/purchasing" label="Cotações" variant="ghost" size="sm" className="-ml-2" />
 
         <QuotationWorkspace quotation={quotation} />
       </div>

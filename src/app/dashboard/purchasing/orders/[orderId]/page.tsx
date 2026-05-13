@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { BackButton } from '@/components/navigation/back-button';
 import {
   AlertTriangle,
-  ArrowLeft,
   Building2,
   CheckCircle2,
   CreditCard,
@@ -71,7 +71,13 @@ import {
   canReceivePurchase,
   canViewPurchasing,
 } from '@/lib/purchasing-permissions';
-import { type PaymentMethod, type PurchaseFinancialStatus, type PurchaseOrderItem, type PurchasePaymentCondition } from '@/types';
+import {
+  type PaymentMethod,
+  type PurchaseFinancialStatus,
+  type PurchaseFreightPaymentMode,
+  type PurchaseOrderItem,
+  type PurchasePaymentCondition,
+} from '@/types';
 
 const RECEIPT_LABELS: Record<string, string> = {
   future_delivery: 'Entrega futura',
@@ -93,6 +99,11 @@ const PAYMENT_CONDITION_LABELS: Record<PurchasePaymentCondition, string> = {
   installments: 'Parcelado',
 };
 
+const FREIGHT_PAYMENT_MODE_LABELS: Record<PurchaseFreightPaymentMode, string> = {
+  included_with_goods: 'Pago junto com a mercadoria',
+  separate: 'Pago em separado',
+};
+
 const FINANCIAL_STATUS_LABELS: Record<PurchaseFinancialStatus, string> = {
   forecasted: 'Previsto',
   confirmed: 'Confirmado',
@@ -110,6 +121,7 @@ type EditForm = {
   deliveryFee: number;
   accountPlanId: string;
   freightAccountPlanId: string;
+  freightPaymentMode: PurchaseFreightPaymentMode;
   resultCenterId: string;
   notes: string;
 };
@@ -261,7 +273,7 @@ export default function PurchaseOrderPage() {
     !!order?.paymentMethod &&
     !!order?.accountPlanId &&
     !!order?.resultCenterId &&
-    ((order?.deliveryFee ?? 0) <= 0 || !!order?.freightAccountPlanId);
+    ((order?.deliveryFee ?? 0) <= 0 || (!!order?.freightAccountPlanId && !!order?.freightPaymentMode));
   const canEditOrder = !!order && canEdit && !isCancelled && !isReceived;
   const canConfirmOrder = !!order && isCreated && canEdit && !isCancelled;
   const canRegisterPayment =
@@ -290,6 +302,7 @@ export default function PurchaseOrderPage() {
       deliveryFee: order.deliveryFee ?? 0,
       accountPlanId: order.accountPlanId ?? purchasingDefaults.goodsAccountPlanId ?? '',
       freightAccountPlanId: order.freightAccountPlanId ?? purchasingDefaults.freightAccountPlanId ?? '',
+      freightPaymentMode: order.freightPaymentMode ?? 'separate',
       resultCenterId: order.resultCenterId ?? '',
       notes: order.notes ?? '',
     });
@@ -316,6 +329,7 @@ export default function PurchaseOrderPage() {
         accountPlanName: selectedAccountPlan?.name,
         freightAccountPlanId: editForm.deliveryFee > 0 ? editForm.freightAccountPlanId : '',
         freightAccountPlanName: editForm.deliveryFee > 0 ? selectedFreightAccountPlan?.name : '',
+        freightPaymentMode: editForm.deliveryFee > 0 ? editForm.freightPaymentMode : undefined,
         resultCenterId: editForm.resultCenterId,
         resultCenterName: selectedResultCenter?.name,
         notes: editForm.notes,
@@ -363,10 +377,7 @@ export default function PurchaseOrderPage() {
     return (
       <div className="container max-w-3xl py-8 space-y-4">
         <p className="text-muted-foreground">Compra não encontrada.</p>
-        <Button variant="outline" onClick={() => router.push('/dashboard/purchasing/orders')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
-        </Button>
+        <BackButton fallbackHref="/dashboard/purchasing/orders" />
       </div>
     );
   }
@@ -374,15 +385,7 @@ export default function PurchaseOrderPage() {
   return (
     <PermissionGuard allowed={canView}>
       <div className="container max-w-6xl py-8 space-y-6">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push('/dashboard/purchasing/orders')}
-          className="-ml-2"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Compras
-        </Button>
+        <BackButton fallbackHref="/dashboard/purchasing/orders" label="Compras" variant="ghost" size="sm" className="-ml-2" />
 
         <div className="rounded-2xl border bg-card p-6 space-y-5">
           <div className="flex flex-col lg:flex-row lg:items-start gap-4">
@@ -651,6 +654,12 @@ export default function PurchaseOrderPage() {
                   <span className="text-muted-foreground">Valor previsto</span>
                   <span>{fmt(effectiveOrderTotal)}</span>
                 </div>
+                {(order.deliveryFee ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Liquidação do frete</span>
+                    <span>{FREIGHT_PAYMENT_MODE_LABELS[order.freightPaymentMode ?? 'separate']}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Valor confirmado</span>
                   <span>{financial?.amountConfirmed != null ? fmt(financial.amountConfirmed) : 'Aguardando recebimento'}</span>
@@ -684,6 +693,14 @@ export default function PurchaseOrderPage() {
                   <p className="font-medium">
                     {order.deliveryFee && order.deliveryFee > 0
                       ? order.freightAccountPlanName ?? 'Não definida'
+                      : 'Sem frete'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Liquidação do frete</p>
+                  <p className="font-medium">
+                    {order.deliveryFee && order.deliveryFee > 0
+                      ? FREIGHT_PAYMENT_MODE_LABELS[order.freightPaymentMode ?? 'separate']
                       : 'Sem frete'}
                   </p>
                 </div>
@@ -867,6 +884,35 @@ export default function PurchaseOrderPage() {
                       allowNone
                       disabled={editForm.deliveryFee <= 0}
                     />
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label>Liquidação do frete</Label>
+                    <Select
+                      value={editForm.deliveryFee > 0 ? editForm.freightPaymentMode : 'separate'}
+                      onValueChange={(value) =>
+                        setEditForm((current) =>
+                          current
+                            ? { ...current, freightPaymentMode: value as PurchaseFreightPaymentMode }
+                            : current,
+                        )
+                      }
+                      disabled={editForm.deliveryFee <= 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione como o frete será quitado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Use "junto" quando o pagamento cobrir mercadoria e frete no mesmo lançamento bancário.
+                    </p>
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2">

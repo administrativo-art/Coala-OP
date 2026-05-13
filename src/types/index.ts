@@ -932,6 +932,7 @@ export type PurchaseOrigin = 'quotation' | 'direct';
 export type PurchaseReceiptMode = 'future_delivery' | 'immediate_pickup';
 export type PaymentMethod = 'pix' | 'card_credit' | 'card_debit' | 'cash' | 'boleto' | 'term';
 export type PurchasePaymentCondition = 'cash' | 'installments';
+export type PurchaseFreightPaymentMode = 'included_with_goods' | 'separate';
 
 export type PurchaseOrderStatus = 'created' | 'confirmed' | 'cancelled';
 
@@ -952,6 +953,7 @@ export type PurchaseOrder = {
   accountPlanName?: string;
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
+  freightPaymentMode?: PurchaseFreightPaymentMode;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
@@ -1075,10 +1077,15 @@ export type PurchaseFinancial = {
   accountPlanName?: string;
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
+  freightPaymentMode?: PurchaseFreightPaymentMode;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
   amountEstimated: number;
+  goodsAmountEstimated?: number;
+  freightAmountEstimated?: number;
+  goodsAmountPaid?: number;
+  freightAmountPaid?: number;
   amountConfirmed?: number;
   paymentMethod: PaymentMethod;
   paymentDueDate: string;
