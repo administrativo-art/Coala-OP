@@ -46,6 +46,7 @@ import type {
   ImportSessionExpenseMode,
   ImportSessionItem,
   ImportSessionItemStatus,
+  ImportSessionOrigin,
   ImportSessionPurchaseLinkMode,
   ImportSessionSummary,
   ImportedTransaction,
@@ -95,6 +96,34 @@ const PURCHASE_LINK_MODE_LABELS: Record<ImportSessionPurchaseLinkMode, string> =
   freight: "Frete",
   combined: "Mercadoria + frete",
 };
+
+const IMPORT_SESSION_ORIGIN_LABELS: Record<ImportSessionOrigin, string> = {
+  bank_statement: "Importação de extrato",
+  ai_assisted: "Populado pela IA",
+  manual: "Manual",
+  other: "Outra origem",
+};
+
+const IMPORT_SESSION_ORIGIN_CLASSES: Record<ImportSessionOrigin, string> = {
+  bank_statement: "border-blue-200 bg-blue-50 text-blue-700",
+  ai_assisted: "border-amber-200 bg-amber-50 text-amber-700",
+  manual: "border-zinc-200 bg-zinc-50 text-zinc-700",
+  other: "border-slate-200 bg-slate-50 text-slate-700",
+};
+
+function getImportSessionOrigin(value: unknown): ImportSessionOrigin {
+  return value === "ai_assisted" || value === "manual" || value === "other" || value === "bank_statement"
+    ? value
+    : "bank_statement";
+}
+
+function getImportedFromValue(session: ImportSession) {
+  return session.origin === "ai_assisted" ? "ai_assisted" : session.origin === "manual" ? "manual" : "bank_statement";
+}
+
+function getRevenueSourceValue(session: ImportSession) {
+  return session.origin === "ai_assisted" ? "ai_assisted" : session.origin === "manual" ? "manual" : "bank_statement";
+}
 
 function buildExpenseOptionLabel(expense: any) {
   const dueDate = toDate(expense.dueDate);
@@ -206,6 +235,7 @@ function stripUndefinedDeep<T>(value: T): T {
 function serializeSessionItem(item: ImportSessionItem) {
   return {
     id: item.id,
+    origin: item.origin ?? null,
     date: item.date,
     amount: item.amount,
     rawDescription: item.rawDescription,
@@ -288,6 +318,7 @@ function createSessionItem(transaction: ImportedTransaction): ImportSessionItem 
 
   return {
     id: transaction.tempId,
+    origin: "bank_statement",
     date: toInputDate(transaction.date),
     amount: transaction.amount,
     rawDescription: transaction.rawDescription,
@@ -334,6 +365,7 @@ function createSessionItem(transaction: ImportedTransaction): ImportSessionItem 
 }
 
 function normalizeSession(doc: any): ImportSession {
+  const origin = getImportSessionOrigin(doc.origin);
   const items = Array.isArray(doc.items)
     ? (doc.items as any[]).map((item): ImportSessionItem => {
         const mode: ImportSessionExpenseMode =
@@ -351,6 +383,7 @@ function normalizeSession(doc: any): ImportSession {
 
         return {
           id: String(item.id ?? ""),
+          origin: item.origin ? getImportSessionOrigin(item.origin) : origin,
           date: String(item.date ?? ""),
           amount: Number(item.amount ?? 0),
           rawDescription: String(item.rawDescription ?? ""),
@@ -428,7 +461,14 @@ function normalizeSession(doc: any): ImportSession {
 
   return {
     ...doc,
+    origin,
+    originLabel: String(doc.originLabel ?? IMPORT_SESSION_ORIGIN_LABELS[origin]),
+    requestDate: doc.requestDate ? String(doc.requestDate) : undefined,
     displayName: String(doc.displayName ?? doc.fileName ?? "Sessão de importação"),
+    fileType:
+      doc.fileType === "ai_assisted" || doc.fileType === "manual" || doc.fileType === "csv" || doc.fileType === "ofx"
+        ? doc.fileType
+        : "ofx",
     statementAccountId: String(doc.statementAccountId ?? ""),
     statementAccountName: String(doc.statementAccountName ?? ""),
     items,
@@ -460,9 +500,12 @@ function buildSessionPayload(
   statementAccountName: string,
   createdBy: string,
   createdByName: string,
-  items: ImportSessionItem[]
+  items: ImportSessionItem[],
+  origin: ImportSessionOrigin = "bank_statement"
 ) {
   return {
+    origin,
+    originLabel: IMPORT_SESSION_ORIGIN_LABELS[origin],
     displayName,
     fileName: file.name,
     fileType,
@@ -1547,6 +1590,8 @@ export function FinancialImportPage({
     setIsProcessing(true);
     try {
       const now = Timestamp.now();
+      const importedFrom = getImportedFromValue(currentSession);
+      const revenueSource = getRevenueSourceValue(currentSession);
       const purchaseBalances = new Map(
         purchaseCandidates.map((candidate) => [
           candidate.orderId,
@@ -1597,7 +1642,7 @@ export function FinancialImportPage({
               toAccountName,
               toPaymentMethodId,
               toPaymentMethodLabel,
-              importedFrom: "bank_statement",
+              importedFrom,
               rawBankDescription: item.rawDescription,
               createdBy: firebaseUser.uid,
               createdAt: now,
@@ -1617,7 +1662,7 @@ export function FinancialImportPage({
               toAccountName: fromAccountName,
               toPaymentMethodId: fromPaymentMethodId,
               toPaymentMethodLabel: fromPaymentMethodLabel,
-              importedFrom: "bank_statement",
+              importedFrom,
               rawBankDescription: item.rawDescription,
               createdBy: firebaseUser.uid,
               createdAt: now,
@@ -1659,7 +1704,7 @@ export function FinancialImportPage({
                 status: "paid",
                 paidAt: transactionDate,
                 paidByImport: true,
-                importedFrom: "bank_statement",
+                importedFrom,
                 rawBankDescription: item.rawDescription,
                 createdBy: firebaseUser.uid,
                 createdAt: now,
@@ -1702,7 +1747,7 @@ export function FinancialImportPage({
               status: "paid",
               paidAt: transactionDate,
               paidByImport: true,
-              importedFrom: "bank_statement",
+              importedFrom,
               rawBankDescription: item.rawDescription,
               createdBy: firebaseUser.uid,
               createdAt: now,
@@ -1741,7 +1786,7 @@ export function FinancialImportPage({
             purchaseOrderId: item.expenseDraft.purchaseOrderId || null,
             purchaseLinkMode: isPurchaseMode ? item.expenseDraft.purchaseLinkMode : null,
             allocatedAmount: isPurchaseMode ? Number(item.expenseDraft.allocatedAmount || Math.abs(item.amount)) : null,
-            importedFrom: "bank_statement",
+            importedFrom,
             rawBankDescription: item.rawDescription,
             auditStatus: "resolved",
             createdBy: firebaseUser.uid,
@@ -1826,8 +1871,8 @@ export function FinancialImportPage({
             paymentMethodId: item.financialDraft.paymentMethodId,
             paymentMethodLabel: item.financialDraft.paymentMethodLabel,
             revenueCategory: "other",
-            revenueSource: "bank_statement",
-            importedFrom: "bank_statement",
+            revenueSource,
+            importedFrom,
             rawBankDescription: item.rawDescription,
             createdBy: firebaseUser.uid,
             createdAt: now,
@@ -2377,6 +2422,15 @@ export function FinancialImportPage({
                             <p className="truncate text-[11px] text-muted-foreground">
                               {getAccountDisplayLabel(accounts, session.statementAccountId, session.statementAccountName, unitNameById) || session.displayName}
                             </p>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "mt-1 rounded-full px-1.5 py-0 text-[9.5px] font-medium normal-case tracking-normal",
+                                IMPORT_SESSION_ORIGIN_CLASSES[session.origin]
+                              )}
+                            >
+                              {session.originLabel || IMPORT_SESSION_ORIGIN_LABELS[session.origin]}
+                            </Badge>
                             <p className="mt-1 text-[10px] text-muted-foreground">
                               {toDate(session.updatedAt) ? format(toDate(session.updatedAt)!, "dd/MM/yyyy") : "—"}
                             </p>
@@ -2402,8 +2456,21 @@ export function FinancialImportPage({
               <div className="space-y-2 border-b px-4 py-3">
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold">Transações do extrato</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{selectedSession.displayName}</p>
+                    <p className="text-sm font-semibold">
+                      {selectedSession.origin === "bank_statement" ? "Transações do extrato" : "Itens para auditoria"}
+                    </p>
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                      <p className="truncate text-[11px] text-muted-foreground">{selectedSession.displayName}</p>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full px-1.5 py-0 text-[9.5px] font-medium normal-case tracking-normal",
+                          IMPORT_SESSION_ORIGIN_CLASSES[selectedSession.origin]
+                        )}
+                      >
+                        {selectedSession.originLabel || IMPORT_SESSION_ORIGIN_LABELS[selectedSession.origin]}
+                      </Badge>
+                    </div>
                   </div>
                   <span className="shrink-0 text-[11px] text-muted-foreground">
                     {selectedSession.items.length} itens

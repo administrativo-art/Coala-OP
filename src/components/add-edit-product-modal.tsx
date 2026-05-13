@@ -53,6 +53,10 @@ const productFormSchema = z.object({
   notes: z.string().optional(),
   baseProductId: z.string().optional(),
   defaultCountingUnit: z.enum(['package', 'base', 'content']).optional(),
+  apparelType: z.string().optional(),
+  apparelSize: z.string().optional(),
+  apparelColor: z.string().optional(),
+  apparelFit: z.string().optional(),
 
   // Conditional sections
   enableLogistics: z.boolean().optional(),
@@ -107,6 +111,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             packageType: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
             notes: '', baseProductId: '',
+            apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
             defaultCountingUnit: 'package',
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
             enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
@@ -117,6 +122,19 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const enableLogisticsWatch = form.watch('enableLogistics');
     const enableCountingInstructionWatch = form.watch('enableCountingInstruction');
     const baseProductIdWatch = form.watch('baseProductId');
+    const isApparel = categoryWatch === 'Vestimenta';
+
+    const handleCategoryChange = (value: UnitCategory) => {
+        form.setValue('category', value, { shouldDirty: true, shouldValidate: true });
+        form.setValue('unit', getUnitsForCategory(value)[0] || '', { shouldDirty: true, shouldValidate: true });
+
+        if (value === 'Vestimenta') {
+            form.setValue('packageType', 'Unidade', { shouldDirty: true, shouldValidate: true });
+            form.setValue('packageSize', 1, { shouldDirty: true, shouldValidate: true });
+            form.setValue('defaultCountingUnit', 'package', { shouldDirty: true, shouldValidate: true });
+            form.setValue('enableLogistics', false, { shouldDirty: true });
+        }
+    };
 
     useEffect(() => {
         if (open) {
@@ -132,6 +150,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     unit: productToEdit.unit,
                     notes: productToEdit.notes || '',
                     baseProductId: productToEdit.baseProductId || '',
+                    apparelType: productToEdit.apparelType || '',
+                    apparelSize: productToEdit.apparelSize || '',
+                    apparelColor: productToEdit.apparelColor || '',
+                    apparelFit: productToEdit.apparelFit || '',
                     defaultCountingUnit: productToEdit.defaultCountingUnit || 'package',
                     // Switches
                     enableLogistics: !!productToEdit.multiplo_caixa,
@@ -148,6 +170,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     packageType: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
                     notes: '', baseProductId: '',
+                    apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
                     defaultCountingUnit: 'package',
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
@@ -229,6 +252,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             notes: values.notes,
             baseProductId: values.baseProductId,
             defaultCountingUnit: values.defaultCountingUnit,
+            apparelType: values.category === 'Vestimenta' ? values.apparelType : undefined,
+            apparelSize: values.category === 'Vestimenta' ? values.apparelSize : undefined,
+            apparelColor: values.category === 'Vestimenta' ? values.apparelColor : undefined,
+            apparelFit: values.category === 'Vestimenta' ? values.apparelFit : undefined,
             
             multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
             rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,

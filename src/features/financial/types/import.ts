@@ -50,6 +50,7 @@ export type ImportSessionStatus = "open" | "completed" | "discarded";
 export type ImportSessionItemStatus = "pending" | "audited" | "ignored" | "completed";
 export type ImportSessionExpenseMode = "new" | "existing" | "purchase" | "split";
 export type ImportSessionPurchaseLinkMode = "goods" | "freight" | "combined";
+export type ImportSessionOrigin = "bank_statement" | "ai_assisted" | "manual" | "other";
 
 export type ImportSessionApportionment = {
   id: string;
@@ -106,6 +107,7 @@ export type ImportSessionFinancialDraft = {
 
 export type ImportSessionItem = {
   id: string;
+  origin?: ImportSessionOrigin;
   date: string;
   amount: number;
   rawDescription: string;
@@ -130,9 +132,12 @@ export type ImportSessionSummary = {
 
 export type ImportSession = {
   id: string;
+  origin: ImportSessionOrigin;
+  originLabel?: string;
+  requestDate?: string;
   displayName: string;
   fileName: string;
-  fileType: "ofx" | "csv";
+  fileType: "ofx" | "csv" | "ai_assisted" | "manual";
   bankProfile?: string;
   statementAccountId: string;
   statementAccountName: string;

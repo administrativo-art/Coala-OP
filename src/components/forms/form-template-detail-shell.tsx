@@ -7,6 +7,7 @@ import { ClipboardList, Layers3, ArrowLeft, Pencil, Plus, Trash2 } from "lucide-
 import type { FormTemplate } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
 import { fetchFormTemplate, updateFormTemplate } from "@/features/forms/lib/client";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -662,92 +663,173 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/dashboard/forms">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="space-y-3">
+          <Link href="/dashboard/forms">
+            <Button variant="ghost" className="w-fit px-0 text-muted-foreground">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar para formulários
+            </Button>
+          </Link>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-3xl font-semibold tracking-tight">{template.name}</h1>
+              <Badge variant="outline">v{template.version}</Badge>
+              <Badge variant="outline">{template.context}</Badge>
+            </div>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              {template.description?.trim() || "Template operacional no novo domínio de formulários."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setEditorOpen(true)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Abrir builder
           </Button>
-        </Link>
-        <Button variant="outline" size="sm" onClick={() => setEditorOpen(true)}>
-          <Pencil className="mr-2 h-4 w-4" />
-          Editar template
-        </Button>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ClipboardList className="h-5 w-5" />
-            {template.name}
-          </CardTitle>
-          <CardDescription>
-            {template.description?.trim() || "Template do novo domínio de formulários."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-lg border p-3 text-sm">Versão {template.version}</div>
-          <div className="rounded-lg border p-3 text-sm">Contexto: {template.context}</div>
-          <div className="rounded-lg border p-3 text-sm">
-            {template.sections.length} seção(ões)
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Seções</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight">{template.sections.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Itens</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight">
+              {template.sections.reduce((total, section) => total + section.items.length, 0)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Branches</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight">
+              {template.sections.reduce(
+                (total, section) =>
+                  total +
+                  section.items.reduce(
+                    (innerTotal, item) => innerTotal + (item.conditional_branches?.length ?? 0),
+                    0
+                  ),
+                0
+              )}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Triggers</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight">
+              {template.sections.reduce(
+                (total, section) =>
+                  total +
+                  section.items.reduce(
+                    (innerTotal, item) => innerTotal + (item.task_triggers?.length ?? 0),
+                    0
+                  ),
+                0
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
-      <div className="space-y-4">
-        {template.sections.map((section) => (
-          <Card key={section.id}>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-4">
+          {template.sections.map((section) => (
+            <Card key={section.id}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Layers3 className="h-4 w-4" />
+                  {section.title}
+                </CardTitle>
+                <CardDescription>
+                  {section.items.length} item(ns) nesta seção
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {section.items.map((item) => (
+                  <div key={item.id} className="rounded-lg border p-3 text-sm">
+                    <div className="font-medium">{item.title}</div>
+                    <div className="text-muted-foreground">
+                      {item.type} • {item.required ? "obrigatório" : "opcional"} • peso {item.weight}
+                    </div>
+                    {item.description ? (
+                      <div className="mt-1 text-muted-foreground">{item.description}</div>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      {item.block_next ? <span>bloqueia próximo</span> : null}
+                      {item.action_required ? <span>gera ação</span> : null}
+                      {item.reference_value !== undefined ? (
+                        <span>
+                          ref {item.reference_value}
+                          {item.tolerance_percent !== undefined
+                            ? ` ± ${item.tolerance_percent}%`
+                            : ""}
+                        </span>
+                      ) : null}
+                      {item.show_if ? <span>condicional</span> : null}
+                      {item.conditional_branches?.length ? (
+                        <span>{item.conditional_branches.length} branch(es)</span>
+                      ) : null}
+                      {item.task_triggers?.length ? (
+                        <span>{item.task_triggers.length} trigger(s) de tarefa</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="space-y-4 xl:sticky xl:top-20 xl:self-start">
+          <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Layers3 className="h-4 w-4" />
-                {section.title}
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5" />
+                Resumo do template
               </CardTitle>
               <CardDescription>
-                {section.items.length} item(ns) nesta seção
+                Leituras rápidas antes de abrir o builder completo.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {section.items.map((item) => (
-                <div key={item.id} className="rounded-lg border p-3 text-sm">
-                  <div className="font-medium">{item.title}</div>
-                  <div className="text-muted-foreground">
-                    {item.type} • {item.required ? "obrigatório" : "opcional"} • peso {item.weight}
-                  </div>
-                  {item.description ? (
-                    <div className="mt-1 text-muted-foreground">{item.description}</div>
-                  ) : null}
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    {item.block_next ? <span>bloqueia próximo</span> : null}
-                    {item.action_required ? <span>gera ação</span> : null}
-                    {item.reference_value !== undefined ? (
-                      <span>
-                        ref {item.reference_value}
-                        {item.tolerance_percent !== undefined
-                          ? ` ± ${item.tolerance_percent}%`
-                          : ""}
-                      </span>
-                    ) : null}
-                    {item.show_if ? <span>condicional</span> : null}
-                    {item.conditional_branches?.length ? (
-                      <span>{item.conditional_branches.length} branch(es)</span>
-                    ) : null}
-                    {item.task_triggers?.length ? (
-                      <span>{item.task_triggers.length} trigger(s) de tarefa</span>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
+            <CardContent className="space-y-3 text-sm">
+              <div className="rounded-xl border p-3">
+                <p className="font-medium">Escopo</p>
+                <p className="mt-1 text-muted-foreground">
+                  Projeto {template.form_project_id} • contexto {template.context}
+                </p>
+              </div>
+              <div className="rounded-xl border p-3">
+                <p className="font-medium">Recorrência</p>
+                <p className="mt-1 text-muted-foreground">
+                  {template.occurrence_type ?? "manual"}
+                </p>
+              </div>
+              <div className="rounded-xl border p-3">
+                <p className="font-medium">Última atividade</p>
+                <p className="mt-1 text-muted-foreground">
+                  {template.updated_at ? String(template.updated_at) : "Sem atualização registrada"}
+                </p>
+              </div>
             </CardContent>
           </Card>
-        ))}
+        </div>
       </div>
 
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[92vh] max-w-6xl overflow-auto">
           <DialogHeader>
             <DialogTitle>Editar template</DialogTitle>
             <DialogDescription>
-              Builder leve para múltiplas seções e itens.
+              Builder com múltiplas seções, lógica condicional, branches e triggers.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">

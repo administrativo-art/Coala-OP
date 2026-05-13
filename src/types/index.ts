@@ -1,5 +1,5 @@
 import { type Timestamp } from 'firebase/firestore';
-export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem"] as const;
+export const unitCategories = ["Volume", "Massa", "Unidade", "Embalagem", "Vestimenta"] as const;
 export const packageTypes = ['Unidade', 'Caixa', 'Pacote', 'Lata', 'Garrafa', 'Frasco', 'Sachê', 'Pote', 'Balde', 'Galão', 'Bag'] as const;
 
 export type UnitCategory = (typeof unitCategories)[number];
@@ -73,6 +73,10 @@ export const units: ConversionUnits = {
     Embalagem: {
       'un': 1,
       'pacote': 1,
+    },
+    Vestimenta: {
+      'peça': 1,
+      'un': 1,
     }
 };
 
@@ -692,6 +696,10 @@ export type Product = {
   secondaryUnitValue?: number;
   isArchived?: boolean;
   baseProductId?: string;
+  apparelType?: string;
+  apparelSize?: string;
+  apparelColor?: string;
+  apparelFit?: string;
 };
 
 export type ProductDefinition = {

@@ -220,9 +220,16 @@ export const formExecutionItemUpdateSchema = z.object({
     .optional(),
 });
 
+export const formExecutionSectionUpdateSchema = z.object({
+  section_id: z.string().trim().min(1),
+  photo_url: z.string().optional(),
+  signature_url: z.string().optional(),
+});
+
 export const formExecutionUpdateSchema = z.object({
   action: z.enum(["save", "complete", "reopen", "cancel"]),
   items: z.array(formExecutionItemUpdateSchema).default([]),
+  sections: z.array(formExecutionSectionUpdateSchema).default([]),
 });
 
 export type FormProjectInput = z.infer<typeof formProjectSchema>;

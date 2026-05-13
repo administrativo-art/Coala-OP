@@ -29,6 +29,11 @@ export const units: ConversionUnits = {
       'pacote': 1,
       'bag': 1,
       'caixa': 1,
+  },
+  Vestimenta: {
+      'peça': 1,
+      'un': 1,
+      'unidade': 1,
   }
 };
 

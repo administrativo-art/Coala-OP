@@ -401,6 +401,21 @@ function mapChecklistExecutionToFormExecution(executionId: string, data: JsonRec
   };
 }
 
+async function commitInChunks(
+  db: ReturnType<typeof getFirestore>,
+  writes: Array<(batch: ReturnType<ReturnType<typeof getFirestore>["batch"]>) => void>,
+  chunkSize = 400
+): Promise<number> {
+  let committed = 0;
+  for (let i = 0; i < writes.length; i += chunkSize) {
+    const batch = db.batch();
+    writes.slice(i, i + chunkSize).forEach((fn) => fn(batch));
+    await batch.commit();
+    committed += writes.slice(i, i + chunkSize).length;
+  }
+  return committed;
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const app = initAdmin(options.serviceAccountPath);
@@ -421,6 +436,23 @@ async function main() {
   const formExecutions = executionSnap.docs.map((doc) =>
     mapChecklistExecutionToFormExecution(doc.id, (doc.data() ?? {}) as JsonRecord)
   );
+
+  // Build snapshot lookup: form template ID → template data (for embedding in executions)
+  const templateById = new Map(formTemplates.map((t) => [t.id, t]));
+
+  const executionsWithSnapshot = formExecutions.map((execution) => {
+    const template = templateById.get(execution.template_id);
+    if (!template) return execution;
+    return {
+      ...execution,
+      template_snapshot: {
+        id: template.id,
+        name: template.name,
+        version: template.version,
+        sections: template.sections,
+      },
+    };
+  });
 
   const uniqueProjects = new Map<string, JsonRecord>();
   const uniqueTypes = new Map<string, JsonRecord>();
@@ -476,7 +508,7 @@ async function main() {
     form_types_target: uniqueTypes.size,
     form_subtypes_target: uniqueSubtypes.size,
     form_templates_target: formTemplates.length,
-    form_executions_target: formExecutions.length,
+    form_executions_target: executionsWithSnapshot.length,
   };
 
   console.log("\n=== Checklist -> Forms Migration ===");
@@ -485,56 +517,86 @@ async function main() {
   if (options.dryRun) {
     console.log("\nDry-run concluído. Nenhuma escrita foi realizada.");
     console.log("Exemplo de template migrado:", formTemplates[0]?.id ?? "nenhum");
-    console.log("Exemplo de execução migrada:", formExecutions[0]?.id ?? "nenhuma");
+    console.log("Exemplo de execução migrada:", executionsWithSnapshot[0]?.id ?? "nenhuma");
+    const withSnapshot = executionsWithSnapshot.filter((e) => "template_snapshot" in e).length;
+    console.log(`Execuções com template_snapshot: ${withSnapshot}/${executionsWithSnapshot.length}`);
     return;
   }
 
-  const migrationRef = coalaDb.collection("migration_logs").doc();
-  const batch = checklistDb.batch();
+  // Build write queue for checklistDb (all form_* collections)
+  type WriteFn = (batch: ReturnType<ReturnType<typeof getFirestore>["batch"]>) => void;
+  const checklistWrites: WriteFn[] = [];
 
   for (const project of uniqueProjects.values()) {
     const { id, ...data } = project;
-    batch.set(checklistDb.collection("form_projects").doc(String(id)), data, {
-      merge: true,
-    });
+    checklistWrites.push((b) =>
+      b.set(checklistDb.collection("form_projects").doc(String(id)), data, { merge: true })
+    );
   }
 
   for (const typeDoc of uniqueTypes.values()) {
     const { id, ...data } = typeDoc;
-    batch.set(checklistDb.collection("form_types").doc(String(id)), data, {
-      merge: true,
-    });
+    checklistWrites.push((b) =>
+      b.set(checklistDb.collection("form_types").doc(String(id)), data, { merge: true })
+    );
   }
 
   for (const subtype of uniqueSubtypes.values()) {
     const { id, ...data } = subtype;
-    batch.set(checklistDb.collection("form_subtypes").doc(String(id)), data, {
-      merge: true,
-    });
+    checklistWrites.push((b) =>
+      b.set(checklistDb.collection("form_subtypes").doc(String(id)), data, { merge: true })
+    );
   }
 
   for (const template of formTemplates) {
     const { id, ...data } = template;
-    batch.set(checklistDb.collection("form_templates").doc(id), data, {
-      merge: true,
-    });
+    checklistWrites.push((b) =>
+      b.set(checklistDb.collection("form_templates").doc(id), data, { merge: true })
+    );
   }
 
-  for (const execution of formExecutions) {
+  for (const execution of executionsWithSnapshot) {
     const { id, ...data } = execution;
-    batch.set(checklistDb.collection("form_executions").doc(id), data, {
-      merge: true,
-    });
+    checklistWrites.push((b) =>
+      b.set(checklistDb.collection("form_executions").doc(id), data, { merge: true })
+    );
   }
 
-  batch.set(migrationRef, {
+  const totalWrites = await commitInChunks(checklistDb, checklistWrites);
+  console.log(`\n${totalWrites} documentos gravados em coala-checklist.`);
+
+  // Validate post-write counts
+  console.log("\nValidando contagens pós-escrita...");
+  const [postTemplatesSnap, postExecutionsSnap] = await Promise.all([
+    checklistDb.collection("form_templates").select().get(),
+    checklistDb.collection("form_executions").select().get(),
+  ]);
+
+  const templatesOk = postTemplatesSnap.size >= formTemplates.length;
+  const executionsOk = postExecutionsSnap.size >= executionsWithSnapshot.length;
+
+  console.log(`form_templates: esperado >= ${formTemplates.length}, encontrado ${postTemplatesSnap.size} ${templatesOk ? "✓" : "✗"}`);
+  console.log(`form_executions: esperado >= ${executionsWithSnapshot.length}, encontrado ${postExecutionsSnap.size} ${executionsOk ? "✓" : "✗"}`);
+
+  if (!templatesOk || !executionsOk) {
+    throw new Error(
+      "Validação de contagem falhou. Verifique os documentos antes de prosseguir."
+    );
+  }
+
+  // Write migration log to coalaDb (separate db — cannot share batch with checklistDb)
+  const migrationRef = coalaDb.collection("migration_logs").doc();
+  await migrationRef.set({
     kind: "checklists_to_forms",
     mode: "apply",
-    summary,
+    summary: {
+      ...summary,
+      form_templates_written: totalWrites,
+      post_write_form_templates: postTemplatesSnap.size,
+      post_write_form_executions: postExecutionsSnap.size,
+    },
     created_at: Timestamp.now(),
   });
-
-  await batch.commit();
 
   console.log("\nMigração aplicada com sucesso.");
   console.log(`Log gravado em coala.migration_logs/${migrationRef.id}`);

@@ -220,6 +220,142 @@ function isShiftEnded(shiftEndDate: string, shiftEndTime: string, now: Date): bo
   return endMinutes <= nowMinutes;
 }
 
+// --- Helpers para o novo motor de Formulários (snake_case) ---
+
+async function isFormsEngineEnabled(): Promise<boolean> {
+  try {
+    const snap = await db
+      .collection('feature_flags')
+      .where('key', '==', 'forms_new_engine_enabled')
+      .limit(1)
+      .get();
+    return !snap.empty && snap.docs[0].data()?.enabled === true;
+  } catch {
+    return false;
+  }
+}
+
+function shouldGenerateFormTemplate(template: any, date: string): boolean {
+  if (template?.is_active !== true) return false;
+
+  const occurrenceType = typeof template?.occurrence_type === 'string' ? template.occurrence_type : 'manual';
+  if (occurrenceType === 'manual') return false;
+  if (occurrenceType === 'daily') return true;
+
+  const anchorDate = normalizeIsoDateFromUnknown(template?.created_at);
+  if (!anchorDate) return false;
+
+  if (occurrenceType === 'weekly') {
+    const delta = diffCalendarDays(date, anchorDate);
+    return delta >= 0 && delta % 7 === 0;
+  }
+  if (occurrenceType === 'biweekly') {
+    const delta = diffCalendarDays(date, anchorDate);
+    return delta >= 0 && delta % 14 === 0;
+  }
+  if (occurrenceType === 'monthly') {
+    const anchorDay = Number(anchorDate.slice(-2));
+    const currentDay = Number(date.slice(-2));
+    return currentDay === Math.min(anchorDay, monthLastDay(date));
+  }
+
+  return false;
+}
+
+function userMatchesFormTemplate(template: any, userData: any): boolean {
+  const roleIds = Array.isArray(template?.job_role_ids) ? template.job_role_ids : [];
+  const functionIds = Array.isArray(template?.job_function_ids) ? template.job_function_ids : [];
+  const userRoleId = typeof userData?.jobRoleId === 'string' ? userData.jobRoleId : null;
+  const userFunctionIds = Array.isArray(userData?.jobFunctionIds) ? userData.jobFunctionIds : [];
+
+  if (roleIds.length > 0 && (!userRoleId || !roleIds.includes(userRoleId))) return false;
+  if (functionIds.length > 0 && !functionIds.some((id: string) => userFunctionIds.includes(id))) return false;
+  return true;
+}
+
+function buildFormExecutionSectionsSnake(sections: any[]) {
+  return [...(sections ?? [])]
+    .sort((a, b) => (a?.order ?? 0) - (b?.order ?? 0))
+    .map((section, index) => ({
+      id: section.id,
+      template_section_id: section.id,
+      title: section.title,
+      order: typeof section.order === 'number' ? section.order : index,
+      show_if: section.show_if ?? null,
+      require_photo: section.require_photo === true,
+      require_signature: section.require_signature === true,
+      photo_url: null,
+      signature_url: null,
+    }));
+}
+
+function flattenFormTemplateItemsSnake(sections: any[]): any[] {
+  const result: any[] = [];
+
+  function visitItems(items: any[], section: any, depth = 1): void {
+    const sorted = [...(items ?? [])].sort((a: any, b: any) => (a?.order ?? 0) - (b?.order ?? 0));
+    for (const item of sorted) {
+      result.push({
+        id: `${section.id}-${item.id}`,
+        template_item_id: item.id,
+        template_section_id: section.id,
+        section_id: section.id,
+        section_title: section.title,
+        order: item.order ?? 0,
+        title: item.title,
+        description: item.description ?? null,
+        type: item.type,
+        required: item.required === true,
+        weight: item.weight ?? 1,
+        block_next: item.block_next === true,
+        criticality: item.criticality ?? 'medium',
+        reference_value: typeof item.reference_value === 'number' ? item.reference_value : null,
+        tolerance_percent: typeof item.tolerance_percent === 'number' ? item.tolerance_percent : null,
+        action_required: item.action_required === true,
+        notify_role_ids: Array.isArray(item.notify_role_ids) ? item.notify_role_ids : [],
+        escalation_minutes: typeof item.escalation_minutes === 'number' ? item.escalation_minutes : null,
+        show_if: item.show_if ?? null,
+        section_show_if: section.show_if ?? null,
+        config: item.config ?? null,
+        checked: null,
+        yes_no_value: null,
+        text_value: null,
+        number_value: null,
+        multi_values: [],
+        date_value: null,
+        photo_urls: [],
+        signature_url: null,
+        is_out_of_range: false,
+        completed_at: null,
+        completed_by_user_id: null,
+        linked_project_task_id: null,
+        linked_project_task_status: null,
+      });
+
+      if (depth < 4 && Array.isArray(item.conditional_branches)) {
+        for (const branch of item.conditional_branches) {
+          visitItems(branch.items ?? [], section, depth + 1);
+        }
+      }
+    }
+  }
+
+  for (const section of (sections ?? [])) {
+    visitItems(section.items ?? [], section);
+  }
+
+  return result;
+}
+
+function buildInitialSectionsSummary(sections: any[]): Record<string, { total_items: number; completed_items: number; score: number }> {
+  const summary: Record<string, { total_items: number; completed_items: number; score: number }> = {};
+  for (const section of (sections ?? [])) {
+    const itemCount = (section.items ?? []).length;
+    summary[section.id] = { total_items: itemCount, completed_items: 0, score: 0 };
+  }
+  return summary;
+}
+
 export const cleanupExpiredActionLogs = onSchedule({
   schedule: "every 24 hours",
   timeZone: "America/Sao_Paulo",
@@ -265,17 +401,23 @@ export const hourlyPdvSync = onSchedule({
     let synced = 0;
     let skipped = 0;
 
+    const HOURLY_FALLBACK_MAP: Record<string, string> = {
+      'tirirical': '17343',
+      'joao-paulo': '17344',
+    };
+
     for (const doc of kiosksSnap.docs) {
       const kiosk = doc.data();
-      if (!kiosk.pdvFilialId) {
+      const pdvFilialId = kiosk.pdvFilialId || HOURLY_FALLBACK_MAP[doc.id];
+      if (!pdvFilialId) {
         console.log(`[hourlyPdvSync] Quiosque ${doc.id} (${kiosk.name ?? '?'}) sem pdvFilialId — ignorado.`);
         skipped++;
         continue;
       }
 
-      console.log(`[hourlyPdvSync] Sincronizando ${doc.id} (filial ${kiosk.pdvFilialId}) para ${dateStr}...`);
+      console.log(`[hourlyPdvSync] Sincronizando ${doc.id} (filial ${pdvFilialId}) para ${dateStr}...`);
       try {
-        await syncDayAdmin(dateStr, doc.id, kiosk.pdvFilialId, db);
+        await syncDayAdmin(dateStr, doc.id, pdvFilialId, db);
         synced++;
       } catch (kioskError) {
         console.error(`[hourlyPdvSync] Erro no quiosque ${doc.id}:`, kioskError);
@@ -520,22 +662,17 @@ export const checklistDailyGenerate = onSchedule(
   async () => {
     const now = new Date();
     const today = getBrtDate(now);
-    console.log(`[checklistDailyGenerate] Gerando checklists para ${today}`);
+    const formsEnabled = await isFormsEngineEnabled();
+    console.log(`[checklistDailyGenerate] Gerando para ${today} — motor: ${formsEnabled ? 'forms' : 'legacy'}`);
 
-    const [templatesSnap, shiftsSnap, existingSnap] = await Promise.all([
-      checklistDb.collection('checklistTemplates').where('isActive', '==', true).get(),
+    const [shiftsSnap, unitsSnap, shiftDefsSnap] = await Promise.all([
       db.collectionGroup('shifts').where('date', '==', today).get(),
-      checklistDb.collection('checklistExecutions').where('checklistDate', '==', today).get(),
-    ]);
-
-    const existingIds = new Set(existingSnap.docs.map((d) => d.id));
-
-    const unitNames = new Map<string, string>();
-    const shiftDefNames = new Map<string, string>();
-    const [unitsSnap, shiftDefsSnap] = await Promise.all([
       db.collection('dp_units').get(),
       db.collection('dp_shiftDefinitions').get(),
     ]);
+
+    const unitNames = new Map<string, string>();
+    const shiftDefNames = new Map<string, string>();
     unitsSnap.docs.forEach((d) => { const n = d.data()?.name; if (n) unitNames.set(d.id, n); });
     shiftDefsSnap.docs.forEach((d) => { const n = d.data()?.name; if (n) shiftDefNames.set(d.id, n); });
 
@@ -547,94 +684,188 @@ export const checklistDailyGenerate = onSchedule(
     )];
     const userDocs = await Promise.all(userIds.map((uid) => db.collection('users').doc(uid).get()));
     const usersById = new Map<string, any>(
-      userDocs
-        .filter((doc) => doc.exists)
-        .map((doc) => [doc.id, doc.data() ?? {}])
+      userDocs.filter((doc) => doc.exists).map((doc) => [doc.id, doc.data() ?? {}])
     );
 
     let created = 0;
     let skipped = 0;
     const batchItems: Array<{ id: string; data: Record<string, unknown> }> = [];
 
-    for (const tDoc of templatesSnap.docs) {
-      const t = tDoc.data();
-      if (!t.name || !Array.isArray(t.sections) || !shouldGenerateChecklistTemplate(t, today)) continue;
+    if (formsEnabled) {
+      // New engine: read form_templates (snake_case), write form_executions
+      const [templatesSnap, existingSnap] = await Promise.all([
+        checklistDb.collection('form_templates').where('is_active', '==', true).get(),
+        checklistDb.collection('form_executions').where('scheduled_for', '==', today).get(),
+      ]);
+      const existingIds = new Set(existingSnap.docs.map((d) => d.id));
 
-      const tUnitIds: string[] = Array.isArray(t.unitIds) ? t.unitIds : [];
-      const tShiftDefIds: string[] = Array.isArray(t.shiftDefinitionIds) ? t.shiftDefinitionIds : [];
+      for (const tDoc of templatesSnap.docs) {
+        const t = tDoc.data();
+        if (!t.name || !Array.isArray(t.sections) || !shouldGenerateFormTemplate(t, today)) continue;
 
-      for (const sDoc of shiftsSnap.docs) {
-        const s = sDoc.data();
-        if (s?.type !== 'work') continue;
-        if (!s.scheduleId || !s.unitId || !s.userId || !s.startTime || !s.endTime) continue;
-        const userData = usersById.get(s.userId);
-        if (!userData || userData.isActive === false) continue;
+        const tUnitIds: string[] = Array.isArray(t.unit_ids) ? t.unit_ids : [];
+        const tShiftDefIds: string[] = Array.isArray(t.shift_definition_ids) ? t.shift_definition_ids : [];
 
-        if (tUnitIds.length > 0 && !tUnitIds.includes(s.unitId)) continue;
-        if (tShiftDefIds.length > 0) {
-          if (!s.shiftDefinitionId || !tShiftDefIds.includes(s.shiftDefinitionId)) continue;
+        for (const sDoc of shiftsSnap.docs) {
+          const s = sDoc.data();
+          if (s?.type !== 'work') continue;
+          if (!s.scheduleId || !s.unitId || !s.userId || !s.startTime || !s.endTime) continue;
+          const userData = usersById.get(s.userId);
+          if (!userData || userData.isActive === false) continue;
+
+          if (tUnitIds.length > 0 && !tUnitIds.includes(s.unitId)) continue;
+          if (tShiftDefIds.length > 0 && (!s.shiftDefinitionId || !tShiftDefIds.includes(s.shiftDefinitionId))) continue;
+          if (!userMatchesFormTemplate(t, userData)) continue;
+
+          const execId = `${today}__${s.scheduleId}__${sDoc.id}__${tDoc.id}`;
+          if (existingIds.has(execId)) { skipped++; continue; }
+          existingIds.add(execId);
+          created++;
+
+          const sections = buildFormExecutionSectionsSnake(t.sections as any[]);
+          const items = flattenFormTemplateItemsSnake(t.sections as any[]);
+          const sectSummary = buildInitialSectionsSummary(t.sections as any[]);
+
+          batchItems.push({
+            id: execId,
+            data: {
+              workspace_id: 'coala',
+              form_project_id: t.form_project_id ?? 'legacy-geral',
+              form_type_id: t.form_type_id ?? 'legacy-type-manual',
+              form_subtype_id: t.form_subtype_id ?? null,
+              context: 'operational',
+              template_id: tDoc.id,
+              template_name: t.name,
+              template_version: typeof t.version === 'number' ? t.version : 1,
+              occurrence_type: t.occurrence_type ?? 'manual',
+              template_snapshot: { id: tDoc.id, name: t.name, version: t.version ?? 1, sections: t.sections },
+              unit_id: s.unitId,
+              unit_name: unitNames.get(s.unitId) ?? s.unitId,
+              schedule_id: s.scheduleId,
+              shift_id: sDoc.id,
+              shift_definition_id: s.shiftDefinitionId ?? null,
+              shift_definition_name: s.shiftDefinitionId ? shiftDefNames.get(s.shiftDefinitionId) ?? s.shiftDefinitionId : null,
+              shift_start_time: s.startTime,
+              shift_end_time: s.endTime,
+              shift_end_date: resolveShiftEndDate(today, s.startTime, s.endTime),
+              assigned_user_id: s.userId,
+              assigned_username: userData.username || s.userId,
+              collaborator_user_ids: [],
+              collaborator_usernames: [],
+              scheduled_for: today,
+              sections,
+              items,
+              sections_summary: sectSummary,
+              status: 'pending',
+              score: null,
+              claimed_by_user_id: null,
+              claimed_by_username: null,
+              claimed_at: null,
+              completed_by_user_id: null,
+              completed_by_username: null,
+              completed_at: null,
+              canceled_by_user_id: null,
+              canceled_at: null,
+              created_at: new Date(),
+              updated_at: new Date(),
+            },
+          });
         }
-        if (!userMatchesChecklistTemplate(t, userData)) continue;
-
-        const execId = `${today}__${s.scheduleId}__${sDoc.id}__${tDoc.id}`;
-        if (existingIds.has(execId)) { skipped++; continue; }
-        existingIds.add(execId);
-        created++;
-
-        const sections = buildChecklistExecutionSections(t.sections as any[]);
-        const items = (t.sections as any[]).flatMap((section) =>
-          flattenChecklistItems(section.items ?? [], section)
-        );
-
-        batchItems.push({
-          id: execId,
-          data: {
-            checklistDate: today,
-            templateId: tDoc.id,
-            templateName: t.name,
-            templateType: t.templateType ?? 'routine',
-            templateVersion: typeof t.version === 'number' ? t.version : 1,
-            occurrenceType: typeof t.occurrenceType === 'string' ? t.occurrenceType : null,
-            scheduleId: s.scheduleId,
-            shiftId: sDoc.id,
-            unitId: s.unitId,
-            unitName: unitNames.get(s.unitId) ?? s.unitId,
-            shiftDefinitionId: s.shiftDefinitionId ?? null,
-            shiftDefinitionName: s.shiftDefinitionId ? shiftDefNames.get(s.shiftDefinitionId) ?? s.shiftDefinitionId : null,
-            assignedUserId: s.userId,
-            assignedUsername: userData.username || s.userId,
-            sections,
-            shiftStartTime: s.startTime,
-            shiftEndTime: s.endTime,
-            shiftEndDate: resolveShiftEndDate(today, s.startTime, s.endTime),
-            status: 'pending',
-            score: null,
-            items,
-            incidentContext: null,
-            supplierName: null,
-            invoiceNumber: null,
-            scheduledDate: null,
-            claimedByUserId: null,
-            claimedByUsername: null,
-            claimedAt: null,
-            completedByUserId: null,
-            completedByUsername: null,
-            completedAt: null,
-            reviewedBy: null,
-            reviewNotes: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
       }
-    }
 
-    for (let i = 0; i < batchItems.length; i += 400) {
-      const batch = checklistDb.batch();
-      batchItems.slice(i, i + 400).forEach((entry) => {
-        batch.set(checklistDb.collection('checklistExecutions').doc(entry.id), entry.data);
-      });
-      await batch.commit();
+      for (let i = 0; i < batchItems.length; i += 400) {
+        const batch = checklistDb.batch();
+        batchItems.slice(i, i + 400).forEach((entry) => {
+          batch.set(checklistDb.collection('form_executions').doc(entry.id), entry.data);
+        });
+        await batch.commit();
+      }
+    } else {
+      // Legacy engine: read checklistTemplates, write checklistExecutions
+      const [templatesSnap, existingSnap] = await Promise.all([
+        checklistDb.collection('checklistTemplates').where('isActive', '==', true).get(),
+        checklistDb.collection('checklistExecutions').where('checklistDate', '==', today).get(),
+      ]);
+      const existingIds = new Set(existingSnap.docs.map((d) => d.id));
+
+      for (const tDoc of templatesSnap.docs) {
+        const t = tDoc.data();
+        if (!t.name || !Array.isArray(t.sections) || !shouldGenerateChecklistTemplate(t, today)) continue;
+
+        const tUnitIds: string[] = Array.isArray(t.unitIds) ? t.unitIds : [];
+        const tShiftDefIds: string[] = Array.isArray(t.shiftDefinitionIds) ? t.shiftDefinitionIds : [];
+
+        for (const sDoc of shiftsSnap.docs) {
+          const s = sDoc.data();
+          if (s?.type !== 'work') continue;
+          if (!s.scheduleId || !s.unitId || !s.userId || !s.startTime || !s.endTime) continue;
+          const userData = usersById.get(s.userId);
+          if (!userData || userData.isActive === false) continue;
+
+          if (tUnitIds.length > 0 && !tUnitIds.includes(s.unitId)) continue;
+          if (tShiftDefIds.length > 0 && (!s.shiftDefinitionId || !tShiftDefIds.includes(s.shiftDefinitionId))) continue;
+          if (!userMatchesChecklistTemplate(t, userData)) continue;
+
+          const execId = `${today}__${s.scheduleId}__${sDoc.id}__${tDoc.id}`;
+          if (existingIds.has(execId)) { skipped++; continue; }
+          existingIds.add(execId);
+          created++;
+
+          const sections = buildChecklistExecutionSections(t.sections as any[]);
+          const items = (t.sections as any[]).flatMap((section) =>
+            flattenChecklistItems(section.items ?? [], section)
+          );
+
+          batchItems.push({
+            id: execId,
+            data: {
+              checklistDate: today,
+              templateId: tDoc.id,
+              templateName: t.name,
+              templateType: t.templateType ?? 'routine',
+              templateVersion: typeof t.version === 'number' ? t.version : 1,
+              occurrenceType: typeof t.occurrenceType === 'string' ? t.occurrenceType : null,
+              scheduleId: s.scheduleId,
+              shiftId: sDoc.id,
+              unitId: s.unitId,
+              unitName: unitNames.get(s.unitId) ?? s.unitId,
+              shiftDefinitionId: s.shiftDefinitionId ?? null,
+              shiftDefinitionName: s.shiftDefinitionId ? shiftDefNames.get(s.shiftDefinitionId) ?? s.shiftDefinitionId : null,
+              assignedUserId: s.userId,
+              assignedUsername: userData.username || s.userId,
+              sections,
+              shiftStartTime: s.startTime,
+              shiftEndTime: s.endTime,
+              shiftEndDate: resolveShiftEndDate(today, s.startTime, s.endTime),
+              status: 'pending',
+              score: null,
+              items,
+              incidentContext: null,
+              supplierName: null,
+              invoiceNumber: null,
+              scheduledDate: null,
+              claimedByUserId: null,
+              claimedByUsername: null,
+              claimedAt: null,
+              completedByUserId: null,
+              completedByUsername: null,
+              completedAt: null,
+              reviewedBy: null,
+              reviewNotes: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+        }
+      }
+
+      for (let i = 0; i < batchItems.length; i += 400) {
+        const batch = checklistDb.batch();
+        batchItems.slice(i, i + 400).forEach((entry) => {
+          batch.set(checklistDb.collection('checklistExecutions').doc(entry.id), entry.data);
+        });
+        await batch.commit();
+      }
     }
 
     console.log(`[checklistDailyGenerate] Criadas: ${created}, já existentes: ${skipped}`);
@@ -761,34 +992,60 @@ export const checklistMarkOverdue = onSchedule(
   { schedule: '*/15 * * * *', timeZone: BRT, retryCount: 1, memory: '256MiB' },
   async () => {
     const now = new Date();
-    console.log(`[checklistMarkOverdue] Verificando atrasos em ${now.toISOString()}`);
+    const formsEnabled = await isFormsEngineEnabled();
+    console.log(`[checklistMarkOverdue] Verificando atrasos em ${now.toISOString()} — motor: ${formsEnabled ? 'forms' : 'legacy'}`);
 
-    const pendingSnap = await checklistDb
+    let totalMarked = 0;
+
+    // Legacy checklistExecutions — always run (for in-progress executions during migration window)
+    const legacySnap = await checklistDb
       .collection('checklistExecutions')
       .where('status', 'in', ['pending', 'claimed'])
       .get();
 
-    if (pendingSnap.empty) return;
-
-    const toMark = pendingSnap.docs.filter((doc) => {
+    const legacyToMark = legacySnap.docs.filter((doc) => {
       const data = doc.data();
       if (!data.shiftEndDate || !data.shiftEndTime) return false;
       return isShiftEnded(data.shiftEndDate as string, data.shiftEndTime as string, now);
     });
 
-    if (toMark.length === 0) {
-      console.log('[checklistMarkOverdue] Nenhuma execução em atraso.');
-      return;
-    }
-
-    for (let i = 0; i < toMark.length; i += 400) {
+    for (let i = 0; i < legacyToMark.length; i += 400) {
       const batch = checklistDb.batch();
-      toMark.slice(i, i + 400).forEach((doc) => {
+      legacyToMark.slice(i, i + 400).forEach((doc) => {
         batch.update(doc.ref, { status: 'overdue', updatedAt: new Date() });
       });
       await batch.commit();
     }
+    totalMarked += legacyToMark.length;
 
-    console.log(`[checklistMarkOverdue] ${toMark.length} execuções marcadas como overdue.`);
+    // New form_executions — only when forms engine is active
+    if (formsEnabled) {
+      const formsSnap = await checklistDb
+        .collection('form_executions')
+        .where('status', 'in', ['pending', 'in_progress'])
+        .get();
+
+      const formsToMark = formsSnap.docs.filter((doc) => {
+        const data = doc.data();
+        if (!data.shift_end_date || !data.shift_end_time) return false;
+        return isShiftEnded(data.shift_end_date as string, data.shift_end_time as string, now);
+      });
+
+      for (let i = 0; i < formsToMark.length; i += 400) {
+        const batch = checklistDb.batch();
+        formsToMark.slice(i, i + 400).forEach((doc) => {
+          batch.update(doc.ref, { status: 'overdue', updated_at: new Date() });
+        });
+        await batch.commit();
+      }
+      totalMarked += formsToMark.length;
+    }
+
+    if (totalMarked === 0) {
+      console.log('[checklistMarkOverdue] Nenhuma execução em atraso.');
+      return;
+    }
+
+    console.log(`[checklistMarkOverdue] ${totalMarked} execuções marcadas como overdue.`);
   }
 );

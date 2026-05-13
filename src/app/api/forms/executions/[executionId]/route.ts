@@ -114,6 +114,18 @@ function applyExecutionItemUpdate(
   return next;
 }
 
+function applyExecutionSectionUpdate(
+  section: Record<string, unknown>,
+  update: Record<string, unknown>
+) {
+  const next = { ...section };
+
+  if ("photo_url" in update) next.photo_url = update.photo_url ?? "";
+  if ("signature_url" in update) next.signature_url = update.signature_url ?? "";
+
+  return next;
+}
+
 function buildSectionsSummary(items: Record<string, unknown>[]) {
   const summary: Record<string, { total_items: number; completed_items: number; score?: number }> = {};
   items.forEach((item) => {
@@ -406,9 +418,20 @@ export async function PATCH(
         return applyExecutionItemUpdate(item, update, nowIso, user.userDoc.id);
       });
 
-      const sections = Array.isArray(data.sections)
-        ? (data.sections as FormExecutionSection[])
+      const currentSections = Array.isArray(data.sections)
+        ? (data.sections as Record<string, unknown>[])
         : [];
+      const sectionUpdateMap = new Map(
+        parsed.sections.map((section) => [
+          String(section.section_id),
+          section as Record<string, unknown>,
+        ])
+      );
+      const sections = currentSections.map((section) => {
+        const update = sectionUpdateMap.get(String(section.id));
+        if (!update) return section;
+        return applyExecutionSectionUpdate(section, update);
+      }) as FormExecutionSection[];
 
       const visibleContext =
         parsed.action === "complete"
@@ -431,6 +454,7 @@ export async function PATCH(
 
       const next = {
         ...data,
+        sections,
         items: nextItems,
         status: nextStatus,
         sections_summary: buildSectionsSummary(visibleContext.visibleItems),
@@ -463,6 +487,7 @@ export async function PATCH(
         timestamp: now,
         metadata: {
           item_count: parsed.items.length,
+          section_count: parsed.sections.length,
         },
       });
 
@@ -579,6 +604,7 @@ export async function PATCH(
       metadata: {
         execution_id: executionId,
         item_count: parsed.items.length,
+        section_count: parsed.sections.length,
         created_task_ids: createdTaskIds,
       },
     });

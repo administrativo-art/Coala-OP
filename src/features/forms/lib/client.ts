@@ -139,6 +139,7 @@ export async function updateFormExecution(
   body: {
     action: "save" | "complete" | "reopen" | "cancel";
     items?: Array<Record<string, unknown>>;
+    sections?: Array<Record<string, unknown>>;
   }
 ) {
   return authorizedJsonRequest<{ execution: FormExecution }>(
