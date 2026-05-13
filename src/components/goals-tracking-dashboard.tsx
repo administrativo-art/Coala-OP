@@ -414,8 +414,8 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[980px] w-[min(92vw,980px)] max-h-[90vh] flex flex-col overflow-hidden rounded-[30px] border border-zinc-200 bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden px-10 pb-8 pt-9 md:px-12 md:pb-10 md:pt-10">
+      <DialogContent className="!max-w-[980px] grid h-[min(90vh,760px)] w-[min(92vw,980px)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[30px] border border-zinc-200 bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
+        <div className="px-10 pt-9 md:px-12 md:pt-10">
           <DialogHeader className="space-y-3 text-left shrink-0">
             <DialogTitle className="pr-12 text-[2rem] font-bold leading-none tracking-[-0.045em] text-zinc-900 md:text-[2.35rem]">
               {title}
@@ -429,8 +429,10 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
               Detalhamento de metas diárias para o período
             </DialogDescription>
           </DialogHeader>
+        </div>
 
-          <div className="mt-8 flex flex-col flex-1 min-h-0 rounded-[24px] border border-zinc-200 bg-white">
+        <div className="min-h-0 px-10 py-8 md:px-12">
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
             <div className="grid shrink-0 grid-cols-[120px_1.2fr_1.2fr_130px] gap-6 border-b border-zinc-200 px-8 py-5 text-[0.92rem] font-bold uppercase tracking-[0.08em] text-zinc-500 md:grid-cols-[140px_1.3fr_1.3fr_140px] md:px-10">
               <span>Dia</span>
               <span className="text-right">Alvo Diário</span>
@@ -438,7 +440,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
               <span className="text-center">Status</span>
             </div>
 
-            <ScrollArea className="flex-1 min-h-0">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               <div>
                 {rows.map(r => (
                   <div
@@ -462,10 +464,11 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
                   </div>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           </div>
+        </div>
 
-          <DialogFooter className="mt-8 shrink-0 justify-end">
+        <DialogFooter className="border-t border-zinc-100 px-10 py-6 md:px-12">
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
@@ -474,7 +477,6 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
               Fechar
             </Button>
           </DialogFooter>
-        </div>
       </DialogContent>
     </Dialog>
   );
