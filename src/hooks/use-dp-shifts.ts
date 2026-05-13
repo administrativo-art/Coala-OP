@@ -7,6 +7,7 @@ import {
   doc, query, orderBy, serverTimestamp, writeBatch, increment, getDocs,
 } from 'firebase/firestore';
 import type { DPShift } from '@/types';
+import { rebalanceGoalsForSchedule } from '@/lib/goals-schedule-rebalance';
 
 export interface DPShiftsHookResult {
   shifts: DPShift[];
@@ -90,6 +91,7 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
       batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(workCount) });
     }
     await batch.commit();
+    await rebalanceGoalsForSchedule(scheduleId);
   }, [countWorkItems, scheduleId]);
 
   const addShiftsBatch = useCallback(async (data: Omit<DPShift, 'id' | 'createdAt'>[]) => {
@@ -109,11 +111,13 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
       }
       await batch.commit();
     }
+    await rebalanceGoalsForSchedule(scheduleId);
   }, [countWorkItems, scheduleId]);
 
   const updateShift = useCallback(async ({ id, ...data }: DPShift) => {
     if (!scheduleId) return;
     await updateDoc(doc(db, 'dp_schedules', scheduleId, 'shifts', id), data as any);
+    await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
   const updateShiftsBatch = useCallback(async (items: DPShift[]) => {
@@ -127,6 +131,7 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
       });
       await batch.commit();
     }
+    await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
   const deleteShift = useCallback(async (shift: Pick<DPShift, 'id' | 'type'> | string) => {
@@ -138,6 +143,7 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
       batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(-1) });
     }
     await batch.commit();
+    await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
   const deleteShiftsBatch = useCallback(async (items: Pick<DPShift, 'id' | 'type'>[]) => {
@@ -153,6 +159,7 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
       }
       await batch.commit();
     }
+    await rebalanceGoalsForSchedule(scheduleId);
   }, [countWorkItems, scheduleId]);
 
   const clearAllShifts = useCallback(async () => {
@@ -167,6 +174,7 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
       }
       await batch.commit();
     }
+    await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId, shifts]);
 
   return {

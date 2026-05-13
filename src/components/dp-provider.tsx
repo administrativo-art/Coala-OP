@@ -61,7 +61,7 @@ function normalizeVacation(doc: { id: string; data: () => Record<string, unknown
   return { id: doc.id, ...doc.data() } as DPVacationRecord;
 }
 
-type DPScope = 'inactive' | 'dashboard' | 'settings' | 'schedules' | 'vacations' | 'collaborators';
+type DPScope = 'inactive' | 'dashboard' | 'settings' | 'schedules' | 'vacations' | 'collaborators' | 'goals';
 
 const SCOPE_RESOURCES: Record<DPScope, DPResourceKey[]> = {
   inactive: [],
@@ -70,6 +70,7 @@ const SCOPE_RESOURCES: Record<DPScope, DPResourceKey[]> = {
   schedules: ['units', 'shiftDefs', 'schedules', 'calendars'],
   vacations: ['units', 'vacations'],
   collaborators: ['shiftDefs'],
+  goals: ['units', 'shiftDefs', 'schedules'],
 };
 
 function getDPScope(pathname: string | null): DPScope {
@@ -80,7 +81,9 @@ function getDPScope(pathname: string | null): DPScope {
   if (pathname.startsWith('/dashboard/dp/ferias')) return 'vacations';
   if (pathname.startsWith('/dashboard/dp/collaborators')) return 'collaborators';
   if (pathname === '/dashboard/dp') return 'dashboard';
-  return pathname.startsWith('/dashboard/dp') ? 'dashboard' : 'inactive';
+  if (pathname.startsWith('/dashboard/dp')) return 'dashboard';
+  if (pathname.startsWith('/dashboard/goals')) return 'goals';
+  return 'inactive';
 }
 
 function logSubscriptionError(scope: string, error: unknown) {

@@ -111,6 +111,7 @@ function PeriodCard({
     return {
       periodDateKeysById: { [period.id]: cs.periodDateKeys ?? [] },
       employeeDateKeysByGoalId: cs.employeeDateKeysByGoalId ?? {},
+      goalIdsByPeriodShiftAndDate: {},
       workedDaysByKioskAndUser: {},
       shiftLabelByKioskUserAndDate: {},
     };

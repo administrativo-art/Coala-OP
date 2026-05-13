@@ -1286,7 +1286,7 @@ const TYPE_ORDER: Record<string, number> = { revenue: 0, ticket: 1, product_line
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export function GoalsTrackingDashboard() {
-  const { periods, employeeGoals, templates, loading, deletePeriod, deleteEmployeeGoal } = useGoals();
+  const { periods, employeeGoals, templates, loading, deletePeriod, deleteEmployeeGoal, rebalancePeriodEmployeeGoals } = useGoals();
   const { user, permissions, users, firebaseUser } = useAuth();
   const { kiosks } = useKiosks();
   const { toast } = useToast();
@@ -1294,6 +1294,7 @@ export function GoalsTrackingDashboard() {
   const [distributionSnapshot, setDistributionSnapshot] = useState<GoalDistributionSnapshot>({
     periodDateKeysById: {},
     employeeDateKeysByGoalId: {},
+    goalIdsByPeriodShiftAndDate: {},
     workedDaysByKioskAndUser: {},
     shiftLabelByKioskUserAndDate: {},
   });
@@ -1464,6 +1465,16 @@ export function GoalsTrackingDashboard() {
     setDeleteOpen(false);
     setDeletingPeriod(null);
     setDeleteLoading(false);
+  }
+
+  async function handleRebalancePeriod(period: GoalPeriodDoc) {
+    const periodEmployeeGoals = employeeGoals.filter(goal => goal.periodId === period.id);
+    await rebalancePeriodEmployeeGoals(
+      period,
+      periodEmployeeGoals,
+      { [period.kioskId]: getKioskName(period.kioskId) }
+    );
+    toast({ title: 'Metas recalculadas pela escala.' });
   }
 
   const activePeriods = useMemo(() =>
@@ -1656,6 +1667,9 @@ export function GoalsTrackingDashboard() {
                            <DropdownMenuSeparator />
                            <DropdownMenuItem onClick={() => { setEditPeriod(mainPeriod); setEditOpen(true); }}>
                              <Pencil className="mr-2 h-4 w-4" /> Editar Meta
+                           </DropdownMenuItem>
+                           <DropdownMenuItem onClick={() => handleRebalancePeriod(mainPeriod)}>
+                             <RefreshCw className="mr-2 h-4 w-4" /> Recalcular pela escala
                            </DropdownMenuItem>
                            <DropdownMenuItem onClick={() => { setClosingPeriod(mainPeriod); setCloseGoalOpen(true); }}>
                              <CheckCircle className="mr-2 h-4 w-4" /> Encerrar Meta

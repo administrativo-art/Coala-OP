@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Goal, ScanSearch, Tags } from "lucide-react";
 
 const PricingParametersModal = dynamic(
   () => import("@/components/pricing-parameters-modal").then((m) => m.PricingParametersModal),
@@ -137,16 +137,19 @@ export function ComercialSettings() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue={defaultTab} className="space-y-6">
-        <TabsList className="flex w-full overflow-x-auto">
+        <TabsList className="flex h-auto w-full overflow-x-auto rounded-2xl border bg-background p-1 shadow-sm">
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="flex-shrink-0">
-              {tab.label}
+            <TabsTrigger key={tab.value} value={tab.value} className="flex-shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold">
+              <span className="inline-flex items-center gap-2">
+                {tab.value === "pricing" ? <Tags className="h-4 w-4" /> : tab.value === "competitors" ? <ScanSearch className="h-4 w-4" /> : <Goal className="h-4 w-4" />}
+                {tab.label}
+              </span>
             </TabsTrigger>
           ))}
         </TabsList>
 
         {tabs.map((tab) => (
-          <TabsContent key={tab.value} value={tab.value}>
+          <TabsContent key={tab.value} value={tab.value} className="mt-4">
             {tab.content}
           </TabsContent>
         ))}

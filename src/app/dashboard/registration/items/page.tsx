@@ -1,30 +1,27 @@
 "use client";
 
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/navigation/back-button';
 import { ItemManagement } from '@/components/item-management';
-import { ArrowLeft, Package, Box } from 'lucide-react';
+import { Package, Box } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BaseProductManagement } from '@/components/base-product-management';
 import { useAuth } from "@/hooks/use-auth";
 import { PermissionGuard } from "@/components/permission-guard";
 
 export default function RegistrationItemsPage() {
-    const router = useRouter();
     const { permissions } = useAuth();
 
     return (
         <PermissionGuard allowed={permissions.registration.view}>
             <div className="space-y-4">
                 <div className="flex items-center gap-4 mb-2">
-                    <Button 
-                        onClick={() => router.push('/dashboard/settings?department=operacional&tab=cadastros')}
+                    <BackButton
+                        fallbackHref="/dashboard/settings?department=operacional&tab=cadastros"
                         variant="ghost"
-                        className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                        aria-label="Voltar para configurações"
-                    >
-                        <ArrowLeft className="w-6 h-6" />
-                    </Button>
+                        iconOnly
+                        className="h-auto w-auto rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
+                        ariaLabel="Voltar para configurações"
+                    />
                     <div>
                         <h1 className="text-3xl font-bold">Gerenciar insumos</h1>
                         <p className="text-sm text-muted-foreground">Voltar para configurações</p>

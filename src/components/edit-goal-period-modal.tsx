@@ -3,8 +3,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useGoals } from '@/contexts/goals-context';
 import { useAuth } from '@/hooks/use-auth';
+import { useKiosks } from '@/hooks/use-kiosks';
 import { useToast } from '@/hooks/use-toast';
-import { type GoalPeriodDoc } from '@/types';
+import { type EmployeeGoal, type GoalPeriodDoc } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,8 +23,9 @@ interface EditGoalPeriodModalProps {
 }
 
 export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeriodModalProps) {
-  const { employeeGoals, updatePeriod, addEmployeeGoal, deleteEmployeeGoal } = useGoals();
+  const { employeeGoals, updatePeriod, addEmployeeGoal, deleteEmployeeGoal, rebalancePeriodEmployeeGoals } = useGoals();
   const { users } = useAuth();
+  const { kiosks } = useKiosks();
   const { toast } = useToast();
 
   const [targetValue, setTargetValue] = useState<number>(0);
@@ -47,6 +49,24 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
 
   const getUserName = (id: string) => users.find(u => u.id === id)?.username ?? id;
 
+  async function rebalanceWith(nextGoals: EmployeeGoal[], nextPeriod = period) {
+    if (!nextPeriod) return;
+    const kioskName = kiosks.find(kiosk => kiosk.id === nextPeriod.kioskId)?.name;
+    await rebalancePeriodEmployeeGoals(
+      nextPeriod,
+      nextGoals,
+      kioskName ? { [nextPeriod.kioskId]: kioskName } : undefined
+    );
+  }
+
+  async function handleDelete(goal: EmployeeGoal) {
+    if (!period) return;
+    setEgLoading(true);
+    await deleteEmployeeGoal(goal.id);
+    await rebalanceWith(periodEmployeeGoals.filter(item => item.id !== goal.id));
+    setEgLoading(false);
+  }
+
   // Inicializa valores quando o modal abre ou o período muda
   useEffect(() => {
     if (open && period) {
@@ -58,7 +78,9 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
   async function handleSavePeriod() {
     if (!period) return;
     setSaving(true);
+    const nextPeriod = { ...period, targetValue, upValue };
     await updatePeriod(period.id, { targetValue, upValue });
+    await rebalanceWith(periodEmployeeGoals, nextPeriod);
     toast({ title: 'Meta atualizada.' });
     setSaving(false);
   }
@@ -90,14 +112,18 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
     const shift = period.shifts?.find(s => s.id === shiftId);
     if (!shift) return;
     setEgLoading(true);
-    const id = await addEmployeeGoal({
+    const employeeGoalData = {
       periodId: period.id, employeeId: empId, kioskId: period.kioskId,
       shiftId, fraction: fractionNum,
       targetValue: period.targetValue * shift.fraction * fractionNum,
       currentValue: 0, dailyProgress: {},
       distributionMode: period.distributionMode ?? 'calendar_days',
-    });
-    if (id) toast({ title: 'Colaborador adicionado.' });
+    } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
+    const id = await addEmployeeGoal(employeeGoalData);
+    if (id) {
+      await rebalanceWith([...periodEmployeeGoals, { id, ...employeeGoalData } as EmployeeGoal]);
+      toast({ title: 'Colaborador adicionado.' });
+    }
     else toast({ title: 'Erro ao adicionar colaborador.', variant: 'destructive' });
     setNewEmp(p => ({ ...p, [shiftId]: '' }));
     setNewPct(p => ({ ...p, [shiftId]: '' }));
@@ -122,13 +148,17 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
       return;
     }
     setEgLoading(true);
-    const id = await addEmployeeGoal({
+    const employeeGoalData = {
       periodId: period.id, employeeId: selectedEmployee, kioskId: period.kioskId,
       fraction: fractionNum, targetValue: period.targetValue * fractionNum,
       distributionMode: period.distributionMode ?? 'calendar_days',
       currentValue: 0, dailyProgress: {},
-    });
-    if (id) toast({ title: 'Colaborador adicionado.' });
+    } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
+    const id = await addEmployeeGoal(employeeGoalData);
+    if (id) {
+      await rebalanceWith([...periodEmployeeGoals, { id, ...employeeGoalData } as EmployeeGoal]);
+      toast({ title: 'Colaborador adicionado.' });
+    }
     else toast({ title: 'Erro ao adicionar colaborador.', variant: 'destructive' });
     setSelectedEmployee('');
     setFraction('');
@@ -191,7 +221,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
                           <Badge variant="secondary">
                             {(eg.fraction * 100).toFixed(0)}% do turno — R$ {eg.targetValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </Badge>
-                          <button onClick={() => deleteEmployeeGoal(eg.id)} className="text-muted-foreground hover:text-destructive">
+                          <button onClick={() => handleDelete(eg)} className="text-muted-foreground hover:text-destructive">
                             <X className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -231,7 +261,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
                     <span>{getUserName(eg.employeeId)}</span>
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">{(eg.fraction * 100).toFixed(0)}% — R$ {eg.targetValue.toFixed(2)}</Badge>
-                      <button onClick={() => deleteEmployeeGoal(eg.id)} className="text-muted-foreground hover:text-destructive">
+                      <button onClick={() => handleDelete(eg)} className="text-muted-foreground hover:text-destructive">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>

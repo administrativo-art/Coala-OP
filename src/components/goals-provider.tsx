@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { type GoalTemplate, type GoalPeriodDoc, type EmployeeGoal } from '@/types';
 import { GoalsContext } from '@/contexts/goals-context';
-import { buildGoalClosureSnapshot, loadGoalDistributionSnapshot } from '@/lib/goals-distribution';
+import { buildGoalClosureSnapshot, calculateScheduledEmployeeGoalTargets, loadGoalDistributionSnapshot } from '@/lib/goals-distribution';
 
 export function GoalsProvider({ children }: { children: React.ReactNode }) {
   const [templates, setTemplates] = useState<GoalTemplate[]>([]);
@@ -142,6 +142,45 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
     } catch (e) { console.error('[GoalsProvider] addEmployeeGoal:', e); return null; }
   }, []);
 
+  const updateEmployeeGoal = useCallback(async (id: string, data: Partial<EmployeeGoal>) => {
+    try {
+      await updateDoc(doc(db, 'employeeGoals', id), { ...data, updatedAt: serverTimestamp() });
+      setEmployeeGoals(prev => prev.map(goal => goal.id === id ? { ...goal, ...data } : goal));
+    } catch (e) { console.error('[GoalsProvider] updateEmployeeGoal:', e); }
+  }, []);
+
+  const rebalancePeriodEmployeeGoals = useCallback(async (
+    period: GoalPeriodDoc,
+    periodEmployeeGoals: EmployeeGoal[],
+    kioskNameById?: Record<string, string>
+  ) => {
+    if (periodEmployeeGoals.length === 0) return;
+
+    try {
+      const snapshot = await loadGoalDistributionSnapshot([period], periodEmployeeGoals, kioskNameById);
+      const targets = calculateScheduledEmployeeGoalTargets(period, periodEmployeeGoals, snapshot);
+      const entries = Object.entries(targets);
+      if (entries.length === 0) return;
+
+      const batch = writeBatch(db);
+      for (const [goalId, target] of entries) {
+        batch.update(doc(db, 'employeeGoals', goalId), {
+          targetValue: target.targetValue,
+          fraction: target.fraction,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+
+      setEmployeeGoals(prev => prev.map(goal => {
+        const target = targets[goal.id];
+        return target ? { ...goal, targetValue: target.targetValue, fraction: target.fraction } : goal;
+      }));
+    } catch (e) {
+      console.error('[GoalsProvider] rebalancePeriodEmployeeGoals:', e);
+    }
+  }, []);
+
   const deleteEmployeeGoal = useCallback(async (id: string) => {
     try {
       await deleteDoc(doc(db, 'employeeGoals', id));
@@ -157,8 +196,8 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
     templates, periods, employeeGoals, loading,
     addTemplate, updateTemplate, deleteTemplate,
     addPeriod, updatePeriod, deletePeriod, closePeriod, reopenPeriod,
-    addEmployeeGoal, deleteEmployeeGoal,
-  }), [templates, periods, employeeGoals, loading, addTemplate, updateTemplate, deleteTemplate, addPeriod, updatePeriod, deletePeriod, closePeriod, reopenPeriod, addEmployeeGoal, deleteEmployeeGoal]);
+    addEmployeeGoal, updateEmployeeGoal, deleteEmployeeGoal, rebalancePeriodEmployeeGoals,
+  }), [templates, periods, employeeGoals, loading, addTemplate, updateTemplate, deleteTemplate, addPeriod, updatePeriod, deletePeriod, closePeriod, reopenPeriod, addEmployeeGoal, updateEmployeeGoal, deleteEmployeeGoal, rebalancePeriodEmployeeGoals]);
 
   return <GoalsContext.Provider value={value}>{children}</GoalsContext.Provider>;
 }

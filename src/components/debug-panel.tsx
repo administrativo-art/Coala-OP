@@ -8,9 +8,10 @@ import { Timer, Server, Smartphone } from 'lucide-react';
 
 interface DebugPanelProps {
   dataLoadTime: number | null;
+  enabled?: boolean;
 }
 
-export function DebugPanel({ dataLoadTime }: DebugPanelProps) {
+export function DebugPanel({ dataLoadTime, enabled = true }: DebugPanelProps) {
   const [pageLoadTime, setPageLoadTime] = useState<number | null>(null);
 
   useEffect(() => {
@@ -20,6 +21,10 @@ export function DebugPanel({ dataLoadTime }: DebugPanelProps) {
       setPageLoadTime(loadTime);
     }
   }, []);
+
+  if (!enabled) {
+    return null;
+  }
 
   return (
     <Sheet>

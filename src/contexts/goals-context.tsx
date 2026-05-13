@@ -17,7 +17,13 @@ export interface GoalsContextType {
   closePeriod: (id: string, status: 'closed' | 'cancelled', closureNote: string, closedBy: string) => Promise<void>;
   reopenPeriod: (id: string) => Promise<void>;
   addEmployeeGoal: (data: Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;
+  updateEmployeeGoal: (id: string, data: Partial<EmployeeGoal>) => Promise<void>;
   deleteEmployeeGoal: (id: string) => Promise<void>;
+  rebalancePeriodEmployeeGoals: (
+    period: GoalPeriodDoc,
+    periodEmployeeGoals: EmployeeGoal[],
+    kioskNameById?: Record<string, string>
+  ) => Promise<void>;
 }
 
 export const GoalsContext = createContext<GoalsContextType | undefined>(undefined);

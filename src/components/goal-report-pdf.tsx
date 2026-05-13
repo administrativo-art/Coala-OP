@@ -119,7 +119,7 @@ function GoalReportPdf({ data }: { data: any }) {
         {data.upTarget > data.target && (
           <View style={S.progressWrap}>
             <View style={S.progressLabel}>
-              <Text style={{ fontSize: 8, color: '#64748b', fontWeight: 'bold' }}>Super Meta (UP) — R$ {fmt(data.upTarget)}</Text>
+              <Text style={{ fontSize: 8, color: '#64748b', fontWeight: 'bold' }}>Meta UP — R$ {fmt(data.upTarget)}</Text>
               <Text style={{ fontSize: 8, fontWeight: 'bold', color: blue }}>{data.upPct.toFixed(1)}%</Text>
             </View>
             <View style={S.progressTrack}>

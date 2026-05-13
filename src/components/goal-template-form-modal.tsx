@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { ProductSimulationContext } from '@/components/product-simulation-provider';
 import { useContext } from 'react';
-import { type GoalPeriodDoc, type GoalShift, type GoalType } from '@/types';
+import { type EmployeeGoal, type GoalPeriodDoc, type GoalShift, type GoalType } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -129,7 +129,7 @@ interface GoalTemplateFormModalProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormModalProps) {
-  const { addTemplate, addPeriod, addEmployeeGoal, periods, employeeGoals, templates } = useGoals();
+  const { addTemplate, addPeriod, addEmployeeGoal, rebalancePeriodEmployeeGoals, periods, employeeGoals, templates } = useGoals();
   const { kiosks } = useKiosks();
   const { user, permissions, users } = useAuth();
   const { shiftDefinitions, shiftDefsLoading, schedules, units } = useDPStore();
@@ -487,7 +487,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         const goalShifts: GoalShift[] = shifts.map(s => ({
           id: s.id, label: s.label, fraction: (parseFloat(s.pct) || 0) / 100,
         }));
-        const periodId = await addPeriod({
+        const periodData = {
           templateId, kioskId,
           startDate: Timestamp.fromDate(start),
           endDate: Timestamp.fromDate(end),
@@ -495,19 +495,29 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           upValue: revenueConfig.upValue,
           currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
           shifts: goalShifts, status: 'active',
-        });
+        } satisfies Omit<GoalPeriodDoc, 'id' | 'createdAt' | 'updatedAt'>;
+        const periodId = await addPeriod(periodData);
         if (periodId) {
+          const createdGoals: EmployeeGoal[] = [];
           for (const a of assignments) {
             const shift = goalShifts.find(s => s.id === a.shiftId);
             if (!shift) continue;
             const withinFraction = (parseFloat(a.pct) || 0) / 100;
-            await addEmployeeGoal({
+            const employeeGoalData = {
               periodId, employeeId: a.employeeId, kioskId,
               shiftId: a.shiftId, fraction: withinFraction,
               targetValue: revenueConfig.targetValue * shift.fraction * withinFraction,
               currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
-            });
+            } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
+            const goalId = await addEmployeeGoal(employeeGoalData);
+            if (goalId) createdGoals.push({ id: goalId, ...employeeGoalData } as EmployeeGoal);
           }
+          const kioskName = kiosks.find(kiosk => kiosk.id === kioskId)?.name;
+          await rebalancePeriodEmployeeGoals(
+            { id: periodId, ...periodData } as GoalPeriodDoc,
+            createdGoals,
+            kioskName ? { [kioskId]: kioskName } : undefined
+          );
         } else hasError = true;
       } else hasError = true;
     }

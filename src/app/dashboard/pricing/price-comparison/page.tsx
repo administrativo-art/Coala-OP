@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useMemo } from 'react';
+import { BackButton } from '@/components/navigation/back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PriceComparisonTable } from '@/components/price-comparison-table';
 import { CompetitorManagementModal } from '@/components/competitor-management-modal';
 import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
-import { ArrowLeft, LineChart, SlidersHorizontal, Group, Users, Menu } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { LineChart, SlidersHorizontal, Group, Users, Menu } from 'lucide-react';
 import { useCompetitors } from '@/hooks/use-competitors';
 import { CompetitorSelectionModal } from '@/components/competitor-selection-modal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -16,7 +16,6 @@ import { PermissionGuard } from "@/components/permission-guard";
 
 
 export default function PriceComparisonPage() {
-  const router = useRouter();
   const { permissions } = useAuth();
   const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -32,14 +31,13 @@ export default function PriceComparisonPage() {
     <PermissionGuard allowed={permissions.pricing.view}>
         <div className="space-y-6">
         <div className="flex items-center gap-4 mb-2">
-            <Button 
-                onClick={() => router.push('/dashboard/pricing')}
+            <BackButton
+                fallbackHref="/dashboard/pricing"
                 variant="ghost"
-                className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                aria-label="Voltar para gestão de preços e margens"
-            >
-                <ArrowLeft className="w-6 h-6" />
-            </Button>
+                iconOnly
+                className="h-auto w-auto rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
+                ariaLabel="Voltar para gestão de preços e margens"
+            />
             <div>
                 <h1 className="text-3xl font-bold">Estudo de preço</h1>
                 <p className="text-sm text-muted-foreground">Voltar para gestão de preços e margens</p>

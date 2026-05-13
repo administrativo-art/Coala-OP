@@ -9,7 +9,6 @@ import { GoalsProvider } from '@/components/goals-provider';
 
 const navItems = [
   { label: 'Acompanhamento', href: '/dashboard/goals/tracking', icon: TrendingUp, requireManage: false },
-  { label: 'Cadastro', href: '/dashboard/goals/registration', icon: ClipboardList, requireManage: true },
   { label: 'Análise', href: '/dashboard/goals/analysis', icon: BarChart2, requireManage: false },
   { label: 'Histórico', href: '/dashboard/goals/history', icon: History, requireManage: false },
 ];

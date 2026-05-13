@@ -34,6 +34,7 @@ interface SectionColor {
 interface NavSection {
   key: string;
   label: string;
+  icon: React.ComponentType<{ className?: string }>;
   items: NavItem[];
   color: SectionColor;
 }
@@ -64,12 +65,14 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const { user, permissions, logout } = useAuth();
   const { pendingTaskCount } = useAllTasks();
   const canAccessPurchasing = canViewPurchasing(permissions);
+  const [hoverExpanded, setHoverExpanded] = useState(false);
 
   const navSections = useMemo((): NavSection[] => {
     const all: NavSection[] = [
       {
         key: "ops",
         label: "Operacional",
+        icon: LayoutGrid,
         color: SECTION_COLORS.ops,
         items: [
           { label: "Painel de Operações", href: "/dashboard/operations", icon: LayoutGrid, show: permissions.dashboard.operational },
@@ -83,6 +86,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       {
         key: "com",
         label: "Comercial",
+        icon: Target,
         color: SECTION_COLORS.com,
         items: [
           { label: "Painel Comercial", href: "/dashboard/commercial", icon: LayoutGrid, show: permissions.dashboard.pricing || permissions.dashboard.technicalSheets },
@@ -93,6 +97,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       {
         key: "dp",
         label: "Pessoal",
+        icon: Users,
         color: SECTION_COLORS.dp,
         items: [
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
@@ -105,6 +110,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       {
         key: "midia",
         label: "Marketing",
+        icon: MonitorPlay,
         color: SECTION_COLORS.midia,
         items: [
           { label: "Coala Signage", href: "/dashboard/signage", icon: MonitorPlay, show: permissions.signage?.view || permissions.signage?.manage },
@@ -113,6 +119,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       {
         key: "fin",
         label: "Financeiro",
+        icon: Wallet,
         color: SECTION_COLORS.fin,
         items: [
           { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
@@ -125,6 +132,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       {
         key: "cfg",
         label: "Configurações",
+        icon: Settings,
         color: SECTION_COLORS.cfg,
         items: [
           { label: "Configurações", href: "/dashboard/settings", icon: Settings, show: permissions.settings.view },
@@ -164,6 +172,21 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
     return item.href === activeHref;
   }
 
+  const activeSectionKey = useMemo(
+    () => navSections.find((section) => section.items.some(isItemActive))?.key ?? null,
+    [activeHref, navSections]
+  );
+
+  useEffect(() => {
+    if (!activeSectionKey) return;
+    setOpenSections((prev) => {
+      if (prev.has(activeSectionKey)) return prev;
+      const next = new Set(prev);
+      next.add(activeSectionKey);
+      return next;
+    });
+  }, [activeSectionKey]);
+
   // Keyboard: close drawer on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onOpenChange(false); };
@@ -180,6 +203,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const userName = user?.username ?? user?.email?.split("@")[0] ?? "Usuário";
   const userEmail = user?.email ?? "";
   const userInitial = (user?.username?.[0] ?? user?.email?.[0] ?? "U").toUpperCase();
+  const expanded = open || hoverExpanded;
 
   return (
     <>
@@ -195,21 +219,33 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
 
       {/* Sidebar */}
       <aside
+        onMouseEnter={() => setHoverExpanded(true)}
+        onMouseLeave={() => setHoverExpanded(false)}
         className={cn(
           "fixed left-0 top-0 bottom-0 z-50 flex flex-col overflow-hidden border-r transition-all duration-300",
           open
             ? "translate-x-0 pointer-events-auto"
             : "-translate-x-full pointer-events-none lg:translate-x-0 lg:pointer-events-auto"
         )}
-        style={{ width: 256, background: "#ffffff" }}
+        style={{ width: expanded ? 256 : 72, background: "#ffffff" }}
       >
         {/* Logo area */}
-        <div className="relative flex-shrink-0 px-4 pt-4 pb-3">
-          <img
-            src={brand.logo}
-            alt={brand.name}
-            style={{ height: 130, width: "100%", objectFit: "cover", objectPosition: "center" }}
-          />
+        <div className={cn("relative flex-shrink-0 pt-4 pb-3", expanded ? "px-4" : "px-3")}>
+          {expanded ? (
+            <img
+              src={brand.logo}
+              alt={brand.name}
+              style={{ height: 130, width: "100%", objectFit: "cover", objectPosition: "center" }}
+            />
+          ) : (
+            <div
+              className="mx-auto grid h-11 w-11 place-items-center rounded-2xl text-lg font-black text-white shadow-sm"
+              style={{ background: "linear-gradient(135deg, #e0528d, #56b6d1)" }}
+              title={brand.name}
+            >
+              C
+            </div>
+          )}
           <button
             onClick={() => onOpenChange(false)}
             className="absolute right-3 top-3 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
@@ -233,104 +269,145 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
             style={{
-              paddingLeft: 12,
-              paddingRight: 12,
+              justifyContent: expanded ? "flex-start" : "center",
+              paddingLeft: expanded ? 12 : 0,
+              paddingRight: expanded ? 12 : 0,
               borderLeft: pathname === "/dashboard" ? "3px solid #6366f1" : "3px solid transparent",
             }}
+            title="Painel Central"
           >
             <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
-            <span>Painel Central</span>
+            {expanded ? <span>Painel Central</span> : null}
           </Link>
         </div>
 
         {/* Accordion nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-1">
-          {navSections.map(section => {
-            const isOpen = openSections.has(section.key);
-            const hasActive = section.items.some(isItemActive);
+          {expanded ? (
+            navSections.map(section => {
+              const isOpen = openSections.has(section.key);
+              const hasActive = section.items.some(isItemActive);
 
-            return (
-              <div key={section.key} className="mb-1">
-                {/* Accordion trigger */}
-                <button
-                  type="button"
-                  onClick={() => toggleSection(section.key)}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground"
-                  style={{ color: hasActive ? section.color.text : undefined }}
-                >
-                  <span className="flex-1 text-left">{section.label}</span>
-                  <ChevronDown
-                    className={cn("h-3 w-3 transition-transform duration-200", isOpen && "rotate-180")}
-                  />
-                </button>
+              return (
+                <div key={section.key} className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(section.key)}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground"
+                    style={{ color: hasActive ? section.color.text : undefined }}
+                  >
+                    <span className="flex-1 text-left">{section.label}</span>
+                    <ChevronDown
+                      className={cn("h-3 w-3 transition-transform duration-200", isOpen && "rotate-180")}
+                    />
+                  </button>
 
-                {/* Sub-items */}
-                {isOpen && (
-                  <div className="mt-0.5 space-y-px">
-                    {section.items.map(item => {
-                      const Icon = item.icon;
-                      const active = isItemActive(item);
-                      const badgeColors = item.badge ? BADGE_COLORS[item.badge.variant] : null;
+                  {isOpen && (
+                    <div className="mt-0.5 space-y-px">
+                      {section.items.map(item => {
+                        const Icon = item.icon;
+                        const active = isItemActive(item);
+                        const badgeColors = item.badge ? BADGE_COLORS[item.badge.variant] : null;
 
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={() => onOpenChange(false)}
-                          className="flex items-center gap-2.5 rounded-lg py-2 text-xs font-medium transition-colors hover:bg-muted"
-                          style={{
-                            paddingLeft: 40,
-                            paddingRight: 10,
-                            borderLeft: active ? `3px solid ${section.color.border}` : "3px solid transparent",
-                            background: active ? section.color.bg : undefined,
-                            color: active ? section.color.text : undefined,
-                          }}
-                        >
-                          <Icon className="h-4 w-4 flex-shrink-0" />
-                          <span className="flex-1">{item.label}</span>
-                          {item.badge && item.badge.count > 0 && badgeColors && (
-                            <span
-                              className="ml-auto rounded-full px-1.5 py-px text-[9px] font-bold"
-                              style={{ background: badgeColors.bg, color: badgeColors.color }}
-                            >
-                              {item.badge.count}
-                            </span>
-                          )}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => onOpenChange(false)}
+                            className="flex items-center gap-2.5 rounded-lg py-2 text-xs font-medium transition-colors hover:bg-muted"
+                            style={{
+                              paddingLeft: 40,
+                              paddingRight: 10,
+                              borderLeft: active ? `3px solid ${section.color.border}` : "3px solid transparent",
+                              background: active ? section.color.bg : undefined,
+                              color: active ? section.color.text : undefined,
+                            }}
+                          >
+                            <Icon className="h-4 w-4 flex-shrink-0" />
+                            <span className="flex-1">{item.label}</span>
+                            {item.badge && item.badge.count > 0 && badgeColors && (
+                              <span
+                                className="ml-auto rounded-full px-1.5 py-px text-[9px] font-bold"
+                                style={{ background: badgeColors.bg, color: badgeColors.color }}
+                              >
+                                {item.badge.count}
+                              </span>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            <div className="space-y-2">
+              {navSections.map((section) => {
+                const Icon = section.icon;
+                const active = section.items.some(isItemActive);
+                const badgeCount = section.items.reduce((sum, item) => sum + (item.badge?.count || 0), 0);
+
+                return (
+                  <button
+                    key={section.key}
+                    type="button"
+                    onClick={() => {
+                      setOpenSections((prev) => {
+                        const next = new Set(prev);
+                        next.add(section.key);
+                        return next;
+                      });
+                      setHoverExpanded(true);
+                    }}
+                    className="relative flex h-10 w-full items-center justify-center rounded-xl transition-colors hover:bg-muted"
+                    style={{
+                      borderLeft: active ? `3px solid ${section.color.border}` : "3px solid transparent",
+                      background: active ? section.color.bg : undefined,
+                      color: active ? section.color.text : undefined,
+                    }}
+                    title={section.label}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {badgeCount > 0 && (
+                      <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </nav>
 
         <div className="mx-4 h-px bg-border mb-2" />
 
         {/* Footer */}
-        <div className="flex-shrink-0 px-4 pb-4">
-          <div className="flex items-center gap-2.5">
+        <div className={cn("flex-shrink-0 pb-4", expanded ? "px-4" : "px-3")}>
+          <div className={cn("flex items-center", expanded ? "gap-2.5" : "justify-center")}>
             <div
               className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
               style={{ background: "linear-gradient(135deg, #f43f5e, #14b8a6)" }}
             >
               {userInitial}
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold leading-tight">{userName}</p>
-              <p className="truncate text-[10px] text-muted-foreground leading-tight">{userEmail}</p>
-            </div>
-            <div className="flex items-center gap-1">
-              <ThemeToggle />
-              <button
-                onClick={logout}
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Sair"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            {expanded ? (
+              <>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold leading-tight">{userName}</p>
+                  <p className="truncate text-[10px] text-muted-foreground leading-tight">{userEmail}</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <ThemeToggle />
+                  <button
+                    onClick={logout}
+                    className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Sair"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
       </aside>

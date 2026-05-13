@@ -3,8 +3,9 @@
 import { useState, useMemo } from 'react';
 import { useGoals } from '@/contexts/goals-context';
 import { useAuth } from '@/hooks/use-auth';
+import { useKiosks } from '@/hooks/use-kiosks';
 import { useToast } from '@/hooks/use-toast';
-import { type GoalPeriodDoc } from '@/types';
+import { type EmployeeGoal, type GoalPeriodDoc } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,8 +21,9 @@ interface AddEmployeeGoalModalProps {
 }
 
 export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployeeGoalModalProps) {
-  const { employeeGoals, addEmployeeGoal, deleteEmployeeGoal } = useGoals();
+  const { employeeGoals, addEmployeeGoal, deleteEmployeeGoal, rebalancePeriodEmployeeGoals } = useGoals();
   const { users } = useAuth();
+  const { kiosks } = useKiosks();
   const { toast } = useToast();
 
   const [selectedEmployee, setSelectedEmployee] = useState('');
@@ -48,6 +50,24 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
   );
 
   const getUserName = (id: string) => users.find(u => u.id === id)?.username ?? id;
+
+  async function rebalanceWith(nextGoals: EmployeeGoal[]) {
+    if (!period) return;
+    const kioskName = kiosks.find(kiosk => kiosk.id === period.kioskId)?.name;
+    await rebalancePeriodEmployeeGoals(
+      period,
+      nextGoals,
+      kioskName ? { [period.kioskId]: kioskName } : undefined
+    );
+  }
+
+  async function handleDelete(goal: EmployeeGoal) {
+    if (!period) return;
+    setLoading(true);
+    await deleteEmployeeGoal(goal.id);
+    await rebalanceWith(periodEmployeeGoals.filter(item => item.id !== goal.id));
+    setLoading(false);
+  }
 
   // ── With shifts ─────────────────────────────────────────────────────────────
 
@@ -79,7 +99,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
     const shift = period.shifts?.find(s => s.id === shiftId);
     if (!shift) return;
     setLoading(true);
-    await addEmployeeGoal({
+    const employeeGoalData = {
       periodId: period.id,
       employeeId: empId,
       kioskId: period.kioskId,
@@ -88,7 +108,9 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
       targetValue: period.targetValue * shift.fraction * fractionNum,
       currentValue: 0,
       distributionMode: period.distributionMode ?? 'calendar_days',
-    });
+    } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
+    const id = await addEmployeeGoal(employeeGoalData);
+    if (id) await rebalanceWith([...periodEmployeeGoals, { id, ...employeeGoalData } as EmployeeGoal]);
     toast({ title: 'Colaborador adicionado ao turno.' });
     setNewEmp(prev => ({ ...prev, [shiftId]: '' }));
     setNewPct(prev => ({ ...prev, [shiftId]: '' }));
@@ -120,7 +142,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
       return;
     }
     setLoading(true);
-    await addEmployeeGoal({
+    const employeeGoalData = {
       periodId: period.id,
       employeeId: selectedEmployee,
       kioskId: period.kioskId,
@@ -128,7 +150,9 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
       targetValue: period.targetValue * fractionNum,
       currentValue: 0,
       distributionMode: period.distributionMode ?? 'calendar_days',
-    });
+    } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
+    const id = await addEmployeeGoal(employeeGoalData);
+    if (id) await rebalanceWith([...periodEmployeeGoals, { id, ...employeeGoalData } as EmployeeGoal]);
     toast({ title: 'Colaborador adicionado à meta.' });
     setSelectedEmployee('');
     setFraction('');
@@ -191,7 +215,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
                           <Badge variant="secondary">
                             {(eg.fraction * 100).toFixed(0)}% do turno — Alvo: R$ {eg.targetValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </Badge>
-                          <button onClick={() => deleteEmployeeGoal(eg.id)} className="text-muted-foreground hover:text-destructive">
+                          <button onClick={() => handleDelete(eg)} className="text-muted-foreground hover:text-destructive">
                             <X className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -248,7 +272,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">{(eg.fraction * 100).toFixed(0)}% — Alvo: R$ {eg.targetValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Badge>
-                      <button onClick={() => deleteEmployeeGoal(eg.id)} className="text-muted-foreground hover:text-destructive">
+                      <button onClick={() => handleDelete(eg)} className="text-muted-foreground hover:text-destructive">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>

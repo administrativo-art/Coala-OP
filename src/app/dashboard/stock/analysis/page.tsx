@@ -1,9 +1,10 @@
 "use client";
 
 import Link from 'next/link';
+import { BackButton } from '@/components/navigation/back-button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight, RefreshCw, Truck } from 'lucide-react';
+import { ArrowRight, RefreshCw, Truck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -33,13 +34,7 @@ export default function RepositionHubPage() {
     return (
         <div className="w-full space-y-6">
             <div className="mb-4">
-                <Button 
-                    onClick={() => router.push('/dashboard/stock')}
-                    variant="outline"
-                >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Voltar para gestão de estoque
-                </Button>
+                <BackButton fallbackHref="/dashboard/stock" label="Voltar para gestão de estoque" />
             </div>
             <div className="space-y-1">
                 <h1 className="text-3xl font-bold">Reposição de Estoque</h1>

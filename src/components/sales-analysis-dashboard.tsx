@@ -675,8 +675,29 @@ function SalesAnalysisDashboardInner() {
     const today = new Date();
     const monthStart = format(startOfMonth(today), 'yyyy-MM-dd');
     const todayStr = format(today, 'yyyy-MM-dd');
+    const revTemplateIds = new Set(templates.filter(t => (t as any).type === 'revenue' || !(t as any).type).map(t => t.id));
 
-    // Map: `empId|||kioskId` → accumulated daily revenue (dedup by date)
+    const mainRevenuePeriodByKiosk = new Map<string, string>();
+    const kioskIds = new Set(periods.map(p => p.kioskId));
+    for (const kioskId of kioskIds) {
+      if (selectedKioskId !== 'all' && kioskId !== selectedKioskId) continue;
+
+      const mainPeriod = periods
+        .filter(p => {
+          if (p.kioskId !== kioskId) return false;
+          if (p.status !== 'active') return false;
+          if (revTemplateIds.size > 0 && !revTemplateIds.has(p.templateId)) return false;
+
+          const startsAt = format(p.startDate.toDate(), 'yyyy-MM-dd');
+          const endsAt = format(p.endDate.toDate(), 'yyyy-MM-dd');
+          return startsAt <= todayStr && endsAt >= monthStart;
+        })
+        .sort((a, b) => (b.targetValue || 0) - (a.targetValue || 0))[0];
+
+      if (mainPeriod) mainRevenuePeriodByKiosk.set(kioskId, mainPeriod.id);
+    }
+
+    // Map: `empId|||kioskId` -> accumulated daily revenue for the current revenue period.
     const byEmpKiosk = new Map<string, {
       employeeId: string; kioskId: string;
       dailyRev: Record<string, number>;
@@ -686,6 +707,7 @@ function SalesAnalysisDashboardInner() {
     for (const eg of employeeGoals) {
       if (selectedKioskId !== 'all' && eg.kioskId !== selectedKioskId) continue;
       if (!eg.dailyProgress) continue;
+      if (mainRevenuePeriodByKiosk.get(eg.kioskId) !== eg.periodId) continue;
 
       // Compute UP proportional: period.upValue * (eg.targetValue / period.targetValue)
       const period = periods.find(p => p.id === eg.periodId);
@@ -697,15 +719,16 @@ function SalesAnalysisDashboardInner() {
       if (!byEmpKiosk.has(key)) {
         byEmpKiosk.set(key, { employeeId: eg.employeeId, kioskId: eg.kioskId, dailyRev: {}, targetValue: eg.targetValue, upValue });
       } else {
-        // Accumulate targets across multiple active periods for same employee+kiosk
+        // Same period can contain multiple goals for the employee, for example split shifts.
         const entry = byEmpKiosk.get(key)!;
         entry.targetValue += eg.targetValue;
         entry.upValue += upValue;
       }
       const entry = byEmpKiosk.get(key)!;
       for (const [date, amount] of Object.entries(eg.dailyProgress)) {
-        if (date >= monthStart && date <= todayStr && entry.dailyRev[date] === undefined)
-          entry.dailyRev[date] = amount;
+        if (date >= monthStart && date <= todayStr) {
+          entry.dailyRev[date] = (entry.dailyRev[date] ?? 0) + amount;
+        }
       }
     }
 
@@ -726,7 +749,7 @@ function SalesAnalysisDashboardInner() {
       })
       .filter(c => c.monthRevenue > 0)
       .sort((a, b) => b.monthRevenue - a.monthRevenue);
-  }, [employeeGoals, periods, selectedKioskId, users, kiosks]);
+  }, [employeeGoals, periods, templates, selectedKioskId, users, kiosks]);
 
   const handleSyncPDVLegal = async (retroactive = false) => {
     setIsSyncing(true);

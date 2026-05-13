@@ -1,8 +1,6 @@
 "use client";
 
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { BackButton } from '@/components/navigation/back-button';
 import { PermissionGuard } from '@/components/permission-guard';
 import { DPRuntimeGuard } from '@/components/dp-runtime-guard';
 import { useAuth } from '@/hooks/use-auth';
@@ -14,21 +12,18 @@ const KioskManagement = dynamic(
 );
 
 export default function UnitsPage() {
-  const router = useRouter();
   const { permissions } = useAuth();
 
   return (
     <PermissionGuard allowed={permissions.settings.view}>
       <div className="w-full space-y-6">
         <div className="flex items-center gap-4 mb-2">
-          <Button
-            onClick={() => router.back()}
+          <BackButton
+            fallbackHref="/dashboard/settings"
             variant="ghost"
-            className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-            aria-label="Voltar"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </Button>
+            iconOnly
+            className="h-auto w-auto rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
+          />
           <div>
             <h1 className="text-3xl font-bold">Unidades</h1>
             <p className="text-sm text-muted-foreground">

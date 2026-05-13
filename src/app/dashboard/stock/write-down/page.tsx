@@ -1,24 +1,20 @@
 
 "use client";
 
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/navigation/back-button';
 import { StockWriteDown } from '@/components/stock-write-down';
-import { ArrowLeft } from 'lucide-react';
 
 export default function StockWriteDownPage() {
-    const router = useRouter();
     return (
         <div className="space-y-4">
             <div className="flex items-center gap-4 mb-2">
-                <Button 
-                    onClick={() => router.push('/dashboard/stock')}
+                <BackButton
+                    fallbackHref="/dashboard/stock"
                     variant="ghost"
-                    className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                    aria-label="Voltar para gestão de estoque"
-                >
-                    <ArrowLeft className="w-6 h-6" />
-                </Button>
+                    iconOnly
+                    className="h-auto w-auto rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
+                    ariaLabel="Voltar para gestão de estoque"
+                />
                 <div>
                     <h1 className="text-3xl font-bold">Baixa de Estoque</h1>
                     <p className="text-sm text-muted-foreground">Voltar para gestão de estoque</p>

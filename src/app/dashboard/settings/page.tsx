@@ -144,10 +144,10 @@ function EmptySection({ label }: { label: string }) {
 function OperationalCadastrosPanel() {
   return (
     <Tabs defaultValue="items" className="w-full space-y-4">
-      <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="items">Insumos</TabsTrigger>
-        <TabsTrigger value="base-products">Produtos Base</TabsTrigger>
-        <TabsTrigger value="entities">Pessoas & Empresas</TabsTrigger>
+      <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl border bg-background p-1 shadow-sm">
+        <TabsTrigger value="items" className="rounded-xl px-4 py-2 text-sm font-medium">Insumos</TabsTrigger>
+        <TabsTrigger value="base-products" className="rounded-xl px-4 py-2 text-sm font-medium">Produtos Base</TabsTrigger>
+        <TabsTrigger value="entities" className="rounded-xl px-4 py-2 text-sm font-medium">Pessoas & Empresas</TabsTrigger>
       </TabsList>
       <TabsContent value="items">
         <ItemManagement />
@@ -338,18 +338,18 @@ function SegmentedTabs<T extends { value: string; label: string; icon?: React.Re
 }) {
   return (
     <div className="max-w-full overflow-x-auto">
-      <div className="inline-flex min-w-max rounded-md border border-border bg-background">
+      <div className="inline-flex min-w-max rounded-2xl border border-border bg-background p-1 shadow-sm">
         {tabs.map((tab) => (
           <button
             key={tab.value}
             type="button"
             onClick={() => onChange(tab.value)}
             className={cn(
-              "flex items-center gap-1.5 whitespace-nowrap border-r border-border transition-all last:border-r-0",
-              withIcons ? "px-4 py-2 text-xs" : "px-3.5 py-1.5 text-xs",
+              "flex items-center gap-2 whitespace-nowrap rounded-xl transition-all",
+              withIcons ? "px-4 py-2.5 text-sm font-semibold" : "px-4 py-2 text-sm font-medium",
               value === tab.value
-                ? "bg-[#FBEAF0] font-medium text-[#993556]"
-                : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                ? "bg-[#FBEAF0] text-[#993556] shadow-sm"
+                : "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             {withIcons ? tab.icon : null}

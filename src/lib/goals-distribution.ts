@@ -22,6 +22,7 @@ function extractShiftTimes(label: string): { start: string; end: string } | null
 export interface GoalDistributionSnapshot {
   periodDateKeysById: Record<string, string[]>;
   employeeDateKeysByGoalId: Record<string, string[]>;
+  goalIdsByPeriodShiftAndDate: Record<string, string[]>;
   // key: `${kioskId}__${userId}` — scoped to kiosk so employees in multiple units don't bleed over
   workedDaysByKioskAndUser: Record<string, string[]>;
   shiftLabelByKioskUserAndDate: Record<string, Record<string, string>>;
@@ -99,6 +100,7 @@ export async function loadGoalDistributionSnapshot(
   const empty: GoalDistributionSnapshot = {
     periodDateKeysById: {},
     employeeDateKeysByGoalId: {},
+    goalIdsByPeriodShiftAndDate: {},
     workedDaysByKioskAndUser: {},
     shiftLabelByKioskUserAndDate: {},
   };
@@ -125,6 +127,7 @@ export async function loadGoalDistributionSnapshot(
 
   const periodDateSetsById = new Map<string, Set<string>>();
   const employeeDateSetsByGoalId = new Map<string, Set<string>>();
+  const goalIdsByPeriodShiftAndDate = new Map<string, Set<string>>();
   const workedDateSetsByKioskAndUser = new Map<string, Set<string>>();
   const shiftLabelsByKioskUserAndDate = new Map<string, Record<string, string>>();
 
@@ -237,6 +240,15 @@ export async function loadGoalDistributionSnapshot(
       let goalSet = employeeDateSetsByGoalId.get(goal.id);
       if (!goalSet) { goalSet = new Set(); employeeDateSetsByGoalId.set(goal.id, goalSet); }
       goalSet.add(shift.date);
+
+      const shiftKey = goal.shiftId ?? '__legacy__';
+      const periodShiftDateKey = `${goalPeriod.id}__${shiftKey}__${shift.date}`;
+      let dayGoalSet = goalIdsByPeriodShiftAndDate.get(periodShiftDateKey);
+      if (!dayGoalSet) {
+        dayGoalSet = new Set();
+        goalIdsByPeriodShiftAndDate.set(periodShiftDateKey, dayGoalSet);
+      }
+      dayGoalSet.add(goal.id);
     }
   }
 
@@ -261,11 +273,91 @@ export async function loadGoalDistributionSnapshot(
     employeeDateKeysByGoalId: Object.fromEntries(
       Array.from(employeeDateSetsByGoalId.entries()).map(([id, dates]) => [id, Array.from(dates).sort()])
     ),
+    goalIdsByPeriodShiftAndDate: Object.fromEntries(
+      Array.from(goalIdsByPeriodShiftAndDate.entries()).map(([key, goalIds]) => [key, Array.from(goalIds).sort()])
+    ),
     workedDaysByKioskAndUser: Object.fromEntries(
       Array.from(workedDateSetsByKioskAndUser.entries()).map(([key, dates]) => [key, Array.from(dates).sort()])
     ),
     shiftLabelByKioskUserAndDate: Object.fromEntries(shiftLabelsByKioskUserAndDate.entries()),
   };
+}
+
+export function calculateScheduledEmployeeGoalTargets(
+  period: GoalPeriodDoc,
+  employeeGoals: EmployeeGoal[],
+  distributionSnapshot?: GoalDistributionSnapshot | null
+) {
+  if (resolveGoalDistributionMode(period) !== 'scheduled_days') {
+    return {};
+  }
+
+  const result: Record<string, { targetValue: number; fraction: number }> = {};
+  const goalsById = new Map(employeeGoals.map(goal => [goal.id, goal]));
+  const goalIdsByPeriodShiftAndDate = distributionSnapshot?.goalIdsByPeriodShiftAndDate ?? {};
+
+  const addShare = (goalId: string, amount: number) => {
+    const current = result[goalId]?.targetValue ?? 0;
+    result[goalId] = {
+      targetValue: current + amount,
+      fraction: result[goalId]?.fraction ?? 0,
+    };
+  };
+
+  const applyFraction = (goal: EmployeeGoal, targetValue: number, shiftFraction: number) => {
+    const denominator = period.targetValue * shiftFraction;
+    result[goal.id] = {
+      targetValue,
+      fraction: denominator > 0 ? targetValue / denominator : goal.fraction,
+    };
+  };
+
+  if (period.shifts?.length) {
+    for (const shift of period.shifts) {
+      const shiftGoals = employeeGoals.filter(goal => goal.shiftId === shift.id);
+      if (shiftGoals.length === 0) continue;
+
+      const shiftDayEntries = Object.entries(goalIdsByPeriodShiftAndDate)
+        .filter(([key]) => key.startsWith(`${period.id}__${shift.id}__`));
+
+      if (shiftDayEntries.length === 0) continue;
+
+      const shiftTarget = period.targetValue * shift.fraction;
+      const dailyShiftTarget = shiftTarget / shiftDayEntries.length;
+
+      for (const [, goalIds] of shiftDayEntries) {
+        if (goalIds.length === 0) continue;
+        const dailyShare = dailyShiftTarget / goalIds.length;
+        goalIds.forEach(goalId => addShare(goalId, dailyShare));
+      }
+
+      for (const goal of shiftGoals) {
+        applyFraction(goal, result[goal.id]?.targetValue ?? 0, shift.fraction);
+      }
+    }
+  } else {
+    const dayEntries = Object.entries(goalIdsByPeriodShiftAndDate)
+      .filter(([key]) => key.startsWith(`${period.id}____legacy____`));
+    if (dayEntries.length === 0) return result;
+
+    const dailyTarget = period.targetValue / dayEntries.length;
+    for (const [, goalIds] of dayEntries) {
+      if (goalIds.length === 0) continue;
+      const dailyShare = dailyTarget / goalIds.length;
+      goalIds.forEach(goalId => addShare(goalId, dailyShare));
+    }
+
+    for (const goal of employeeGoals) {
+      const targetValue = result[goal.id]?.targetValue ?? 0;
+      applyFraction(goal, targetValue, 1);
+    }
+  }
+
+  for (const goalId of Object.keys(result)) {
+    if (!goalsById.has(goalId)) delete result[goalId];
+  }
+
+  return result;
 }
 
 export function buildGoalClosureSnapshot(

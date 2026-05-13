@@ -10,8 +10,9 @@ import { ptBR } from 'date-fns/locale';
 import { format } from 'date-fns';
 import { useGoals } from '@/contexts/goals-context';
 import { useAuth } from '@/hooks/use-auth';
+import { useKiosks } from '@/hooks/use-kiosks';
 import { useToast } from '@/hooks/use-toast';
-import { type GoalTemplate, type GoalShift } from '@/types';
+import { type EmployeeGoal, type GoalPeriodDoc, type GoalTemplate, type GoalShift } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
@@ -79,8 +80,9 @@ interface InstantiateGoalPeriodModalProps {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPeriodCreated }: InstantiateGoalPeriodModalProps) {
-  const { addPeriod, addEmployeeGoal } = useGoals();
+  const { addPeriod, addEmployeeGoal, rebalancePeriodEmployeeGoals } = useGoals();
   const { users } = useAuth();
+  const { kiosks } = useKiosks();
   const { toast } = useToast();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -185,7 +187,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
       id: s.id, label: s.label, fraction: (parseFloat(s.pct) || 0) / 100,
     }));
 
-    const periodId = await addPeriod({
+    const periodData = {
       templateId: template.id,
       kioskId: template.kioskId,
       startDate: Timestamp.fromDate(start),
@@ -197,7 +199,9 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
       distributionMode: 'scheduled_days',
       shifts: goalShifts,
       status: 'active',
-    });
+    } satisfies Omit<GoalPeriodDoc, 'id' | 'createdAt' | 'updatedAt'>;
+
+    const periodId = await addPeriod(periodData);
 
     if (!periodId) {
       toast({ title: 'Erro ao criar período', variant: 'destructive' });
@@ -207,17 +211,31 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
 
     let savedCount = 0;
     let failCount = 0;
+    const createdGoals: EmployeeGoal[] = [];
     for (const a of usedAssignments) {
       const shift = goalShifts.find(s => s.id === a.shiftId);
       if (!shift) continue;
       const withinFraction = (parseFloat(a.pct) || 0) / 100;
-      const egId = await addEmployeeGoal({
+      const employeeGoalData = {
         periodId, employeeId: a.employeeId, kioskId: template.kioskId,
         shiftId: a.shiftId, fraction: withinFraction,
         targetValue: data.targetValue * shift.fraction * withinFraction,
         currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
-      });
-      if (egId) savedCount++; else failCount++;
+      } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
+      const egId = await addEmployeeGoal(employeeGoalData);
+      if (egId) {
+        savedCount++;
+        createdGoals.push({ id: egId, ...employeeGoalData } as EmployeeGoal);
+      } else failCount++;
+    }
+
+    if (createdGoals.length > 0) {
+      const kioskName = kiosks.find(kiosk => kiosk.id === template.kioskId)?.name;
+      await rebalancePeriodEmployeeGoals(
+        { id: periodId, ...periodData } as GoalPeriodDoc,
+        createdGoals,
+        kioskName ? { [template.kioskId]: kioskName } : undefined
+      );
     }
 
     if (failCount > 0) {

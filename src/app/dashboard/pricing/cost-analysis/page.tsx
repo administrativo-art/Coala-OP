@@ -1,29 +1,26 @@
 "use client";
 
 import { PricingSimulator } from '@/components/pricing-simulator';
+import { BackButton } from '@/components/navigation/back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, DollarSign } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { DollarSign } from 'lucide-react';
 import { useAuth } from "@/hooks/use-auth";
 import { PermissionGuard } from "@/components/permission-guard";
 
 export default function CostAnalysisPage() {
-  const router = useRouter();
   const { permissions } = useAuth();
 
   return (
     <PermissionGuard allowed={permissions.pricing.view}>
         <div className="space-y-6">
         <div className="flex items-center gap-4 mb-2">
-            <Button 
-                onClick={() => router.push('/dashboard/pricing')}
+            <BackButton
+                fallbackHref="/dashboard/pricing"
                 variant="ghost"
-                className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
-                aria-label="Voltar para gestão de preços e margens"
-            >
-                <ArrowLeft className="w-6 h-6" />
-            </Button>
+                iconOnly
+                className="h-auto w-auto rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
+                ariaLabel="Voltar para gestão de preços e margens"
+            />
             <div>
                 <h1 className="text-3xl font-bold">Ficha de custo e margem</h1>
                 <p className="text-sm text-muted-foreground">Voltar para gestão de preços e margens</p>
