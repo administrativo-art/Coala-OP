@@ -501,7 +501,7 @@ export function CatalogoView() {
     ? `${visibleProducts.length} resultado${visibleProducts.length !== 1 ? 's' : ''}`
     : selectedLine
     ? selectedLine.name
-    : 'Cardápio';
+    : 'Fichas Técnicas';
 
   return (
     <>

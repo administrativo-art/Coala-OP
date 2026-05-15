@@ -40,7 +40,7 @@ export function CatalogoQRPanel() {
         </head>
         <body>
           <div class="card">
-            <p class="title">Cardápio de Mercadorias</p>
+            <p class="title">Fichas Técnicas</p>
             <img src="${dataUrl}" alt="QR Code" />
             <p class="subtitle">Escaneie para consultar o modo de montagem e ficha técnica</p>
             <p class="url">${CATALOG_URL}</p>
