@@ -14,12 +14,17 @@ import {
   UtensilsCrossed,
   Layers,
   ChevronRight,
+  FileText,
+  Award,
+  Video,
+  LayoutDashboard,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Step = { id: string; text: string; quantity?: number; unit?: string; imageUrl?: string };
 type Phase = { id: string; name: string; etapas: Step[] };
+type Ingredient = { name: string; quantity: number; unit: string };
 type Product = {
   id: string;
   name: string;
@@ -27,10 +32,12 @@ type Product = {
   imageUrl: string | null;
   preparationTime: number | null;
   portionWeight: number | null;
+  portionTolerance: number | null;
   assemblyInstructions: Phase[];
   qualityStandard: { id: string; text: string }[];
   allergens: { id: string; text: string }[];
   assemblyVideoUrl: string | null;
+  ingredients: Ingredient[];
 };
 type Line = { id: string; name: string; color?: string };
 
@@ -201,7 +208,6 @@ function ProductCard({
 
 function ExpandedPanel({ product, origin, onClose }: { product: Product; origin: DOMRect; onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState<'assembly' | 'quality' | 'allergens'>('assembly');
   const [closing, setClosing] = useState(false);
 
   useEffect(() => {
@@ -235,138 +241,155 @@ function ExpandedPanel({ product, origin, onClose }: { product: Product; origin:
     ], { duration: 380, easing: 'cubic-bezier(0.64, 0, 0.78, 0)', fill: 'forwards' }).finished.then(onClose);
   }, [closing, onClose, origin]);
 
-  const hasAssembly = product.assemblyInstructions.length > 0;
-  const hasQuality = product.qualityStandard.length > 0;
-  const hasAllergens = product.allergens.length > 0;
-
-  const tabs = [
-    { key: 'assembly', label: 'Montagem', show: true },
-    { key: 'quality', label: 'Qualidade', show: hasQuality },
-    { key: 'allergens', label: 'Alérgenos', show: hasAllergens },
-  ].filter(t => t.show);
+  const allergenText = product.allergens.length > 0
+    ? product.allergens.map(a => a.text).join(', ')
+    : 'Nenhum';
 
   return (
     <div
       ref={panelRef}
-      className="fixed inset-0 z-50 flex flex-col bg-white"
-      style={{ opacity: 0, overflowY: 'auto' }}
+      className="fixed inset-0 z-50 bg-white overflow-y-auto"
+      style={{ opacity: 0 }}
     >
-      {/* Sticky header */}
-      <div className="sticky top-0 z-10 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' }}>
+      {/* Sticky top bar */}
+      <div className="sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' }}>
         <button
           onClick={handleClose}
-          className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors px-4 pt-4 pb-2"
+          className="flex items-center gap-1.5 text-white/80 hover:text-white px-4 py-3"
         >
           <ChevronLeft size={20} />
-          <span className="text-sm">Voltar</span>
+          <span className="text-sm font-medium">Voltar</span>
         </button>
-
-        <div className="px-4 pb-4 flex items-end gap-4">
-          <div className="relative rounded-2xl overflow-hidden flex-shrink-0 flex items-center justify-center"
-            style={{ width: 72, height: 72, background: 'rgba(255,255,255,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
-            {product.imageUrl ? (
-              <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="72px" />
-            ) : (
-              <UtensilsCrossed size={32} className="text-white/60" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-white font-bold text-lg leading-tight">{product.name}</h2>
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {product.preparationTime != null && (
-                <span className="flex items-center gap-1 bg-white/15 text-white text-xs px-2 py-0.5 rounded-full font-medium">
-                  <Clock size={10} />{fmtTime(product.preparationTime)}
-                </span>
-              )}
-              {product.portionWeight != null && (
-                <span className="flex items-center gap-1 bg-white/15 text-white text-xs px-2 py-0.5 rounded-full font-medium">
-                  <Weight size={10} />{fmtWeight(product.portionWeight)}
-                </span>
-              )}
-              {product.assemblyVideoUrl && (
-                <a href={product.assemblyVideoUrl} target="_blank" rel="noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  className="flex items-center gap-1 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
-                  <Play size={9} fill="white" />Vídeo
-                </a>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-t border-white/10">
-          {tabs.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
-              className="flex-1 py-3 text-sm font-medium transition-colors relative"
-              style={{ color: tab === t.key ? 'white' : 'rgba(255,255,255,0.45)' }}>
-              {t.label}
-              {tab === t.key && (
-                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 3, background: '#7C3AED' }} />
-              )}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 p-4 space-y-4" style={{ background: 'hsl(220 20% 97%)', paddingBottom: 32 }}>
-        {/* Assembly */}
-        {tab === 'assembly' && (
-          <>
-            {!hasAssembly ? (
-              <div className="flex flex-col items-center py-16 text-gray-400">
-                <Layers size={36} className="mb-3 opacity-30" />
-                <p className="text-sm">Sem instruções de montagem cadastradas</p>
+      <div className="max-w-2xl mx-auto px-4 pb-10 space-y-5 pt-4">
+
+        {/* Reference image */}
+        {product.imageUrl ? (
+          <div className="rounded-2xl overflow-hidden relative" style={{ aspectRatio: '16/7' }}>
+            <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="100vw" />
+            <div className="absolute inset-0 flex items-end p-4" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 60%)' }}>
+              <div>
+                <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Foto de Referência</p>
+                <h2 className="text-white font-black text-xl leading-tight">{product.name}</h2>
               </div>
-            ) : (
-              product.assemblyInstructions.map((phase, pi) => (
-                <div key={phase.id} className="bg-white rounded-2xl overflow-hidden shadow-sm">
-                  <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#1a1a2e' }}>
-                    <span className="text-xs font-bold rounded-full px-2 py-0.5" style={{ background: '#7C3AED', color: 'white' }}>
-                      FASE {pi + 1}
-                    </span>
-                    <span className="text-white font-semibold text-sm">{phase.name}</span>
-                  </div>
-                  <div className="divide-y divide-gray-50">
-                    {phase.etapas.map((step, si) => (
-                      <div key={step.id} className="flex gap-3 p-4 items-start">
-                        <div className="flex-shrink-0 rounded-full text-xs font-bold flex items-center justify-center text-white mt-0.5"
-                          style={{ width: 24, height: 24, background: '#7C3AED', minWidth: 24 }}>
-                          {si + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-gray-800 text-sm leading-relaxed">{step.text}</p>
-                          {step.quantity != null && step.unit && (
-                            <p className="text-xs text-purple-600 font-medium mt-0.5">{step.quantity} {step.unit}</p>
-                          )}
-                        </div>
-                        {step.imageUrl && (
-                          <div className="flex-shrink-0 relative rounded-xl overflow-hidden" style={{ width: 64, height: 64 }}>
-                            <Image src={step.imageUrl} alt={`Etapa ${si + 1}`} fill className="object-cover" sizes="64px" />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-          </>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border-2 border-dashed border-gray-200 h-32 flex flex-col items-center justify-center bg-gray-50 text-gray-400">
+            <UtensilsCrossed size={28} className="mb-1 opacity-20" />
+            <p className="text-xs font-medium">{product.name}</p>
+          </div>
         )}
 
-        {/* Quality */}
-        {tab === 'quality' && (
-          <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
-            <div className="px-4 py-3" style={{ background: '#1a1a2e' }}>
-              <span className="text-white font-semibold text-sm flex items-center gap-2">
-                <CheckCircle2 size={16} className="text-green-400" />Padrão de Qualidade
-              </span>
+        {/* Metrics grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white rounded-2xl p-4 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
+            <Clock size={18} className="text-blue-500" />
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide text-center">Tempo de Montagem</p>
+            <p className="text-base font-black text-gray-900">
+              {product.preparationTime ? fmtTime(product.preparationTime) : '—'}
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl p-4 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
+            <Weight size={18} className="text-pink-500" />
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide text-center">Peso da Porção</p>
+            <p className="text-base font-black text-gray-900">
+              {product.portionWeight ? fmtWeight(product.portionWeight) : '—'}
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl p-4 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
+            <Award size={18} className="text-orange-500" />
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide text-center">Tolerância</p>
+            <p className="text-base font-black text-gray-900">
+              {product.portionTolerance ? `±${product.portionTolerance}g` : '—'}
+            </p>
+          </div>
+          <div className="bg-orange-50 rounded-2xl p-4 flex flex-col items-center gap-1 shadow-sm border border-orange-100">
+            <AlertCircle size={18} className="text-orange-500" />
+            <p className="text-[9px] font-bold text-orange-700 uppercase tracking-wide text-center">Alergênicos</p>
+            <p className="text-[11px] font-bold text-orange-900 text-center leading-tight">{allergenText}</p>
+          </div>
+        </div>
+
+        {/* Assembly instructions */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between border-b-2 border-blue-500 pb-2">
+            <h3 className="font-black text-gray-900 text-base flex items-center gap-2">
+              <LayoutDashboard size={18} className="text-blue-600" />
+              Passo a Passo de Montagem
+            </h3>
+          </div>
+
+          {product.assemblyInstructions.length === 0 ? (
+            <div className="py-10 border-2 border-dashed border-gray-100 rounded-2xl text-center text-gray-400">
+              <Layers size={28} className="mx-auto mb-2 opacity-20" />
+              <p className="text-sm">Sem instruções de montagem cadastradas</p>
+            </div>
+          ) : (
+            product.assemblyInstructions.map((phase, pi) => (
+              <div key={phase.id} className="space-y-2">
+                <div className="bg-blue-50 px-3 py-1.5 rounded-lg inline-block">
+                  <p className="font-black text-blue-700 text-xs uppercase tracking-widest">{phase.name}</p>
+                </div>
+                <div className="space-y-2">
+                  {phase.etapas.map((step, si) => (
+                    <div key={step.id} className="flex gap-4 items-start bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                      <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl text-white font-black text-lg shadow-md"
+                        style={{ background: '#2563EB' }}>
+                        {si + 1}
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <p className="text-gray-800 font-semibold text-sm leading-snug">{step.text}</p>
+                        {step.quantity && step.unit && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-bold text-xs">
+                            <UtensilsCrossed size={10} /> {step.quantity} {step.unit}
+                          </span>
+                        )}
+                      </div>
+                      {step.imageUrl && (
+                        <div className="flex-shrink-0 relative rounded-xl overflow-hidden border-2 border-white shadow-md" style={{ width: 72, height: 72 }}>
+                          <Image src={step.imageUrl} alt={`Etapa ${si + 1}`} fill className="object-cover" sizes="72px" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Video */}
+        {product.assemblyVideoUrl && (
+          <div className="p-4 rounded-2xl flex items-center justify-between gap-4" style={{ background: '#EFF6FF', border: '2px solid #BFDBFE' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg">
+                <Video size={22} />
+              </div>
+              <div>
+                <p className="font-black text-blue-900 text-sm">Vídeo de Montagem</p>
+                <p className="text-xs text-blue-600 font-medium">Assista ao processo completo</p>
+              </div>
+            </div>
+            <a href={product.assemblyVideoUrl} target="_blank" rel="noreferrer"
+              className="flex-shrink-0 bg-blue-600 text-white text-xs font-black px-4 py-2 rounded-xl shadow">
+              ABRIR
+            </a>
+          </div>
+        )}
+
+        {/* Quality standard */}
+        {product.qualityStandard.length > 0 && (
+          <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+            <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#1a1a2e' }}>
+              <CheckCircle2 size={15} className="text-green-400" />
+              <span className="text-white font-semibold text-sm">Padrão de Qualidade</span>
             </div>
             <div className="divide-y divide-gray-50">
               {product.qualityStandard.map(item => (
-                <div key={item.id} className="flex gap-3 p-4 items-start">
-                  <CheckCircle2 size={16} className="text-green-500 mt-0.5 flex-shrink-0" />
+                <div key={item.id} className="flex gap-3 p-3 items-start">
+                  <CheckCircle2 size={14} className="text-green-500 mt-0.5 flex-shrink-0" />
                   <p className="text-gray-800 text-sm">{item.text}</p>
                 </div>
               ))}
@@ -374,19 +397,20 @@ function ExpandedPanel({ product, origin, onClose }: { product: Product; origin:
           </div>
         )}
 
-        {/* Allergens */}
-        {tab === 'allergens' && (
-          <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
-            <div className="px-4 py-3" style={{ background: '#1a1a2e' }}>
-              <span className="text-white font-semibold text-sm flex items-center gap-2">
-                <AlertCircle size={16} className="text-amber-400" />Alérgenos
-              </span>
+        {/* Ingredients */}
+        {product.ingredients.length > 0 && (
+          <div className="rounded-2xl overflow-hidden" style={{ background: '#F9FAFB' }}>
+            <div className="px-4 py-3 flex items-center gap-2">
+              <FileText size={14} className="text-gray-400" />
+              <span className="font-black text-gray-700 text-xs uppercase tracking-widest">Checklist de Ingredientes</span>
             </div>
-            <div className="divide-y divide-gray-50">
-              {product.allergens.map(item => (
-                <div key={item.id} className="flex gap-3 p-4 items-start">
-                  <AlertCircle size={16} className="text-amber-500 mt-0.5 flex-shrink-0" />
-                  <p className="text-gray-800 text-sm">{item.text}</p>
+            <div className="px-4 pb-4 grid grid-cols-1 gap-2">
+              {product.ingredients.map(ing => (
+                <div key={ing.name} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+                  <span className="font-semibold text-gray-700 text-sm">{ing.name}</span>
+                  <span className="text-xs font-black text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                    {ing.quantity} {ing.unit}
+                  </span>
                 </div>
               ))}
             </div>
