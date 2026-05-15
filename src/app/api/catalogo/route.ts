@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { type ProductSimulation } from '@/types';
 
 export async function GET() {
   try {
-    const snap = await getDocs(collection(db, 'productSimulations'));
+    const snap = await dbAdmin.collection('productSimulations').get();
 
     const products = snap.docs
-      .map(doc => ({ id: doc.id, ...doc.data() } as ProductSimulation))
+      .map(doc => ({ id: doc.id, ...doc.data() }) as ProductSimulation)
       .filter(sim => !sim.isArchived)
       .map(sim => ({
         id: sim.id,

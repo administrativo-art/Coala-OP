@@ -618,8 +618,12 @@ export function CatalogoView() {
   useEffect(() => {
     fetch('/api/catalogo')
       .then(r => r.json())
-      .then((data: Product[]) => {
-        setProducts(data);
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setProducts(data as Product[]);
+        } else {
+          setError(true);
+        }
         setLoading(false);
       })
       .catch(() => {
