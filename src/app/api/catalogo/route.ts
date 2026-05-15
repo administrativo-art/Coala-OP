@@ -41,6 +41,7 @@ export async function GET() {
         qualityStandard: sim.ppo?.qualityStandard ?? [],
         allergens: sim.ppo?.allergens ?? [],
         assemblyVideoUrl: sim.ppo?.assemblyVideoUrl ?? null,
+        sku: sim.ppo?.sku ?? (sim as any).sku ?? null,
         ingredients: items
           .filter(item => item.simulationId === sim.id)
           .map(item => {
@@ -52,7 +53,12 @@ export async function GET() {
             };
           }),
       }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+      .sort((a, b) => {
+        const numA = a.sku !== null ? Number(a.sku) : Infinity;
+        const numB = b.sku !== null ? Number(b.sku) : Infinity;
+        if (numA !== numB) return numA - numB;
+        return a.name.localeCompare(b.name, 'pt-BR');
+      });
 
     return NextResponse.json({ lines, products });
   } catch (error) {
