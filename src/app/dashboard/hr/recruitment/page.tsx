@@ -22,27 +22,49 @@ const STATUS_CONFIG: Record<CandidateStatus, { label: string; color: string; ico
 };
 
 export default function RecruitmentPage() {
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, permissions, loading: authLoading } = useAuth();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [roles, setRoles] = useState<JobRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [search, setSearch] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const canViewRecruitment =
+    permissions.dp?.view ||
+    permissions.dp?.collaborators?.view ||
+    permissions.dp?.collaborators?.edit ||
+    permissions.settings?.manageUsers;
+  const canManageRecruitment =
+    permissions.dp?.collaborators?.edit || permissions.settings?.manageUsers;
 
   const loadData = async () => {
-    if (!firebaseUser) return;
+    if (authLoading) return;
+    if (!firebaseUser || !canViewRecruitment) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setError(null);
     try {
       const [candidatesRes, rolesRes] = await Promise.all([
         fetch('/api/hr/candidates', {
           headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` }
-        }).then(r => r.json()),
+        }).then(async (response) => {
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error ?? 'Falha ao carregar candidatos.');
+          }
+          return response.json() as Promise<Candidate[]>;
+        }),
         fetchHrBootstrap(firebaseUser)
       ]);
       setCandidates(candidatesRes);
       setRoles(rolesRes.roles);
     } catch (err) {
       console.error('Error loading recruitment data:', err);
+      setError(err instanceof Error ? err.message : 'Falha ao carregar recrutamento.');
     } finally {
       setLoading(false);
     }
@@ -50,7 +72,7 @@ export default function RecruitmentPage() {
 
   useEffect(() => {
     loadData();
-  }, [firebaseUser]);
+  }, [firebaseUser, authLoading, canViewRecruitment]);
 
   const filteredCandidates = useMemo(() => {
     return candidates.filter(c => 
@@ -59,12 +81,20 @@ export default function RecruitmentPage() {
     );
   }, [candidates, search]);
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
       </div>
     );
+  }
+
+  if (!canViewRecruitment) {
+    return <p className="text-slate-400 p-6">Sem permissão para acessar Recrutamento.</p>;
+  }
+
+  if (error) {
+    return <p className="text-slate-400 p-6">{error}</p>;
   }
 
   return (
@@ -102,10 +132,12 @@ export default function RecruitmentPage() {
             </button>
           </div>
 
-          <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/20">
-            <UserPlus className="h-4 w-4" />
-            <span>Novo Candidato</span>
-          </button>
+          {canManageRecruitment && (
+            <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/20">
+              <UserPlus className="h-4 w-4" />
+              <span>Novo Candidato</span>
+            </button>
+          )}
         </div>
       </div>
 

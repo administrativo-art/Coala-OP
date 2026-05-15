@@ -278,6 +278,9 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const goalsViewWatch = form.watch('permissions.goals.view' as any);
   const settingsViewWatch = form.watch('permissions.settings.view' as any);
   const signageViewWatch = form.watch('permissions.signage.view' as any);
+  const formsViewAllWatch = form.watch('permissions.forms.global.view_all_projects' as any);
+  const formsCreateProjectsWatch = form.watch('permissions.forms.global.create_projects' as any);
+  const formsAccessWatch = !!formsViewAllWatch || !!formsCreateProjectsWatch;
   const financialViewWatch = form.watch('permissions.financial.view' as any);
   const financialCashFlowViewWatch = form.watch('permissions.financial.cashFlow.view' as any);
   const financialExpensesViewWatch = form.watch('permissions.financial.expenses.view' as any);
@@ -322,12 +325,12 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="dashboard">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><LayoutDashboard className="mr-2 h-5 w-5" /> Dashboard</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.dashboard.view" as any, "Visualizar Dashboard Principal", "Permite que o usuário veja a página inicial do dashboard.")}
+                                    {renderModuleToggle("permissions.dashboard.view" as any, "Acessar painéis principais", "Permite abrir a página inicial e os painéis departamentais.")}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Operacional</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
-                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Gestão de Preços</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
-                                        <FormField control={form.control} name="permissions.dashboard.technicalSheets" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Fichas Técnicas</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
-                                        <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Aba Auditoria</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
+                                        <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Painel de Operações</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
+                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Painel Comercial - Preços</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
+                                        <FormField control={form.control} name="permissions.dashboard.technicalSheets" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Painel Comercial - Fichas Técnicas</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
+                                        <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Indicadores de Auditoria</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                     </div>
                                 </AccordionContent>
                             </AccordionItem>
@@ -336,7 +339,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="registration">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><ListPlus className="mr-2 h-5 w-5" /> Cadastros</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.registration.view" as any, "Ver Módulo de Cadastros")}
+                                    {renderModuleToggle("permissions.registration.view" as any, "Acessar Cadastros Operacionais")}
                                     {renderPermissionSwitch("permissions.registration.items.add" as any, "Adicionar Insumos", "Permite cadastrar novos insumos (itens físicos).", !registrationViewWatch)}
                                     {renderPermissionSwitch("permissions.registration.items.edit" as any, "Editar Insumos", "Permite editar insumos existentes.", !registrationViewWatch)}
                                     {renderPermissionSwitch("permissions.registration.items.delete" as any, "Excluir Insumos", "Permite excluir insumos (ação perigosa).", !registrationViewWatch)}
@@ -400,11 +403,11 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
                                     {/* Compras */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <h4 className="font-semibold text-md mb-2">Compras</h4>
-                                        {renderPermissionSwitch("permissions.stock.purchasing.view" as any, "Visualizar Módulo de Compras", "Permite ver a tela de compras.", !stockViewWatch)}
+                                        <h4 className="font-semibold text-md mb-2">Compras legadas e histórico de preços</h4>
+                                        {renderPermissionSwitch("permissions.stock.purchasing.view" as any, "Visualizar Compras no Estoque", "Permite ver a experiência legada de compras dentro do estoque.", !stockViewWatch)}
                                          <div className="pl-6 space-y-2">
-                                            {renderPermissionSwitch("permissions.stock.purchasing.suggest" as any, "Sugerir Preços", "Permite criar sessões de compra e adicionar cotações.", !purchasingViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.purchasing.approve" as any, "Efetivar Compra", "Permite confirmar um preço, atualizando o custo do insumo.", !purchasingViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.purchasing.suggest" as any, "Criar Sessões e Cotações", "Permite criar sessões de compra e adicionar cotações.", !purchasingViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.purchasing.approve" as any, "Efetivar Preços", "Permite confirmar um preço, atualizando o custo do insumo.", !purchasingViewWatch, true)}
                                             {renderPermissionSwitch("permissions.stock.purchasing.deleteHistory" as any, "Excluir Histórico de Preços", "Permite apagar registros de preços efetivados.", !purchasingViewWatch, true)}
                                          </div>
                                     </div>
@@ -420,12 +423,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                          </div>
                                     </div>
 
-                                    {/* Conversões e Listas */}
+                                    {/* Conversões */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <h4 className="font-semibold text-md mb-2">Conversões e Listas</h4>
+                                        <h4 className="font-semibold text-md mb-2">Conversões</h4>
                                         {renderPermissionSwitch("permissions.stock.conversions.view" as any, "Visualizar Conversor de Medidas", "Permite acessar a ferramenta de conversão.", !stockViewWatch)}
-                                        {renderPermissionSwitch("permissions.stock.predefinedLists.view" as any, "Visualizar Listas Predefinidas", "Permite ver as listas de insumos predefinidas.", !stockViewWatch)}
-                                        {renderPermissionSwitch("permissions.stock.predefinedLists.manage" as any, "Gerenciar Listas Predefinidas", "Permite criar e editar listas predefinidas.", !stockViewWatch, true)}
                                     </div>
                                     
                                     {/* Reposição */}
@@ -441,8 +442,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="pricing">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><DollarSign className="mr-2 h-5 w-5" /> Gestão de Preços e Margens</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.pricing.view" as any, "Ver Módulo de Gestão de Preços e Margens")}
-                                    {renderPermissionSwitch("permissions.pricing.simulate" as any, "Simular Ficha de Custo e Margem", "Permite criar/editar fichas técnicas e simulações.", !pricingViewWatch)}
+                                    {renderModuleToggle("permissions.pricing.view" as any, "Acessar Gestão de Preços", "Permite abrir preços, comparação de concorrentes e fichas de custo.")}
+                                    {renderPermissionSwitch("permissions.pricing.simulate" as any, "Simular Ficha de Custo e Margem", "Permite criar e editar fichas técnicas e simulações.", !pricingViewWatch)}
                                     {renderPermissionSwitch("permissions.pricing.manageParameters" as any, "Gerenciar Parâmetros de Preço", "Permite editar o % operacional e faixas de lucro.", !pricingViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>
@@ -450,12 +451,45 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             {/* ── CONFIGURAÇÕES ── */}
                             <AccordionItem value="settings">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><Settings className="mr-2 h-5 w-5" /> Configurações</div></AccordionTrigger>
-                                <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.settings.view" as any, "Ver Módulo de Configurações")}
-                                    {renderPermissionSwitch("permissions.settings.manageUsers" as any, "Gerenciar Usuários", "Permite criar, editar e excluir usuários.", !settingsViewWatch)}
-                                    {renderPermissionSwitch("permissions.settings.manageKiosks" as any, "Gerenciar Quiosques", "Permite criar e excluir quiosques.", !settingsViewWatch)}
-                                    {renderPermissionSwitch("permissions.settings.manageProfiles" as any, "Gerenciar Perfis", "Permite criar e editar perfis de permissão.", !settingsViewWatch)}
-                                    {renderPermissionSwitch("permissions.settings.manageLabels" as any, "Gerenciar Etiquetas", "Permite alterar o tamanho padrão das etiquetas.", !settingsViewWatch)}
+                                <AccordionContent className="space-y-4 p-1 pt-4">
+                                    {renderModuleToggle("permissions.settings.view" as any, "Acessar Configurações", "Permite abrir a central de configurações por departamento.")}
+
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                      <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Warehouse className="h-4 w-4" /> Operacional</h4>
+                                      {renderPermissionSwitch("permissions.settings.manageKiosks" as any, "Gerenciar Unidades", "Permite criar, editar e excluir unidades operacionais.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.registration.view" as any, "Acessar Cadastros Operacionais", "Permite abrir os cadastros de insumos, produtos base e pessoas/empresas dentro das configurações.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.settings.manageLabels" as any, "Configurar Etiquetas de Estoque", "Permite alterar o tamanho padrão das etiquetas de lote.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.dp.checklists.manageTemplates" as any, "Gerenciar Templates de Checklists", "Permite manter templates de checklists operacionais.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.dp.settings.manageChecklistTypes" as any, "Gerenciar Tipos de Checklist", "Permite criar e editar tipos de checklist.", !settingsViewWatch)}
+                                    </div>
+
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                      <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><TrendingUp className="h-4 w-4" /> Comercial</h4>
+                                      {renderPermissionSwitch("permissions.purchasing.view" as any, "Configurar Compras", "Permite acessar classificações e parâmetros usados pelo módulo de compras.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.pricing.manageParameters" as any, "Gerenciar Parâmetros de Preço", "Permite editar parâmetros de precificação e margens.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.pricing.view" as any, "Gerenciar Concorrentes", "Permite acessar a gestão de concorrentes e mercadorias monitoradas.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.goals.manage" as any, "Gerenciar Configurações de Metas", "Permite criar templates e configurar períodos de metas.", !settingsViewWatch)}
+                                    </div>
+
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                      <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Users className="h-4 w-4" /> Pessoal</h4>
+                                      {renderPermissionSwitch("permissions.settings.manageUsers" as any, "Gerenciar Usuários", "Permite criar, editar, desligar e excluir usuários.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.settings.manageProfiles" as any, "Gerenciar Perfis", "Permite criar, duplicar e editar perfis de permissão.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.dp.collaborators.edit" as any, "Gerenciar Cargos, Funções e Organograma", "Permite manter cadastros do DP usados em cargos, funções e estrutura organizacional.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.dp.collaborators.terminate" as any, "Gerenciar Acesso por Escala", "Permite acessar diagnósticos e auditorias ligados à política de acesso por escala.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.dp.settings.manageShifts" as any, "Gerenciar Turnos", "Permite criar e editar turnos reutilizáveis.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.dp.settings.manageCalendars" as any, "Gerenciar Calendários", "Permite criar e editar calendários de trabalho e feriados.", !settingsViewWatch)}
+                                    </div>
+
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                      <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Financeiro</h4>
+                                      {renderPermissionSwitch("permissions.financial.settings.view" as any, "Acessar Configurações Financeiras", "Permite abrir cadastros contábeis, contas bancárias e regras de importação.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.financial.settings.manageAccountPlans" as any, "Gerenciar Plano de Contas", "Permite criar, editar e excluir planos de contas.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.financial.settings.manageResultCenters" as any, "Gerenciar Centros de Resultado", "Permite criar, editar e excluir centros de resultado.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.financial.settings.manageBankAccounts" as any, "Gerenciar Contas Bancárias", "Permite manter bancos, contas e métodos de pagamento.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.financial.settings.manageExpenseDescriptions" as any, "Gerenciar Descrições de Despesas", "Permite manter descrições reutilizáveis do financeiro.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.financial.settings.manageImportAliases" as any, "Gerenciar Aliases de Importação", "Permite manter regras automáticas de classificação de extratos.", !settingsViewWatch)}
+                                    </div>
                                 </AccordionContent>
                             </AccordionItem>
 
@@ -463,9 +497,22 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             <AccordionItem value="tasks">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><ListTodo className="mr-2 h-5 w-5" /> Tarefas</div></AccordionTrigger>
                                 <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.tasks.view" as any, "Visualizar Tarefas", "Permite visualizar todas as tarefas do sistema.")}
+                                    {renderModuleToggle("permissions.tasks.view" as any, "Visualizar Tarefas Gerais", "Permite acessar a área de tarefas gerais.")}
                                     {renderPermissionSwitch("permissions.tasks.manage" as any, "Gerenciar Tarefas", "Permite criar, atribuir, editar e excluir tarefas.", !tasksViewWatch)}
                                 </AccordionContent>
+                            </AccordionItem>
+
+                            {/* ── FORMULÁRIOS ── */}
+                            <AccordionItem value="forms">
+                              <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b">
+                                <div className="flex items-center"><FileText className="mr-2 h-5 w-5" /> Formulários</div>
+                              </AccordionTrigger>
+                              <AccordionContent className="space-y-2 pt-4 p-1">
+                                {renderPermissionSwitch("permissions.forms.global.view_all_projects" as any, "Visualizar Todos os Projetos", "Permite acessar o módulo de formulários e ver todos os projetos disponíveis.", false)}
+                                {renderPermissionSwitch("permissions.forms.global.create_projects" as any, "Criar Projetos", "Permite criar e gerenciar projetos de formulários.", false)}
+                                {renderPermissionSwitch("permissions.forms.global.manage_templates" as any, "Gerenciar Templates", "Permite criar e editar templates de formulários.", !formsAccessWatch)}
+                                {renderPermissionSwitch("permissions.forms.global.view_analytics" as any, "Ver Análises", "Permite acessar indicadores e análises dos formulários.", !formsAccessWatch)}
+                              </AccordionContent>
                             </AccordionItem>
 
                             {/* ── METAS ── */}

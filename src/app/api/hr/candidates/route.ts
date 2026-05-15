@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { verifyAuth } from '@/lib/verify-auth';
+import { assertHrAccess } from '@/features/hr/lib/server-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,8 +10,8 @@ function jsonError(message: string, status = 400) {
 }
 
 export async function GET(request: NextRequest) {
-  const decoded = await verifyAuth(request).catch(() => null);
-  if (!decoded) return jsonError('Não autorizado.', 401);
+  const access = await assertHrAccess(request, 'view').catch(() => null);
+  if (!access) return jsonError('Sem permissão para acessar candidatos.', 403);
 
   const snapshot = await dbAdmin.collection('candidates').orderBy('appliedAt', 'desc').get();
   const candidates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -19,8 +19,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const decoded = await verifyAuth(request).catch(() => null);
-  if (!decoded) return jsonError('Não autorizado.', 401);
+  const access = await assertHrAccess(request, 'manage').catch(() => null);
+  if (!access) return jsonError('Sem permissão para gerenciar candidatos.', 403);
 
   const body = await request.json();
   const now = new Date().toISOString();
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     ...body,
     appliedAt: body.appliedAt || now,
     updatedAt: now,
-    createdBy: decoded.uid,
+    createdBy: access.decoded.uid,
   });
 
   return NextResponse.json({ id: ref.id }, { status: 201 });

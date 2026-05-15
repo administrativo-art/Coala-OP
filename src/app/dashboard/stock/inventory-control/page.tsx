@@ -12,9 +12,11 @@ import { MovementHistoryModal } from '@/components/movement-history-modal';
 import { FinancialPeriodAnalysisModal } from '@/components/financial-period-analysis-modal';
 import { LabelSettingsModal } from '@/components/label-settings';
 import { RadialMenu } from '@/components/radial-menu';
+import { useAuth } from '@/hooks/use-auth';
 
 function InventoryControlContent() {
     const router = useRouter();
+    const { permissions } = useAuth();
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
@@ -40,11 +42,11 @@ function InventoryControlContent() {
         label: 'Consumo por Período',
         onClick: () => setIsConsumptionModalOpen(true),
       },
-      {
+      ...(permissions.settings.manageLabels ? [{
         icon: <Ticket className="h-6 w-6" />,
         label: 'Configurar Etiquetas',
         onClick: () => setIsLabelModalOpen(true),
-      },
+      }] : []),
     ];
 
 
