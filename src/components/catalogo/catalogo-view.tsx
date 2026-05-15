@@ -262,7 +262,7 @@ function ExpandedPanel({ product, origin, onClose }: { product: Product; origin:
         </button>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 pb-10 space-y-5 pt-4">
+      <div className="max-w-7xl mx-auto px-4 pb-10 space-y-5 pt-4">
 
         {/* Reference image */}
         {product.imageUrl ? (
@@ -283,7 +283,7 @@ function ExpandedPanel({ product, origin, onClose }: { product: Product; origin:
         )}
 
         {/* Metrics grid */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           <div className="bg-white rounded-2xl p-4 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
             <Clock size={18} className="text-blue-500" />
             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide text-center">Tempo de Montagem</p>
@@ -516,7 +516,7 @@ export function CatalogoView() {
             borderBottom: '1px solid rgba(0,0,0,0.06)',
           }}
         >
-          <div className="px-4 pt-4 pb-3 max-w-2xl mx-auto">
+          <div className="px-4 pt-4 pb-3 max-w-7xl mx-auto">
             {/* Title row */}
             <div className="flex items-center gap-2 mb-3">
               {selectedLine && !isSearching && (
@@ -550,7 +550,7 @@ export function CatalogoView() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 px-4 py-4 max-w-2xl mx-auto w-full pb-8">
+        <div className="flex-1 px-4 py-4 max-w-7xl mx-auto w-full pb-8">
           {/* Loading */}
           {loading && (
             <div className="space-y-3">
@@ -573,7 +573,7 @@ export function CatalogoView() {
 
           {/* Lines home */}
           {!loading && !error && showLines && (
-            <div className="space-y-2.5">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {lines.map((line, i) => (
                 <LineCard
                   key={line.id}
@@ -606,7 +606,7 @@ export function CatalogoView() {
                   <p className="text-sm">Nenhum produto encontrado</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {visibleProducts.map((product, i) => (
                     <ProductCard key={product.id} product={product} colorIdx={i} onExpand={handleExpand} />
                   ))}
