@@ -116,21 +116,21 @@ function ProductCard({
           className="absolute inset-0 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow select-none"
           style={{ backfaceVisibility: 'hidden' }}
         >
-          <div className="relative flex items-center justify-center" style={{ background: color.bg, height: '46%' }}>
+          <div className="relative flex items-center justify-center" style={{ background: color.bg, height: '52%' }}>
             <div className="absolute top-2 right-3 rounded-full opacity-25" style={{ width: 38, height: 38, background: color.dot }} />
             <div className="absolute bottom-1 left-4 rounded-full opacity-15" style={{ width: 24, height: 24, background: color.dot }} />
             <div
-              className="relative z-10 rounded-xl overflow-hidden flex items-center justify-center"
-              style={{ width: 68, height: 68, background: 'white', boxShadow: `0 6px 20px ${color.dot}40` }}
+              className="relative z-10 rounded-2xl overflow-hidden flex items-center justify-center"
+              style={{ width: 96, height: 96, background: 'white', boxShadow: `0 8px 24px ${color.dot}50` }}
             >
               {product.imageUrl ? (
-                <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="68px" />
+                <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="96px" />
               ) : (
-                <UtensilsCrossed size={30} style={{ color: color.dot }} />
+                <UtensilsCrossed size={36} style={{ color: color.dot }} />
               )}
             </div>
           </div>
-          <div className="flex flex-col items-center justify-between px-3 py-2.5 h-[54%]">
+          <div className="flex flex-col items-center justify-between px-3 py-2.5 h-[48%]">
             <p className="font-semibold text-center leading-tight text-sm" style={{ color: '#1a1a2e' }}>
               {product.name}
             </p>
@@ -266,7 +266,7 @@ function ExpandedPanel({ product, origin, onClose }: { product: Product; origin:
 
         {/* Reference image */}
         {product.imageUrl ? (
-          <div className="rounded-2xl overflow-hidden relative" style={{ aspectRatio: '16/7' }}>
+          <div className="rounded-2xl overflow-hidden relative" style={{ aspectRatio: '16/9' }}>
             <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="100vw" />
             <div className="absolute inset-0 flex items-end p-4" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 60%)' }}>
               <div>
