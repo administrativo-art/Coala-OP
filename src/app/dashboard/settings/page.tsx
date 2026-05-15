@@ -117,6 +117,10 @@ const PdvSyncManagement = dynamic(
   () => import("@/components/pdv-sync-management").then((m) => m.PdvSyncManagement),
   { ssr: false }
 );
+const CatalogoQRPanel = dynamic(
+  () => import("@/components/catalogo/catalogo-qr-panel").then((m) => m.CatalogoQRPanel),
+  { ssr: false }
+);
 const PurchasingAccountingSettings = dynamic(
   () => import("@/components/purchasing/purchasing-accounting-settings").then((m) => m.PurchasingAccountingSettings),
   { ssr: false }
@@ -431,6 +435,13 @@ export default function SettingsPage() {
       title: "Sincronização PDV",
       description: "Reprocesse dados históricos e configure a rotina operacional ligada ao PDV.",
       content: <PdvSyncManagement />,
+    },
+    {
+      value: "catalogo-qr",
+      label: "QR Catálogo",
+      title: "QR Code do Catálogo",
+      description: "Imprima o QR code para que atendentes acessem o catálogo de mercadorias diretamente pelo celular.",
+      content: <CatalogoQRPanel />,
     },
   ].filter((tab) => {
     if (tab.value === "cadastros") return !!permissions.registration.view;
