@@ -317,41 +317,17 @@ function ExpandedPanel({ product, origin, onClose }: { product: Product; origin:
             </div>
           </div>
 
-          {product.assemblyVideoUrl && (() => {
-            const embed = getEmbedUrl(product.assemblyVideoUrl);
-            if (!embed) return (
-              <a href={product.assemblyVideoUrl} target="_blank" rel="noreferrer"
-                className="flex items-center gap-3 p-3 rounded-xl"
-                style={{ background: '#EFF6FF', border: '2px solid #BFDBFE', textDecoration: 'none' }}>
-                <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white flex-shrink-0">
-                  <Video size={16} />
-                </div>
-                <div>
-                  <p className="font-black text-blue-900 text-xs">Vídeo de Montagem</p>
-                  <p className="text-[10px] text-blue-600 font-medium">Abrir link externo</p>
-                </div>
-              </a>
-            );
-            return (
-              <div className="space-y-1.5">
-                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                  <Video size={10} /> Vídeo de Montagem
-                </p>
-                <div className="rounded-2xl overflow-hidden shadow-md w-full" style={{ aspectRatio: '16/9' }}>
-                  {embed.type === 'iframe' ? (
-                    <iframe
-                      src={embed.src}
-                      className="w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  ) : (
-                    <video src={embed.src} controls className="w-full h-full bg-black" />
-                  )}
-                </div>
-              </div>
-            );
-          })()}
+          {/* Nutritional table placeholder */}
+          <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm bg-white">
+            <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#1a1a2e' }}>
+              <FileText size={13} className="text-gray-300" />
+              <span className="text-white font-semibold text-sm">Tabela Nutricional</span>
+            </div>
+            <div className="px-4 py-6 flex flex-col items-center justify-center gap-2 text-gray-300">
+              <FileText size={28} className="opacity-20" />
+              <p className="text-xs text-center text-gray-400">Em breve</p>
+            </div>
+          </div>
         </div>
 
         {/* RIGHT — assembly + quality + ingredients */}
@@ -440,6 +416,43 @@ function ExpandedPanel({ product, origin, onClose }: { product: Product; origin:
               </div>
             </div>
           )}
+
+          {/* Video */}
+          {product.assemblyVideoUrl && (() => {
+            const embed = getEmbedUrl(product.assemblyVideoUrl);
+            if (!embed) return (
+              <a href={product.assemblyVideoUrl} target="_blank" rel="noreferrer"
+                className="flex items-center gap-3 p-3 rounded-xl"
+                style={{ background: '#EFF6FF', border: '2px solid #BFDBFE', textDecoration: 'none' }}>
+                <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                  <Video size={16} />
+                </div>
+                <div>
+                  <p className="font-black text-blue-900 text-xs">Vídeo de Montagem</p>
+                  <p className="text-[10px] text-blue-600 font-medium">Abrir link externo</p>
+                </div>
+              </a>
+            );
+            return (
+              <div className="space-y-1.5">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                  <Video size={10} /> Vídeo de Montagem
+                </p>
+                <div className="rounded-2xl overflow-hidden shadow-md w-full" style={{ aspectRatio: '16/9' }}>
+                  {embed.type === 'iframe' ? (
+                    <iframe
+                      src={embed.src}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video src={embed.src} controls className="w-full h-full bg-black" />
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>
