@@ -109,6 +109,8 @@ export function PricingSimulator() {
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
     const [simulationToView, setSimulationToView] = useState<ProductSimulation | null>(null);
     const [simulationToDeactivate, setSimulationToDeactivate] = useState<ProductSimulation | null>(null);
+    const [simToDeleteFirst, setSimToDeleteFirst] = useState<ProductSimulation | null>(null);
+    const [simToDeleteFinal, setSimToDeleteFinal] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
@@ -177,9 +179,21 @@ export function PricingSimulator() {
         setIsViewerModalOpen(true);
     };
 
-    const handleDelete = async (simulationId: string) => {
-        await deleteSimulation(simulationId);
-        setIsProductModalOpen(false); 
+    const handleDelete = (sim: ProductSimulation) => {
+        setSimToDeleteFirst(sim);
+    };
+
+    const handleConfirmDeleteFirst = () => {
+        if (!simToDeleteFirst) return;
+        setSimToDeleteFinal(simToDeleteFirst);
+        setSimToDeleteFirst(null);
+    };
+
+    const handleConfirmDeleteFinal = async () => {
+        if (!simToDeleteFinal) return;
+        await deleteSimulation(simToDeleteFinal.id);
+        setSimToDeleteFinal(null);
+        setIsProductModalOpen(false);
         setSimulationToEdit(null);
     };
 
@@ -700,27 +714,11 @@ export function PricingSimulator() {
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem onClick={() => handleToggleSimulationActive(sim, false)} className="text-orange-600 focus:text-orange-600"><CheckCircle2 className="mr-2 h-4 w-4" /> Desativar mercadoria</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
-                                                <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" />Ficha Técnica de Instrução</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleEdit(sim, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" /> Editar Ficha</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" /> Ficha Técnica de Instrução</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleEdit(sim, 'ficha')}><ClipboardList className="mr-2 h-4 w-4" /> Ficha Técnica Completa</DropdownMenuItem>
-                                                <DropdownMenuItem onSelect={e => e.preventDefault()}>
-                                                    <PDFDownloadLink
-                                                        document={<FichaTecnicaDocument type="completa" data={{
-                                                            ...sim,
-                                                            ingredients: simulationItems.filter(i => i.simulationId === sim.id).map(i => ({
-                                                                name: baseProductMap.get(i.baseProductId)?.name || 'Insumo não encontrado',
-                                                                quantity: i.quantity,
-                                                                unit: i.overrideUnit || baseProductMap.get(i.baseProductId)?.unit || ''
-                                                            }))
-                                                        }} />}
-                                                        fileName={`ficha_completa_${sim.name.replace(/ /g, '_')}.pdf`}
-                                                        className="w-full text-left"
-                                                    >
-                                                        {({ loading }: BlobProviderParams) => loading ? 'Gerando...' : 'Ficha Completa (PDF)'}
-                                                    </PDFDownloadLink>
-                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleEdit(sim, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" /> Editar Ficha</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
-                                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
@@ -856,7 +854,7 @@ export function PricingSimulator() {
                                                             <DropdownMenuSeparator />
                                                             <DropdownMenuItem onClick={() => handleEdit(sim, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" /> Editar Ficha</DropdownMenuItem>
                                                             <DropdownMenuSeparator />
-                                                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim.id)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </div>
@@ -1176,6 +1174,40 @@ export function PricingSimulator() {
                 filteredSimulations={filteredSimulations}
                 selectedSimulationIds={selectedSimulations}
             />
+
+            <AlertDialog open={!!simToDeleteFirst} onOpenChange={(open) => { if (!open) setSimToDeleteFirst(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir mercadoria</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir <strong>{simToDeleteFirst?.name}</strong>? Esta ação não pode ser desfeita.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmDeleteFirst} className="bg-destructive hover:bg-destructive/90">
+                            Sim, excluir
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={!!simToDeleteFinal} onOpenChange={(open) => { if (!open) setSimToDeleteFinal(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar exclusão definitiva</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Esta é sua última chance. A mercadoria <strong>{simToDeleteFinal?.name}</strong> será excluída permanentemente e todos os seus dados serão perdidos. Confirma?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmDeleteFinal} className="bg-destructive hover:bg-destructive/90">
+                            Excluir definitivamente
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <AlertDialog open={!!simulationToDeactivate} onOpenChange={(open) => { if (!open) setSimulationToDeactivate(null); }}>
                 <AlertDialogContent>

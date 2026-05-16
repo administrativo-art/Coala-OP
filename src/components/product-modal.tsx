@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -17,14 +18,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Trash2, Loader2, Info, LayoutDashboard, ClipboardList, Check, Search, Edit } from 'lucide-react';
+import { Trash2, Loader2, Info, LayoutDashboard, ClipboardList, Check, Search, Edit, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
-// Import sub-components (we'll move logic here)
 import { CostAnalysisTab } from './product-modal/cost-analysis-tab';
 import FullTechnicalSheetView from './product-modal/full-technical-sheet-view';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
+
+const PDFDownloadLink = dynamic(
+  () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
+  { ssr: false, loading: () => <Button variant="secondary" disabled size="sm"><Download className="mr-2 h-4 w-4" />Carregando...</Button> }
+);
 
 interface ProductModalProps {
   open: boolean;
@@ -37,8 +43,24 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
   const [activeTab, setActiveTab] = useState<'cost' | 'ficha'>(initialTab);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { updateSimulation, deleteSimulation } = useProductSimulation();
+  const { updateSimulation, deleteSimulation, simulationItems } = useProductSimulation();
+  const { baseProducts } = useBaseProducts();
   const { toast } = useToast();
+
+  const pdfData = useMemo(() => {
+    if (!simulation) return null;
+    const ingredients = simulationItems
+      .filter(item => item.simulationId === simulation.id)
+      .map(item => {
+        const bp = baseProducts.find(b => b.id === item.baseProductId);
+        return {
+          name: bp?.name || 'Insumo não encontrado',
+          quantity: item.quantity,
+          unit: item.overrideUnit || bp?.unit || 'un',
+        };
+      });
+    return { ...simulation, totalCmv: simulation.totalCmv, ingredients };
+  }, [simulation, simulationItems, baseProducts]);
 
   useEffect(() => {
     if (open) {
@@ -146,6 +168,19 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
               </Button>
             </div>
             <div className="flex gap-2">
+              {isViewOnlyMode && pdfData && (
+                <PDFDownloadLink
+                  document={<FichaTecnicaDocument data={pdfData} />}
+                  fileName={`ficha_tecnica_${simulation.name.replace(/ /g, '_')}.pdf`}
+                >
+                  {((props: any) => (
+                    <Button variant="secondary" size="sm" disabled={props.loading}>
+                      <Download className="mr-2 h-4 w-4" />
+                      {props.loading ? 'Gerando...' : 'Baixar PDF'}
+                    </Button>
+                  )) as any}
+                </PDFDownloadLink>
+              )}
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 {isViewOnlyMode ? 'Fechar' : 'Cancelar'}
               </Button>
