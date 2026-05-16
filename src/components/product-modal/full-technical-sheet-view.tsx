@@ -1,28 +1,36 @@
 "use client";
 
 import React, { useMemo } from 'react';
+import Image from 'next/image';
 import { type ProductSimulation } from '@/types';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useBaseProducts } from '@/hooks/use-base-products';
-import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
-import { Clock, Weight, ShieldAlert, LayoutDashboard, Utensils, Check, Info } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import {
+  Clock, Weight, AlertCircle, CheckCircle2, UtensilsCrossed,
+  Layers, FileText, Award, Video, LayoutDashboard,
+} from 'lucide-react';
 
-const formatCurrency = (value: number | undefined | null) => {
-    if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-};
+function fmtTime(s: number) {
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)} min`;
+}
+
+function fmtWeight(g: number) {
+  return g >= 1000 ? `${(g / 1000).toFixed(1)}kg` : `${g}g`;
+}
+
+function getEmbedUrl(url: string): { type: 'iframe' | 'video'; src: string } | null {
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+  if (yt) return { type: 'iframe', src: `https://www.youtube.com/embed/${yt[1]}` };
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return { type: 'iframe', src: `https://player.vimeo.com/video/${vimeo[1]}` };
+  if (/\.(mp4|webm|ogg)(\?.*)?$/i.test(url)) return { type: 'video', src: url };
+  return null;
+}
 
 export default function FullTechnicalSheetView({ simulation }: { simulation: ProductSimulation }) {
   const { simulationItems } = useProductSimulation();
   const { baseProducts } = useBaseProducts();
-  const { categories } = useProductSimulationCategories();
-
-  const getCatName = (id: string) => categories.find(c => c.id === id)?.name || id;
 
   const ingredients = useMemo(() => {
     return simulationItems
@@ -33,243 +41,232 @@ export default function FullTechnicalSheetView({ simulation }: { simulation: Pro
           name: bp?.name || 'Insumo não encontrado',
           quantity: item.quantity,
           unit: item.overrideUnit || bp?.unit || 'un',
-          cost: item.useDefault 
-            ? (bp?.lastEffectivePrice?.pricePerUnit || bp?.initialCostPerUnit || 0)
-            : (item.overrideCostPerUnit || 0)
         };
       });
   }, [simulation.id, simulationItems, baseProducts]);
 
+  const allergens: { id: string; text: string }[] = Array.isArray(simulation.ppo?.allergens)
+    ? simulation.ppo.allergens.map((a: any) => typeof a === 'string' ? { id: a, text: a } : a)
+    : [];
+  const allergenText = allergens.length > 0 ? allergens.map(a => a.text).join(', ') : 'Nenhum';
+
+  const qualityStandard: { id: string; text: string }[] = Array.isArray(simulation.ppo?.qualityStandard)
+    ? simulation.ppo.qualityStandard.filter((q: any) => typeof q === 'object' && q.text)
+    : [];
+
+  const assemblyInstructions: any[] = simulation.ppo?.assemblyInstructions ?? [];
+  const videoUrl: string | null = simulation.ppo?.assemblyVideoUrl || null;
+
   return (
-    <div className="h-full flex flex-col bg-gray-50/50">
-      <ScrollArea className="flex-1 p-8">
-        <div className="max-w-4xl mx-auto space-y-8">
-          
-          {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Preço de Venda</p>
-              <p className="text-xl font-black text-gray-900">{formatCurrency(simulation.salePrice)}</p>
+    <ScrollArea className="h-full">
+      <div
+        className="p-6 md:grid md:gap-8 md:items-start"
+        style={{ gridTemplateColumns: '300px 1fr' }}
+      >
+        {/* LEFT — photo + metrics + nutritional */}
+        <div className="space-y-3 mb-6 md:mb-0">
+          {simulation.ppo?.referenceImageUrl ? (
+            <div className="rounded-2xl overflow-hidden relative shadow-md" style={{ aspectRatio: '3/4' }}>
+              <Image
+                src={simulation.ppo.referenceImageUrl}
+                alt={simulation.name}
+                fill
+                className="object-cover"
+                sizes="300px"
+              />
+              <div
+                className="absolute inset-x-0 bottom-0 p-4"
+                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 70%)' }}
+              >
+                <p className="text-white/70 text-[9px] font-bold uppercase tracking-widest">Foto de Referência</p>
+                <h2 className="text-white font-black text-lg leading-tight">{simulation.name}</h2>
+              </div>
             </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Custo (CMV)</p>
-              <p className="text-xl font-black text-gray-900">{formatCurrency(simulation.totalCmv)}</p>
+          ) : (
+            <div
+              className="rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center bg-gray-50 text-gray-400"
+              style={{ aspectRatio: '3/4' }}
+            >
+              <UtensilsCrossed size={36} className="mb-2 opacity-20" />
+              <p className="text-sm font-medium text-center px-4">{simulation.name}</p>
             </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Margem Bruta R$</p>
-              <p className="text-xl font-black text-gray-900">{formatCurrency(simulation.salePrice - simulation.totalCmv)}</p>
-            </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Margem Bruta %</p>
-              <p className="text-xl font-black text-gray-900">
-                {simulation.salePrice > 0 ? (((simulation.salePrice - simulation.totalCmv) / simulation.salePrice) * 100).toFixed(1) : 0}%
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-white rounded-xl p-3 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
+              <Clock size={16} className="text-blue-500" />
+              <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wide text-center">Tempo</p>
+              <p className="text-sm font-black text-gray-900">
+                {simulation.ppo?.preparationTime ? fmtTime(simulation.ppo.preparationTime) : '—'}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">M. Contribuição</p>
-              <p className={cn(
-                "text-xl font-black",
-                (simulation.profitGoal && simulation.profitPercentage >= simulation.profitGoal) ? "text-green-600" : "text-orange-500"
-              )}>
-                {simulation.profitPercentage.toFixed(1)}%
+            <div className="bg-white rounded-xl p-3 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
+              <Weight size={16} className="text-pink-500" />
+              <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wide text-center">Peso</p>
+              <p className="text-sm font-black text-gray-900">
+                {simulation.ppo?.portionWeight ? fmtWeight(simulation.ppo.portionWeight) : '—'}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Markup</p>
-              <p className="text-xl font-black text-gray-700">{simulation.markup.toFixed(2)}x</p>
+            <div className="bg-white rounded-xl p-3 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
+              <Award size={16} className="text-orange-500" />
+              <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wide text-center">Tolerância</p>
+              <p className="text-sm font-black text-gray-900">
+                {simulation.ppo?.portionTolerance ? `±${simulation.ppo.portionTolerance}g` : '—'}
+              </p>
+            </div>
+            <div className="bg-orange-50 rounded-xl p-3 flex flex-col items-center gap-1 shadow-sm border border-orange-100">
+              <AlertCircle size={16} className="text-orange-500" />
+              <p className="text-[8px] font-bold text-orange-700 uppercase tracking-wide text-center">Alergênicos</p>
+              <p className="text-[10px] font-bold text-orange-900 text-center leading-tight">{allergenText}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-[1fr_300px] gap-8">
-            <div className="space-y-8">
-              {/* Composition */}
-              <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b bg-gray-50/50">
-                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                    <Utensils className="h-4 w-4 text-pink-500" />
-                    Composição e Custos
-                  </h3>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="text-[10px] font-bold uppercase h-10">Item</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase h-10 text-center">Quantidade</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase h-10 text-right">Custo Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ingredients.map((ing, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="py-3">
-                          <p className="text-sm font-semibold text-gray-800">{ing.name}</p>
-                        </TableCell>
-                        <TableCell className="py-3 text-center text-xs font-medium text-gray-600">
-                          {ing.quantity} {ing.unit}
-                        </TableCell>
-                        <TableCell className="py-3 text-right text-sm font-bold text-gray-900">
-                          {formatCurrency(ing.quantity * ing.cost)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Instructions */}
-              <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b bg-gray-50/50">
-                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                    <LayoutDashboard className="h-4 w-4 text-blue-500" />
-                    Modo de Montagem
-                  </h3>
-                </div>
-                <div className="p-6 space-y-6">
-                  {simulation.ppo?.assemblyInstructions?.map((phase, pi) => (
-                    <div key={pi} className="space-y-3">
-                      <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest border-b pb-1">
-                        {phase.name}
-                      </h4>
-                      <div className="space-y-4">
-                        {phase.etapas.map((etapa, ei) => (
-                          <div key={ei} className="flex gap-4">
-                            <span className="text-sm font-black text-gray-300">{ei + 1}</span>
-                            <p className="text-sm text-gray-700 leading-relaxed">{etapa.text}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  {(!simulation.ppo?.assemblyInstructions || simulation.ppo.assemblyInstructions.length === 0) && (
-                    <p className="text-sm text-gray-400 italic">Nenhuma instrução cadastrada.</p>
-                  )}
-                </div>
-              </div>
+          {/* Nutritional placeholder */}
+          <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm bg-white">
+            <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#1a1a2e' }}>
+              <FileText size={13} className="text-gray-300" />
+              <span className="text-white font-semibold text-sm">Tabela Nutricional</span>
             </div>
-
-            <div className="space-y-6">
-              {/* Photo */}
-              {simulation.ppo?.referenceImageUrl ? (
-                <div className="bg-white p-2 rounded-2xl border shadow-sm">
-                   <img src={simulation.ppo.referenceImageUrl} className="w-full aspect-square object-cover rounded-xl" />
-                </div>
-              ) : (
-                <div className="bg-gray-50 p-2 rounded-2xl border-2 border-dashed border-gray-200 aspect-square flex flex-col items-center justify-center text-gray-400">
-                    <Utensils className="h-8 w-8 mb-2 opacity-20" />
-                    <p className="text-sm font-medium text-center">Sem foto<br/>de referência</p>
-                </div>
-              )}
-
-              {/* Specs */}
-              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-gray-400" />
-                    <span className="text-xs font-bold text-gray-500 uppercase">Preparo</span>
-                  </div>
-                  <span className="text-sm font-bold text-gray-900">{simulation.ppo?.preparationTime || 0}s</span>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Utensils className="h-4 w-4 text-gray-400" />
-                    <span className="text-xs font-bold text-gray-500 uppercase">Peso</span>
-                  </div>
-                  <span className="text-sm font-bold text-gray-900">{simulation.ppo?.portionWeight || 0}g</span>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-orange-500">
-                    <ShieldAlert className="h-4 w-4" />
-                    <span className="text-xs font-bold uppercase">Alergênicos</span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {simulation.ppo?.allergens?.map((a: any, i: number) => (
-                    <Badge key={i} variant="outline" className="bg-orange-50 text-orange-700 border-orange-100 text-[10px]">
-                      {typeof a === 'string' ? a : a.text}
-                    </Badge>
-                  ))}
-                  {(!simulation.ppo?.allergens || simulation.ppo.allergens.length === 0) && (
-                    <span className="text-xs text-gray-400">Nenhum</span>
-                  )}
-                </div>
-              </div>
-              
-              {/* Categorização & Kiosks */}
-              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Localização e Categoria</h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-start text-xs">
-                      <span className="text-gray-500">Quiosques</span>
-                      <div className="flex flex-wrap gap-1 justify-end max-w-[150px]">
-                        {simulation.kioskIds?.length ? simulation.kioskIds.map((id, i) => (
-                           <Badge key={i} variant="secondary" className="text-[9px] px-1.5 h-4">{id}</Badge>
-                        )) : <span className="font-bold text-gray-700">Todos</span>}
-                      </div>
-                    </div>
-                    <Separator className="bg-gray-50" />
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Categoria</span>
-                      <span className="font-bold text-gray-700">{simulation.categoryIds?.[0] ? getCatName(simulation.categoryIds[0]) : '—'}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Linha</span>
-                      <span className="font-bold text-gray-700">{simulation.lineId ? getCatName(simulation.lineId) : '—'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Fiscal & Impostos */}
-              <div className="bg-gray-100/50 p-6 rounded-2xl border border-dashed border-gray-200 space-y-3">
-                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dados Fiscais e Taxas</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-gray-400 uppercase">NCM</span>
-                    <p className="font-mono font-bold text-xs text-gray-700">{simulation.ppo?.ncm || '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-gray-400 uppercase">CEST</span>
-                    <p className="font-mono font-bold text-xs text-gray-700">{simulation.ppo?.cest || '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-gray-400 uppercase">CFOP</span>
-                    <p className="font-mono font-bold text-xs text-gray-700">{simulation.ppo?.cfop || '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-gray-400 uppercase">Meta M.B.</span>
-                    <p className="font-bold text-xs text-gray-700">{simulation.profitGoal ? `${simulation.profitGoal}%` : '—'}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tabela Nutricional */}
-              <div className="bg-green-50/50 p-6 rounded-2xl border border-dashed border-green-200 space-y-3">
-                <h4 className="text-[10px] font-black text-green-700 uppercase tracking-widest">Tabela Nutricional</h4>
-                <div className="flex flex-col items-center justify-center py-4 text-center text-green-600/60">
-                    <Utensils className="h-6 w-6 mb-2 opacity-50" />
-                    <p className="text-xs font-bold uppercase">Módulo em breve</p>
-                    <p className="text-[10px] max-w-[200px]">A tabela nutricional automática será implementada no futuro.</p>
-                </div>
-              </div>
-
-              {/* Notes */}
-              {simulation.notes && (
-                <div className="bg-yellow-50/50 p-4 rounded-xl border border-yellow-100">
-                  <h4 className="text-[10px] font-black text-yellow-600 uppercase tracking-widest mb-2 flex items-center gap-1">
-                    <Info className="h-3 w-3" /> Observações
-                  </h4>
-                  <p className="text-xs text-yellow-800 leading-relaxed italic">
-                    "{simulation.notes}"
-                  </p>
-                </div>
-              )}
+            <div className="px-4 py-6 flex flex-col items-center justify-center gap-2">
+              <FileText size={28} className="opacity-20 text-gray-300" />
+              <p className="text-xs text-center text-gray-400">Em breve</p>
             </div>
           </div>
         </div>
-      </ScrollArea>
-    </div>
+
+        {/* RIGHT — assembly + quality + ingredients + video */}
+        <div className="space-y-5">
+
+          {/* Assembly */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 border-b-2 border-blue-500 pb-2">
+              <LayoutDashboard size={17} className="text-blue-600" />
+              <h3 className="font-black text-gray-900 text-base">Passo a Passo de Montagem</h3>
+            </div>
+            {assemblyInstructions.length === 0 ? (
+              <div className="py-10 border-2 border-dashed border-gray-100 rounded-2xl text-center text-gray-400">
+                <Layers size={28} className="mx-auto mb-2 opacity-20" />
+                <p className="text-sm">Sem instruções cadastradas</p>
+              </div>
+            ) : (
+              assemblyInstructions.map((phase: any) => (
+                <div key={phase.id} className="space-y-2">
+                  <div className="bg-blue-50 px-3 py-1.5 rounded-lg inline-block">
+                    <p className="font-black text-blue-700 text-xs uppercase tracking-widest">{phase.name}</p>
+                  </div>
+                  <div className="space-y-2">
+                    {phase.etapas.map((step: any, si: number) => (
+                      <div key={step.id} className="flex gap-3 items-start bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                        <div
+                          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-white font-black text-base shadow-md"
+                          style={{ background: '#2563EB' }}
+                        >
+                          {si + 1}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <p className="text-gray-800 font-semibold text-sm leading-snug">{step.text}</p>
+                          {step.quantity && step.unit && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-bold text-xs">
+                              <UtensilsCrossed size={9} /> {step.quantity} {step.unit}
+                            </span>
+                          )}
+                        </div>
+                        {step.imageUrl && (
+                          <div
+                            className="flex-shrink-0 relative rounded-xl overflow-hidden border-2 border-white shadow-md"
+                            style={{ width: 68, height: 68 }}
+                          >
+                            <Image src={step.imageUrl} alt={`Etapa ${si + 1}`} fill className="object-cover" sizes="68px" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Quality */}
+          {qualityStandard.length > 0 && (
+            <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+              <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#1a1a2e' }}>
+                <CheckCircle2 size={14} className="text-green-400" />
+                <span className="text-white font-semibold text-sm">Padrão de Qualidade</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {qualityStandard.map(item => (
+                  <div key={item.id} className="flex gap-3 p-3 items-start">
+                    <CheckCircle2 size={13} className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-gray-800 text-sm">{item.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ingredients */}
+          {ingredients.length > 0 && (
+            <div className="rounded-2xl overflow-hidden" style={{ background: '#F9FAFB' }}>
+              <div className="px-4 py-3 flex items-center gap-2">
+                <FileText size={13} className="text-gray-400" />
+                <span className="font-black text-gray-700 text-xs uppercase tracking-widest">Checklist de Ingredientes</span>
+              </div>
+              <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {ingredients.map(ing => (
+                  <div key={ing.name} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-2">
+                    <span className="font-semibold text-gray-700 text-sm truncate">{ing.name}</span>
+                    <span className="flex-shrink-0 text-xs font-black text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                      {ing.quantity} {ing.unit}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Video */}
+          {videoUrl && (() => {
+            const embed = getEmbedUrl(videoUrl);
+            if (!embed) return (
+              <a
+                href={videoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-3 p-3 rounded-xl"
+                style={{ background: '#EFF6FF', border: '2px solid #BFDBFE', textDecoration: 'none' }}
+              >
+                <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                  <Video size={16} />
+                </div>
+                <div>
+                  <p className="font-black text-blue-900 text-xs">Vídeo de Montagem</p>
+                  <p className="text-[10px] text-blue-600 font-medium">Abrir link externo</p>
+                </div>
+              </a>
+            );
+            return (
+              <div className="space-y-1.5">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                  <Video size={10} /> Vídeo de Montagem
+                </p>
+                <div className="rounded-2xl overflow-hidden shadow-md w-full" style={{ aspectRatio: '16/9' }}>
+                  {embed.type === 'iframe' ? (
+                    <iframe
+                      src={embed.src}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video src={embed.src} controls className="w-full h-full bg-black" />
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+    </ScrollArea>
   );
 }
