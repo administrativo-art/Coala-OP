@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Camera, Upload, Trash2, PlusCircle, Search, Check, Clock, Weight, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
+import { Camera, Upload, Trash2, PlusCircle, Search, Check, Clock, Weight, ShieldAlert, ChevronDown, ChevronUp, Video } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ALLERGENS_ANVISA = [
@@ -49,6 +49,7 @@ const phaseSchema = z.object({
 const ppoSchema = z.object({
   sku: z.string().optional(),
   referenceImageUrl: z.string().optional(),
+  assemblyVideoUrl: z.string().optional(),
   ingredients: z.array(ingredientSchema),
   assemblyInstructions: z.array(phaseSchema),
   allergens: z.array(z.string()),
@@ -88,6 +89,7 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
     defaultValues: {
       sku: simulation.ppo?.sku || '',
       referenceImageUrl: simulation.ppo?.referenceImageUrl || '',
+      assemblyVideoUrl: simulation.ppo?.assemblyVideoUrl || '',
       ingredients: initialIngredients,
       assemblyInstructions: (simulation.ppo?.assemblyInstructions?.length ? simulation.ppo.assemblyInstructions : [{ id: 'default', name: 'Preparo', etapas: [{ id: '1', text: '' }] }]) as any,
       allergens: (simulation.ppo?.allergens || []).map((a: any) => typeof a === 'string' ? a : a.text),
@@ -163,6 +165,7 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
           ...simulation.ppo,
           sku: values.sku,
           referenceImageUrl: values.referenceImageUrl,
+          assemblyVideoUrl: values.assemblyVideoUrl || '',
           assemblyInstructions: values.assemblyInstructions,
           allergens: values.allergens.map(a => ({ id: a, text: a })),
           preparationTime: values.preparationTime,
@@ -472,6 +475,30 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
                 })}
               </div>
             </div>
+
+            <Separator className="bg-gray-100" />
+
+            {/* Vídeo de Montagem */}
+            <FormField
+              control={form.control}
+              name="assemblyVideoUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1.5">
+                    <Video className="h-3 w-3" /> URL do Vídeo de Montagem (opcional)
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      value={field.value ?? ''}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className="h-10 text-sm"
+                    />
+                  </FormControl>
+                  <p className="text-[10px] text-gray-400">Aceita YouTube, YouTube Shorts, Vimeo ou link direto de vídeo (.mp4)</p>
+                </FormItem>
+              )}
+            />
 
           </div>
         </ScrollArea>
