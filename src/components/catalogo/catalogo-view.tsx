@@ -65,6 +65,15 @@ function matchesSearch(name: string, query: string): boolean {
   return words.every(w => target.includes(w));
 }
 
+function getEmbedUrl(url: string): { type: 'iframe' | 'video'; src: string } | null {
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (yt) return { type: 'iframe', src: `https://www.youtube.com/embed/${yt[1]}` };
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return { type: 'iframe', src: `https://player.vimeo.com/video/${vimeo[1]}` };
+  if (/\.(mp4|webm|ogg)(\?.*)?$/i.test(url)) return { type: 'video', src: url };
+  return null;
+}
+
 function fmtTime(s: number) {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)} min`;
 }
@@ -308,19 +317,41 @@ function ExpandedPanel({ product, origin, onClose }: { product: Product; origin:
             </div>
           </div>
 
-          {product.assemblyVideoUrl && (
-            <a href={product.assemblyVideoUrl} target="_blank" rel="noreferrer"
-              className="flex items-center gap-3 p-3 rounded-xl"
-              style={{ background: '#EFF6FF', border: '2px solid #BFDBFE', textDecoration: 'none' }}>
-              <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white flex-shrink-0">
-                <Video size={16} />
+          {product.assemblyVideoUrl && (() => {
+            const embed = getEmbedUrl(product.assemblyVideoUrl);
+            if (!embed) return (
+              <a href={product.assemblyVideoUrl} target="_blank" rel="noreferrer"
+                className="flex items-center gap-3 p-3 rounded-xl"
+                style={{ background: '#EFF6FF', border: '2px solid #BFDBFE', textDecoration: 'none' }}>
+                <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                  <Video size={16} />
+                </div>
+                <div>
+                  <p className="font-black text-blue-900 text-xs">Vídeo de Montagem</p>
+                  <p className="text-[10px] text-blue-600 font-medium">Abrir link externo</p>
+                </div>
+              </a>
+            );
+            return (
+              <div className="space-y-1.5">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                  <Video size={10} /> Vídeo de Montagem
+                </p>
+                <div className="rounded-2xl overflow-hidden shadow-md w-full" style={{ aspectRatio: '16/9' }}>
+                  {embed.type === 'iframe' ? (
+                    <iframe
+                      src={embed.src}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video src={embed.src} controls className="w-full h-full bg-black" />
+                  )}
+                </div>
               </div>
-              <div>
-                <p className="font-black text-blue-900 text-xs">Vídeo de Montagem</p>
-                <p className="text-[10px] text-blue-600 font-medium">Toque para assistir</p>
-              </div>
-            </a>
-          )}
+            );
+          })()}
         </div>
 
         {/* RIGHT — assembly + quality + ingredients */}
