@@ -100,7 +100,7 @@ function ProductCard({
   );
 
   return (
-    <div ref={cardRef} style={{ perspective: '1200px', height: 272 }}>
+    <div ref={cardRef} style={{ perspective: '1200px', aspectRatio: '3/4' }}>
       <div
         className="w-full h-full relative"
         style={{
@@ -116,38 +116,38 @@ function ProductCard({
           className="absolute inset-0 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow select-none"
           style={{ backfaceVisibility: 'hidden' }}
         >
-          <div className="relative flex items-center justify-center" style={{ background: color.bg, height: '52%' }}>
-            <div className="absolute top-2 right-3 rounded-full opacity-25" style={{ width: 38, height: 38, background: color.dot }} />
-            <div className="absolute bottom-1 left-4 rounded-full opacity-15" style={{ width: 24, height: 24, background: color.dot }} />
-            <div
-              className="relative z-10 rounded-2xl overflow-hidden flex items-center justify-center"
-              style={{ width: 96, height: 96, background: 'white', boxShadow: `0 8px 24px ${color.dot}50` }}
-            >
-              {product.imageUrl ? (
-                <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="96px" />
-              ) : (
-                <UtensilsCrossed size={36} style={{ color: color.dot }} />
-              )}
-            </div>
+          {/* Full-bleed image — top 65% */}
+          <div className="relative" style={{ height: '65%', background: color.bg }}>
+            {product.imageUrl ? (
+              <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="300px" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <UtensilsCrossed size={40} style={{ color: color.dot, opacity: 0.4 }} />
+              </div>
+            )}
+            {/* Subtle gradient at bottom for text legibility if ever overlapping */}
+            <div className="absolute inset-x-0 bottom-0 h-6" style={{ background: 'linear-gradient(to top, rgba(255,255,255,0.4), transparent)' }} />
           </div>
-          <div className="flex flex-col items-center justify-between px-3 py-2.5 h-[48%]">
-            <p className="font-semibold text-center leading-tight text-sm" style={{ color: '#1a1a2e' }}>
+
+          {/* Info — bottom 35% */}
+          <div className="flex flex-col justify-between px-2.5 py-2" style={{ height: '35%' }}>
+            <p className="font-semibold text-center leading-tight text-xs" style={{ color: '#1a1a2e' }}>
               {product.name}
             </p>
-            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+            <div className="flex items-center gap-1 flex-wrap justify-center">
               {product.preparationTime != null && (
-                <span className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: color.bg, color: color.text }}>
-                  <Clock size={9} />{fmtTime(product.preparationTime)}
+                <span className="flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: color.bg, color: color.text }}>
+                  <Clock size={8} />{fmtTime(product.preparationTime)}
                 </span>
               )}
               {product.portionWeight != null && (
-                <span className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: color.bg, color: color.text }}>
-                  <Weight size={9} />{fmtWeight(product.portionWeight)}
+                <span className="flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: color.bg, color: color.text }}>
+                  <Weight size={8} />{fmtWeight(product.portionWeight)}
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-gray-400 text-center">
-              {hasInstructions ? 'Toque para ver montagem' : 'Sem montagem cadastrada'}
+            <p className="text-[9px] text-gray-400 text-center">
+              {hasInstructions ? 'Toque para ver montagem' : 'Sem montagem'}
             </p>
           </div>
         </div>
@@ -158,21 +158,21 @@ function ProductCard({
           style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', background: '#1a1a2e' }}
         >
           <div className="px-3 py-2 flex items-center justify-between flex-shrink-0" style={{ background: color.dot }}>
-            <span className="text-white text-[10px] font-bold uppercase tracking-wider truncate">{product.name}</span>
-            <Layers size={12} className="text-white opacity-80 flex-shrink-0 ml-1" />
+            <span className="text-white text-[9px] font-bold uppercase tracking-wider truncate">{product.name}</span>
+            <Layers size={11} className="text-white opacity-80 flex-shrink-0 ml-1" />
           </div>
-          <div className="flex-1 overflow-hidden px-3 py-2 space-y-1.5">
+          <div className="flex-1 overflow-hidden px-2.5 py-2 space-y-1.5">
             {!hasInstructions ? (
-              <p className="text-gray-400 text-xs text-center mt-4">Sem instruções cadastradas</p>
+              <p className="text-gray-400 text-xs text-center mt-6">Sem instruções cadastradas</p>
             ) : (
               <>
                 {firstPhase && (
-                  <p className="text-gray-400 text-[9px] uppercase tracking-wide font-medium">{firstPhase.name}</p>
+                  <p className="text-gray-400 text-[8px] uppercase tracking-wide font-medium">{firstPhase.name}</p>
                 )}
                 {previewSteps.map((step, i) => (
                   <div key={step.id} className="flex gap-1.5 items-start">
-                    <span className="flex-shrink-0 rounded-full text-[9px] font-bold flex items-center justify-center mt-0.5"
-                      style={{ width: 16, height: 16, background: color.dot, color: 'white' }}>
+                    <span className="flex-shrink-0 rounded-full text-[8px] font-bold flex items-center justify-center mt-0.5"
+                      style={{ width: 14, height: 14, background: color.dot, color: 'white' }}>
                       {i + 1}
                     </span>
                     <p className="text-white text-[10px] leading-snug line-clamp-2">
@@ -184,14 +184,14 @@ function ProductCard({
                   </div>
                 ))}
                 {firstPhase && firstPhase.etapas.length > 3 && (
-                  <p className="text-gray-500 text-[9px] pl-4">+{firstPhase.etapas.length - 3} etapas...</p>
+                  <p className="text-gray-500 text-[8px] pl-4">+{firstPhase.etapas.length - 3} etapas...</p>
                 )}
               </>
             )}
           </div>
-          <div className="px-3 pb-3 flex-shrink-0">
+          <div className="px-2.5 pb-2.5 flex-shrink-0">
             <button
-              className="w-full py-1.5 rounded-xl text-[11px] font-semibold transition-opacity active:opacity-70"
+              className="w-full py-1.5 rounded-xl text-[10px] font-semibold transition-opacity active:opacity-70"
               style={{ background: color.dot, color: 'white' }}
               onClick={handleExpand}
             >
@@ -262,160 +262,154 @@ function ExpandedPanel({ product, origin, onClose }: { product: Product; origin:
         </button>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 pb-10 space-y-5 pt-4">
+      {/* Two-column layout on desktop, stacked on mobile */}
+      <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 pb-10 md:grid md:gap-8 md:items-start"
+        style={{ gridTemplateColumns: '300px 1fr' }}>
 
-        {/* Reference image */}
-        {product.imageUrl ? (
-          <div className="rounded-2xl overflow-hidden relative" style={{ aspectRatio: '16/9' }}>
-            <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="100vw" />
-            <div className="absolute inset-0 flex items-end p-4" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 60%)' }}>
-              <div>
-                <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Foto de Referência</p>
-                <h2 className="text-white font-black text-xl leading-tight">{product.name}</h2>
+        {/* LEFT — photo + metrics (sticky on desktop) */}
+        <div className="md:sticky md:top-14 space-y-3 mb-6 md:mb-0">
+          {product.imageUrl ? (
+            <div className="rounded-2xl overflow-hidden relative shadow-md" style={{ aspectRatio: '3/4' }}>
+              <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="300px" />
+              <div className="absolute inset-x-0 bottom-0 p-4"
+                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 70%)' }}>
+                <p className="text-white/70 text-[9px] font-bold uppercase tracking-widest">Foto de Referência</p>
+                <h2 className="text-white font-black text-lg leading-tight">{product.name}</h2>
               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-2xl border-2 border-dashed border-gray-200 h-32 flex flex-col items-center justify-center bg-gray-50 text-gray-400">
-            <UtensilsCrossed size={28} className="mb-1 opacity-20" />
-            <p className="text-xs font-medium">{product.name}</p>
-          </div>
-        )}
-
-        {/* Metrics grid */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          <div className="bg-white rounded-2xl p-4 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
-            <Clock size={18} className="text-blue-500" />
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide text-center">Tempo de Montagem</p>
-            <p className="text-base font-black text-gray-900">
-              {product.preparationTime ? fmtTime(product.preparationTime) : '—'}
-            </p>
-          </div>
-          <div className="bg-white rounded-2xl p-4 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
-            <Weight size={18} className="text-pink-500" />
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide text-center">Peso da Porção</p>
-            <p className="text-base font-black text-gray-900">
-              {product.portionWeight ? fmtWeight(product.portionWeight) : '—'}
-            </p>
-          </div>
-          <div className="bg-white rounded-2xl p-4 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
-            <Award size={18} className="text-orange-500" />
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide text-center">Tolerância</p>
-            <p className="text-base font-black text-gray-900">
-              {product.portionTolerance ? `±${product.portionTolerance}g` : '—'}
-            </p>
-          </div>
-          <div className="bg-orange-50 rounded-2xl p-4 flex flex-col items-center gap-1 shadow-sm border border-orange-100">
-            <AlertCircle size={18} className="text-orange-500" />
-            <p className="text-[9px] font-bold text-orange-700 uppercase tracking-wide text-center">Alergênicos</p>
-            <p className="text-[11px] font-bold text-orange-900 text-center leading-tight">{allergenText}</p>
-          </div>
-        </div>
-
-        {/* Assembly instructions */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between border-b-2 border-blue-500 pb-2">
-            <h3 className="font-black text-gray-900 text-base flex items-center gap-2">
-              <LayoutDashboard size={18} className="text-blue-600" />
-              Passo a Passo de Montagem
-            </h3>
-          </div>
-
-          {product.assemblyInstructions.length === 0 ? (
-            <div className="py-10 border-2 border-dashed border-gray-100 rounded-2xl text-center text-gray-400">
-              <Layers size={28} className="mx-auto mb-2 opacity-20" />
-              <p className="text-sm">Sem instruções de montagem cadastradas</p>
             </div>
           ) : (
-            product.assemblyInstructions.map((phase, pi) => (
-              <div key={phase.id} className="space-y-2">
-                <div className="bg-blue-50 px-3 py-1.5 rounded-lg inline-block">
-                  <p className="font-black text-blue-700 text-xs uppercase tracking-widest">{phase.name}</p>
-                </div>
-                <div className="space-y-2">
-                  {phase.etapas.map((step, si) => (
-                    <div key={step.id} className="flex gap-4 items-start bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                      <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl text-white font-black text-lg shadow-md"
-                        style={{ background: '#2563EB' }}>
-                        {si + 1}
-                      </div>
-                      <div className="flex-1 min-w-0 space-y-2">
-                        <p className="text-gray-800 font-semibold text-sm leading-snug">{step.text}</p>
-                        {step.quantity && step.unit && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-bold text-xs">
-                            <UtensilsCrossed size={10} /> {step.quantity} {step.unit}
-                          </span>
-                        )}
-                      </div>
-                      {step.imageUrl && (
-                        <div className="flex-shrink-0 relative rounded-xl overflow-hidden border-2 border-white shadow-md" style={{ width: 72, height: 72 }}>
-                          <Image src={step.imageUrl} alt={`Etapa ${si + 1}`} fill className="object-cover" sizes="72px" />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+            <div className="rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center bg-gray-50 text-gray-400"
+              style={{ aspectRatio: '3/4' }}>
+              <UtensilsCrossed size={36} className="mb-2 opacity-20" />
+              <p className="text-sm font-medium text-center px-4">{product.name}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-white rounded-xl p-3 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
+              <Clock size={16} className="text-blue-500" />
+              <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wide text-center">Tempo</p>
+              <p className="text-sm font-black text-gray-900">{product.preparationTime ? fmtTime(product.preparationTime) : '—'}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
+              <Weight size={16} className="text-pink-500" />
+              <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wide text-center">Peso</p>
+              <p className="text-sm font-black text-gray-900">{product.portionWeight ? fmtWeight(product.portionWeight) : '—'}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 flex flex-col items-center gap-1 shadow-sm border border-gray-100">
+              <Award size={16} className="text-orange-500" />
+              <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wide text-center">Tolerância</p>
+              <p className="text-sm font-black text-gray-900">{product.portionTolerance ? `±${product.portionTolerance}g` : '—'}</p>
+            </div>
+            <div className="bg-orange-50 rounded-xl p-3 flex flex-col items-center gap-1 shadow-sm border border-orange-100">
+              <AlertCircle size={16} className="text-orange-500" />
+              <p className="text-[8px] font-bold text-orange-700 uppercase tracking-wide text-center">Alergênicos</p>
+              <p className="text-[10px] font-bold text-orange-900 text-center leading-tight">{allergenText}</p>
+            </div>
+          </div>
+
+          {product.assemblyVideoUrl && (
+            <a href={product.assemblyVideoUrl} target="_blank" rel="noreferrer"
+              className="flex items-center gap-3 p-3 rounded-xl"
+              style={{ background: '#EFF6FF', border: '2px solid #BFDBFE', textDecoration: 'none' }}>
+              <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white flex-shrink-0">
+                <Video size={16} />
               </div>
-            ))
+              <div>
+                <p className="font-black text-blue-900 text-xs">Vídeo de Montagem</p>
+                <p className="text-[10px] text-blue-600 font-medium">Toque para assistir</p>
+              </div>
+            </a>
           )}
         </div>
 
-        {/* Video */}
-        {product.assemblyVideoUrl && (
-          <div className="p-4 rounded-2xl flex items-center justify-between gap-4" style={{ background: '#EFF6FF', border: '2px solid #BFDBFE' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg">
-                <Video size={22} />
-              </div>
-              <div>
-                <p className="font-black text-blue-900 text-sm">Vídeo de Montagem</p>
-                <p className="text-xs text-blue-600 font-medium">Assista ao processo completo</p>
-              </div>
-            </div>
-            <a href={product.assemblyVideoUrl} target="_blank" rel="noreferrer"
-              className="flex-shrink-0 bg-blue-600 text-white text-xs font-black px-4 py-2 rounded-xl shadow">
-              ABRIR
-            </a>
-          </div>
-        )}
+        {/* RIGHT — assembly + quality + ingredients */}
+        <div className="space-y-5">
+          <h2 className="font-black text-gray-900 text-xl md:hidden">{product.name}</h2>
 
-        {/* Quality standard */}
-        {product.qualityStandard.length > 0 && (
-          <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-            <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#1a1a2e' }}>
-              <CheckCircle2 size={15} className="text-green-400" />
-              <span className="text-white font-semibold text-sm">Padrão de Qualidade</span>
+          {/* Assembly */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 border-b-2 border-blue-500 pb-2">
+              <LayoutDashboard size={17} className="text-blue-600" />
+              <h3 className="font-black text-gray-900 text-base">Passo a Passo de Montagem</h3>
             </div>
-            <div className="divide-y divide-gray-50">
-              {product.qualityStandard.map(item => (
-                <div key={item.id} className="flex gap-3 p-3 items-start">
-                  <CheckCircle2 size={14} className="text-green-500 mt-0.5 flex-shrink-0" />
-                  <p className="text-gray-800 text-sm">{item.text}</p>
+            {product.assemblyInstructions.length === 0 ? (
+              <div className="py-10 border-2 border-dashed border-gray-100 rounded-2xl text-center text-gray-400">
+                <Layers size={28} className="mx-auto mb-2 opacity-20" />
+                <p className="text-sm">Sem instruções cadastradas</p>
+              </div>
+            ) : (
+              product.assemblyInstructions.map((phase) => (
+                <div key={phase.id} className="space-y-2">
+                  <div className="bg-blue-50 px-3 py-1.5 rounded-lg inline-block">
+                    <p className="font-black text-blue-700 text-xs uppercase tracking-widest">{phase.name}</p>
+                  </div>
+                  <div className="space-y-2">
+                    {phase.etapas.map((step, si) => (
+                      <div key={step.id} className="flex gap-3 items-start bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                        <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-white font-black text-base shadow-md"
+                          style={{ background: '#2563EB' }}>
+                          {si + 1}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <p className="text-gray-800 font-semibold text-sm leading-snug">{step.text}</p>
+                          {step.quantity && step.unit && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-bold text-xs">
+                              <UtensilsCrossed size={9} /> {step.quantity} {step.unit}
+                            </span>
+                          )}
+                        </div>
+                        {step.imageUrl && (
+                          <div className="flex-shrink-0 relative rounded-xl overflow-hidden border-2 border-white shadow-md" style={{ width: 68, height: 68 }}>
+                            <Image src={step.imageUrl} alt={`Etapa ${si + 1}`} fill className="object-cover" sizes="68px" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              ))
+            )}
           </div>
-        )}
 
-        {/* Ingredients */}
-        {product.ingredients.length > 0 && (
-          <div className="rounded-2xl overflow-hidden" style={{ background: '#F9FAFB' }}>
-            <div className="px-4 py-3 flex items-center gap-2">
-              <FileText size={14} className="text-gray-400" />
-              <span className="font-black text-gray-700 text-xs uppercase tracking-widest">Checklist de Ingredientes</span>
+          {/* Quality */}
+          {product.qualityStandard.length > 0 && (
+            <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+              <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#1a1a2e' }}>
+                <CheckCircle2 size={14} className="text-green-400" />
+                <span className="text-white font-semibold text-sm">Padrão de Qualidade</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {product.qualityStandard.map(item => (
+                  <div key={item.id} className="flex gap-3 p-3 items-start">
+                    <CheckCircle2 size={13} className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-gray-800 text-sm">{item.text}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="px-4 pb-4 grid grid-cols-1 gap-2">
-              {product.ingredients.map(ing => (
-                <div key={ing.name} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-                  <span className="font-semibold text-gray-700 text-sm">{ing.name}</span>
-                  <span className="text-xs font-black text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
-                    {ing.quantity} {ing.unit}
-                  </span>
-                </div>
-              ))}
+          )}
+
+          {/* Ingredients */}
+          {product.ingredients.length > 0 && (
+            <div className="rounded-2xl overflow-hidden" style={{ background: '#F9FAFB' }}>
+              <div className="px-4 py-3 flex items-center gap-2">
+                <FileText size={13} className="text-gray-400" />
+                <span className="font-black text-gray-700 text-xs uppercase tracking-widest">Checklist de Ingredientes</span>
+              </div>
+              <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {product.ingredients.map(ing => (
+                  <div key={ing.name} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between gap-2">
+                    <span className="font-semibold text-gray-700 text-sm truncate">{ing.name}</span>
+                    <span className="flex-shrink-0 text-xs font-black text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                      {ing.quantity} {ing.unit}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
