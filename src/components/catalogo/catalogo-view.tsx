@@ -66,7 +66,7 @@ function matchesSearch(name: string, query: string): boolean {
 }
 
 function getEmbedUrl(url: string): { type: 'iframe' | 'video'; src: string } | null {
-  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
   if (yt) return { type: 'iframe', src: `https://www.youtube.com/embed/${yt[1]}` };
   const vimeo = url.match(/vimeo\.com\/(\d+)/);
   if (vimeo) return { type: 'iframe', src: `https://player.vimeo.com/video/${vimeo[1]}` };
