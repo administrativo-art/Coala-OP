@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils';
 import { CostAnalysisTab } from './product-modal/cost-analysis-tab';
 import FullTechnicalSheetView from './product-modal/full-technical-sheet-view';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
+import { FichaTecnicaCompletaDocument } from './pdf/FichaTecnicaCompletaDocument';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -45,22 +45,34 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
   const [isLoading, setIsLoading] = useState(false);
   const { updateSimulation, deleteSimulation, simulationItems } = useProductSimulation();
   const { baseProducts } = useBaseProducts();
+  const { categories } = useProductSimulationCategories();
   const { toast } = useToast();
 
   const pdfData = useMemo(() => {
     if (!simulation) return null;
+    const getCatName = (id: string) => categories.find(c => c.id === id)?.name || '—';
     const ingredients = simulationItems
       .filter(item => item.simulationId === simulation.id)
       .map(item => {
         const bp = baseProducts.find(b => b.id === item.baseProductId);
+        const cost = item.useDefault
+          ? (bp?.lastEffectivePrice?.pricePerUnit || bp?.initialCostPerUnit || 0)
+          : (item.overrideCostPerUnit || 0);
         return {
           name: bp?.name || 'Insumo não encontrado',
           quantity: item.quantity,
           unit: item.overrideUnit || bp?.unit || 'un',
+          cost,
         };
       });
-    return { ...simulation, totalCmv: simulation.totalCmv, ingredients };
-  }, [simulation, simulationItems, baseProducts]);
+    return {
+      ...simulation,
+      totalCmv: simulation.totalCmv,
+      ingredients,
+      categoryName: simulation.categoryIds?.[0] ? getCatName(simulation.categoryIds[0]) : '—',
+      lineName: simulation.lineId ? getCatName(simulation.lineId) : '—',
+    };
+  }, [simulation, simulationItems, baseProducts, categories]);
 
   useEffect(() => {
     if (open) {
@@ -170,8 +182,8 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
             <div className="flex gap-2">
               {isViewOnlyMode && pdfData && (
                 <PDFDownloadLink
-                  document={<FichaTecnicaDocument data={pdfData} />}
-                  fileName={`ficha_tecnica_${simulation.name.replace(/ /g, '_')}.pdf`}
+                  document={<FichaTecnicaCompletaDocument data={pdfData as any} />}
+                  fileName={`ficha_completa_${simulation.name.replace(/ /g, '_')}.pdf`}
                 >
                   {((props: any) => (
                     <Button variant="secondary" size="sm" disabled={props.loading}>
