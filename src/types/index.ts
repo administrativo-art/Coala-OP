@@ -673,6 +673,20 @@ export type PlayerHeartbeat = {
   updatedAt?: string;
 };
 
+export type NutritionalNutrient = {
+  name: string;
+  amount: string;
+  unit: string;
+  dailyValue?: string;
+};
+
+export type NutritionalData = {
+  portionSize: string;
+  portionDescription?: string;
+  nutrients: NutritionalNutrient[];
+  extractedAt: string;
+};
+
 export type Product = {
   id: string;
   baseName: string;
@@ -700,6 +714,11 @@ export type Product = {
   apparelSize?: string;
   apparelColor?: string;
   apparelFit?: string;
+  nutritionalTableImageUrl?: string;
+  compositionImageUrl?: string;
+  nutritionalData?: NutritionalData;
+  compositionText?: string;
+  detectedAllergens?: string[];
 };
 
 export type ProductDefinition = {

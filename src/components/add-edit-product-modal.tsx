@@ -11,7 +11,7 @@ import dynamic from 'next/dynamic';
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
 import { getUnitsForCategory, units, type UnitCategory, unitCategories, packageTypes, type PackageType } from '@/lib/conversion';
-import { type Product } from '@/types';
+import { type Product, type NutritionalData } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 
 
@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, Trash2, Upload, Info, Settings, Search, Loader2 } from 'lucide-react';
+import { Camera, Trash2, Upload, Info, Settings, Search, Loader2, FlaskConical, ImageIcon, ZoomIn } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from './ui/separator';
@@ -66,6 +66,9 @@ const productFormSchema = z.object({
   enableCountingInstruction: z.boolean().optional(),
   countingInstruction: z.string().optional(),
   countingInstructionImageUrl: z.string().optional(),
+
+  nutritionalTableImageUrl: z.string().optional(),
+  compositionImageUrl: z.string().optional(),
 }).superRefine((data, ctx) => {
     if (data.enableLogistics) {
         if (!data.multiplo_caixa || data.multiplo_caixa <= 0) {
@@ -100,9 +103,14 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const [isInstructionPhotoModalOpen, setIsInstructionPhotoModalOpen] = useState(false);
+    const [isNutritionalPhotoModalOpen, setIsNutritionalPhotoModalOpen] = useState(false);
+    const [isCompositionPhotoModalOpen, setIsCompositionPhotoModalOpen] = useState(false);
+    const [zoomedImage, setZoomedImage] = useState<string | null>(null);
     const [isFetchingProduct, setIsFetchingProduct] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const instructionFileInputRef = useRef<HTMLInputElement>(null);
+    const nutritionalTableFileInputRef = useRef<HTMLInputElement>(null);
+    const compositionFileInputRef = useRef<HTMLInputElement>(null);
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
@@ -115,6 +123,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             defaultCountingUnit: 'package',
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
             enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
+            nutritionalTableImageUrl: '', compositionImageUrl: '',
         }
     });
     
@@ -163,6 +172,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     enableCountingInstruction: !!(productToEdit.countingInstruction || productToEdit.countingInstructionImageUrl),
                     countingInstruction: productToEdit.countingInstruction || '',
                     countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
+                    nutritionalTableImageUrl: productToEdit.nutritionalTableImageUrl || '',
+                    compositionImageUrl: productToEdit.compositionImageUrl || '',
                 });
             } else {
                 form.reset({
@@ -174,6 +185,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     defaultCountingUnit: 'package',
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
+                    nutritionalTableImageUrl: '', compositionImageUrl: '',
                 });
             }
         }
@@ -191,16 +203,21 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         setIsScannerOpen(false);
     };
 
-    const handlePhotoCaptured = async (dataUrl: string, target: 'main' | 'instruction') => {
-        if (target === 'main') {
-            form.setValue('imageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
-        } else {
-            form.setValue('countingInstructionImageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
-        }
+    type PhotoTarget = 'main' | 'instruction' | 'nutritionalTable' | 'composition';
+
+    const photoTargetField: Record<PhotoTarget, 'imageUrl' | 'countingInstructionImageUrl' | 'nutritionalTableImageUrl' | 'compositionImageUrl'> = {
+        main: 'imageUrl',
+        instruction: 'countingInstructionImageUrl',
+        nutritionalTable: 'nutritionalTableImageUrl',
+        composition: 'compositionImageUrl',
+    };
+
+    const handlePhotoCaptured = async (dataUrl: string, target: PhotoTarget) => {
+        form.setValue(photoTargetField[target], dataUrl, { shouldValidate: true, shouldDirty: true });
         toast({ title: "Foto capturada com sucesso!" });
     };
 
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, target: 'main' | 'instruction') => {
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, target: PhotoTarget) => {
         const file = event.target.files?.[0];
         if (file) {
             if (file.size > 5 * 1024 * 1024) {
@@ -210,11 +227,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             const reader = new FileReader();
             reader.onloadend = async () => {
                 const dataUrl = reader.result as string;
-                if (target === 'main') {
-                    form.setValue('imageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
-                } else {
-                    form.setValue('countingInstructionImageUrl', dataUrl, { shouldValidate: true, shouldDirty: true });
-                }
+                form.setValue(photoTargetField[target], dataUrl, { shouldValidate: true, shouldDirty: true });
             };
             reader.readAsDataURL(file);
         }
@@ -256,12 +269,18 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             apparelSize: values.category === 'Vestimenta' ? values.apparelSize : undefined,
             apparelColor: values.category === 'Vestimenta' ? values.apparelColor : undefined,
             apparelFit: values.category === 'Vestimenta' ? values.apparelFit : undefined,
-            
+
             multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
             rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,
-                        
+
             countingInstruction: values.enableCountingInstruction ? values.countingInstruction : undefined,
             countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl : undefined,
+
+            nutritionalTableImageUrl: values.nutritionalTableImageUrl || undefined,
+            compositionImageUrl: values.compositionImageUrl || undefined,
+            nutritionalData: productToEdit?.nutritionalData,
+            compositionText: productToEdit?.compositionText,
+            detectedAllergens: productToEdit?.detectedAllergens,
         };
 
         if (productToEdit) {
@@ -517,6 +536,121 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
                                     <FormField control={form.control} name="notes" render={({ field }) => (<FormItem className='mt-4'><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                 </Card>
+
+                                <Card className="p-4 bg-emerald-50 dark:bg-emerald-900/20">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <FlaskConical className="h-4 w-4 text-emerald-600" />
+                                        <h3 className="font-medium text-emerald-900 dark:text-emerald-100">Tabela Nutricional e Composição</h3>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mb-4">Fotografe a embalagem. Os dados serão transcritos pelo assistente quando solicitado.</p>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {/* Nutritional Table Photo */}
+                                        <div className="space-y-2">
+                                            <FormLabel className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Foto — Tabela Nutricional</FormLabel>
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => form.watch('nutritionalTableImageUrl') ? setZoomedImage(form.watch('nutritionalTableImageUrl')!) : undefined}
+                                                    className="w-20 h-20 rounded-md bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0 border border-emerald-200 focus:outline-none"
+                                                >
+                                                    {form.watch('nutritionalTableImageUrl') ? (
+                                                        <div className="relative w-full h-full group">
+                                                            <Image src={form.watch('nutritionalTableImageUrl')!} alt="Tabela Nutricional" width={80} height={80} className="object-cover w-full h-full" />
+                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <ZoomIn className="h-5 w-5 text-white" />
+                                                            </div>
+                                                        </div>
+                                                    ) : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
+                                                </button>
+                                                <div className="flex flex-col gap-1.5">
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsNutritionalPhotoModalOpen(true)}><Camera className="mr-1.5 h-3.5 w-3.5" /> Câmera</Button>
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => nutritionalTableFileInputRef.current?.click()}><Upload className="mr-1.5 h-3.5 w-3.5" /> Upload</Button>
+                                                    {form.watch('nutritionalTableImageUrl') && (
+                                                        <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600 px-2" onClick={() => form.setValue('nutritionalTableImageUrl', '', { shouldDirty: true })}>
+                                                            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Remover
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <Input type="file" ref={nutritionalTableFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'nutritionalTable')} />
+                                            <FormField control={form.control} name="nutritionalTableImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl></FormItem>)}/>
+                                        </div>
+
+                                        {/* Composition Photo */}
+                                        <div className="space-y-2">
+                                            <FormLabel className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Foto — Composição / Ingredientes</FormLabel>
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => form.watch('compositionImageUrl') ? setZoomedImage(form.watch('compositionImageUrl')!) : undefined}
+                                                    className="w-20 h-20 rounded-md bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0 border border-emerald-200 focus:outline-none"
+                                                >
+                                                    {form.watch('compositionImageUrl') ? (
+                                                        <div className="relative w-full h-full group">
+                                                            <Image src={form.watch('compositionImageUrl')!} alt="Composição" width={80} height={80} className="object-cover w-full h-full" />
+                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <ZoomIn className="h-5 w-5 text-white" />
+                                                            </div>
+                                                        </div>
+                                                    ) : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
+                                                </button>
+                                                <div className="flex flex-col gap-1.5">
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsCompositionPhotoModalOpen(true)}><Camera className="mr-1.5 h-3.5 w-3.5" /> Câmera</Button>
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => compositionFileInputRef.current?.click()}><Upload className="mr-1.5 h-3.5 w-3.5" /> Upload</Button>
+                                                    {form.watch('compositionImageUrl') && (
+                                                        <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600 px-2" onClick={() => form.setValue('compositionImageUrl', '', { shouldDirty: true })}>
+                                                            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Remover
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <Input type="file" ref={compositionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'composition')} />
+                                            <FormField control={form.control} name="compositionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl></FormItem>)}/>
+                                        </div>
+                                    </div>
+
+                                    {/* Read-only display of transcribed nutritional data */}
+                                    {productToEdit?.nutritionalData ? (
+                                        <div className="mt-4 pt-4 border-t border-emerald-200 space-y-3">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Dados Transcritos</p>
+                                            <div className="bg-white rounded-lg border border-emerald-100 overflow-hidden">
+                                                <div className="px-3 py-2 bg-emerald-600 text-white">
+                                                    <p className="text-xs font-bold">INFORMAÇÃO NUTRICIONAL</p>
+                                                    <p className="text-[10px] text-emerald-100">Porção: {productToEdit.nutritionalData.portionSize}{productToEdit.nutritionalData.portionDescription ? ` (${productToEdit.nutritionalData.portionDescription})` : ''}</p>
+                                                </div>
+                                                <div className="divide-y divide-gray-50">
+                                                    {productToEdit.nutritionalData.nutrients.map((n, i) => (
+                                                        <div key={i} className="flex justify-between items-center px-3 py-1.5">
+                                                            <span className="text-xs text-gray-700">{n.name}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs font-bold text-gray-900">{n.amount}{n.unit}</span>
+                                                                {n.dailyValue && <span className="text-[10px] text-gray-400">{n.dailyValue}</span>}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            {productToEdit.compositionText && (
+                                                <div className="bg-white rounded-lg border border-emerald-100 p-3">
+                                                    <p className="text-[10px] font-bold uppercase text-emerald-700 mb-1">Composição</p>
+                                                    <p className="text-xs text-gray-600 leading-relaxed">{productToEdit.compositionText}</p>
+                                                </div>
+                                            )}
+                                            {productToEdit.detectedAllergens && productToEdit.detectedAllergens.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {productToEdit.detectedAllergens.map((a, i) => (
+                                                        <span key={i} className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold border border-orange-200">{a}</span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="mt-4 pt-4 border-t border-emerald-200">
+                                            <p className="text-xs text-muted-foreground text-center py-2">Dados nutricionais ainda não transcritos — solicite no chat.</p>
+                                        </div>
+                                    )}
+                                </Card>
                             </div>
                         </ScrollArea>
                         <DialogFooter className="pt-4 border-t">
@@ -531,6 +665,17 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             {isScannerOpen && <BarcodeScannerModal open={isScannerOpen} onOpenChange={setIsScannerOpen} onScanSuccess={handleScanSuccess} />}
             {isPhotoModalOpen && <PhotoCaptureModal open={isPhotoModalOpen} onOpenChange={setIsPhotoModalOpen} onPhotoCaptured={(dataUrl) => handlePhotoCaptured(dataUrl, 'main')} />}
             {isInstructionPhotoModalOpen && <PhotoCaptureModal open={isInstructionPhotoModalOpen} onOpenChange={setIsInstructionPhotoModalOpen} onPhotoCaptured={(dataUrl) => handlePhotoCaptured(dataUrl, 'instruction')} />}
+            {isNutritionalPhotoModalOpen && <PhotoCaptureModal open={isNutritionalPhotoModalOpen} onOpenChange={setIsNutritionalPhotoModalOpen} onPhotoCaptured={(dataUrl) => handlePhotoCaptured(dataUrl, 'nutritionalTable')} />}
+            {isCompositionPhotoModalOpen && <PhotoCaptureModal open={isCompositionPhotoModalOpen} onOpenChange={setIsCompositionPhotoModalOpen} onPhotoCaptured={(dataUrl) => handlePhotoCaptured(dataUrl, 'composition')} />}
+
+            {/* Zoom lightbox */}
+            {zoomedImage && (
+                <Dialog open={!!zoomedImage} onOpenChange={() => setZoomedImage(null)}>
+                    <DialogContent className="max-w-3xl p-2 bg-black border-none">
+                        <Image src={zoomedImage} alt="Ampliado" width={800} height={1000} className="w-full h-auto object-contain max-h-[85vh] rounded" />
+                    </DialogContent>
+                </Dialog>
+            )}
         </>
     );
 }

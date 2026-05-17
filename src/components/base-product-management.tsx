@@ -13,11 +13,12 @@ import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit, Settings, Search, MoreHorizontal, Inbox, Box, DollarSign } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, Settings, Search, MoreHorizontal, Inbox, Box, DollarSign, FileText } from 'lucide-react';
 import { type BaseProduct } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Skeleton } from './ui/skeleton';
 import { AddEditBaseProductModal } from './add-edit-base-product-modal';
+import { BaseProductFichaModal } from './base-product-ficha-modal';
 import { ClassificationManagementModal } from './classification-management-modal';
 import { Input } from './ui/input';
 import { useClassifications } from '@/hooks/use-classifications';
@@ -91,6 +92,7 @@ export function BaseProductManagement() {
   const [productsToDelete, setProductsToDelete] = useState<BaseProduct[]>([]);
   const [productToEditId, setProductToEditId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [fichaProduct, setFichaProduct] = useState<BaseProduct | null>(null);
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -282,6 +284,7 @@ export function BaseProductManagement() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onSelect={() => setFichaProduct(product)}><FileText className="mr-2 h-4 w-4" /> Ficha Cadastral</DropdownMenuItem>
                                                     <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
                                                     <DropdownMenuSeparator />
                                                     <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
@@ -349,6 +352,7 @@ export function BaseProductManagement() {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onSelect={() => setFichaProduct(product)}><FileText className="mr-2 h-4 w-4" /> Ficha Cadastral</DropdownMenuItem>
                                                         <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
                                                         <DropdownMenuSeparator />
                                                         <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
@@ -382,6 +386,17 @@ export function BaseProductManagement() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         productToEditId={productToEditId}
+      />
+
+      <BaseProductFichaModal
+        open={!!fichaProduct}
+        onOpenChange={(open) => { if (!open) setFichaProduct(null); }}
+        baseProduct={fichaProduct}
+        onEdit={(bp) => {
+          setFichaProduct(null);
+          setProductToEditId(bp.id);
+          setIsModalOpen(true);
+        }}
       />
 
       <ClassificationManagementModal open={isClassificationModalOpen} onOpenChange={setIsClassificationModalOpen} />
