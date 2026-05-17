@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Briefcase, Pencil, ShieldCheck, Users2, Workflow } from "lucide-react";
 
-import type { JobFunction, JobRole } from "@/types";
+import type { HrFormQuestion, JobFunction, JobRole } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
@@ -83,6 +83,25 @@ const roleSchema = z.object({
 
 type RoleFormValues = z.infer<typeof roleSchema>;
 
+type RoleSubmitValues = RoleFormValues & {
+  formQuestions: HrFormQuestion[];
+};
+
+const questionTypes: Array<{ value: HrFormQuestion["type"]; label: string }> = [
+  { value: "text", label: "Texto" },
+  { value: "yes_no", label: "Sim/Não" },
+  { value: "select", label: "Seleção única" },
+  { value: "multi_select", label: "Múltipla escolha" },
+];
+
+const emptyQuestionDraft = {
+  text: "",
+  type: "text" as HrFormQuestion["type"],
+  optionsText: "",
+  required: false,
+  eliminatory: false,
+};
+
 const functionSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome da função."),
   publicTitle: z.string().trim().optional(),
@@ -105,9 +124,12 @@ function RoleDialog({
   onOpenChange: (value: boolean) => void;
   role: JobRole | null;
   roles: JobRole[];
-  onSubmit: (values: RoleFormValues, currentRole: JobRole | null) => Promise<void>;
+  onSubmit: (values: RoleSubmitValues, currentRole: JobRole | null) => Promise<void>;
 }) {
   const { profiles } = useProfiles();
+  const [questions, setQuestions] = React.useState<HrFormQuestion[]>([]);
+  const [questionDraft, setQuestionDraft] = React.useState(emptyQuestionDraft);
+  const [questionError, setQuestionError] = React.useState<string | null>(null);
   const form = useForm<RoleFormValues>({
     resolver: zodResolver(roleSchema),
     defaultValues: {
@@ -134,9 +156,48 @@ function RoleDialog({
       description: role?.description ?? "",
       publicDescription: role?.publicDescription ?? "",
     });
+    setQuestions(role?.formQuestions ?? []);
+    setQuestionDraft(emptyQuestionDraft);
+    setQuestionError(null);
   }, [form, open, role]);
 
   const reportsToOptions = roles.filter((item) => item.id !== role?.id);
+  const addQuestion = () => {
+    const text = questionDraft.text.trim();
+    if (!text) {
+      setQuestionError("Informe o texto da pergunta.");
+      return;
+    }
+
+    const options = questionDraft.optionsText
+      .split("\n")
+      .map(option => option.trim())
+      .filter(Boolean);
+    if ((questionDraft.type === "select" || questionDraft.type === "multi_select") && options.length === 0) {
+      setQuestionError("Informe ao menos uma opção para esta pergunta.");
+      return;
+    }
+
+    const id = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `question-${Date.now()}`;
+    setQuestions(prev => [
+      ...prev,
+      {
+        id,
+        text,
+        type: questionDraft.type,
+        required: questionDraft.required,
+        scored: false,
+        weight: "medium",
+        eliminatory: questionDraft.eliminatory,
+        tags: [],
+        config: options.length > 0 ? { options } : undefined,
+      },
+    ]);
+    setQuestionDraft(emptyQuestionDraft);
+    setQuestionError(null);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -150,7 +211,7 @@ function RoleDialog({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(async (values) => {
-              await onSubmit(values, role);
+              await onSubmit({ ...values, formQuestions: questions }, role);
               onOpenChange(false);
             })}
             className="space-y-4"
@@ -319,6 +380,103 @@ function RoleDialog({
                   </FormItem>
                 )}
               />
+            </div>
+
+            <div className="space-y-4 rounded-lg border p-4">
+              <div>
+                <h3 className="text-sm font-semibold">Formulário de triagem</h3>
+                <p className="text-sm text-muted-foreground">
+                  Perguntas exibidas na candidatura pública para vagas ligadas a este cargo.
+                </p>
+              </div>
+
+              {questions.length > 0 && (
+                <div className="space-y-2">
+                  {questions.map((question) => (
+                    <div key={question.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-medium">{question.text}</p>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="secondary">
+                            {questionTypes.find(item => item.value === question.type)?.label ?? question.type}
+                          </Badge>
+                          {question.required && <Badge variant="outline">Obrigatória</Badge>}
+                          {question.eliminatory && <Badge variant="outline">Eliminatória</Badge>}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setQuestions(prev => prev.filter(item => item.id !== question.id))}
+                      >
+                        Remover
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid gap-3 rounded-md bg-muted/30 p-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Pergunta</label>
+                  <Input
+                    value={questionDraft.text}
+                    onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
+                    placeholder="Ex: Você tem disponibilidade aos domingos?"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Tipo</label>
+                  <select
+                    value={questionDraft.type}
+                    onChange={event => setQuestionDraft(prev => ({
+                      ...prev,
+                      type: event.target.value as HrFormQuestion["type"],
+                    }))}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {questionTypes.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={questionDraft.required}
+                      onChange={event => setQuestionDraft(prev => ({ ...prev, required: event.target.checked }))}
+                    />
+                    Obrigatória
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={questionDraft.eliminatory}
+                      onChange={event => setQuestionDraft(prev => ({ ...prev, eliminatory: event.target.checked }))}
+                    />
+                    Eliminatória
+                  </label>
+                </div>
+                {(questionDraft.type === "select" || questionDraft.type === "multi_select") && (
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Opções, uma por linha</label>
+                    <Textarea
+                      rows={3}
+                      value={questionDraft.optionsText}
+                      onChange={event => setQuestionDraft(prev => ({ ...prev, optionsText: event.target.value }))}
+                      placeholder={"Manhã\nTarde/noite\nFlexível"}
+                    />
+                  </div>
+                )}
+                {questionError && <p className="text-sm text-destructive md:col-span-2">{questionError}</p>}
+                <div className="md:col-span-2">
+                  <Button type="button" variant="outline" onClick={addQuestion}>
+                    Adicionar pergunta
+                  </Button>
+                </div>
+              </div>
             </div>
 
             <DialogFooter>
@@ -596,7 +754,7 @@ export function DPSettingsRoles() {
     return summary;
   }, [activeUsers, roles]);
 
-  async function handleRoleSubmit(values: RoleFormValues, role: JobRole | null) {
+  async function handleRoleSubmit(values: RoleSubmitValues, role: JobRole | null) {
     if (!firebaseUser) return;
 
     const payload = {
@@ -608,6 +766,7 @@ export function DPSettingsRoles() {
       isActive: values.isActive,
       description: values.description || undefined,
       publicDescription: values.publicDescription || undefined,
+      formQuestions: values.formQuestions,
     };
 
     try {

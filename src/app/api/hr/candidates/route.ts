@@ -18,7 +18,20 @@ export async function GET(request: NextRequest) {
   if (!access) return jsonError('Sem permissão para acessar candidatos.', 403);
 
   const snapshot = await hrDbAdmin.collection('candidates').orderBy('appliedAt', 'desc').get();
-  const candidates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const candidates = await Promise.all(snapshot.docs.map(async (doc) => {
+    const data = doc.data();
+    const latestApplicationId = typeof data.latestApplicationId === 'string' ? data.latestApplicationId : null;
+    if (!latestApplicationId) return { id: doc.id, ...data };
+
+    const applicationDoc = await hrDbAdmin.collection('applications').doc(latestApplicationId).get();
+    return {
+      id: doc.id,
+      ...data,
+      latestApplication: applicationDoc.exists
+        ? { id: applicationDoc.id, ...applicationDoc.data() }
+        : null,
+    };
+  }));
   return NextResponse.json(candidates);
 }
 

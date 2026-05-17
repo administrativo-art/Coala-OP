@@ -8,7 +8,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchHrBootstrap } from '@/features/hr/lib/client';
-import type { Candidate, CandidateStatus, JobRole, JobOpening, JobOpeningStatus } from '@/types';
+import type { Candidate, CandidateStatus, HrFormQuestion, JobRole, JobOpening, JobOpeningStatus } from '@/types';
 import {
   UserPlus, Search, Filter, MoreHorizontal, Mail, Phone,
   FileText, Calendar, Star, Clock, CheckCircle2, XCircle,
@@ -124,6 +124,13 @@ function ErrorLine({ msg }: { msg: string }) {
       <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" /> {msg}
     </p>
   );
+}
+
+function formatFormAnswer(value: unknown) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
+  if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—';
+  return String(value);
 }
 
 function ResumeInput({ value, onChange }: { value: File | null; onChange: (f: File | null) => void }) {
@@ -397,6 +404,10 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
 
   const role = roles.find(r => r.id === candidate.jobRoleId);
   const opening = openings.find(o => o.id === candidate.jobOpeningId);
+  const formAnswers = candidate.latestApplication?.formAnswers ?? candidate.formAnswers ?? {};
+  const questionSnapshot = candidate.latestApplication?.formQuestionSnapshot ?? role?.formQuestions ?? [];
+  const questionsById = new Map((questionSnapshot as HrFormQuestion[]).map(question => [question.id, question]));
+  const answerEntries = Object.entries(formAnswers);
   const hasChanges =
     form.name !== candidate.name || form.email !== candidate.email ||
     form.phone !== (candidate.phone ?? '') || form.notes !== (candidate.notes ?? '') ||
@@ -508,6 +519,23 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
               placeholder={canManage ? 'Anotações sobre o candidato…' : '—'}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none disabled:opacity-60" />
           </div>
+
+          {answerEntries.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Respostas do formulário</h3>
+              <div className="space-y-2">
+                {answerEntries.map(([questionId, answer]) => {
+                  const question = questionsById.get(questionId);
+                  return (
+                    <div key={questionId} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+                      <p className="text-xs font-medium text-slate-400">{question?.text ?? 'Pergunta removida'}</p>
+                      <p className="mt-1 text-sm text-slate-200">{formatFormAnswer(answer)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="text-xs text-slate-600 space-y-0.5">
             <p>Inscrito em {new Date(candidate.appliedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>

@@ -556,8 +556,14 @@ export type Candidate = {
   jobRoleName?: string;
   jobOpeningId?: string;
   latestApplicationId?: string;
+  latestApplication?: {
+    id: string;
+    formAnswers?: Record<string, unknown>;
+    formQuestionSnapshot?: HrFormQuestion[];
+  };
   status: CandidateStatus;
   notes?: string;
+  formAnswers?: Record<string, unknown>;
   rating?: number; // 1-5
   source?: string;
   appliedAt: string;

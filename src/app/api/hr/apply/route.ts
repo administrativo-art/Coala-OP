@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
+import type { HrFormQuestion } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,6 +44,80 @@ function isAllowedResumeUrl(value: unknown) {
     value.length <= 1200;
 }
 
+function getQuestionOptions(question: HrFormQuestion) {
+  const options = question.config?.options;
+  return Array.isArray(options)
+    ? options.filter((option): option is string => typeof option === 'string' && option.trim().length > 0)
+    : [];
+}
+
+function hasAnswer(value: unknown) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function normalizeFormAnswers(rawAnswers: unknown, questions: HrFormQuestion[]) {
+  if (rawAnswers !== undefined && (typeof rawAnswers !== 'object' || rawAnswers === null || Array.isArray(rawAnswers))) {
+    throw new Error('Respostas do formulário inválidas.');
+  }
+
+  const input = (rawAnswers ?? {}) as Record<string, unknown>;
+  if (JSON.stringify(input).length > 12_000) {
+    throw new Error('Respostas do formulário acima do limite permitido.');
+  }
+
+  const normalized: Record<string, unknown> = {};
+  for (const question of questions) {
+    const raw = input[question.id];
+    if (question.required && !hasAnswer(raw)) {
+      throw new Error(`Responda a pergunta obrigatória: ${question.text}`);
+    }
+    if (!hasAnswer(raw)) continue;
+
+    const options = getQuestionOptions(question);
+    if (question.type === 'yes_no') {
+      if (typeof raw !== 'boolean') throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = raw;
+      continue;
+    }
+    if (question.type === 'select') {
+      const value = trimText(raw, 200);
+      if (!value || !options.includes(value)) throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = value;
+      continue;
+    }
+    if (question.type === 'multi_select') {
+      if (!Array.isArray(raw)) throw new Error(`Resposta inválida para: ${question.text}`);
+      const values = raw
+        .map(entry => trimText(entry, 200))
+        .filter(Boolean);
+      if (values.some(value => !options.includes(value))) throw new Error(`Resposta inválida para: ${question.text}`);
+      if (question.required && values.length === 0) throw new Error(`Responda a pergunta obrigatória: ${question.text}`);
+      normalized[question.id] = Array.from(new Set(values));
+      continue;
+    }
+
+    normalized[question.id] = trimText(raw, 1000);
+  }
+
+  return normalized;
+}
+
+function createQuestionSnapshot(questions: HrFormQuestion[]) {
+  return questions.map(question => ({
+    id: question.id,
+    text: question.text,
+    type: question.type,
+    required: question.required,
+    eliminatory: question.eliminatory,
+    expectedAnswer: question.expectedAnswer === undefined ? null : question.expectedAnswer,
+    weight: question.weight,
+    config: question.config ?? null,
+  }));
+}
+
 export async function POST(request: NextRequest) {
   const flags = await getFeatureFlags();
   if (flags.kill_recruitment_public_landing) {
@@ -64,6 +139,7 @@ export async function POST(request: NextRequest) {
   const source = trimText(body.source, 40) || 'site';
   const resumeUrl = isAllowedResumeUrl(body.resumeUrl) ? body.resumeUrl : null;
   const resumePath = trimText(body.resumePath, 500) || null;
+  const rawFormAnswers = body.formAnswers;
   const consentAccepted = body.consentAccepted === true;
   const website = trimText(body.website, 200);
 
@@ -87,6 +163,19 @@ export async function POST(request: NextRequest) {
 
   const opening = snapshot.docs[0];
   const openingData = opening.data();
+  const roleDoc = typeof openingData.jobRoleId === 'string'
+    ? await hrDbAdmin.collection('jobRoles').doc(openingData.jobRoleId).get()
+    : null;
+  const formQuestions = roleDoc?.exists && Array.isArray(roleDoc.data()?.formQuestions)
+    ? roleDoc.data()?.formQuestions as HrFormQuestion[]
+    : [];
+  let formAnswers: Record<string, unknown>;
+  try {
+    formAnswers = normalizeFormAnswers(rawFormAnswers, formQuestions);
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : 'Respostas do formulário inválidas.');
+  }
+  const formQuestionSnapshot = createQuestionSnapshot(formQuestions);
 
   const existingCandidate = await hrDbAdmin
     .collection('candidates')
@@ -117,6 +206,8 @@ export async function POST(request: NextRequest) {
     notes: coverMessage || null,
     resumeUrl,
     resumePath,
+    formAnswers,
+    formQuestionSnapshot,
     appliedAt: now,
     updatedAt: now,
     createdBy: 'public',
@@ -135,6 +226,7 @@ export async function POST(request: NextRequest) {
     source,
     resumeUrl,
     resumePath,
+    formAnswers,
     rating: 0,
     consent: {
       accepted: true,

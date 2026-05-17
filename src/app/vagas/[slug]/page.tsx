@@ -6,6 +6,7 @@ import {
   MapPin, Monitor, Users, CheckCircle2, ArrowLeft,
   Loader2, AlertTriangle, Send, Paperclip, X, Building2,
 } from 'lucide-react';
+import type { HrFormQuestion } from '@/types';
 
 type WorkType = 'presencial' | 'remoto' | 'hibrido';
 
@@ -16,6 +17,7 @@ interface PublicOpening {
   jobRoleName?: string;
   description?: string;
   requirements?: string[];
+  formQuestions?: HrFormQuestion[];
   location?: string;
   workType?: WorkType;
   slots: number;
@@ -28,6 +30,116 @@ const WORK_TYPE_LABELS: Record<WorkType, string> = {
   hibrido: 'Híbrido',
 };
 
+function getQuestionOptions(question: HrFormQuestion) {
+  const options = question.config?.options;
+  return Array.isArray(options)
+    ? options.filter((option): option is string => typeof option === 'string' && option.trim().length > 0)
+    : [];
+}
+
+function hasAnswer(value: unknown) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function FormQuestionField({ question, value, onChange }: {
+  question: HrFormQuestion;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  const options = getQuestionOptions(question);
+
+  if (question.type === 'yes_no') {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-slate-400">{question.text}{question.required ? ' *' : ''}</p>
+        <div className="flex gap-3">
+          {[
+            { label: 'Sim', value: true },
+            { label: 'Não', value: false },
+          ].map(option => (
+            <label key={option.label} className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="radio"
+                checked={value === option.value}
+                onChange={() => onChange(option.value)}
+                className="accent-indigo-500"
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (question.type === 'select') {
+    return (
+      <div>
+        <label className="block text-xs font-medium text-slate-400 mb-1.5">{question.text}{question.required ? ' *' : ''}</label>
+        <select
+          value={typeof value === 'string' ? value : ''}
+          onChange={e => onChange(e.target.value)}
+          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+        >
+          <option value="">Selecione</option>
+          {options.map(option => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </div>
+    );
+  }
+
+  if (question.type === 'multi_select') {
+    const values = Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-slate-400">{question.text}{question.required ? ' *' : ''}</p>
+        <div className="space-y-2">
+          {options.map(option => (
+            <label key={option} className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={values.includes(option)}
+                onChange={e => onChange(e.target.checked ? [...values, option] : values.filter(entry => entry !== option))}
+                className="accent-indigo-500"
+              />
+              {option}
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (question.type === 'text') {
+    return (
+      <div>
+        <label className="block text-xs font-medium text-slate-400 mb-1.5">{question.text}{question.required ? ' *' : ''}</label>
+        <textarea
+          value={typeof value === 'string' ? value : ''}
+          onChange={e => onChange(e.target.value)}
+          rows={2}
+          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-400 mb-1.5">{question.text}{question.required ? ' *' : ''}</label>
+      <input
+        type="text"
+        value={typeof value === 'string' ? value : ''}
+        onChange={e => onChange(e.target.value)}
+        className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+      />
+    </div>
+  );
+}
+
 export default function VagaDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
 
@@ -36,6 +148,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
   const [notFound, setNotFound] = useState(false);
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' });
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [consent, setConsent] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -47,7 +160,10 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
       .then(r => r.json())
       .then((data: PublicOpening[]) => {
         const found = data.find(o => o.slug === slug);
-        if (found) setOpening(found);
+        if (found) {
+          setOpening(found);
+          setAnswers({});
+        }
         else setNotFound(true);
       })
       .catch(() => setNotFound(true))
@@ -65,13 +181,20 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
     setSubmitError(null);
 
     try {
-      const payload: Record<string, string> = {
+      if (!opening) throw new Error('Vaga não encontrada ou encerrada.');
+      const missingQuestion = (opening.formQuestions ?? []).find(question => question.required && !hasAnswer(answers[question.id]));
+      if (missingQuestion) {
+        throw new Error(`Responda a pergunta obrigatória: ${missingQuestion.text}`);
+      }
+
+      const payload: Record<string, unknown> = {
         slug,
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
         message: form.message.trim(),
         source: 'site',
+        formAnswers: answers,
       };
 
       // Upload CV if provided
@@ -271,6 +394,20 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
                       placeholder="Conte um pouco sobre você..."
                     />
                   </div>
+
+                  {(opening.formQuestions ?? []).length > 0 && (
+                    <div className="space-y-4 border-t border-slate-800 pt-4">
+                      <h3 className="font-semibold text-white text-sm">Perguntas de triagem</h3>
+                      {(opening.formQuestions ?? []).map(question => (
+                        <FormQuestionField
+                          key={question.id}
+                          question={question}
+                          value={answers[question.id]}
+                          onChange={value => setAnswers(prev => ({ ...prev, [question.id]: value }))}
+                        />
+                      ))}
+                    </div>
+                  )}
 
                   <label className="flex items-start gap-2.5 cursor-pointer">
                     <input
