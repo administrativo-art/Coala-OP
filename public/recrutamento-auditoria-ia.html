@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auditoria IA - Recrutamento Coala</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #020617;
+        --panel: #0f172a;
+        --panel-soft: #111827;
+        --line: #1e293b;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --faint: #64748b;
+        --accent: #818cf8;
+        --green: #34d399;
+        --amber: #fbbf24;
+        --red: #fb7185;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .shell {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 40px 24px 56px;
+      }
+
+      header {
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 24px;
+        margin-bottom: 28px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        font-size: clamp(32px, 5vw, 52px);
+        line-height: 1.05;
+      }
+
+      h2 {
+        font-size: 20px;
+        margin-bottom: 12px;
+      }
+
+      h3 {
+        font-size: 15px;
+        margin-bottom: 8px;
+      }
+
+      p {
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 12px;
+      }
+
+      .lead {
+        max-width: 780px;
+        margin-top: 16px;
+        font-size: 17px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin: 20px 0 28px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 18px;
+      }
+
+      .wide {
+        grid-column: 1 / -1;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 9px;
+        color: var(--muted);
+        font-size: 12px;
+        margin: 3px 4px 3px 0;
+        white-space: nowrap;
+      }
+
+      .tag.good {
+        color: var(--green);
+        border-color: rgba(52, 211, 153, 0.35);
+      }
+
+      .tag.warn {
+        color: var(--amber);
+        border-color: rgba(251, 191, 36, 0.35);
+      }
+
+      .tag.risk {
+        color: var(--red);
+        border-color: rgba(251, 113, 133, 0.35);
+      }
+
+      ol,
+      ul {
+        margin: 10px 0 0;
+        padding-left: 22px;
+        color: var(--muted);
+      }
+
+      li {
+        margin: 7px 0;
+      }
+
+      code {
+        color: #c4b5fd;
+        background: rgba(129, 140, 248, 0.12);
+        border: 1px solid rgba(129, 140, 248, 0.18);
+        border-radius: 5px;
+        padding: 1px 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 0.92em;
+      }
+
+      .path-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .path {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-soft);
+      }
+
+      .path span {
+        color: var(--faint);
+        font-size: 13px;
+      }
+
+      .checklist label {
+        display: block;
+        padding: 8px 0;
+        color: var(--muted);
+      }
+
+      .checklist input {
+        margin-right: 9px;
+      }
+
+      .note {
+        border-left: 3px solid var(--accent);
+        padding: 10px 14px;
+        background: rgba(129, 140, 248, 0.08);
+        color: var(--muted);
+      }
+
+      .warning {
+        border-left-color: var(--amber);
+        background: rgba(251, 191, 36, 0.08);
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 180px;
+        resize: vertical;
+        margin-top: 10px;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #020617;
+        color: var(--text);
+        font: inherit;
+      }
+
+      @media (max-width: 760px) {
+        .shell {
+          padding: 28px 16px 40px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .path {
+          flex-direction: column;
+          gap: 4px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <div class="eyebrow">Briefing para auditoria por IA</div>
+        <h1>Recrutamento Coala</h1>
+        <p class="lead">
+          Use esta página como roteiro para uma IA navegar, testar e avaliar a experiência de recrutamento.
+          O objetivo é auditar a trilha completa: criação de vaga, publicação, candidatura pública e gestão
+          do candidato no pipeline interno.
+        </p>
+      </header>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Escopo</h2>
+          <span class="tag good">Landing pública</span>
+          <span class="tag good">Detalhe da vaga</span>
+          <span class="tag good">Formulário de candidatura</span>
+          <span class="tag good">Painel interno</span>
+          <span class="tag good">Pipeline Kanban</span>
+          <span class="tag warn">Permissões</span>
+          <span class="tag warn">LGPD</span>
+          <span class="tag risk">Abuso público</span>
+        </article>
+
+        <article class="card">
+          <h2>Acesso</h2>
+          <p>
+            A parte pública não exige login. O painel interno exige usuário autenticado com permissão de RH/DP.
+            Não há credenciais nesta página.
+          </p>
+          <p class="note warning">
+            Se a IA não tiver login interno, ela deve limitar a auditoria ao fluxo público e relatar que o painel
+            interno não pôde ser validado.
+          </p>
+        </article>
+
+        <article class="card wide">
+          <h2>Rotas para navegar</h2>
+          <div class="path-list">
+            <div class="path">
+              <a href="/vagas" target="_blank" rel="noopener noreferrer">/vagas</a>
+              <span>Lista pública de vagas abertas</span>
+            </div>
+            <div class="path">
+              <code>/vagas/[slug]</code>
+              <span>Detalhe público da vaga e formulário de candidatura</span>
+            </div>
+            <div class="path">
+              <a href="/dashboard/hr/recruitment" target="_blank" rel="noopener noreferrer">/dashboard/hr/recruitment</a>
+              <span>Painel interno de recrutamento</span>
+            </div>
+            <div class="path">
+              <a href="/api/hr/openings/public" target="_blank" rel="noopener noreferrer">/api/hr/openings/public</a>
+              <span>API pública de vagas abertas</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Trilha recomendada</h2>
+          <ol>
+            <li>Abrir <code>/vagas</code> e avaliar clareza da proposta, busca, estados vazios e responsividade.</li>
+            <li>Clicar em uma vaga aberta e validar se dados essenciais aparecem: título, local, modalidade, prazo, descrição e requisitos.</li>
+            <li>Enviar uma candidatura teste com nome, e-mail, telefone, mensagem, currículo e consentimento.</li>
+            <li>Tentar enviar candidatura duplicada com o mesmo e-mail para a mesma vaga.</li>
+            <li>Entrar no painel interno em <code>/dashboard/hr/recruitment</code>.</li>
+            <li>Confirmar se o candidato aparece como <code>Inscrito</code>.</li>
+            <li>Mover o candidato entre etapas do Kanban e conferir persistência após recarregar.</li>
+            <li>Abrir o detalhe do candidato e validar currículo, notas, origem, avaliação e datas.</li>
+            <li>Criar uma vaga interna, verificar se aparece em <code>/vagas</code> e depois pausar/encerrar.</li>
+          </ol>
+        </article>
+
+        <article class="card">
+          <h2>Estados a testar</h2>
+          <ul>
+            <li>Sem vagas abertas.</li>
+            <li>Busca sem resultado.</li>
+            <li>Vaga encerrada ou slug inexistente.</li>
+            <li>Erro de API na listagem pública.</li>
+            <li>Arquivo inválido no currículo.</li>
+            <li>Currículo acima de 10 MB.</li>
+            <li>Formulário sem consentimento LGPD.</li>
+            <li>Candidatura duplicada.</li>
+            <li>Usuário interno sem permissão de gestão.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h2>Critérios de UX</h2>
+          <ul>
+            <li>O candidato entende rapidamente onde está e qual é a vaga?</li>
+            <li>A página comunica a empresa e o processo sem parecer genérica?</li>
+            <li>O formulário é curto o suficiente para conversão?</li>
+            <li>Os erros são claros e recuperáveis?</li>
+            <li>O mobile mantém leitura, toque e espaçamento adequados?</li>
+            <li>O painel interno é eficiente para uso repetido pelo RH?</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h2>Critérios técnicos</h2>
+          <ul>
+            <li>Dados de recrutamento gravam no banco <code>coala-rh</code>.</li>
+            <li><code>jobOpenings</code> alimenta a página pública.</li>
+            <li><code>candidates</code> alimenta o pipeline interno.</li>
+            <li>Upload de currículo salva URL e caminho no candidato.</li>
+            <li>Rotas públicas validam entrada e tratam abuso básico.</li>
+            <li>Kill switch <code>kill_recruitment_public_landing</code> desliga a experiência pública.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="card wide checklist">
+          <h2>Checklist rápido</h2>
+          <label><input type="checkbox" /> Landing pública carrega sem login.</label>
+          <label><input type="checkbox" /> Cards de vaga mostram informações suficientes para decidir clicar.</label>
+          <label><input type="checkbox" /> Detalhe da vaga explica função, requisitos e próximos passos.</label>
+          <label><input type="checkbox" /> Formulário exige dados mínimos e consentimento.</label>
+          <label><input type="checkbox" /> Upload de currículo funciona e aparece no painel interno.</label>
+          <label><input type="checkbox" /> Candidatura duplicada é bloqueada com mensagem clara.</label>
+          <label><input type="checkbox" /> Candidato entra no pipeline como Inscrito.</label>
+          <label><input type="checkbox" /> Drag-and-drop entre etapas salva corretamente.</label>
+          <label><input type="checkbox" /> Filtros por vaga, cargo, status e busca funcionam.</label>
+          <label><input type="checkbox" /> Vagas pausadas/encerradas somem da página pública.</label>
+          <label><input type="checkbox" /> Layout funciona em desktop e mobile.</label>
+        </article>
+
+        <article class="card wide">
+          <h2>Formato sugerido de parecer</h2>
+          <p>Peça para a IA devolver o relatório nesta estrutura:</p>
+          <textarea readonly>Resumo executivo:
+
+Principais achados:
+1.
+2.
+3.
+
+Riscos por severidade:
+- Crítico:
+- Alto:
+- Médio:
+- Baixo:
+
+Problemas de UX:
+
+Problemas técnicos:
+
+Problemas de LGPD/segurança:
+
+O que está bom:
+
+Recomendações priorizadas:
+1.
+2.
+3.
+
+Evidências:
+- Tela/rota:
+- Passos para reproduzir:
+- Resultado esperado:
+- Resultado encontrado:</textarea>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

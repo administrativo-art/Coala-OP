@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dbAdmin } from '@/lib/firebase-admin';
+import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 
 export const runtime = 'nodejs';
@@ -16,7 +16,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { id } = await context.params;
   const body = await request.json();
 
-  await dbAdmin.collection('candidates').doc(id).update({
+  await hrDbAdmin.collection('candidates').doc(id).update({
     ...body,
     updatedAt: new Date().toISOString(),
   });
@@ -29,6 +29,6 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   if (!access) return jsonError('Sem permissão para gerenciar candidatos.', 403);
 
   const { id } = await context.params;
-  await dbAdmin.collection('candidates').doc(id).delete();
+  await hrDbAdmin.collection('candidates').doc(id).delete();
   return NextResponse.json({ ok: true });
 }
