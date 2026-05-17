@@ -35,6 +35,10 @@ function getClientKey(request: NextRequest) {
 
 function isRateLimited(key: string) {
   const now = Date.now();
+  for (const [bucketKey, bucket] of rateBuckets.entries()) {
+    if (now > bucket.resetAt) rateBuckets.delete(bucketKey);
+  }
+
   const current = rateBuckets.get(key);
   if (!current || now > current.resetAt) {
     rateBuckets.set(key, { count: 1, resetAt: now + UPLOAD_LIMIT_WINDOW_MS });

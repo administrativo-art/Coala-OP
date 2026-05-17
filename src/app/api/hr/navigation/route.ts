@@ -48,6 +48,12 @@ export async function GET(request: NextRequest) {
           href: "/dashboard/settings?department=pessoal&tab=login-access",
           enabled: access.canManageCatalog,
         },
+        {
+          id: "recruitment",
+          label: "Recrutamento",
+          href: "/dashboard/hr/recruitment",
+          enabled: access.canView,
+        },
       ],
     });
   } catch (error) {

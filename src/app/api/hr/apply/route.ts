@@ -19,6 +19,10 @@ function trimText(value: unknown, maxLength: number) {
 
 function isRateLimited(key: string) {
   const now = Date.now();
+  for (const [bucketKey, bucket] of rateBuckets.entries()) {
+    if (now > bucket.resetAt) rateBuckets.delete(bucketKey);
+  }
+
   const current = rateBuckets.get(key);
   if (!current || now > current.resetAt) {
     rateBuckets.set(key, { count: 1, resetAt: now + APPLY_LIMIT_WINDOW_MS });
@@ -84,24 +88,48 @@ export async function POST(request: NextRequest) {
   const opening = snapshot.docs[0];
   const openingData = opening.data();
 
-  // Prevent duplicate application (same email + same opening)
-  const existing = await hrDbAdmin
+  const existingCandidate = await hrDbAdmin
     .collection('candidates')
-    .where('jobOpeningId', '==', opening.id)
     .where('email', '==', email)
     .limit(1)
     .get();
 
-  if (!existing.empty) return jsonError('Este e-mail já tem uma candidatura para esta vaga.', 409);
-
   const now = new Date().toISOString();
-  await hrDbAdmin.collection('candidates').add({
+  const candidateRef = existingCandidate.empty
+    ? hrDbAdmin.collection('candidates').doc()
+    : existingCandidate.docs[0].ref;
+  const candidateData = existingCandidate.empty ? null : existingCandidate.docs[0].data();
+  const applicationRef = hrDbAdmin.collection('applications').doc(`${candidateRef.id}_${opening.id}`);
+  const applicationDoc = await applicationRef.get();
+
+  if (applicationDoc.exists || candidateData?.jobOpeningId === opening.id) {
+    return jsonError('Este e-mail já tem uma candidatura para esta vaga.', 409);
+  }
+
+  const applicationPayload = {
+    candidateId: candidateRef.id,
+    jobOpeningId: opening.id,
+    jobRoleId: openingData.jobRoleId,
+    jobRoleName: openingData.jobRoleName,
+    stage: 'applied',
+    status: 'active',
+    source,
+    notes: coverMessage || null,
+    resumeUrl,
+    resumePath,
+    appliedAt: now,
+    updatedAt: now,
+    createdBy: 'public',
+  };
+
+  const candidatePayload = {
     name,
     email,
     phone: phone || null,
     jobRoleId: openingData.jobRoleId,
     jobRoleName: openingData.jobRoleName,
     jobOpeningId: opening.id,
+    latestApplicationId: applicationRef.id,
     status: 'applied',
     notes: coverMessage || null,
     source,
@@ -121,7 +149,20 @@ export async function POST(request: NextRequest) {
     appliedAt: now,
     updatedAt: now,
     createdBy: 'public',
-  });
+  };
+
+  const batch = hrDbAdmin.batch();
+  batch.set(applicationRef, applicationPayload);
+  if (existingCandidate.empty) {
+    batch.set(candidateRef, candidatePayload);
+  } else {
+    batch.set(candidateRef, {
+      ...candidatePayload,
+      createdBy: candidateData?.createdBy ?? 'public',
+      firstAppliedAt: candidateData?.firstAppliedAt ?? candidateData?.appliedAt ?? now,
+    }, { merge: true });
+  }
+  await batch.commit();
 
   return NextResponse.json({ ok: true }, { status: 201 });
 }

@@ -36,6 +36,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
   const [notFound, setNotFound] = useState(false);
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' });
+  const [consent, setConsent] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -77,17 +78,23 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
       if (resumeFile) {
         const fd = new FormData();
         fd.append('file', resumeFile);
+        fd.append('slug', slug);
+        fd.append('website', '');
         const uploadRes = await fetch('/api/hr/upload', { method: 'POST', body: fd });
-        if (uploadRes.ok) {
-          const { url } = await uploadRes.json();
-          payload.resumeUrl = url;
+        if (!uploadRes.ok) {
+          const data = await uploadRes.json().catch(() => null);
+          throw new Error(data?.error ?? 'Falha ao enviar currículo.');
         }
+
+        const { url, path } = await uploadRes.json();
+        payload.resumeUrl = url;
+        if (path) payload.resumePath = path;
       }
 
       const res = await fetch('/api/hr/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, consentAccepted: consent, website: '' }),
       });
 
       if (!res.ok) {
@@ -265,6 +272,19 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
                     />
                   </div>
 
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={consent}
+                      onChange={e => setConsent(e.target.checked)}
+                      className="mt-0.5 accent-indigo-500 w-4 h-4 flex-shrink-0"
+                    />
+                    <span className="text-xs text-slate-400 leading-relaxed">
+                      Autorizo o tratamento dos meus dados pessoais para fins de recrutamento e seleção,
+                      conforme a Lei Geral de Proteção de Dados (LGPD).
+                    </span>
+                  </label>
+
                   {submitError && (
                     <p className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
                       <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" /> {submitError}
@@ -272,8 +292,8 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
                   )}
 
                   <button
-                    type="submit" disabled={submitting}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-medium text-sm transition-all"
+                    type="submit" disabled={submitting || !consent}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium text-sm transition-all"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     {submitting ? 'Enviando…' : 'Enviar candidatura'}

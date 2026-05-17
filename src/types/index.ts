@@ -551,13 +551,36 @@ export type Candidate = {
   email: string;
   phone?: string;
   resumeUrl?: string;
+  resumePath?: string;
   jobRoleId: string;
   jobRoleName?: string;
+  jobOpeningId?: string;
+  latestApplicationId?: string;
   status: CandidateStatus;
   notes?: string;
   rating?: number; // 1-5
   source?: string;
   appliedAt: string;
+  updatedAt: string;
+  createdBy: string;
+};
+
+export type JobOpeningStatus = 'open' | 'paused' | 'closed';
+
+export type JobOpening = {
+  id: string;
+  jobRoleId: string;
+  jobRoleName?: string;
+  title: string;
+  slug: string;
+  description?: string;
+  requirements?: string[];
+  location?: string;
+  workType?: 'presencial' | 'remoto' | 'hibrido';
+  slots: number;
+  status: JobOpeningStatus;
+  closesAt?: string;
+  createdAt: string;
   updatedAt: string;
   createdBy: string;
 };

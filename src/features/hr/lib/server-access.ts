@@ -10,6 +10,8 @@ import { requireUser } from "@/lib/auth-server";
 function canViewHr(permissions: PermissionSet, isDefaultAdmin: boolean) {
   return (
     isDefaultAdmin ||
+    permissions.recruitment?.view ||
+    permissions.recruitment?.pipeline?.view ||
     permissions.dp.view ||
     permissions.dp.collaborators.view ||
     permissions.dp.collaborators.edit ||
@@ -20,6 +22,8 @@ function canViewHr(permissions: PermissionSet, isDefaultAdmin: boolean) {
 function canManageHrCatalog(permissions: PermissionSet, isDefaultAdmin: boolean) {
   return (
     isDefaultAdmin ||
+    permissions.recruitment?.manage ||
+    permissions.recruitment?.pipeline?.manage ||
     permissions.dp.collaborators.edit ||
     permissions.settings.manageUsers
   );

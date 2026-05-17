@@ -15,11 +15,27 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { id } = await context.params;
   const body = await request.json();
+  const now = new Date().toISOString();
+  const currentDoc = typeof body.status === 'string'
+    ? await hrDbAdmin.collection('candidates').doc(id).get()
+    : null;
 
   await hrDbAdmin.collection('candidates').doc(id).update({
     ...body,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   });
+
+  const latestApplicationId = typeof body.latestApplicationId === 'string'
+    ? body.latestApplicationId
+    : currentDoc?.data()?.latestApplicationId;
+  const status = typeof body.status === 'string' ? body.status : null;
+  if (latestApplicationId && status) {
+    await hrDbAdmin.collection('applications').doc(latestApplicationId).set({
+      stage: status,
+      updatedAt: now,
+      updatedBy: access.decoded.uid,
+    }, { merge: true });
+  }
 
   return NextResponse.json({ ok: true });
 }
