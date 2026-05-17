@@ -51,6 +51,7 @@ export function useHrBootstrap() {
   }, [authLoading, refresh]);
 
   return {
+    departments: data?.departments ?? [],
     roles: data?.roles ?? [],
     functions: data?.functions ?? [],
     access: data?.access ?? { canView: false, canManageCatalog: false },

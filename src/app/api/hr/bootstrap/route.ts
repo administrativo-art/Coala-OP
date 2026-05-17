@@ -13,12 +13,17 @@ export async function GET(request: NextRequest) {
   try {
     const access = await assertHrAccess(request, "view");
 
-    const [rolesSnap, functionsSnap] = await Promise.all([
+    const [departmentsSnap, rolesSnap, functionsSnap] = await Promise.all([
+      hrDbAdmin.collection("jobDepartments").orderBy("name").get(),
       hrDbAdmin.collection("jobRoles").orderBy("name").get(),
       hrDbAdmin.collection("jobFunctions").orderBy("name").get(),
     ]);
 
     return NextResponse.json({
+      departments: departmentsSnap.docs.map((doc) => ({
+        id: doc.id,
+        ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),
+      })),
       roles: rolesSnap.docs.map((doc) => ({
         id: doc.id,
         ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),

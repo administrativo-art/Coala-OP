@@ -45,10 +45,19 @@ const formQuestionSchema = z.object({
   config: z.record(z.unknown()).optional(),
 });
 
+export const jobDepartmentCreateSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  slug: z.string().trim().min(1).max(120).optional(),
+  description: z.string().trim().max(1000).optional(),
+  isActive: z.boolean().default(true),
+});
+
 const jobRoleBaseSchema = z.object({
   name: z.string().trim().min(2).max(120),
   publicTitle: z.string().trim().min(2).max(120).optional(),
   slug: z.string().trim().min(1).max(120).optional(),
+  departmentId: z.string().trim().min(1).nullable().optional(),
+  departmentName: z.string().trim().min(1).max(120).nullable().optional(),
   reportsTo: z.string().trim().min(1).nullable().optional(),
   description: z.string().trim().max(4000).optional(),
   publicDescription: z.string().trim().max(4000).optional(),
@@ -71,6 +80,8 @@ const jobFunctionBaseSchema = z.object({
   name: z.string().trim().min(2).max(120),
   publicTitle: z.string().trim().min(2).max(120).optional(),
   slug: z.string().trim().min(1).max(120).optional(),
+  departmentId: z.string().trim().min(1).nullable().optional(),
+  departmentName: z.string().trim().min(1).max(120).nullable().optional(),
   description: z.string().trim().max(4000).optional(),
   publicDescription: z.string().trim().max(4000).optional(),
   responsibilities: stringListSchema,
@@ -93,6 +104,16 @@ export const jobFunctionPatchSchema = jobFunctionBaseSchema.partial().refine(
   (value) => Object.keys(value).length > 0,
   { message: "Informe ao menos um campo para atualização." }
 );
+
+export function normalizeJobDepartmentInput(
+  input: z.infer<typeof jobDepartmentCreateSchema>
+) {
+  return stripUndefined({
+    ...input,
+    slug: input.slug?.trim() || slugify(input.name),
+    description: input.description?.trim() || undefined,
+  });
+}
 
 export function stripUndefined<T extends Record<string, unknown>>(value: T) {
   return Object.fromEntries(

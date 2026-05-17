@@ -4,13 +4,14 @@ import React from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Briefcase, Pencil, ShieldCheck, Users2, Workflow } from "lucide-react";
+import { Briefcase, ChevronDown, ChevronRight, Pencil, Plus, ShieldCheck, Trash2, Users2, Workflow } from "lucide-react";
 
-import type { HrFormQuestion, JobFunction, JobRole } from "@/types";
+import type { HrFormQuestion, HrQuestionType, JobDepartment, JobFunction, JobRole } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import {
+  createHrDepartment,
   createHrFunction,
   createHrRole,
   syncHrRoleProfile,
@@ -73,6 +74,7 @@ import {
 const roleSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do cargo."),
   publicTitle: z.string().trim().optional(),
+  departmentId: z.string().optional(),
   reportsTo: z.string().optional(),
   defaultProfileId: z.string().optional(),
   loginRestricted: z.boolean().default(false),
@@ -83,28 +85,10 @@ const roleSchema = z.object({
 
 type RoleFormValues = z.infer<typeof roleSchema>;
 
-type RoleSubmitValues = RoleFormValues & {
-  formQuestions: HrFormQuestion[];
-};
-
-const questionTypes: Array<{ value: HrFormQuestion["type"]; label: string }> = [
-  { value: "text", label: "Texto" },
-  { value: "yes_no", label: "Sim/Não" },
-  { value: "select", label: "Seleção única" },
-  { value: "multi_select", label: "Múltipla escolha" },
-];
-
-const emptyQuestionDraft = {
-  text: "",
-  type: "text" as HrFormQuestion["type"],
-  optionsText: "",
-  required: false,
-  eliminatory: false,
-};
-
 const functionSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome da função."),
   publicTitle: z.string().trim().optional(),
+  departmentId: z.string().optional(),
   compatibleRoleIds: z.array(z.string()).default([]),
   isActive: z.boolean().default(true),
   description: z.string().trim().optional(),
@@ -113,28 +97,47 @@ const functionSchema = z.object({
 
 type FunctionFormValues = z.infer<typeof functionSchema>;
 
+const QUESTION_TYPE_LABELS: Record<HrQuestionType, string> = {
+  text: 'Texto livre',
+  yes_no: 'Sim ou Não',
+  select: 'Seleção única',
+  multi_select: 'Múltipla escolha',
+  number_range: 'Faixa numérica',
+  date: 'Data',
+  location: 'Localização',
+  file_upload: 'Upload de arquivo',
+};
+
+const QUESTION_TYPES_ORDERED: HrQuestionType[] = [
+  'text', 'yes_no', 'select', 'multi_select', 'number_range', 'date', 'location', 'file_upload',
+];
+
+function genId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 function RoleDialog({
   open,
   onOpenChange,
   role,
   roles,
+  departments,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   role: JobRole | null;
   roles: JobRole[];
-  onSubmit: (values: RoleSubmitValues, currentRole: JobRole | null) => Promise<void>;
+  departments: JobDepartment[];
+  onSubmit: (values: RoleFormValues, formQuestions: HrFormQuestion[], currentRole: JobRole | null) => Promise<void>;
 }) {
   const { profiles } = useProfiles();
-  const [questions, setQuestions] = React.useState<HrFormQuestion[]>([]);
-  const [questionDraft, setQuestionDraft] = React.useState(emptyQuestionDraft);
-  const [questionError, setQuestionError] = React.useState<string | null>(null);
   const form = useForm<RoleFormValues>({
     resolver: zodResolver(roleSchema),
     defaultValues: {
       name: "",
       publicTitle: "",
+      departmentId: "",
       reportsTo: "",
       defaultProfileId: "",
       loginRestricted: false,
@@ -144,11 +147,19 @@ function RoleDialog({
     },
   });
 
+  const [questions, setQuestions] = React.useState<HrFormQuestion[]>([]);
+  const [showQSection, setShowQSection] = React.useState(false);
+  const [showQForm, setShowQForm] = React.useState(false);
+  const [newQ, setNewQ] = React.useState<{
+    text: string; type: HrQuestionType; required: boolean; eliminatory: boolean; options: string;
+  }>({ text: '', type: 'text', required: false, eliminatory: false, options: '' });
+
   React.useEffect(() => {
     if (!open) return;
     form.reset({
       name: role?.name ?? "",
       publicTitle: role?.publicTitle ?? "",
+      departmentId: role?.departmentId ?? "",
       reportsTo: role?.reportsTo ?? "",
       defaultProfileId: role?.defaultProfileId ?? "",
       loginRestricted: role?.loginRestricted ?? false,
@@ -157,47 +168,38 @@ function RoleDialog({
       publicDescription: role?.publicDescription ?? "",
     });
     setQuestions(role?.formQuestions ?? []);
-    setQuestionDraft(emptyQuestionDraft);
-    setQuestionError(null);
+    setShowQSection(false);
+    setShowQForm(false);
+    setNewQ({ text: '', type: 'text', required: false, eliminatory: false, options: '' });
   }, [form, open, role]);
 
+  function addQuestion() {
+    const text = newQ.text.trim();
+    if (!text) return;
+    const options = (newQ.type === 'select' || newQ.type === 'multi_select')
+      ? newQ.options.split('\n').map(o => o.trim()).filter(Boolean)
+      : [];
+    const q: HrFormQuestion = {
+      id: genId(),
+      text,
+      type: newQ.type,
+      required: newQ.required,
+      scored: false,
+      weight: 'medium',
+      eliminatory: newQ.eliminatory,
+      tags: [],
+      config: options.length > 0 ? { options } : undefined,
+    };
+    setQuestions(prev => [...prev, q]);
+    setNewQ({ text: '', type: 'text', required: false, eliminatory: false, options: '' });
+    setShowQForm(false);
+  }
+
+  function removeQuestion(id: string) {
+    setQuestions(prev => prev.filter(q => q.id !== id));
+  }
+
   const reportsToOptions = roles.filter((item) => item.id !== role?.id);
-  const addQuestion = () => {
-    const text = questionDraft.text.trim();
-    if (!text) {
-      setQuestionError("Informe o texto da pergunta.");
-      return;
-    }
-
-    const options = questionDraft.optionsText
-      .split("\n")
-      .map(option => option.trim())
-      .filter(Boolean);
-    if ((questionDraft.type === "select" || questionDraft.type === "multi_select") && options.length === 0) {
-      setQuestionError("Informe ao menos uma opção para esta pergunta.");
-      return;
-    }
-
-    const id = typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `question-${Date.now()}`;
-    setQuestions(prev => [
-      ...prev,
-      {
-        id,
-        text,
-        type: questionDraft.type,
-        required: questionDraft.required,
-        scored: false,
-        weight: "medium",
-        eliminatory: questionDraft.eliminatory,
-        tags: [],
-        config: options.length > 0 ? { options } : undefined,
-      },
-    ]);
-    setQuestionDraft(emptyQuestionDraft);
-    setQuestionError(null);
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -211,10 +213,10 @@ function RoleDialog({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(async (values) => {
-              await onSubmit({ ...values, formQuestions: questions }, role);
+              await onSubmit(values, questions, role);
               onOpenChange(false);
             })}
-            className="space-y-4"
+            className="space-y-4 max-h-[80vh] overflow-y-auto pr-1"
           >
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
@@ -246,6 +248,36 @@ function RoleDialog({
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="departmentId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Departamento</FormLabel>
+                    <Select
+                      value={field.value || "__none__"}
+                      onValueChange={(value) =>
+                        field.onChange(value === "__none__" ? "" : value)
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sem departamento" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sem departamento</SelectItem>
+                        {departments.filter((department) => department.isActive !== false).map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="reportsTo"
@@ -382,101 +414,123 @@ function RoleDialog({
               />
             </div>
 
-            <div className="space-y-4 rounded-lg border p-4">
-              <div>
-                <h3 className="text-sm font-semibold">Formulário de triagem</h3>
-                <p className="text-sm text-muted-foreground">
-                  Perguntas exibidas na candidatura pública para vagas ligadas a este cargo.
-                </p>
-              </div>
+            {/* Formulário de triagem */}
+            <div className="rounded-lg border">
+              <button
+                type="button"
+                onClick={() => setShowQSection(v => !v)}
+                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium"
+              >
+                <span>
+                  Formulário de triagem
+                  {questions.length > 0 && (
+                    <span className="ml-1 text-xs text-muted-foreground">({questions.length})</span>
+                  )}
+                </span>
+                {showQSection ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
 
-              {questions.length > 0 && (
-                <div className="space-y-2">
-                  {questions.map((question) => (
-                    <div key={question.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
-                      <div className="min-w-0 space-y-1">
-                        <p className="text-sm font-medium">{question.text}</p>
-                        <div className="flex flex-wrap gap-1">
-                          <Badge variant="secondary">
-                            {questionTypes.find(item => item.value === question.type)?.label ?? question.type}
-                          </Badge>
-                          {question.required && <Badge variant="outline">Obrigatória</Badge>}
-                          {question.eliminatory && <Badge variant="outline">Eliminatória</Badge>}
+              {showQSection && (
+                <div className="border-t px-4 pb-4 pt-3 space-y-3">
+                  {questions.length > 0 && (
+                    <div className="space-y-2">
+                      {questions.map((q, i) => (
+                        <div key={q.id} className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                          <span className="mt-0.5 text-muted-foreground">{i + 1}.</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{q.text}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              <span className="rounded-full bg-secondary px-2 py-0.5 text-xs">
+                                {QUESTION_TYPE_LABELS[q.type]}
+                              </span>
+                              {q.required && (
+                                <span className="rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs">Obrigatória</span>
+                              )}
+                              {q.eliminatory && (
+                                <span className="rounded-full bg-red-100 text-red-800 px-2 py-0.5 text-xs">Eliminatória</span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeQuestion(q.id)}
+                            className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setQuestions(prev => prev.filter(item => item.id !== question.id))}
-                      >
-                        Remover
-                      </Button>
+                      ))}
                     </div>
-                  ))}
+                  )}
+
+                  {showQForm ? (
+                    <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+                      <Input
+                        placeholder="Texto da pergunta"
+                        value={newQ.text}
+                        onChange={e => setNewQ(prev => ({ ...prev, text: e.target.value }))}
+                        maxLength={240}
+                      />
+                      <select
+                        value={newQ.type}
+                        onChange={e => setNewQ(prev => ({ ...prev, type: e.target.value as HrQuestionType }))}
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                      >
+                        {QUESTION_TYPES_ORDERED.map(t => (
+                          <option key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</option>
+                        ))}
+                      </select>
+                      {(newQ.type === 'select' || newQ.type === 'multi_select') && (
+                        <Textarea
+                          rows={3}
+                          placeholder="Uma opção por linha"
+                          value={newQ.options}
+                          onChange={e => setNewQ(prev => ({ ...prev, options: e.target.value }))}
+                        />
+                      )}
+                      <div className="flex gap-4 text-sm">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newQ.required}
+                            onChange={e => setNewQ(prev => ({ ...prev, required: e.target.checked }))}
+                            className="h-3.5 w-3.5"
+                          />
+                          Obrigatória
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newQ.eliminatory}
+                            onChange={e => setNewQ(prev => ({ ...prev, eliminatory: e.target.checked }))}
+                            className="h-3.5 w-3.5"
+                          />
+                          Eliminatória
+                        </label>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button type="button" size="sm" variant="outline" onClick={() => setShowQForm(false)}>
+                          Cancelar
+                        </Button>
+                        <Button type="button" size="sm" onClick={addQuestion} disabled={!newQ.text.trim()}>
+                          Confirmar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowQForm(true)}
+                      className="gap-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Adicionar pergunta
+                    </Button>
+                  )}
                 </div>
               )}
-
-              <div className="grid gap-3 rounded-md bg-muted/30 p-3 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Pergunta</label>
-                  <Input
-                    value={questionDraft.text}
-                    onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
-                    placeholder="Ex: Você tem disponibilidade aos domingos?"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Tipo</label>
-                  <select
-                    value={questionDraft.type}
-                    onChange={event => setQuestionDraft(prev => ({
-                      ...prev,
-                      type: event.target.value as HrFormQuestion["type"],
-                    }))}
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    {questionTypes.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-end gap-4">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={questionDraft.required}
-                      onChange={event => setQuestionDraft(prev => ({ ...prev, required: event.target.checked }))}
-                    />
-                    Obrigatória
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={questionDraft.eliminatory}
-                      onChange={event => setQuestionDraft(prev => ({ ...prev, eliminatory: event.target.checked }))}
-                    />
-                    Eliminatória
-                  </label>
-                </div>
-                {(questionDraft.type === "select" || questionDraft.type === "multi_select") && (
-                  <div className="md:col-span-2">
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Opções, uma por linha</label>
-                    <Textarea
-                      rows={3}
-                      value={questionDraft.optionsText}
-                      onChange={event => setQuestionDraft(prev => ({ ...prev, optionsText: event.target.value }))}
-                      placeholder={"Manhã\nTarde/noite\nFlexível"}
-                    />
-                  </div>
-                )}
-                {questionError && <p className="text-sm text-destructive md:col-span-2">{questionError}</p>}
-                <div className="md:col-span-2">
-                  <Button type="button" variant="outline" onClick={addQuestion}>
-                    Adicionar pergunta
-                  </Button>
-                </div>
-              </div>
             </div>
 
             <DialogFooter>
@@ -499,12 +553,14 @@ function FunctionDialog({
   onOpenChange,
   item,
   roles,
+  departments,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   item: JobFunction | null;
   roles: JobRole[];
+  departments: JobDepartment[];
   onSubmit: (
     values: FunctionFormValues,
     currentFunction: JobFunction | null
@@ -515,6 +571,7 @@ function FunctionDialog({
     defaultValues: {
       name: "",
       publicTitle: "",
+      departmentId: "",
       compatibleRoleIds: [],
       isActive: true,
       description: "",
@@ -527,6 +584,7 @@ function FunctionDialog({
     form.reset({
       name: item?.name ?? "",
       publicTitle: item?.publicTitle ?? "",
+      departmentId: item?.departmentId ?? "",
       compatibleRoleIds: item?.compatibleRoleIds ?? [],
       isActive: item?.isActive ?? true,
       description: item?.description ?? "",
@@ -581,6 +639,37 @@ function FunctionDialog({
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="departmentId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Departamento</FormLabel>
+                  <Select
+                    value={field.value || "__none__"}
+                    onValueChange={(value) =>
+                      field.onChange(value === "__none__" ? "" : value)
+                    }
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sem departamento" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sem departamento</SelectItem>
+                      {departments.filter((department) => department.isActive !== false).map((department) => (
+                        <SelectItem key={department.id} value={department.id}>
+                          {department.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -688,7 +777,7 @@ function StatusBadge({ active }: { active: boolean }) {
 
 export function DPSettingsRoles() {
   const { firebaseUser, activeUsers } = useAuth();
-  const { roles, functions, loading, error, refresh, access } = useHrBootstrap();
+  const { departments, roles, functions, loading, error, refresh, access } = useHrBootstrap();
   const { profiles } = useProfiles();
   const { toast } = useToast();
 
@@ -700,12 +789,14 @@ export function DPSettingsRoles() {
   const [syncingRoleId, setSyncingRoleId] = React.useState<string | null>(null);
   const [roleQuery, setRoleQuery] = React.useState("");
   const [functionQuery, setFunctionQuery] = React.useState("");
+  const [departmentName, setDepartmentName] = React.useState("");
+  const [creatingDepartment, setCreatingDepartment] = React.useState(false);
 
   const filteredRoles = React.useMemo(() => {
     const normalized = roleQuery.trim().toLowerCase();
     if (!normalized) return roles;
     return roles.filter((role) =>
-      [role.name, role.publicTitle, role.slug]
+      [role.name, role.publicTitle, role.slug, role.departmentName]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(normalized))
     );
@@ -715,7 +806,7 @@ export function DPSettingsRoles() {
     const normalized = functionQuery.trim().toLowerCase();
     if (!normalized) return functions;
     return functions.filter((item) =>
-      [item.name, item.publicTitle, item.slug]
+      [item.name, item.publicTitle, item.slug, item.departmentName]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(normalized))
     );
@@ -729,6 +820,11 @@ export function DPSettingsRoles() {
   const roleNameById = React.useMemo(
     () => new Map(roles.map((role) => [role.id, role.name])),
     [roles]
+  );
+
+  const departmentNameById = React.useMemo(
+    () => new Map(departments.map((department) => [department.id, department.name])),
+    [departments]
   );
 
   const roleSyncSummary = React.useMemo(() => {
@@ -754,19 +850,21 @@ export function DPSettingsRoles() {
     return summary;
   }, [activeUsers, roles]);
 
-  async function handleRoleSubmit(values: RoleSubmitValues, role: JobRole | null) {
+  async function handleRoleSubmit(values: RoleFormValues, formQuestions: HrFormQuestion[], role: JobRole | null) {
     if (!firebaseUser) return;
 
     const payload = {
       name: values.name,
       publicTitle: values.publicTitle || undefined,
+      departmentId: values.departmentId || null,
+      departmentName: values.departmentId ? departmentNameById.get(values.departmentId) ?? null : null,
       reportsTo: values.reportsTo || null,
       defaultProfileId: values.defaultProfileId || undefined,
       loginRestricted: values.loginRestricted,
       isActive: values.isActive,
       description: values.description || undefined,
       publicDescription: values.publicDescription || undefined,
-      formQuestions: values.formQuestions,
+      formQuestions,
     };
 
     try {
@@ -800,6 +898,8 @@ export function DPSettingsRoles() {
     const payload = {
       name: values.name,
       publicTitle: values.publicTitle || undefined,
+      departmentId: values.departmentId || null,
+      departmentName: values.departmentId ? departmentNameById.get(values.departmentId) ?? null : null,
       compatibleRoleIds: values.compatibleRoleIds,
       isActive: values.isActive,
       description: values.description || undefined,
@@ -825,6 +925,30 @@ export function DPSettingsRoles() {
         variant: "destructive",
       });
       throw submitError;
+    }
+  }
+
+  async function handleCreateDepartment() {
+    if (!firebaseUser) return;
+    const name = departmentName.trim();
+    if (!name) return;
+
+    try {
+      setCreatingDepartment(true);
+      await createHrDepartment(firebaseUser, { name, isActive: true });
+      setDepartmentName("");
+      toast({ title: "Departamento criado." });
+      await refresh();
+    } catch (departmentError) {
+      toast({
+        title:
+          departmentError instanceof Error
+            ? departmentError.message
+            : "Erro ao criar departamento.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingDepartment(false);
     }
   }
 
@@ -951,6 +1075,7 @@ export function DPSettingsRoles() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Cargo</TableHead>
+                  <TableHead>Departamento</TableHead>
                   <TableHead>Hierarquia</TableHead>
                   <TableHead>Perfil padrão</TableHead>
                   <TableHead>Status</TableHead>
@@ -960,7 +1085,7 @@ export function DPSettingsRoles() {
               <TableBody>
                 {filteredRoles.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
                       Nenhum cargo cadastrado.
                     </TableCell>
                   </TableRow>
@@ -974,6 +1099,15 @@ export function DPSettingsRoles() {
                             Público: {role.publicTitle}
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {role.departmentId ? (
+                          <Badge variant="outline">
+                            {departmentNameById.get(role.departmentId) ?? role.departmentName ?? "Departamento removido"}
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Sem departamento</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1 text-sm">
@@ -1073,6 +1207,12 @@ export function DPSettingsRoles() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="rounded-lg border p-4">
+              <div className="text-sm text-muted-foreground">Departamentos</div>
+              <div className="mt-1 text-3xl font-semibold">
+                {departments.filter((department) => department.isActive !== false).length}
+              </div>
+            </div>
+            <div className="rounded-lg border p-4">
               <div className="text-sm text-muted-foreground">Cargos ativos</div>
               <div className="mt-1 text-3xl font-semibold">
                 {roles.filter((role) => role.isActive).length}
@@ -1087,6 +1227,37 @@ export function DPSettingsRoles() {
             <div className="rounded-lg border p-4 text-sm text-muted-foreground">
               O perfil padrão do cargo agora pode ser aplicado manualmente aos colaboradores vinculados, sem substituir a autoridade atual de `profileId`.
             </div>
+            {access.canManageCatalog && (
+              <div className="rounded-lg border p-4 space-y-3">
+                <div>
+                  <div className="text-sm font-medium">Novo departamento</div>
+                  <div className="text-xs text-muted-foreground">Use para agrupar cargos e funções no organograma.</div>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={departmentName}
+                    onChange={(event) => setDepartmentName(event.target.value)}
+                    placeholder="Ex: Operacional"
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => void handleCreateDepartment()}
+                    disabled={creatingDepartment || !departmentName.trim()}
+                  >
+                    Criar
+                  </Button>
+                </div>
+                {departments.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {departments.map((department) => (
+                      <Badge key={department.id} variant="secondary">
+                        {department.name}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -1124,6 +1295,7 @@ export function DPSettingsRoles() {
             <TableHeader>
               <TableRow>
                 <TableHead>Função</TableHead>
+                <TableHead>Departamento</TableHead>
                 <TableHead>Cargos compatíveis</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -1132,7 +1304,7 @@ export function DPSettingsRoles() {
             <TableBody>
               {filteredFunctions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
                     Nenhuma função cadastrada.
                   </TableCell>
                 </TableRow>
@@ -1146,6 +1318,15 @@ export function DPSettingsRoles() {
                           Público: {item.publicTitle}
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {item.departmentId ? (
+                        <Badge variant="outline">
+                          {departmentNameById.get(item.departmentId) ?? item.departmentName ?? "Departamento removido"}
+                        </Badge>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Sem departamento</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
@@ -1192,6 +1373,7 @@ export function DPSettingsRoles() {
         onOpenChange={setRoleDialogOpen}
         role={editingRole}
         roles={roles}
+        departments={departments}
         onSubmit={handleRoleSubmit}
       />
 
@@ -1200,6 +1382,7 @@ export function DPSettingsRoles() {
         onOpenChange={setFunctionDialogOpen}
         item={editingFunction}
         roles={roles}
+        departments={departments}
         onSubmit={handleFunctionSubmit}
       />
 

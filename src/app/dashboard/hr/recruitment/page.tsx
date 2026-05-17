@@ -47,6 +47,21 @@ const WORK_TYPE_OPTIONS = [
   { value: 'hibrido',    label: 'Híbrido' },
 ];
 
+const QUESTION_TYPES: Array<{ value: HrFormQuestion['type']; label: string }> = [
+  { value: 'text', label: 'Texto' },
+  { value: 'yes_no', label: 'Sim/Não' },
+  { value: 'select', label: 'Seleção única' },
+  { value: 'multi_select', label: 'Múltipla escolha' },
+];
+
+const EMPTY_QUESTION_DRAFT = {
+  text: '',
+  type: 'text' as HrFormQuestion['type'],
+  optionsText: '',
+  required: false,
+  eliminatory: false,
+};
+
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
 async function apiFetch(path: string, getToken: () => Promise<string>, init?: RequestInit) {
@@ -405,7 +420,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
   const role = roles.find(r => r.id === candidate.jobRoleId);
   const opening = openings.find(o => o.id === candidate.jobOpeningId);
   const formAnswers = candidate.latestApplication?.formAnswers ?? candidate.formAnswers ?? {};
-  const questionSnapshot = candidate.latestApplication?.formQuestionSnapshot ?? role?.formQuestions ?? [];
+  const questionSnapshot = candidate.latestApplication?.formQuestionSnapshot ?? opening?.formQuestions ?? role?.formQuestions ?? [];
   const questionsById = new Map((questionSnapshot as HrFormQuestion[]).map(question => [question.id, question]));
   const answerEntries = Object.entries(formAnswers);
   const hasChanges =
@@ -635,16 +650,25 @@ function DraggableCard({ candidate, onOpen }: { candidate: Candidate; onOpen: ()
     ? (SOURCE_TAG_COLORS[candidate.source] ?? SOURCE_TAG_COLORS['Outro'])
     : null;
 
+  const isNew = (Date.now() - new Date(candidate.appliedAt).getTime()) < 7 * 86_400_000;
+
   return (
     <div
       ref={setNodeRef} style={style} {...attributes}
       className="bg-slate-900 border border-slate-800/80 rounded-xl shadow-sm hover:border-slate-700 hover:shadow-md hover:shadow-black/20 transition-all group"
     >
       <button onClick={onOpen} className="w-full text-left p-4">
-        {/* Top row: initials + name + drag handle */}
+        {/* Top row: initials + name + NOVO badge + drag handle */}
         <div className="flex items-start gap-2.5 mb-3">
           <CandidateInitials name={candidate.name} />
           <div className="flex-1 min-w-0 pt-0.5">
+            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+              {isNew && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/20 tracking-wide">
+                  NOVO
+                </span>
+              )}
+            </div>
             <h4 className="font-semibold text-white group-hover:text-indigo-300 transition-colors text-sm leading-snug truncate">
               {candidate.name}
             </h4>
@@ -664,11 +688,9 @@ function DraggableCard({ candidate, onOpen }: { candidate: Candidate; onOpen: ()
         </div>
 
         {/* Rating */}
-        {(candidate.rating ?? 0) > 0 && (
-          <div className="mb-3">
-            <RatingStars value={candidate.rating ?? 0} readonly />
-          </div>
-        )}
+        <div className="mb-3">
+          <RatingStars value={candidate.rating ?? 0} readonly />
+        </div>
 
         {/* Footer */}
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -846,12 +868,52 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
     status: opening?.status ?? 'open',
     requirements: (opening?.requirements ?? []).join('\n'),
   });
+  const [questions, setQuestions] = useState<HrFormQuestion[]>(opening?.formQuestions ?? []);
+  const [questionDraft, setQuestionDraft] = useState(EMPTY_QUESTION_DRAFT);
+  const [questionError, setQuestionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const set = (field: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(prev => ({ ...prev, [field]: e.target.value }));
+
+  const addQuestion = () => {
+    const text = questionDraft.text.trim();
+    if (!text) {
+      setQuestionError('Informe o texto da pergunta.');
+      return;
+    }
+
+    const options = questionDraft.optionsText
+      .split('\n')
+      .map(option => option.trim())
+      .filter(Boolean);
+    if ((questionDraft.type === 'select' || questionDraft.type === 'multi_select') && options.length === 0) {
+      setQuestionError('Informe ao menos uma opção para esta pergunta.');
+      return;
+    }
+
+    const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `question-${Date.now()}`;
+    setQuestions(prev => [
+      ...prev,
+      {
+        id,
+        text,
+        type: questionDraft.type,
+        required: questionDraft.required,
+        scored: false,
+        weight: 'medium',
+        eliminatory: questionDraft.eliminatory,
+        tags: [],
+        config: options.length > 0 ? { options } : undefined,
+      },
+    ]);
+    setQuestionDraft(EMPTY_QUESTION_DRAFT);
+    setQuestionError(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -872,6 +934,7 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
         closesAt: form.closesAt ? new Date(form.closesAt).toISOString() : null,
         status: form.status,
         requirements: form.requirements.split('\n').map(s => s.trim()).filter(Boolean),
+        formQuestions: questions,
       };
       if (isEdit) {
         await apiFetch(`/api/hr/openings/${opening!.id}`, getToken, {
@@ -893,7 +956,7 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="relative z-10 w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-slate-800 flex-shrink-0">
           <h2 className="text-lg font-bold text-white">{isEdit ? 'Editar vaga' : 'Nova vaga'}</h2>
           <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800">
@@ -965,6 +1028,109 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
               <textarea value={form.requirements} onChange={set('requirements')} rows={4}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none font-mono"
                 placeholder="Experiência com gestão de equipes&#10;Disponibilidade de horário&#10;Residir em SP" />
+            </div>
+            <div className="col-span-2 space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+              <div>
+                <h3 className="text-sm font-semibold text-white">Formulário de triagem</h3>
+                <p className="mt-1 text-xs text-slate-500">Perguntas exibidas na candidatura pública desta vaga.</p>
+              </div>
+
+              {questions.length > 0 && (
+                <div className="space-y-2">
+                  {questions.map((question) => (
+                    <div key={question.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <div className="min-w-0 space-y-2">
+                        <p className="text-sm font-medium text-slate-100">{question.text}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400">
+                            {QUESTION_TYPES.find(item => item.value === question.type)?.label ?? question.type}
+                          </span>
+                          {question.required && (
+                            <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-300">Obrigatória</span>
+                          )}
+                          {question.eliminatory && (
+                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300">Eliminatória</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setQuestions(prev => prev.filter(item => item.id !== question.id))}
+                        className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-white"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-950/50 p-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Pergunta</label>
+                  <input
+                    type="text"
+                    value={questionDraft.text}
+                    onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                    placeholder="Ex: Você tem disponibilidade aos domingos?"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Tipo</label>
+                  <select
+                    value={questionDraft.type}
+                    onChange={event => setQuestionDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                  >
+                    {QUESTION_TYPES.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="flex items-center gap-2 text-xs text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={questionDraft.required}
+                      onChange={event => setQuestionDraft(prev => ({ ...prev, required: event.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500"
+                    />
+                    Obrigatória
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={questionDraft.eliminatory}
+                      onChange={event => setQuestionDraft(prev => ({ ...prev, eliminatory: event.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500"
+                    />
+                    Eliminatória
+                  </label>
+                </div>
+                {(questionDraft.type === 'select' || questionDraft.type === 'multi_select') && (
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Opções, uma por linha</label>
+                    <textarea
+                      value={questionDraft.optionsText}
+                      onChange={event => setQuestionDraft(prev => ({ ...prev, optionsText: event.target.value }))}
+                      rows={3}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
+                      placeholder={'Manhã\nTarde/noite\nFlexível'}
+                    />
+                  </div>
+                )}
+                {questionError && <p className="col-span-2 text-xs text-red-400">{questionError}</p>}
+                <div className="col-span-2">
+                  <button
+                    type="button"
+                    onClick={addQuestion}
+                    className="flex items-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
+                  >
+                    <Plus className="h-4 w-4" /> Adicionar pergunta
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           {error && <ErrorLine msg={error} />}
@@ -1136,6 +1302,167 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
   );
 }
 
+// ─── TalentsView ─────────────────────────────────────────────────────────────
+
+function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactivated }: {
+  candidates: Candidate[];
+  roles: JobRole[];
+  getToken: () => Promise<string>;
+  canManage: boolean;
+  onOpen: (c: Candidate) => void;
+  onReactivated: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [filterRole, setFilterRole] = useState('');
+  const [filterRating, setFilterRating] = useState('');
+  const [reactivating, setReactivating] = useState<string | null>(null);
+
+  const archived = candidates.filter(c => ARCHIVED_STATUSES.includes(c.status));
+
+  const filtered = archived.filter(c => {
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
+        !c.email.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterRole && c.jobRoleId !== filterRole) return false;
+    if (filterRating && (c.rating ?? 0) < Number(filterRating)) return false;
+    return true;
+  });
+
+  const highRating = archived.filter(c => (c.rating ?? 0) >= 4).length;
+
+  async function handleReactivate(candidate: Candidate) {
+    setReactivating(candidate.id);
+    try {
+      await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'applied' }),
+      });
+      onReactivated();
+    } catch {
+      // silent
+    } finally {
+      setReactivating(null);
+    }
+  }
+
+  const roleOptions = useMemo(() => {
+    const ids = new Set(archived.map(c => c.jobRoleId).filter(Boolean));
+    return roles.filter(r => ids.has(r.id));
+  }, [archived, roles]);
+
+  return (
+    <div className="flex flex-col gap-4 flex-1">
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Total no banco</p>
+          <p className="text-3xl font-bold text-white">{archived.length}</p>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Alta avaliação (4+)</p>
+          <p className="text-3xl font-bold text-amber-400">{highRating}</p>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Cargos distintos</p>
+          <p className="text-3xl font-bold text-white">{roleOptions.length}</p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por nome ou e-mail…"
+            className="pl-9 pr-4 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 w-52 text-sm" />
+        </div>
+        {roleOptions.length > 0 && (
+          <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
+            className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            <option value="">Todos os cargos</option>
+            {roleOptions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        )}
+        <select value={filterRating} onChange={e => setFilterRating(e.target.value)}
+          className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+          <option value="">Avaliação</option>
+          <option value="1">1+ estrela</option>
+          <option value="2">2+ estrelas</option>
+          <option value="3">3+ estrelas</option>
+          <option value="4">4+ estrelas</option>
+          <option value="5">5 estrelas</option>
+        </select>
+      </div>
+
+      {/* Empty state */}
+      {archived.length === 0 && (
+        <div className="py-16 text-center">
+          <Star className="h-10 w-10 text-slate-700 mx-auto mb-3" />
+          <p className="text-slate-500 text-sm">Nenhum candidato no banco de talentos ainda.</p>
+          <p className="text-slate-600 text-xs mt-1">Candidatos reprovados ou desistentes aparecem aqui.</p>
+        </div>
+      )}
+
+      {/* Grid */}
+      {filtered.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filtered.map(candidate => {
+            const statusCfg = STATUS_CONFIG[candidate.status];
+            return (
+              <div key={candidate.id}
+                className="bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-slate-700 transition-colors flex flex-col gap-3">
+                {/* Top */}
+                <div className="flex items-start gap-3">
+                  <CandidateInitials name={candidate.name} />
+                  <div className="flex-1 min-w-0">
+                    <button
+                      onClick={() => onOpen(candidate)}
+                      className="text-sm font-semibold text-white hover:text-indigo-300 transition-colors truncate block text-left w-full">
+                      {candidate.name}
+                    </button>
+                    <p className="text-[11px] text-slate-500 truncate">{candidate.jobRoleName ?? '—'}</p>
+                  </div>
+                </div>
+
+                {/* Rating */}
+                <RatingStars value={candidate.rating ?? 0} readonly />
+
+                {/* Status + date */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${statusCfg.color}/20 text-slate-400`}>
+                    {statusCfg.label}
+                  </span>
+                  <span className="text-[10px] text-slate-600">
+                    {new Date(candidate.appliedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit' })}
+                  </span>
+                </div>
+
+                {/* Reactivate */}
+                {canManage && (
+                  <button
+                    onClick={() => handleReactivate(candidate)}
+                    disabled={reactivating === candidate.id}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-indigo-400 border border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/15 rounded-xl transition-colors disabled:opacity-40">
+                    {reactivating === candidate.id
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <ArrowRight className="h-3 w-3" />}
+                    Reativar para triagem
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* No results (but has archived) */}
+      {archived.length > 0 && filtered.length === 0 && (
+        <div className="py-10 text-center text-slate-600 text-sm">Nenhum candidato encontrado com os filtros aplicados.</div>
+      )}
+    </div>
+  );
+}
+
 // ─── RecruitmentPage ──────────────────────────────────────────────────────────
 
 export default function RecruitmentPage() {
@@ -1146,16 +1473,17 @@ export default function RecruitmentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Nav
-  const [activeTab, setActiveTab] = useState<'pipeline' | 'openings'>('pipeline');
+  // View mode: kanban | list (triagem) | openings (por vaga)
+  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'openings' | 'talents'>('kanban');
 
   // Pipeline filters
   const [search, setSearch] = useState('');
-  const [filterRole, setFilterRole] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
   const [filterOpening, setFilterOpening] = useState('');
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [filterLocation, setFilterLocation] = useState('');
+  const [filterSource, setFilterSource] = useState('');
+  const [filterRating, setFilterRating] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<CandidateStatus>>(new Set());
 
   // Modals
   const [showNewModal, setShowNewModal] = useState(false);
@@ -1201,22 +1529,64 @@ export default function RecruitmentPage() {
 
   // ── Filters ────────────────────────────────────────────────────────────────
 
+  const locationOptions = useMemo(() => {
+    const locs = new Set<string>();
+    candidates.forEach(c => {
+      const o = openings.find(op => op.id === c.jobOpeningId);
+      if (o?.location) locs.add(o.location);
+    });
+    return Array.from(locs).sort();
+  }, [candidates, openings]);
+
+  const sourceOptions = useMemo(() => {
+    const srcs = new Set<string>();
+    candidates.forEach(c => { if (c.source) srcs.add(c.source); });
+    return Array.from(srcs).sort();
+  }, [candidates]);
+
   const filtered = useMemo(() => {
     return candidates.filter(c => {
       if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
           !c.email.toLowerCase().includes(search.toLowerCase())) return false;
-      if (filterRole && c.jobRoleId !== filterRole) return false;
-      if (filterStatus && c.status !== filterStatus) return false;
       if (filterOpening && c.jobOpeningId !== filterOpening) return false;
+      if (filterLocation) {
+        const op = openings.find(o => o.id === c.jobOpeningId);
+        if (!op || op.location !== filterLocation) return false;
+      }
+      if (filterSource && c.source !== filterSource) return false;
+      if (filterRating) {
+        if ((c.rating ?? 0) < Number(filterRating)) return false;
+      }
       return true;
     });
-  }, [candidates, search, filterRole, filterStatus, filterOpening]);
+  }, [candidates, openings, search, filterOpening, filterLocation, filterSource, filterRating]);
 
   const pipelineCandidates = useMemo(() =>
     filtered.filter(c => PIPELINE_STATUSES.includes(c.status)), [filtered]);
 
   const archivedCandidates = useMemo(() =>
     filtered.filter(c => ARCHIVED_STATUSES.includes(c.status)), [filtered]);
+
+  const stats = useMemo(() => {
+    const now = Date.now();
+    const MS_DAY = 86_400_000;
+    const applied = candidates.filter(c => c.status === 'applied').length;
+    const screening = candidates.filter(c => c.status === 'screening').length;
+    const stuck = candidates.filter(c =>
+      PIPELINE_STATUSES.includes(c.status) &&
+      (now - new Date(c.updatedAt).getTime()) > 15 * MS_DAY
+    ).length;
+    const hired = candidates.filter(c => c.status === 'hired').length;
+    const pipeline = candidates.filter(c => PIPELINE_STATUSES.includes(c.status));
+    const avgDays = pipeline.length > 0
+      ? Math.round(pipeline.reduce((sum, c) =>
+          sum + (now - new Date(c.appliedAt).getTime()), 0) / pipeline.length / MS_DAY)
+      : 0;
+    const recentApplied = candidates.filter(c =>
+      (now - new Date(c.appliedAt).getTime()) < 7 * MS_DAY
+    ).length;
+    return { applied, screening, stuck, hired, avgDays, recentApplied };
+  }, [candidates]);
 
   // ── DnD handlers ──────────────────────────────────────────────────────────
 
@@ -1271,7 +1641,7 @@ export default function RecruitmentPage() {
   };
 
   const handleOpeningsFilterFromTab = (openingId: string) => {
-    setActiveTab('pipeline');
+    setViewMode('kanban');
     setFilterOpening(openingId);
   };
 
@@ -1298,12 +1668,22 @@ export default function RecruitmentPage() {
     );
   }
 
-  const activeFilters = [filterRole, filterStatus, filterOpening].filter(Boolean).length;
+  const activeFilters = [filterOpening, filterLocation, filterSource, filterRating].filter(Boolean).length;
+
+  const FUNNEL_COLORS: Record<string, string> = {
+    applied: 'bg-blue-500',
+    screening: 'bg-indigo-500',
+    interview: 'bg-purple-500',
+    technical_test: 'bg-pink-500',
+    offer: 'bg-amber-500',
+    hired: 'bg-green-500',
+  };
 
   return (
-    <div className="flex flex-col h-full space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="flex flex-col h-full space-y-5">
+
+      {/* ─── Header ─── */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Recrutamento</h1>
           <p className="text-slate-400 mt-1 text-sm">
@@ -1312,215 +1692,310 @@ export default function RecruitmentPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {activeTab === 'pipeline' && canManage && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View toggle */}
+          <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-xl p-1">
+            {(['kanban', 'list', 'openings', 'talents'] as const).map((mode) => {
+              const labels: Record<string, string> = { kanban: 'Kanban', list: 'Triagem', openings: 'Por vaga', talents: 'Talentos' };
+              return (
+                <button key={mode} onClick={() => setViewMode(mode)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    viewMode === mode ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'
+                  }`}>
+                  {labels[mode]}
+                </button>
+              );
+            })}
+            <a href="/vagas" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-300 transition-all">
+              <Globe className="h-3.5 w-3.5" />
+              Página pública
+            </a>
+          </div>
+
+          {/* CTA */}
+          {canManage && viewMode !== 'openings' && viewMode !== 'talents' && (
             <button onClick={() => setShowNewModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium text-sm shadow-lg shadow-indigo-500/20">
               <UserPlus className="h-4 w-4" />
-              <span>Novo Candidato</span>
+              Novo candidato
             </button>
           )}
-          <a href="/vagas" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-xl text-sm transition-colors">
-            <Globe className="h-4 w-4" />
-            <span className="hidden md:inline">Página pública</span>
-          </a>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 bg-slate-900/50 border border-slate-800 rounded-xl p-1 w-fit">
-        {([['pipeline', 'Pipeline'], ['openings', 'Vagas']] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setActiveTab(id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === id ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'
-            }`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Pipeline Tab ── */}
-      {activeTab === 'pipeline' && (
-        <div className="flex flex-col flex-1 space-y-4 min-h-0">
-          {/* Filters bar */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-              <input
-                type="text" value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar…"
-                className="pl-9 pr-4 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 w-48 text-sm" />
+      {/* ─── Stats row ─── */}
+      {viewMode !== 'openings' && viewMode !== 'talents' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          {[
+            { key: 'inscritos', label: 'Inscritos', value: stats.applied, sub: stats.recentApplied > 0 ? `+${stats.recentApplied} esta sem.` : null, subColor: 'text-emerald-400' },
+            { key: 'triagem', label: 'Em triagem', value: stats.screening, sub: null, subColor: '' },
+            { key: 'parados', label: 'Parados +15 dias', value: stats.stuck, sub: null, subColor: '' },
+            { key: 'contratados', label: 'Contratados', value: stats.hired, sub: null, subColor: '' },
+            { key: 'tempo', label: 'Tempo médio', value: `${stats.avgDays}d`, sub: null, subColor: '' },
+          ].map(({ key, label, value, sub, subColor }) => (
+            <div key={key} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">{label}</p>
+              <div className="flex items-end justify-between gap-2">
+                <p className="text-3xl font-bold text-white leading-none">{value}</p>
+                {sub && <span className={`text-xs font-medium ${subColor} mb-0.5`}>{sub}</span>}
+              </div>
             </div>
+          ))}
+        </div>
+      )}
 
-            <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
-              className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
-              <option value="">Todos os cargos</option>
-              {roles.filter(r => r.isActive !== false).map(r => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
+      {/* ─── Funnel ─── */}
+      {viewMode !== 'openings' && viewMode !== 'talents' && candidates.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+          <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-4">Funil de conversão</h3>
+          {/* Stage labels + counts */}
+          <div className="flex mb-3">
+            {PIPELINE_STATUSES.map(status => {
+              const count = candidates.filter(c => c.status === status).length;
+              const cfg = STATUS_CONFIG[status];
+              return (
+                <div key={status} style={{ flex: 1 }} className="text-center min-w-0 px-1">
+                  <p className="text-base font-bold text-white leading-none mb-1">{count}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{cfg.label}</p>
+                </div>
+              );
+            })}
+          </div>
+          {/* Bar */}
+          <div className="flex h-5 gap-0.5 rounded-lg overflow-hidden">
+            {PIPELINE_STATUSES.map(status => {
+              const count = candidates.filter(c => c.status === status).length;
+              const total = candidates.filter(c => PIPELINE_STATUSES.includes(c.status)).length;
+              const flex = total > 0 ? Math.max(count, 0.15) : 1;
+              return (
+                <div
+                  key={status}
+                  style={{ flex }}
+                  className={`${FUNNEL_COLORS[status] ?? 'bg-slate-700'} rounded-sm`}
+                  title={`${STATUS_CONFIG[status].label}: ${count}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
-              <option value="">Todos os status</option>
-              {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
-            </select>
-
-            {openings.length > 0 && (
-              <select value={filterOpening} onChange={e => setFilterOpening(e.target.value)}
-                className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
-                <option value="">Todas as vagas</option>
-                {openings.map(o => <option key={o.id} value={o.id}>{o.title}</option>)}
-              </select>
-            )}
-
-            {activeFilters > 0 && (
-              <button
-                onClick={() => { setFilterRole(''); setFilterStatus(''); setFilterOpening(''); setSearch(''); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-white border border-slate-800 rounded-xl hover:border-slate-700">
-                <X className="h-3 w-3" /> Limpar filtros
-              </button>
-            )}
-
-            <div className="ml-auto flex bg-slate-900 border border-slate-800 rounded-xl p-1">
-              <button onClick={() => setViewMode('kanban')}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'kanban' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-                <Kanban className="h-4 w-4" />
-              </button>
-              <button onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-                <List className="h-4 w-4" />
-              </button>
-            </div>
+      {/* ─── Pipeline filters ─── */}
+      {viewMode !== 'openings' && viewMode !== 'talents' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <input
+              type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar candidato e e-mail…"
+              className="pl-9 pr-4 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 w-52 text-sm" />
           </div>
 
-          {/* Kanban */}
-          {viewMode === 'kanban' && (
-            <div className="flex-1 flex flex-col gap-4 overflow-y-auto min-h-0">
-              <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          {openings.length > 0 && (
+            <select value={filterOpening} onChange={e => setFilterOpening(e.target.value)}
+              className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+              <option value="">Todas as vagas</option>
+              {openings.map(o => <option key={o.id} value={o.id}>{o.title}</option>)}
+            </select>
+          )}
+
+          {locationOptions.length > 0 && (
+            <select value={filterLocation} onChange={e => setFilterLocation(e.target.value)}
+              className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+              <option value="">Todas unidades</option>
+              {locationOptions.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+            </select>
+          )}
+
+          {sourceOptions.length > 0 && (
+            <select value={filterSource} onChange={e => setFilterSource(e.target.value)}
+              className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+              <option value="">Todas origens</option>
+              {sourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
+            </select>
+          )}
+
+          <select value={filterRating} onChange={e => setFilterRating(e.target.value)}
+            className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            <option value="">Avaliação</option>
+            <option value="1">1+ estrela</option>
+            <option value="2">2+ estrelas</option>
+            <option value="3">3+ estrelas</option>
+            <option value="4">4+ estrelas</option>
+            <option value="5">5 estrelas</option>
+          </select>
+
+          {activeFilters > 0 && (
+            <button
+              onClick={() => { setFilterOpening(''); setFilterLocation(''); setFilterSource(''); setFilterRating(''); setSearch(''); }}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-white border border-slate-800 rounded-xl hover:border-slate-700">
+              <X className="h-3 w-3" /> Limpar filtros
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ─── Kanban ─── */}
+      {viewMode === 'kanban' && (
+        <div className="flex-1 flex flex-col gap-4 overflow-y-auto min-h-0">
+          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+              {PIPELINE_STATUSES.map(status => (
+                <DroppableColumn
+                  key={status}
+                  status={status}
+                  candidates={pipelineCandidates.filter(c => c.status === status)}
+                  onCardOpen={setDetailCandidate}
+                />
+              ))}
+            </div>
+            <DragOverlay>
+              {activeDragCandidate && (
+                <div className="p-4 bg-slate-900 border border-indigo-500/50 rounded-xl shadow-2xl w-72 opacity-95">
+                  <h4 className="font-bold text-white text-sm">{activeDragCandidate.name}</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">{activeDragCandidate.jobRoleName}</p>
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+
+          {/* Archived */}
+          {archivedCandidates.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowArchived(p => !p)}
+                className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-3">
+                {showArchived ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                <Archive className="h-3.5 w-3.5" />
+                Arquivados ({archivedCandidates.length})
+              </button>
+              {showArchived && (
                 <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
-                  {PIPELINE_STATUSES.map(status => (
+                  {ARCHIVED_STATUSES.map(status => (
                     <DroppableColumn
                       key={status}
                       status={status}
-                      candidates={pipelineCandidates.filter(c => c.status === status)}
+                      candidates={archivedCandidates.filter(c => c.status === status)}
                       onCardOpen={setDetailCandidate}
                     />
                   ))}
                 </div>
-                <DragOverlay>
-                  {activeDragCandidate && (
-                    <div className="p-4 bg-slate-900 border border-indigo-500/50 rounded-xl shadow-2xl w-72 opacity-95">
-                      <h4 className="font-bold text-white text-sm">{activeDragCandidate.name}</h4>
-                      <p className="text-xs text-slate-400 mt-0.5">{activeDragCandidate.jobRoleName}</p>
-                    </div>
-                  )}
-                </DragOverlay>
-              </DndContext>
-
-              {/* Archived section */}
-              {archivedCandidates.length > 0 && (
-                <div>
-                  <button
-                    onClick={() => setShowArchived(p => !p)}
-                    className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-3">
-                    {showArchived ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                    <Archive className="h-3.5 w-3.5" />
-                    Arquivados ({archivedCandidates.length})
-                  </button>
-                  {showArchived && (
-                    <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
-                      {ARCHIVED_STATUSES.map(status => (
-                        <DroppableColumn
-                          key={status}
-                          status={status}
-                          candidates={archivedCandidates.filter(c => c.status === status)}
-                          onCardOpen={setDetailCandidate}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
               )}
-            </div>
-          )}
-
-          {/* List */}
-          {viewMode === 'list' && (
-            <div className="flex-1 bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-800 bg-slate-900/80">
-                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Candidato</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Cargo</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider hidden md:table-cell">Avaliação</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider hidden lg:table-cell">Inscrição</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-600 text-sm">
-                        Nenhum candidato encontrado.
-                      </td>
-                    </tr>
-                  )}
-                  {filtered.map(candidate => (
-                    <tr key={candidate.id} onClick={() => setDetailCandidate(candidate)}
-                      className="hover:bg-slate-800/30 transition-colors cursor-pointer group">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-semibold text-white group-hover:text-indigo-300 transition-colors text-sm truncate">
-                              {candidate.name}
-                            </span>
-                            <span className="text-xs text-slate-500 truncate">{candidate.email}</span>
-                          </div>
-                          {candidate.resumeUrl && (
-                            <Paperclip className="h-3 w-3 text-slate-600 flex-shrink-0" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm text-slate-300">{candidate.jobRoleName ?? '—'}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <StatusBadge status={candidate.status} />
-                      </td>
-                      <td className="px-6 py-4 hidden md:table-cell">
-                        <RatingStars value={candidate.rating ?? 0} readonly />
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-400 hidden lg:table-cell">
-                        {new Date(candidate.appliedAt).toLocaleDateString('pt-BR')}
-                      </td>
-                      <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
-                        {canManage ? (
-                          <ListRowMenu
-                            candidate={candidate}
-                            onOpen={() => setDetailCandidate(candidate)}
-                            onDelete={() => setDeleteCandidate(candidate)}
-                          />
-                        ) : (
-                          <button onClick={() => setDetailCandidate(candidate)}
-                            className="p-2 text-slate-500 hover:text-white">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Openings Tab ── */}
-      {activeTab === 'openings' && (
+      {/* ─── List / Triagem ─── */}
+      {viewMode === 'list' && (
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {filtered.length === 0 && (
+            <div className="py-16 text-center text-slate-600 text-sm">Nenhum candidato encontrado.</div>
+          )}
+
+          {filtered.length > 0 && (
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="grid grid-cols-[2rem_1fr_minmax(0,140px)_88px_80px_80px_2rem] items-center px-4 py-2.5 border-b border-slate-800 bg-slate-900/80">
+                <span />
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Nome</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden md:block">Cargo</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden lg:block">Avaliação</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden lg:block">Inscrição</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden sm:block">Origem</span>
+                <span />
+              </div>
+
+              {ALL_STATUSES.map(status => {
+                const group = filtered.filter(c => c.status === status);
+                if (group.length === 0) return null;
+                const cfg = STATUS_CONFIG[status];
+                const isCollapsed = collapsedGroups.has(status);
+                const toggle = () => setCollapsedGroups(prev => {
+                  const next = new Set(prev);
+                  if (next.has(status)) next.delete(status); else next.add(status);
+                  return next;
+                });
+
+                return (
+                  <div key={status} className="border-b border-slate-800/60 last:border-b-0">
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-900/60 hover:bg-slate-800/40 transition-colors">
+                      <button onClick={toggle} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                        {isCollapsed
+                          ? <ChevronRight className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
+                          : <ChevronDown className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />}
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.color}`} />
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">{cfg.label}</span>
+                        <span className="text-xs text-slate-600 ml-1">{group.length}</span>
+                      </button>
+                      {canManage && (
+                        <button
+                          onClick={() => setShowNewModal(true)}
+                          className="flex items-center gap-1 text-[11px] text-slate-600 hover:text-indigo-400 transition-colors px-2 py-1 rounded-lg hover:bg-indigo-500/10">
+                          <Plus className="h-3 w-3" /> Adicionar
+                        </button>
+                      )}
+                    </div>
+
+                    {!isCollapsed && group.map((candidate, rowIdx) => {
+                      const sourceColor = candidate.source
+                        ? (SOURCE_TAG_COLORS[candidate.source] ?? SOURCE_TAG_COLORS['Outro'])
+                        : null;
+                      return (
+                        <div
+                          key={candidate.id}
+                          onClick={() => setDetailCandidate(candidate)}
+                          className="grid grid-cols-[2rem_1fr_minmax(0,140px)_88px_80px_80px_2rem] items-center px-4 py-3 border-t border-slate-800/40 hover:bg-slate-800/30 transition-colors cursor-pointer group"
+                        >
+                          <span className="text-[11px] text-slate-700 font-mono select-none">{rowIdx + 1}</span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-white group-hover:text-indigo-300 transition-colors truncate leading-snug">
+                                {candidate.name}
+                              </p>
+                              <p className="text-[11px] text-slate-500 truncate">{candidate.email}</p>
+                            </div>
+                            {candidate.resumeUrl && <Paperclip className="h-3 w-3 text-slate-600 flex-shrink-0" />}
+                          </div>
+                          <span className="text-xs text-slate-400 truncate hidden md:block">{candidate.jobRoleName ?? '—'}</span>
+                          <div className="hidden lg:block"><RatingStars value={candidate.rating ?? 0} readonly /></div>
+                          <span className="text-[11px] text-slate-500 hidden lg:block">
+                            {new Date(candidate.appliedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                          </span>
+                          <div className="hidden sm:block">
+                            {sourceColor && candidate.source ? (
+                              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border truncate max-w-[72px] block text-center ${sourceColor}`}>
+                                {candidate.source}
+                              </span>
+                            ) : <span className="text-[11px] text-slate-700">—</span>}
+                          </div>
+                          <div onClick={e => e.stopPropagation()}>
+                            {canManage ? (
+                              <ListRowMenu
+                                candidate={candidate}
+                                onOpen={() => setDetailCandidate(candidate)}
+                                onDelete={() => setDeleteCandidate(candidate)}
+                              />
+                            ) : (
+                              <button onClick={() => setDetailCandidate(candidate)}
+                                className="p-1.5 text-slate-600 hover:text-white">
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Por vaga ─── */}
+      {viewMode === 'openings' && (
         <OpeningsView
           openings={openings}
           roles={roles}
@@ -1528,6 +2003,18 @@ export default function RecruitmentPage() {
           canManage={canManage}
           onRefresh={loadData}
           onCandidatesFilter={handleOpeningsFilterFromTab}
+        />
+      )}
+
+      {/* ─── Banco de talentos ─── */}
+      {viewMode === 'talents' && (
+        <TalentsView
+          candidates={candidates}
+          roles={roles}
+          getToken={getToken}
+          canManage={canManage}
+          onOpen={setDetailCandidate}
+          onReactivated={loadData}
         />
       )}
 

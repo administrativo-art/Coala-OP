@@ -1,4 +1,4 @@
-import type { JobFunction, JobRole } from "@/types";
+import type { JobDepartment, JobFunction, JobRole } from "@/types";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import type {
   LoginRestrictionEvaluation,
@@ -9,6 +9,7 @@ type FirebaseUserLike = {
 };
 
 export type HrBootstrapPayload = {
+  departments: JobDepartment[];
   roles: JobRole[];
   functions: JobFunction[];
   access: {
@@ -191,6 +192,21 @@ export async function fetchHrBootstrap(firebaseUser: FirebaseUserLike) {
     firebaseUser,
     { method: "GET" },
     "Falha ao carregar os dados do RH."
+  );
+}
+
+export async function createHrDepartment(
+  firebaseUser: FirebaseUserLike,
+  payload: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ department: JobDepartment }>(
+    "/api/hr/departments",
+    firebaseUser,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    "Falha ao criar departamento."
   );
 }
 

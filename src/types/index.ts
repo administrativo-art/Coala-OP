@@ -581,6 +581,7 @@ export type JobOpening = {
   slug: string;
   description?: string;
   requirements?: string[];
+  formQuestions?: HrFormQuestion[];
   location?: string;
   workType?: 'presencial' | 'remoto' | 'hibrido';
   slots: number;
@@ -591,12 +592,24 @@ export type JobOpening = {
   createdBy: string;
 };
 
+export type JobDepartment = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type JobRole = {
 // ...
   id: string;
   name: string;
   publicTitle: string;
   slug: string;
+  departmentId?: string | null;
+  departmentName?: string | null;
   reportsTo?: string | null;
   description?: string;
   publicDescription?: string;
@@ -622,6 +635,8 @@ export type JobFunction = {
   name: string;
   publicTitle: string;
   slug: string;
+  departmentId?: string | null;
+  departmentName?: string | null;
   description?: string;
   publicDescription?: string;
   responsibilities?: string[];

@@ -163,11 +163,8 @@ export async function POST(request: NextRequest) {
 
   const opening = snapshot.docs[0];
   const openingData = opening.data();
-  const roleDoc = typeof openingData.jobRoleId === 'string'
-    ? await hrDbAdmin.collection('jobRoles').doc(openingData.jobRoleId).get()
-    : null;
-  const formQuestions = roleDoc?.exists && Array.isArray(roleDoc.data()?.formQuestions)
-    ? roleDoc.data()?.formQuestions as HrFormQuestion[]
+  const formQuestions = Array.isArray(openingData.formQuestions)
+    ? openingData.formQuestions as HrFormQuestion[]
     : [];
   let formAnswers: Record<string, unknown>;
   try {
