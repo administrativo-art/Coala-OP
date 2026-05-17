@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import dynamic from 'next/dynamic';
 import { useProductSimulation } from "@/hooks/use-product-simulation";
-import { type ProductSimulation, type PricingParameters, type SimulationCategory } from '@/types';
+import { type ProductSimulation, type PricingParameters, type SimulationCategory, type Kiosk } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +30,8 @@ import {
     Warehouse,
     LayoutDashboard,
     ClipboardList,
-    Package
+    Package,
+    Building2
 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
@@ -55,7 +56,8 @@ import { Label } from "./ui/label";
 import { ScrollArea } from "./ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { TechnicalSheetViewerModal } from "./technical-sheet-viewer-modal";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useChannels } from "@/hooks/use-channels";
@@ -76,6 +78,73 @@ const PDFDownloadLink = dynamic(
   { ssr: false }
 );
 
+
+interface KioskManagementDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  simulation: ProductSimulation;
+  kiosks: Kiosk[];
+  onSave: (kioskIds: string[]) => Promise<void>;
+}
+
+function KioskManagementDialog({ open, onOpenChange, simulation, kiosks, onSave }: KioskManagementDialogProps) {
+  const [selectedIds, setSelectedIds] = useState<string[]>(simulation.kioskIds ?? []);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) setSelectedIds(simulation.kioskIds ?? []);
+  }, [open, simulation.kioskIds]);
+
+  const toggle = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const hasChanged = JSON.stringify([...selectedIds].sort()) !== JSON.stringify([...(simulation.kioskIds ?? [])].sort());
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSave(selectedIds);
+      onOpenChange(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Gerenciar Unidades</DialogTitle>
+          <DialogDescription className="truncate">{simulation.name}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1 py-2">
+          {selectedIds.length === 0 && (
+            <p className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-3">
+              Esta mercadoria não aparecerá ao filtrar por unidade.
+            </p>
+          )}
+          {kiosks.map(kiosk => (
+            <div key={kiosk.id} className="flex items-center justify-between rounded-lg px-3 py-2.5 hover:bg-muted/50 transition-colors">
+              <label htmlFor={`kiosk-${kiosk.id}`} className="text-sm font-medium cursor-pointer flex-1">{kiosk.name}</label>
+              <Switch
+                id={`kiosk-${kiosk.id}`}
+                checked={selectedIds.includes(kiosk.id)}
+                onCheckedChange={() => toggle(kiosk.id)}
+              />
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button onClick={handleSave} disabled={!hasChanged || isSaving}>
+            {isSaving ? 'Salvando...' : 'Salvar'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
@@ -111,6 +180,7 @@ export function PricingSimulator() {
     const [simulationToDeactivate, setSimulationToDeactivate] = useState<ProductSimulation | null>(null);
     const [simToDeleteFirst, setSimToDeleteFirst] = useState<ProductSimulation | null>(null);
     const [simToDeleteFinal, setSimToDeleteFinal] = useState<ProductSimulation | null>(null);
+    const [simToManageKiosks, setSimToManageKiosks] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
@@ -232,6 +302,13 @@ export function PricingSimulator() {
         if (!simulationToDeactivate) return;
         await updateSimulation({ id: simulationToDeactivate.id, isArchived: true });
         setSimulationToDeactivate(null);
+    };
+
+    const handleSaveKioskManagement = async (kioskIds: string[]) => {
+        if (!simToManageKiosks) return;
+        await updateSimulation({ id: simToManageKiosks.id, kioskIds });
+        toast({ title: "Unidades atualizadas com sucesso." });
+        setSimToManageKiosks(null);
     };
     
     const categoryMap = useMemo(() => {
@@ -666,6 +743,21 @@ export function PricingSimulator() {
                                                     </Tooltip>
                                                 </TooltipProvider>
                                             )}
+                                            {sim.kioskIds && sim.kioskIds.length > 0 && (
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1 cursor-default text-gray-500 border-gray-200">
+                                                                <Building2 className="h-2.5 w-2.5" />
+                                                                {sim.kioskIds.length}
+                                                            </Badge>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p className="text-xs">{sim.kioskIds.length} unidade{sim.kioskIds.length !== 1 ? 's' : ''} ativa{sim.kioskIds.length !== 1 ? 's' : ''}</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            )}
                                         </div>
                                         <p className="text-xs text-muted-foreground font-mono">SKU: {sim.ppo?.sku || 'N/A'}</p>
                                     </div>
@@ -713,6 +805,7 @@ export function PricingSimulator() {
                                             <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0 text-muted-foreground"><span className="sr-only">Abrir menu</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem onClick={() => handleToggleSimulationActive(sim, false)} className="text-orange-600 focus:text-orange-600"><CheckCircle2 className="mr-2 h-4 w-4" /> Desativar mercadoria</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => setSimToManageKiosks(sim)}><Building2 className="mr-2 h-4 w-4" /> Gerenciar Unidades</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" /> Ficha Técnica de Instrução</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleEdit(sim, 'ficha')}><ClipboardList className="mr-2 h-4 w-4" /> Ficha Técnica Completa</DropdownMenuItem>
@@ -1208,6 +1301,16 @@ export function PricingSimulator() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {simToManageKiosks && (
+                <KioskManagementDialog
+                    open={!!simToManageKiosks}
+                    onOpenChange={(open) => { if (!open) setSimToManageKiosks(null); }}
+                    simulation={simToManageKiosks}
+                    kiosks={kiosks}
+                    onSave={handleSaveKioskManagement}
+                />
+            )}
 
             <AlertDialog open={!!simulationToDeactivate} onOpenChange={(open) => { if (!open) setSimulationToDeactivate(null); }}>
                 <AlertDialogContent>
