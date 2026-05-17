@@ -1572,20 +1572,36 @@ export default function RecruitmentPage() {
     const MS_DAY = 86_400_000;
     const applied = candidates.filter(c => c.status === 'applied').length;
     const screening = candidates.filter(c => c.status === 'screening').length;
-    const stuck = candidates.filter(c =>
-      PIPELINE_STATUSES.includes(c.status) &&
-      (now - new Date(c.updatedAt).getTime()) > 15 * MS_DAY
-    ).length;
     const hired = candidates.filter(c => c.status === 'hired').length;
     const pipeline = candidates.filter(c => PIPELINE_STATUSES.includes(c.status));
     const avgDays = pipeline.length > 0
       ? Math.round(pipeline.reduce((sum, c) =>
           sum + (now - new Date(c.appliedAt).getTime()), 0) / pipeline.length / MS_DAY)
       : 0;
-    const recentApplied = candidates.filter(c =>
+    // Sparkline: candidates applied per day for last 7 days
+    const sparkData = Array.from({ length: 7 }, (_, i) => {
+      const dayStart = now - (6 - i) * MS_DAY;
+      const dayEnd = dayStart + MS_DAY;
+      return candidates.filter(c => {
+        const t = new Date(c.appliedAt).getTime();
+        return t >= dayStart && t < dayEnd;
+      }).length;
+    });
+    // Trend: this week vs last week
+    const thisWeekApplied = candidates.filter(c =>
       (now - new Date(c.appliedAt).getTime()) < 7 * MS_DAY
     ).length;
-    return { applied, screening, stuck, hired, avgDays, recentApplied };
+    const lastWeekApplied = candidates.filter(c => {
+      const age = now - new Date(c.appliedAt).getTime();
+      return age >= 7 * MS_DAY && age < 14 * MS_DAY;
+    }).length;
+    const appliedTrend = lastWeekApplied > 0
+      ? Math.round(((thisWeekApplied - lastWeekApplied) / lastWeekApplied) * 100)
+      : thisWeekApplied > 0 ? 100 : 0;
+    const hiredThisMonth = candidates.filter(c =>
+      c.status === 'hired' && (now - new Date(c.updatedAt).getTime()) < 30 * MS_DAY
+    ).length;
+    return { applied, screening, hired, avgDays, sparkData, appliedTrend, hiredThisMonth };
   }, [candidates]);
 
   // ── DnD handlers ──────────────────────────────────────────────────────────
@@ -1726,22 +1742,66 @@ export default function RecruitmentPage() {
 
       {/* ─── Stats row ─── */}
       {viewMode !== 'openings' && viewMode !== 'talents' && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-          {[
-            { key: 'inscritos', label: 'Inscritos', value: stats.applied, sub: stats.recentApplied > 0 ? `+${stats.recentApplied} esta sem.` : null, subColor: 'text-emerald-400' },
-            { key: 'triagem', label: 'Em triagem', value: stats.screening, sub: null, subColor: '' },
-            { key: 'parados', label: 'Parados +15 dias', value: stats.stuck, sub: null, subColor: '' },
-            { key: 'contratados', label: 'Contratados', value: stats.hired, sub: null, subColor: '' },
-            { key: 'tempo', label: 'Tempo médio', value: `${stats.avgDays}d`, sub: null, subColor: '' },
-          ].map(({ key, label, value, sub, subColor }) => (
-            <div key={key} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">{label}</p>
-              <div className="flex items-end justify-between gap-2">
-                <p className="text-3xl font-bold text-white leading-none">{value}</p>
-                {sub && <span className={`text-xs font-medium ${subColor} mb-0.5`}>{sub}</span>}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Inscritos — with sparkline */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Inscritos</p>
+            <div className="flex items-end justify-between gap-2">
+              <div>
+                <p className="text-3xl font-bold text-white leading-none">{stats.applied}</p>
+                {stats.appliedTrend !== 0 && (
+                  <span className={`flex items-center gap-0.5 text-xs font-bold mt-1 ${stats.appliedTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                      {stats.appliedTrend > 0
+                        ? <path d="M4 1L7 6H1L4 1Z" />
+                        : <path d="M4 7L7 2H1L4 7Z" />}
+                    </svg>
+                    {Math.abs(stats.appliedTrend)}%
+                  </span>
+                )}
               </div>
+              {/* Sparkline */}
+              <svg width="56" height="28" className="text-indigo-400 flex-shrink-0">
+                {stats.sparkData.map((v, i) => {
+                  const max = Math.max(...stats.sparkData, 1);
+                  const bh = Math.max((v / max) * 24, 2);
+                  const bw = 6;
+                  return (
+                    <rect key={i} x={i * 8} y={28 - bh} width={bw} height={bh}
+                      rx="1" fill="currentColor" opacity={0.3 + 0.7 * (v / max)} />
+                  );
+                })}
+              </svg>
             </div>
-          ))}
+          </div>
+
+          {/* Em triagem */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Em triagem</p>
+            <p className="text-3xl font-bold text-white leading-none">{stats.screening}</p>
+          </div>
+
+          {/* Contratados */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Contratados</p>
+            <div>
+              <p className="text-3xl font-bold text-white leading-none">{stats.hired}</p>
+              {stats.hiredThisMonth > 0 && (
+                <span className="flex items-center gap-0.5 text-xs font-bold mt-1 text-emerald-400">
+                  <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                    <path d="M4 1L7 6H1L4 1Z" />
+                  </svg>
+                  +{stats.hiredThisMonth} este mês
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Tempo médio */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Tempo médio</p>
+            <p className="text-3xl font-bold text-white leading-none">{stats.avgDays}d</p>
+          </div>
         </div>
       )}
 
