@@ -14,6 +14,8 @@ import {
   Users,
 } from "lucide-react";
 
+import { PrivacyGovernancePanel } from "@/components/privacy/privacy-governance-panel";
+
 const inventoryRows = [
   {
     module: "Login e usuarios",
@@ -84,11 +86,11 @@ const checklist = [
   { label: "Controle de acesso por perfis", done: true },
   { label: "Reset de senha via e-mail do Firebase", done: true },
   { label: "Inventario inicial de dados por modulo", done: true },
-  { label: "Auditoria centralizada de visualizacao/alteracao", done: false },
-  { label: "Retencao automatizada por tipo de dado", done: false },
-  { label: "Canal formal para pedidos de titulares", done: false },
-  { label: "Procedimento de incidente de seguranca", done: false },
-  { label: "MFA obrigatorio para administradores", done: false },
+  { label: "Auditoria centralizada de visualizacao/alteracao", done: true },
+  { label: "Retencao tecnica com TTL por registro", done: true },
+  { label: "Canal interno para pedidos de titulares", done: true },
+  { label: "Registro interno de incidente de seguranca", done: true },
+  { label: "MFA obrigatorio para administradores", done: true, note: "Nao aplicavel por decisao interna" },
 ];
 
 const retentionRows = [
@@ -195,7 +197,10 @@ export function InternalPrivacySettings() {
             <div className="space-y-3">
               {checklist.map((item) => (
                 <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3">
-                  <p className="text-xs font-bold text-slate-700">{item.label}</p>
+                  <div>
+                    <p className="text-xs font-bold text-slate-700">{item.label}</p>
+                    {"note" in item && item.note ? <p className="mt-1 text-[10px] font-semibold text-slate-400">{item.note}</p> : null}
+                  </div>
                   <StatusPill done={item.done} />
                 </div>
               ))}
@@ -218,6 +223,8 @@ export function InternalPrivacySettings() {
           </div>
         </div>
       </section>
+
+      <PrivacyGovernancePanel />
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -244,8 +251,8 @@ export function InternalPrivacySettings() {
             <p>1. Registrar eventos de auditoria para visualizacao, edicao, exportacao e reset de senha.</p>
             <p>2. Bloquear dados sensiveis de RH para perfis que nao sejam RH/DP ou administracao autorizada.</p>
             <p>3. Criar fluxo de solicitacao do titular: acesso, correcao, informacao e eliminacao quando aplicavel.</p>
-            <p>4. Criar registro de incidente com avaliacao de risco, titulares afetados e comunicacoes realizadas.</p>
-            <p>5. Exigir MFA para administradores e perfis com acesso a dados sensiveis.</p>
+            <p>4. Manter registro interno de incidente com dados afetados, titulares, gravidade e medidas tomadas.</p>
+            <p>5. Revisar periodicamente usuarios administradores e remover acessos inativos.</p>
           </div>
         </div>
       </section>
@@ -254,10 +261,10 @@ export function InternalPrivacySettings() {
         <div className="flex gap-3">
           <Mail className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
           <div>
-            <p className="text-sm font-black text-amber-900">Pendente de decisao administrativa</p>
+            <p className="text-sm font-black text-amber-900">Pendente de decisao administrativa final</p>
             <p className="mt-1 text-sm leading-6 text-amber-800">
-              Definir oficialmente o canal de privacidade, responsavel interno, prazos finais de retencao
-              e quais fornecedores participam de cada tratamento. Esta tela e o ponto inicial de governanca,
+              Definir oficialmente o e-mail externo de privacidade, responsavel interno definitivo
+              e revisao periodica de fornecedores. Esta tela e o ponto inicial de governanca,
               nao substitui revisao juridica quando necessaria.
             </p>
           </div>

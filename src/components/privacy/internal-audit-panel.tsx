@@ -21,6 +21,8 @@ const MODULE_LABELS: Record<string, string> = {
   "dp.schedules": "Escalas",
   "recruitment.candidates": "Candidatos",
   "recruitment.openings": "Vagas",
+  "privacy.requests": "Pedidos LGPD",
+  "privacy.incidents": "Incidentes",
   tasks: "Tarefas",
 };
 
@@ -42,6 +44,10 @@ const ACTION_LABELS: Record<string, string> = {
   opening_created: "Vaga criada",
   opening_updated: "Vaga atualizada",
   opening_deleted: "Vaga excluida",
+  privacy_request_created: "Pedido LGPD criado",
+  privacy_request_updated: "Pedido LGPD atualizado",
+  security_incident_created: "Incidente criado",
+  security_incident_updated: "Incidente atualizado",
 };
 
 function formatDate(value: string | null) {
@@ -157,6 +163,7 @@ export function InternalAuditPanel() {
               <SelectItem value="dp.collaborators">Colaboradores</SelectItem>
               <SelectItem value="dp.schedules">Escalas</SelectItem>
               <SelectItem value="recruitment">Recrutamento</SelectItem>
+              <SelectItem value="privacy">Privacidade</SelectItem>
               <SelectItem value="tasks">Tarefas</SelectItem>
             </SelectContent>
           </Select>
