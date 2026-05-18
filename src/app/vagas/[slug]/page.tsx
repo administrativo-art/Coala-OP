@@ -54,18 +54,18 @@ function FormQuestionField({ question, value, onChange }: {
   if (question.type === 'yes_no') {
     return (
       <div className="space-y-2">
-        <p className="text-xs font-medium text-slate-400">{question.text}{question.required ? ' *' : ''}</p>
+        <p className="text-xs font-medium text-slate-600">{question.text}{question.required ? ' *' : ''}</p>
         <div className="flex gap-3">
           {[
             { label: 'Sim', value: true },
             { label: 'Não', value: false },
           ].map(option => (
-            <label key={option.label} className="flex items-center gap-2 text-sm text-slate-300">
+            <label key={option.label} className="flex items-center gap-2 text-sm text-slate-700">
               <input
                 type="radio"
                 checked={value === option.value}
                 onChange={() => onChange(option.value)}
-                className="accent-indigo-500"
+                className="accent-emerald-700"
               />
               {option.label}
             </label>
@@ -78,11 +78,11 @@ function FormQuestionField({ question, value, onChange }: {
   if (question.type === 'select') {
     return (
       <div>
-        <label className="block text-xs font-medium text-slate-400 mb-1.5">{question.text}{question.required ? ' *' : ''}</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1.5">{question.text}{question.required ? ' *' : ''}</label>
         <select
           value={typeof value === 'string' ? value : ''}
           onChange={e => onChange(e.target.value)}
-          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 text-sm"
         >
           <option value="">Selecione</option>
           {options.map(option => <option key={option} value={option}>{option}</option>)}
@@ -95,15 +95,15 @@ function FormQuestionField({ question, value, onChange }: {
     const values = Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
     return (
       <div className="space-y-2">
-        <p className="text-xs font-medium text-slate-400">{question.text}{question.required ? ' *' : ''}</p>
+        <p className="text-xs font-medium text-slate-600">{question.text}{question.required ? ' *' : ''}</p>
         <div className="space-y-2">
           {options.map(option => (
-            <label key={option} className="flex items-center gap-2 text-sm text-slate-300">
+            <label key={option} className="flex items-center gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"
                 checked={values.includes(option)}
                 onChange={e => onChange(e.target.checked ? [...values, option] : values.filter(entry => entry !== option))}
-                className="accent-indigo-500"
+                className="accent-emerald-700"
               />
               {option}
             </label>
@@ -116,12 +116,12 @@ function FormQuestionField({ question, value, onChange }: {
   if (question.type === 'text') {
     return (
       <div>
-        <label className="block text-xs font-medium text-slate-400 mb-1.5">{question.text}{question.required ? ' *' : ''}</label>
+        <label className="block text-xs font-medium text-slate-600 mb-1.5">{question.text}{question.required ? ' *' : ''}</label>
         <textarea
           value={typeof value === 'string' ? value : ''}
           onChange={e => onChange(e.target.value)}
           rows={2}
-          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
+          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-950 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 text-sm resize-none"
         />
       </div>
     );
@@ -129,12 +129,12 @@ function FormQuestionField({ question, value, onChange }: {
 
   return (
     <div>
-      <label className="block text-xs font-medium text-slate-400 mb-1.5">{question.text}{question.required ? ' *' : ''}</label>
+      <label className="block text-xs font-medium text-slate-600 mb-1.5">{question.text}{question.required ? ' *' : ''}</label>
       <input
         type="text"
         value={typeof value === 'string' ? value : ''}
         onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+        className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 text-sm"
       />
     </div>
   );
@@ -235,17 +235,17 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+      <div className="min-h-screen bg-[#f7f7f2] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-700" />
       </div>
     );
   }
 
   if (notFound || !opening) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-400">
+      <div className="min-h-screen bg-[#f7f7f2] flex flex-col items-center justify-center gap-4 text-slate-500">
         <p className="text-lg">Vaga não encontrada ou encerrada.</p>
-        <Link href="/vagas" className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+        <Link href="/vagas" className="text-sm text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Ver todas as vagas
         </Link>
       </div>
@@ -253,12 +253,12 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-[#f7f7f2] text-slate-950">
       {/* Header */}
-      <div className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-10">
+      <div className="border-b border-slate-100 bg-white/90 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-3">
-          <Building2 className="h-6 w-6 text-indigo-400" />
-          <Link href="/vagas" className="text-sm text-slate-400 hover:text-white transition-colors flex items-center gap-1.5">
+          <Building2 className="h-6 w-6 text-emerald-700" />
+          <Link href="/vagas" className="text-sm text-slate-600 hover:text-slate-950 transition-colors flex items-center gap-1.5">
             <ArrowLeft className="h-3.5 w-3.5" /> Vagas
           </Link>
         </div>
@@ -268,24 +268,24 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
         <div className="grid md:grid-cols-[1fr_380px] gap-10 items-start">
           {/* Job Details */}
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight mb-2">{opening.title}</h1>
+            <h1 className="text-3xl font-bold text-slate-950 tracking-tight mb-2">{opening.title}</h1>
             {opening.jobRoleName && opening.jobRoleName !== opening.title && (
               <p className="text-slate-500 mb-4">{opening.jobRoleName}</p>
             )}
 
             <div className="flex flex-wrap items-center gap-4 mb-8">
               {opening.location && (
-                <span className="flex items-center gap-1.5 text-sm text-slate-400">
+                <span className="flex items-center gap-1.5 text-sm text-slate-600">
                   <MapPin className="h-4 w-4 text-slate-500" /> {opening.location}
                 </span>
               )}
               {opening.workType && (
-                <span className="flex items-center gap-1.5 text-sm text-slate-400">
+                <span className="flex items-center gap-1.5 text-sm text-slate-600">
                   <Monitor className="h-4 w-4 text-slate-500" /> {WORK_TYPE_LABELS[opening.workType]}
                 </span>
               )}
               {opening.slots > 1 && (
-                <span className="flex items-center gap-1.5 text-sm text-slate-400">
+                <span className="flex items-center gap-1.5 text-sm text-slate-600">
                   <Users className="h-4 w-4 text-slate-500" /> {opening.slots} vagas
                 </span>
               )}
@@ -298,18 +298,18 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
 
             {opening.description && (
               <div className="mb-8">
-                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3">Sobre a vaga</h2>
-                <p className="text-slate-400 leading-relaxed whitespace-pre-line">{opening.description}</p>
+                <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider mb-3">Sobre a vaga</h2>
+                <p className="text-slate-600 leading-relaxed whitespace-pre-line">{opening.description}</p>
               </div>
             )}
 
             {opening.requirements && opening.requirements.length > 0 && (
               <div>
-                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3">Requisitos</h2>
+                <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider mb-3">Requisitos</h2>
                 <ul className="space-y-2">
                   {opening.requirements.map((req, i) => (
-                    <li key={i} className="flex items-start gap-2 text-slate-400">
-                      <CheckCircle2 className="h-4 w-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+                    <li key={i} className="flex items-start gap-2 text-slate-600">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-700 flex-shrink-0 mt-0.5" />
                       <span>{req}</span>
                     </li>
                   ))}
@@ -320,60 +320,60 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
 
           {/* Apply Form */}
           <div className="sticky top-24">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-xl shadow-emerald-950/5">
               {submitted ? (
                 <div className="py-8 text-center space-y-3">
-                  <div className="w-14 h-14 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
-                    <CheckCircle2 className="h-7 w-7 text-green-400" />
+                  <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="h-7 w-7 text-emerald-700" />
                   </div>
-                  <h3 className="font-bold text-white text-lg">Candidatura enviada!</h3>
-                  <p className="text-slate-400 text-sm">
+                  <h3 className="font-bold text-slate-950 text-lg">Candidatura enviada!</h3>
+                  <p className="text-slate-500 text-sm">
                     Recebemos sua candidatura. Nossa equipe entrará em contato em breve.
                   </p>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <h2 className="font-bold text-white text-lg mb-2">Candidatar-se</h2>
+                  <h2 className="font-bold text-slate-950 text-lg mb-2">Candidatar-se</h2>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Nome completo *</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Nome completo *</label>
                     <input
                       type="text" value={form.name} onChange={set('name')} required
-                      className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-950 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 text-sm"
                       placeholder="Seu nome"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">E-mail *</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">E-mail *</label>
                     <input
                       type="email" value={form.email} onChange={set('email')} required
-                      className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-950 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 text-sm"
                       placeholder="email@exemplo.com"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Telefone</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Telefone</label>
                     <input
                       type="tel" value={form.phone} onChange={set('phone')}
-                      className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-950 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 text-sm"
                       placeholder="(11) 9 0000-0000"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Currículo (PDF, DOC)</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Curriculo (PDF, DOC)</label>
                     {resumeFile ? (
-                      <div className="flex items-center gap-2 p-2.5 bg-slate-950 border border-indigo-500/30 rounded-xl">
-                        <Paperclip className="h-4 w-4 text-indigo-400 flex-shrink-0" />
-                        <span className="text-sm text-slate-300 truncate flex-1">{resumeFile.name}</span>
-                        <button type="button" onClick={() => setResumeFile(null)} className="text-slate-500 hover:text-white">
+                      <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+                        <Paperclip className="h-4 w-4 text-emerald-700 flex-shrink-0" />
+                        <span className="text-sm text-slate-700 truncate flex-1">{resumeFile.name}</span>
+                        <button type="button" onClick={() => setResumeFile(null)} className="text-slate-500 hover:text-slate-950">
                           <X className="h-4 w-4" />
                         </button>
                       </div>
                     ) : (
-                      <label className="flex items-center gap-2 p-2.5 bg-slate-950 border border-slate-700 rounded-xl cursor-pointer hover:border-slate-600 transition-colors">
+                      <label className="flex items-center gap-2 p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-slate-300 transition-colors">
                         <Paperclip className="h-4 w-4 text-slate-500" />
                         <span className="text-sm text-slate-500">Anexar currículo</span>
                         <input
@@ -387,17 +387,17 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Mensagem</label>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Mensagem</label>
                     <textarea
                       value={form.message} onChange={set('message')} rows={3}
-                      className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-950 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 text-sm resize-none"
                       placeholder="Conte um pouco sobre você..."
                     />
                   </div>
 
                   {(opening.formQuestions ?? []).length > 0 && (
-                    <div className="space-y-4 border-t border-slate-800 pt-4">
-                      <h3 className="font-semibold text-white text-sm">Perguntas de triagem</h3>
+                    <div className="space-y-4 border-t border-slate-100 pt-4">
+                      <h3 className="font-semibold text-slate-950 text-sm">Perguntas de triagem</h3>
                       {(opening.formQuestions ?? []).map(question => (
                         <FormQuestionField
                           key={question.id}
@@ -414,9 +414,9 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
                       type="checkbox"
                       checked={consent}
                       onChange={e => setConsent(e.target.checked)}
-                      className="mt-0.5 accent-indigo-500 w-4 h-4 flex-shrink-0"
+                      className="mt-0.5 accent-emerald-700 w-4 h-4 flex-shrink-0"
                     />
-                    <span className="text-xs text-slate-400 leading-relaxed">
+                    <span className="text-xs text-slate-500 leading-relaxed">
                       Autorizo o tratamento dos meus dados pessoais para fins de recrutamento e seleção,
                       conforme a Lei Geral de Proteção de Dados (LGPD).
                     </span>
@@ -430,7 +430,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
 
                   <button
                     type="submit" disabled={submitting || !consent}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium text-sm transition-all"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium text-sm transition-all"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     {submitting ? 'Enviando…' : 'Enviar candidatura'}

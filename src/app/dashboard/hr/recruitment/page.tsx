@@ -14,7 +14,7 @@ import {
   FileText, Calendar, Star, Clock, CheckCircle2, XCircle,
   ArrowRight, Kanban, List, Loader2, X, Trash2, AlertTriangle,
   Briefcase, ChevronDown, ChevronRight, ExternalLink, Paperclip,
-  Globe, PauseCircle, Archive, Plus, Pencil,
+  Globe, PauseCircle, Archive, Plus, Pencil, SlidersHorizontal,
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -600,14 +600,25 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
 // ─── Kanban DnD ───────────────────────────────────────────────────────────────
 
 const COLUMN_ACCENT: Record<CandidateStatus, string> = {
-  applied:        'border-t-blue-500   bg-blue-500/5',
-  screening:      'border-t-indigo-500 bg-indigo-500/5',
-  interview:      'border-t-purple-500 bg-purple-500/5',
-  technical_test: 'border-t-pink-500   bg-pink-500/5',
-  offer:          'border-t-yellow-500 bg-yellow-500/5',
-  hired:          'border-t-green-500  bg-green-500/5',
-  rejected:       'border-t-red-500    bg-red-500/5',
-  withdrawn:      'border-t-slate-500  bg-slate-500/5',
+  applied:        'from-sky-50 to-blue-50 border-blue-100',
+  screening:      'from-violet-50 to-indigo-50 border-indigo-100',
+  interview:      'from-fuchsia-50 to-pink-50 border-pink-100',
+  technical_test: 'from-amber-50 to-orange-50 border-orange-100',
+  offer:          'from-emerald-50 to-teal-50 border-teal-100',
+  hired:          'from-lime-50 to-green-50 border-green-100',
+  rejected:       'from-rose-50 to-red-50 border-red-100',
+  withdrawn:      'from-slate-50 to-zinc-50 border-slate-200',
+};
+
+const CARD_ACCENT: Record<CandidateStatus, string> = {
+  applied:        'bg-blue-100/80 border-blue-200 text-blue-950',
+  screening:      'bg-violet-100/80 border-violet-200 text-violet-950',
+  interview:      'bg-pink-100/80 border-pink-200 text-pink-950',
+  technical_test: 'bg-orange-100/80 border-orange-200 text-orange-950',
+  offer:          'bg-emerald-100/80 border-emerald-200 text-emerald-950',
+  hired:          'bg-cyan-100/80 border-cyan-200 text-cyan-950',
+  rejected:       'bg-rose-100/80 border-rose-200 text-rose-950',
+  withdrawn:      'bg-slate-100 border-slate-200 text-slate-950',
 };
 
 function CandidateInitials({ name }: { name: string }) {
@@ -618,21 +629,21 @@ function CandidateInitials({ name }: { name: string }) {
   ];
   const color = colors[name.charCodeAt(0) % colors.length];
   return (
-    <div className={`w-7 h-7 rounded-full ${color} flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0`}>
+    <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white flex-shrink-0`}>
       {initials}
     </div>
   );
 }
 
 const SOURCE_TAG_COLORS: Record<string, string> = {
-  LinkedIn:    'bg-blue-500/10  text-blue-400  border-blue-500/20',
-  Indicação:   'bg-green-500/10 text-green-400 border-green-500/20',
-  Site:        'bg-violet-500/10 text-violet-400 border-violet-500/20',
-  Indeed:      'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  Catho:       'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-  Espontâneo:  'bg-slate-500/10 text-slate-400 border-slate-500/20',
-  Outro:       'bg-slate-500/10 text-slate-400 border-slate-500/20',
-  site:        'bg-violet-500/10 text-violet-400 border-violet-500/20',
+  LinkedIn:    'bg-white/75 text-blue-700 border-blue-100',
+  Indicação:   'bg-white/75 text-green-700 border-green-100',
+  Site:        'bg-white/75 text-violet-700 border-violet-100',
+  Indeed:      'bg-white/75 text-orange-700 border-orange-100',
+  Catho:       'bg-white/75 text-yellow-700 border-yellow-100',
+  Espontâneo:  'bg-white/75 text-slate-600 border-slate-200',
+  Outro:       'bg-white/75 text-slate-600 border-slate-200',
+  site:        'bg-white/75 text-violet-700 border-violet-100',
 };
 
 function DraggableCard({ candidate, onOpen }: { candidate: Candidate; onOpen: () => void }) {
@@ -655,29 +666,32 @@ function DraggableCard({ candidate, onOpen }: { candidate: Candidate; onOpen: ()
   return (
     <div
       ref={setNodeRef} style={style} {...attributes}
-      className="bg-slate-900 border border-slate-800/80 rounded-xl shadow-sm hover:border-slate-700 hover:shadow-md hover:shadow-black/20 transition-all group"
+      className={`rounded-2xl border p-3 shadow-sm transition-all group hover:-translate-y-0.5 hover:shadow-md ${CARD_ACCENT[candidate.status]}`}
     >
-      <button onClick={onOpen} className="w-full text-left p-4">
-        {/* Top row: initials + name + NOVO badge + drag handle */}
-        <div className="flex items-start gap-2.5 mb-3">
-          <CandidateInitials name={candidate.name} />
+      <button onClick={onOpen} className="w-full text-left">
+        <div className="mb-3 flex items-start gap-2.5">
           <div className="flex-1 min-w-0 pt-0.5">
-            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+            <div className="mb-2 flex items-center gap-1.5 flex-wrap">
+              {sourceColor && candidate.source && (
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${sourceColor}`}>
+                  #{candidate.source}
+                </span>
+              )}
               {isNew && (
-                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/20 tracking-wide">
+                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-100 tracking-wide">
                   NOVO
                 </span>
               )}
             </div>
-            <h4 className="font-semibold text-white group-hover:text-indigo-300 transition-colors text-sm leading-snug truncate">
+            <h4 className="font-semibold transition-colors text-sm leading-snug">
               {candidate.name}
             </h4>
-            <p className="text-[11px] text-slate-500 truncate mt-0.5">{candidate.jobRoleName}</p>
+            <p className="text-[11px] opacity-70 truncate mt-1">{candidate.jobRoleName}</p>
           </div>
           <div
             {...listeners}
             onClick={e => e.stopPropagation()}
-            className="cursor-grab active:cursor-grabbing p-1 text-slate-700 hover:text-slate-500 flex-shrink-0 mt-0.5"
+            className="cursor-grab active:cursor-grabbing p-1 text-current/35 hover:text-current/60 flex-shrink-0 mt-0.5"
           >
             <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor">
               <circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/>
@@ -687,24 +701,20 @@ function DraggableCard({ candidate, onOpen }: { candidate: Candidate; onOpen: ()
           </div>
         </div>
 
-        {/* Rating */}
-        <div className="mb-3">
+        <div className="mb-3 flex items-center gap-2">
           <RatingStars value={candidate.rating ?? 0} readonly />
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {sourceColor && candidate.source && (
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${sourceColor}`}>
-              {candidate.source}
-            </span>
-          )}
           {candidate.resumeUrl && (
-            <span className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded-full">
+            <span className="flex items-center gap-1 text-[10px] text-current/55 bg-white/65 px-1.5 py-0.5 rounded-md">
               <Paperclip className="h-2.5 w-2.5" /> CV
             </span>
           )}
-          <span className="ml-auto text-[10px] text-slate-600 flex items-center gap-1">
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex -space-x-2">
+            <CandidateInitials name={candidate.name} />
+          </div>
+          <span className="text-[10px] text-current/55 flex items-center gap-1 rounded-md bg-white/65 px-2 py-1">
             <Calendar className="h-2.5 w-2.5" />
             {new Date(candidate.appliedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
           </span>
@@ -724,32 +734,34 @@ function DroppableColumn({ status, candidates, onCardOpen }: {
   const accent = COLUMN_ACCENT[status];
 
   return (
-    <div className="flex-shrink-0 w-72 flex flex-col">
-      {/* Column header card */}
-      <div className={`border-t-2 ${accent} bg-slate-900/40 border border-slate-800/60 rounded-t-xl px-4 py-3 flex items-center gap-2`}>
-        <h3 className="font-bold text-white text-xs uppercase tracking-wider flex-1">{cfg.label}</h3>
-        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${cfg.color}/15 text-slate-300`}>
-          {candidates.length}
-        </span>
+    <div className={`flex-shrink-0 w-[270px] rounded-2xl border bg-gradient-to-b ${accent} p-2 shadow-sm flex flex-col`}>
+      <div className="px-2.5 py-2.5 flex items-center gap-2">
+        <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
+        <h3 className="font-bold text-slate-900 text-sm flex-1">{cfg.label}</h3>
+        <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-white/70 hover:text-slate-900">
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+        <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-white/70 hover:text-slate-900">
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      {/* Drop zone */}
       <div
         ref={setNodeRef}
-        className={`flex flex-col gap-2 p-2 min-h-[160px] rounded-b-xl border border-t-0 transition-colors ${
+        className={`flex flex-col gap-3 p-1 min-h-[420px] rounded-xl transition-colors ${
           isOver
-            ? 'border-indigo-500/50 bg-indigo-500/5'
-            : 'border-slate-800/60 bg-slate-900/10'
+            ? 'bg-white/70 ring-2 ring-indigo-200'
+            : 'bg-white/25'
         }`}
       >
         {candidates.map(c => (
           <DraggableCard key={c.id} candidate={c} onOpen={() => onCardOpen(c)} />
         ))}
         {candidates.length === 0 && (
-          <div className={`flex-1 min-h-[80px] flex items-center justify-center rounded-lg border border-dashed ${
-            isOver ? 'border-indigo-500/40' : 'border-slate-800/40'
+          <div className={`flex-1 min-h-[120px] flex items-center justify-center rounded-xl border border-dashed ${
+            isOver ? 'border-indigo-300 bg-indigo-50/70' : 'border-slate-200 bg-white/35'
           }`}>
-            <UserPlus className="h-4 w-4 text-slate-700" />
+            <UserPlus className="h-4 w-4 text-slate-400" />
           </div>
         )}
       </div>
@@ -1184,10 +1196,10 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-slate-400 text-sm">{openings.filter(o => o.status === 'open').length} vagas abertas</p>
+        <p className="text-slate-500 text-sm">{openings.filter(o => o.status === 'open').length} vagas abertas</p>
         {canManage && (
           <button onClick={() => setModal('new')}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium text-sm">
+            className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800">
             <Plus className="h-4 w-4" /> Nova vaga
           </button>
         )}
@@ -1195,7 +1207,7 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
 
       {openings.length === 0 && (
         <div className="py-16 text-center">
-          <Briefcase className="h-10 w-10 text-slate-700 mx-auto mb-3" />
+          <Briefcase className="h-10 w-10 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500">Nenhuma vaga cadastrada.</p>
         </div>
       )}
@@ -1217,22 +1229,22 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
                 const role = roles.find(r => r.id === opening.jobRoleId);
                 return (
                   <div key={opening.id}
-                    className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl hover:border-slate-700 transition-colors">
+                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-slate-300">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-bold text-white text-sm">{opening.title}</h4>
+                          <h4 className="font-bold text-slate-950 text-sm">{opening.title}</h4>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.color}`}>
                             {cfg.label}
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 mb-2">{role?.name ?? opening.jobRoleName}</p>
                         <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-                          {opening.location && <span>📍 {opening.location}</span>}
-                          {opening.workType && <span>💼 {{ presencial: 'Presencial', remoto: 'Remoto', hibrido: 'Híbrido' }[opening.workType]}</span>}
-                          <span>👥 {opening.slots} vaga{opening.slots !== 1 ? 's' : ''}</span>
+                          {opening.location && <span>{opening.location}</span>}
+                          {opening.workType && <span>{{ presencial: 'Presencial', remoto: 'Remoto', hibrido: 'Híbrido' }[opening.workType]}</span>}
+                          <span>{opening.slots} vaga{opening.slots !== 1 ? 's' : ''}</span>
                           {opening.closesAt && (
-                            <span className="text-amber-500/70">
+                            <span className="text-amber-600">
                               até {new Date(opening.closesAt).toLocaleDateString('pt-BR')}
                             </span>
                           )}
@@ -1241,13 +1253,13 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button
                           onClick={() => onCandidatesFilter(opening.id)}
-                          className="px-3 py-1.5 text-xs text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 rounded-lg transition-colors">
+                          className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-950 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors">
                           Candidatos
                         </button>
                         {canManage && (
                           <>
                             <button onClick={() => setModal(opening)}
-                              className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800">
+                              className="p-1.5 text-slate-500 hover:text-slate-950 rounded-lg hover:bg-slate-100">
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button onClick={() => setDeleteTarget(opening)}
@@ -1282,11 +1294,11 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
-          <div className="relative z-10 w-full max-w-sm bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <h3 className="font-bold text-white">Excluir vaga?</h3>
-            <p className="text-sm text-slate-400">"{deleteTarget.title}" será removida permanentemente.</p>
+          <div className="relative z-10 w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <h3 className="font-bold text-slate-950">Excluir vaga?</h3>
+            <p className="text-sm text-slate-500">"{deleteTarget.title}" será removida permanentemente.</p>
             <div className="flex gap-2">
-              <button onClick={() => setDeleteTarget(null)} className="flex-1 px-3 py-2 text-sm border border-slate-700 text-slate-400 rounded-xl">
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 px-3 py-2 text-sm border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50">
                 Cancelar
               </button>
               <button onClick={() => handleDelete(deleteTarget)} disabled={deleting}
@@ -1696,13 +1708,14 @@ export default function RecruitmentPage() {
   };
 
   return (
-    <div className="flex flex-col h-full space-y-5">
+    <div className="flex min-h-[calc(100vh-8rem)] flex-col space-y-5 rounded-[28px] border border-white/70 bg-white/85 p-4 text-slate-900 shadow-sm backdrop-blur md:p-5">
 
       {/* ─── Header ─── */}
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Recrutamento</h1>
-          <p className="text-slate-400 mt-1 text-sm">
+          <p className="text-xs font-semibold text-slate-400">Pipeline</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-950">Recrutamento</h1>
+          <p className="text-slate-500 mt-1 text-sm">
             {candidates.length} candidato{candidates.length !== 1 ? 's' : ''} ·{' '}
             {openings.filter(o => o.status === 'open').length} vaga{openings.filter(o => o.status === 'open').length !== 1 ? 's' : ''} aberta{openings.filter(o => o.status === 'open').length !== 1 ? 's' : ''}
           </p>
@@ -1710,20 +1723,20 @@ export default function RecruitmentPage() {
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* View toggle */}
-          <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-xl p-1">
+          <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
             {(['kanban', 'list', 'openings', 'talents'] as const).map((mode) => {
               const labels: Record<string, string> = { kanban: 'Kanban', list: 'Triagem', openings: 'Por vaga', talents: 'Talentos' };
               return (
                 <button key={mode} onClick={() => setViewMode(mode)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    viewMode === mode ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'
+                    viewMode === mode ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900'
                   }`}>
                   {labels[mode]}
                 </button>
               );
             })}
             <a href="/vagas" target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-300 transition-all">
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-900 transition-all">
               <Globe className="h-3.5 w-3.5" />
               Página pública
             </a>
@@ -1732,7 +1745,7 @@ export default function RecruitmentPage() {
           {/* CTA */}
           {canManage && viewMode !== 'openings' && viewMode !== 'talents' && (
             <button onClick={() => setShowNewModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium text-sm shadow-lg shadow-indigo-500/20">
+              className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800">
               <UserPlus className="h-4 w-4" />
               Novo candidato
             </button>
@@ -1741,14 +1754,14 @@ export default function RecruitmentPage() {
       </div>
 
       {/* ─── Stats row ─── */}
-      {viewMode !== 'openings' && viewMode !== 'talents' && (
+      {viewMode === 'list' && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {/* Inscritos — with sparkline */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Inscritos</p>
             <div className="flex items-end justify-between gap-2">
               <div>
-                <p className="text-3xl font-bold text-white leading-none">{stats.applied}</p>
+                <p className="text-3xl font-bold text-slate-950 leading-none">{stats.applied}</p>
                 {stats.appliedTrend !== 0 && (
                   <span className={`flex items-center gap-0.5 text-xs font-bold mt-1 ${stats.appliedTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
@@ -1776,16 +1789,16 @@ export default function RecruitmentPage() {
           </div>
 
           {/* Em triagem */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Em triagem</p>
-            <p className="text-3xl font-bold text-white leading-none">{stats.screening}</p>
+            <p className="text-3xl font-bold text-slate-950 leading-none">{stats.screening}</p>
           </div>
 
           {/* Contratados */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Contratados</p>
             <div>
-              <p className="text-3xl font-bold text-white leading-none">{stats.hired}</p>
+              <p className="text-3xl font-bold text-slate-950 leading-none">{stats.hired}</p>
               {stats.hiredThisMonth > 0 && (
                 <span className="flex items-center gap-0.5 text-xs font-bold mt-1 text-emerald-400">
                   <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
@@ -1798,16 +1811,16 @@ export default function RecruitmentPage() {
           </div>
 
           {/* Tempo médio */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Tempo médio</p>
-            <p className="text-3xl font-bold text-white leading-none">{stats.avgDays}d</p>
+            <p className="text-3xl font-bold text-slate-950 leading-none">{stats.avgDays}d</p>
           </div>
         </div>
       )}
 
       {/* ─── Funnel ─── */}
-      {viewMode !== 'openings' && viewMode !== 'talents' && candidates.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      {viewMode === 'list' && candidates.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5">
           <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-4">Funil de conversão</h3>
           {/* Stage labels + counts */}
           <div className="flex mb-3">
@@ -1816,7 +1829,7 @@ export default function RecruitmentPage() {
               const cfg = STATUS_CONFIG[status];
               return (
                 <div key={status} style={{ flex: 1 }} className="text-center min-w-0 px-1">
-                  <p className="text-base font-bold text-white leading-none mb-1">{count}</p>
+                  <p className="text-base font-bold text-slate-950 leading-none mb-1">{count}</p>
                   <p className="text-[10px] text-slate-500 truncate">{cfg.label}</p>
                 </div>
               );
@@ -1843,18 +1856,22 @@ export default function RecruitmentPage() {
 
       {/* ─── Pipeline filters ─── */}
       {viewMode !== 'openings' && viewMode !== 'talents' && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
+          <div className="mr-2 hidden items-center gap-2 border-r border-slate-100 pr-3 text-sm font-semibold text-slate-950 md:flex">
+            <Kanban className="h-4 w-4 text-slate-500" />
+            Board
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Buscar candidato e e-mail…"
-              className="pl-9 pr-4 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 w-52 text-sm" />
+              className="w-64 rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
           </div>
 
           {openings.length > 0 && (
             <select value={filterOpening} onChange={e => setFilterOpening(e.target.value)}
-              className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
               <option value="">Todas as vagas</option>
               {openings.map(o => <option key={o.id} value={o.id}>{o.title}</option>)}
             </select>
@@ -1862,7 +1879,7 @@ export default function RecruitmentPage() {
 
           {locationOptions.length > 0 && (
             <select value={filterLocation} onChange={e => setFilterLocation(e.target.value)}
-              className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
               <option value="">Todas unidades</option>
               {locationOptions.map(loc => <option key={loc} value={loc}>{loc}</option>)}
             </select>
@@ -1870,14 +1887,14 @@ export default function RecruitmentPage() {
 
           {sourceOptions.length > 0 && (
             <select value={filterSource} onChange={e => setFilterSource(e.target.value)}
-              className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
               <option value="">Todas origens</option>
               {sourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
             </select>
           )}
 
           <select value={filterRating} onChange={e => setFilterRating(e.target.value)}
-            className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
             <option value="">Avaliação</option>
             <option value="1">1+ estrela</option>
             <option value="2">2+ estrelas</option>
@@ -1889,10 +1906,17 @@ export default function RecruitmentPage() {
           {activeFilters > 0 && (
             <button
               onClick={() => { setFilterOpening(''); setFilterLocation(''); setFilterSource(''); setFilterRating(''); setSearch(''); }}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-white border border-slate-800 rounded-xl hover:border-slate-700">
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-500 hover:border-slate-300 hover:text-slate-950">
               <X className="h-3 w-3" /> Limpar filtros
             </button>
           )}
+          <button
+            type="button"
+            className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Filtros
+          </button>
         </div>
       )}
 
@@ -1900,7 +1924,7 @@ export default function RecruitmentPage() {
       {viewMode === 'kanban' && (
         <div className="flex-1 flex flex-col gap-4 overflow-y-auto min-h-0">
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+            <div className="flex gap-4 overflow-x-auto rounded-2xl bg-slate-50/80 p-3 pb-4 custom-scrollbar">
               {PIPELINE_STATUSES.map(status => (
                 <DroppableColumn
                   key={status}
