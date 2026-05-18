@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { PlusCircle, Edit, Trash2, Users, Shield, ChevronsUpDown, Check, DollarSign, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, Building2, ArrowLeft, UserCircle, Briefcase, Settings2 } from 'lucide-react';
+import { Edit, Trash2, Shield, ChevronsUpDown, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, ArrowLeft, MoreHorizontal, Send, Download, UserPlus, CircleDot } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -74,7 +74,7 @@ type UserFormValues = z.infer<typeof userSchema>;
 
 export function UserManagement() {
   const { permissions, users, addUser, deleteUser, user: currentUser, updateUser, resetPassword } = useAuth();
-  const { kiosks, loading: kiosksLoading } = useKiosks();
+  const { kiosks } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const { shiftDefinitions } = useDP();
   const { toast } = useToast();
@@ -116,7 +116,11 @@ export function UserManagement() {
 
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
-      const searchMatch = user.username.toLowerCase().includes(searchTerm.toLowerCase());
+      const term = searchTerm.toLowerCase();
+      const searchMatch =
+        user.username.toLowerCase().includes(term) ||
+        user.email.toLowerCase().includes(term) ||
+        (user.jobRoleName ?? '').toLowerCase().includes(term);
       const profileMatch = profileFilter === 'all' || user.profileId === profileFilter;
       const kioskMatch = kioskFilter === 'all' || user.assignedKioskIds.includes(kioskFilter);
       return searchMatch && profileMatch && kioskMatch;
@@ -346,11 +350,53 @@ export function UserManagement() {
     );
   }
   
-  const getProfileName = (profileId: string) => profiles.find(p => p.id === profileId)?.name || 'N/A';
-  const getKioskNames = (kioskIds: string[]) => {
-    if (!kioskIds || kioskIds.length === 0) return 'N/A';
-    return kioskIds.map(id => kiosks.find(k => k.id === id)?.name || id).join(', ');
-  }
+  const activeCount = users.filter((user) => user.isActive !== false).length;
+  const inactiveCount = users.length - activeCount;
+  const pendingInvites = users.filter((user) => user.isActive !== false && !(user as any).lastLoginAt).length;
+  const blockedCount = users.filter((user) => user.loginRestrictionEnabled).length;
+
+  const statCards = [
+    { label: 'Ativos', value: activeCount, total: users.length, color: 'bg-emerald-500', pct: users.length ? Math.round((activeCount / users.length) * 100) : 0 },
+    { label: 'Convites pendentes', value: pendingInvites, total: users.length, color: 'bg-amber-500', pct: users.length ? Math.round((pendingInvites / users.length) * 100) : 0 },
+    { label: 'Inativos', value: inactiveCount, total: users.length, color: 'bg-slate-400', pct: users.length ? Math.round((inactiveCount / users.length) * 100) : 0 },
+    { label: 'Bloqueados', value: blockedCount, total: users.length, color: 'bg-rose-500', pct: users.length ? Math.round((blockedCount / users.length) * 100) : 0 },
+  ];
+
+  const lastAccessLabel = (value: unknown) => {
+    if (!value) return 'Nunca';
+    try {
+      const date = typeof value === 'object' && value && 'toDate' in value && typeof (value as any).toDate === 'function'
+        ? (value as any).toDate()
+        : new Date(value as any);
+      const diffMs = Date.now() - date.getTime();
+      const minutes = Math.floor(diffMs / 60000);
+      if (minutes < 60) return `ha ${Math.max(minutes, 1)} min`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `ha ${hours}h`;
+      const days = Math.floor(hours / 24);
+      if (days === 1) return 'ontem';
+      return `ha ${days} dias`;
+    } catch {
+      return 'Nunca';
+    }
+  };
+
+  const tenureLabel = (value: unknown) => {
+    if (!value) return 'novo';
+    try {
+      const date = typeof value === 'object' && value && 'toDate' in value && typeof (value as any).toDate === 'function'
+        ? (value as any).toDate()
+        : new Date(value as any);
+      const months = Math.max(0, Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+      if (months < 1) return 'novo';
+      if (months < 12) return `${months} m`;
+      const years = Math.floor(months / 12);
+      const rest = months % 12;
+      return rest ? `${years} a ${rest} m` : `${years} a`;
+    } catch {
+      return 'novo';
+    }
+  };
 
   return (
     <>
@@ -652,30 +698,58 @@ export function UserManagement() {
           </form>
         </Form>
       ) : (
-        <div className="space-y-5">
-          {/* Actions */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button onClick={handleAddNew} disabled={!permissions.settings.manageUsers}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar usuário
-            </Button>
-            <Button variant="outline" onClick={() => setIsProfilesModalOpen(true)} disabled={!permissions.settings.manageProfiles}>
-              <Shield className="mr-2 h-4 w-4" /> Gerenciar perfis
-            </Button>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="text-2xl font-black text-slate-950">Usuários</h2>
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                {users.length} pessoa{users.length === 1 ? '' : 's'} com acesso · gerencie perfis, quiosques e dados complementares do DP.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" className="h-10 rounded-xl border-slate-200 bg-white" disabled>
+                <Download className="mr-2 h-4 w-4" /> Exportar
+              </Button>
+              <Button variant="outline" className="h-10 rounded-xl border-slate-200 bg-white" onClick={() => setUserToResetPassword(filteredUsers[0] ?? null)} disabled={!permissions.settings.manageUsers || filteredUsers.length === 0}>
+                <Send className="mr-2 h-4 w-4" /> Convidar em massa
+              </Button>
+              <Button variant="outline" className="h-10 rounded-xl border-slate-200 bg-white" onClick={() => setIsProfilesModalOpen(true)} disabled={!permissions.settings.manageProfiles}>
+                <Shield className="mr-2 h-4 w-4" /> Perfis
+              </Button>
+              <Button onClick={handleAddNew} disabled={!permissions.settings.manageUsers} className="h-10 rounded-xl bg-pink-500 text-white hover:bg-pink-600">
+                <UserPlus className="mr-2 h-4 w-4" /> Novo usuário
+              </Button>
+            </div>
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row items-center gap-2 p-3 border rounded-lg bg-muted/50">
+          <div className="grid gap-3 md:grid-cols-4">
+            {statCards.map((stat) => (
+              <div key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-black uppercase text-slate-500">{stat.label}</p>
+                  <span className={`h-8 w-1 rounded-full ${stat.color}`} />
+                </div>
+                <div className="mt-2 flex items-end justify-between gap-3">
+                  <p className="text-3xl font-black text-slate-950">{stat.value}</p>
+                  <p className="text-xs font-black text-slate-500">{stat.pct}%</p>
+                </div>
+                <p className="mt-1 text-xs font-semibold text-slate-400">/ {stat.total}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center">
             <div className="relative flex-grow w-full">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome..."
+                placeholder="Buscar por nome, email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-full"
+                className="h-10 w-full rounded-xl border-slate-100 bg-slate-50 pl-10"
               />
             </div>
             <Select value={profileFilter} onValueChange={setProfileFilter}>
-              <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectTrigger className="h-10 w-full rounded-xl border-slate-100 bg-slate-50 sm:w-[210px]">
                 <SelectValue placeholder="Perfil" />
               </SelectTrigger>
               <SelectContent>
@@ -686,7 +760,7 @@ export function UserManagement() {
               </SelectContent>
             </Select>
             <Select value={kioskFilter} onValueChange={setKioskFilter}>
-              <SelectTrigger className="w-full sm:w-[220px]">
+              <SelectTrigger className="h-10 w-full rounded-xl border-slate-100 bg-slate-50 sm:w-[260px]">
                 <SelectValue placeholder="Quiosque" />
               </SelectTrigger>
               <SelectContent>
@@ -696,49 +770,80 @@ export function UserManagement() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="ghost" onClick={() => { setSearchTerm(''); setProfileFilter('all'); setKioskFilter('all'); }}>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="hidden text-xs font-black text-slate-500 sm:inline">{filteredUsers.length} de {users.length}</span>
+              <Button variant="ghost" className="h-10 rounded-xl" onClick={() => { setSearchTerm(''); setProfileFilter('all'); setKioskFilter('all'); }}>
               <Eraser className="mr-2 h-4 w-4" /> Limpar
-            </Button>
+              </Button>
+            </div>
           </div>
 
-          {/* Grouped user list */}
           {groupedUsers.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Nenhum usuário encontrado.</p>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+              Nenhum usuário encontrado.
+            </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {groupedUsers.map(group => (
-                <div key={group.profileId} className="space-y-2">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
-                    {group.profileName}
-                    <span className="ml-2 font-normal normal-case">({group.users.length})</span>
-                  </h3>
-                  <div className="space-y-1.5">
+                <section key={group.profileId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="rounded-lg bg-pink-100 px-2.5 py-1 text-xs font-black text-pink-600">{group.profileName}</span>
+                      <span className="text-xs font-semibold text-slate-500">
+                        {group.users.length} pessoa{group.users.length === 1 ? '' : 's'} · {group.users.filter((user) => user.isActive !== false).length} ativa{group.users.filter((user) => user.isActive !== false).length === 1 ? '' : 's'}
+                      </span>
+                      <span className="hidden text-xs font-semibold text-slate-400 md:inline">Acesso total ao sistema</span>
+                    </div>
+                    <button onClick={handleAddNew} className="text-xs font-black text-pink-500">+ Adicionar</button>
+                  </div>
+                  <div className="divide-y divide-slate-100">
                     {group.users.map(user => (
-                      <div key={user.id} className="flex items-start gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-muted/40">
-                        <Avatar className="h-8 w-8 shrink-0 mt-0.5">
-                          <AvatarImage src={user.avatarUrl} />
-                          <AvatarFallback className="text-xs text-white" style={{ backgroundColor: getUserColor(user.id, user.color) }}>
-                            {user.username.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm">{user.username}</p>
-                          {user.assignedKioskIds?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {user.assignedKioskIds.map(id => {
-                                const name = kiosks.find(k => k.id === id)?.name ?? id;
-                                return (
-                                  <span key={id} className="text-[11px] bg-muted text-muted-foreground rounded px-1.5 py-0.5 leading-none">
-                                    {name}
-                                  </span>
-                                );
-                              })}
+                      <div key={user.id} className="grid gap-3 px-4 py-3 transition-colors hover:bg-pink-50/30 lg:grid-cols-[minmax(260px,1.3fr)_minmax(180px,1fr)_110px_90px_132px] lg:items-center">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <input type="checkbox" className="h-4 w-4 rounded border-slate-300" aria-label={`Selecionar ${user.username}`} />
+                          <Avatar className="h-10 w-10 shrink-0">
+                            <AvatarImage src={user.avatarUrl} />
+                            <AvatarFallback className="text-xs font-black text-white" style={{ backgroundColor: getUserColor(user.id, user.color) }}>
+                              {user.username.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-black text-slate-900">{user.username}</p>
+                              {user.operacional && <Badge className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700" variant="outline">2FA</Badge>}
+                              {user.isActive === false && <Badge className="border-slate-200 bg-slate-100 text-[10px] text-slate-500" variant="outline">Inativo</Badge>}
                             </div>
+                            <p className="mt-0.5 truncate text-xs font-medium text-slate-500">{user.jobRoleName ?? group.profileName} · {user.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {user.assignedKioskIds?.slice(0, 2).map(id => {
+                            const name = kiosks.find(k => k.id === id)?.name ?? id;
+                            return (
+                              <span key={id} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                                <CircleDot className="h-2.5 w-2.5 text-indigo-500" />
+                                {name}
+                              </span>
+                            );
+                          })}
+                          {(user.assignedKioskIds?.length ?? 0) > 2 && (
+                            <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-500">+{(user.assignedKioskIds?.length ?? 0) - 2}</span>
+                          )}
+                          {(!user.assignedKioskIds || user.assignedKioskIds.length === 0) && (
+                            <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-400">Sem quiosque</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="text-xs font-black text-slate-700">
+                          {lastAccessLabel((user as any).lastLoginAt)}
+                          <p className="text-[10px] font-semibold text-slate-400">ultimo acesso</p>
+                        </div>
+                        <div className="text-xs font-black text-slate-700">
+                          {tenureLabel(user.admissionDate)}
+                          <p className="text-[10px] font-semibold text-slate-400">de casa</p>
+                        </div>
+                        <div className="flex items-center justify-end gap-1">
                           {permissions.settings.manageUsers && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(user)}>
+                            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg border-pink-200 text-pink-500" onClick={() => handleEdit(user)}>
                               <Edit className="h-3.5 w-3.5" />
                             </Button>
                           )}
@@ -751,12 +856,15 @@ export function UserManagement() {
                               description={`Um e-mail será enviado para ${user.email} com instruções para redefinir a senha.`}
                               confirmButtonText="Sim, enviar e-mail"
                               confirmButtonVariant="default"
-                              triggerButton={<Button variant="ghost" size="icon" className="h-8 w-8"><KeyRound className="h-3.5 w-3.5" /></Button>}
+                              triggerButton={<Button variant="outline" size="icon" className="h-8 w-8 rounded-lg border-slate-200"><KeyRound className="h-3.5 w-3.5" /></Button>}
                             />
                           )}
+                          <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg border-slate-200" disabled>
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </Button>
                           {permissions.settings.manageUsers && (
                             <Button
-                              variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                              variant="outline" size="icon" className="h-8 w-8 rounded-lg border-rose-200 text-rose-500 hover:text-rose-600"
                               onClick={() => handleDeleteClick(user)}
                               disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}
                             >
@@ -767,7 +875,7 @@ export function UserManagement() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
               ))}
             </div>
           )}

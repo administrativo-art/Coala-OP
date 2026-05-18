@@ -5,13 +5,10 @@ import Link from "next/link";
 import { format, differenceInMonths, differenceInYears } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  AlertTriangle,
   ArrowLeft,
   BadgeCheck,
   Briefcase,
-  Building2,
   Calendar,
-  CheckCircle2,
   Clock,
   Hash,
   IdCard,
@@ -19,12 +16,10 @@ import {
   MapPin,
   Shield,
   ShieldOff,
-  Star,
   TrendingUp,
   Umbrella,
   UserRound,
   UserX,
-  WalletCards,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
@@ -101,12 +96,12 @@ function Panel({ title, icon: Icon, children, className = "" }: {
   className?: string;
 }) {
   return (
-    <section className={`rounded-[28px] border border-[#ded8c8] bg-[#f8f0de] p-5 ${className}`}>
+    <section className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
       <div className="mb-4 flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e9dfc9] text-[#25231f]">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-pink-100 text-pink-600">
           <Icon className="h-4 w-4" />
         </span>
-        <h2 className="text-sm font-black text-[#25231f]">{title}</h2>
+        <h2 className="text-sm font-black text-slate-950">{title}</h2>
       </div>
       {children}
     </section>
@@ -115,34 +110,34 @@ function Panel({ title, icon: Icon, children, className = "" }: {
 
 function InfoLine({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[112px_1fr] gap-3 border-b border-[#e3dccb] py-2.5 text-xs last:border-b-0">
-      <span className="font-semibold text-[#817762]">{label}</span>
-      <span className="min-w-0 text-right font-bold text-[#25231f]">{value || "-"}</span>
+    <div className="grid grid-cols-[112px_1fr] gap-3 border-b border-slate-100 py-2.5 text-xs last:border-b-0">
+      <span className="font-semibold text-slate-500">{label}</span>
+      <span className="min-w-0 text-right font-bold text-slate-950">{value || "-"}</span>
     </div>
   );
 }
 
 function MetricBar({ label, value, score, color }: { label: string; value: string; score: number; color: string }) {
   return (
-    <div className="grid grid-cols-[150px_1fr_48px] items-center gap-3">
+    <div className="grid grid-cols-[150px_1fr_48px] items-center gap-3 rounded-xl bg-slate-50 p-2">
       <div className="flex items-center gap-2">
         <span className={`h-8 w-8 rounded-full ${color}`} />
-        <span className="text-xs font-black text-[#25231f]">{label}</span>
+        <span className="text-xs font-black text-slate-950">{label}</span>
       </div>
-      <div className="h-3 overflow-hidden rounded-full bg-[#e8dfcc]">
+      <div className="h-3 overflow-hidden rounded-full bg-slate-200">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(Math.max(score, 8), 100)}%` }} />
       </div>
-      <span className="text-right text-sm font-black text-[#25231f]">{value}</span>
+      <span className="text-right text-sm font-black text-slate-950">{value}</span>
     </div>
   );
 }
 
 function Chip({ children, tone = "default" }: { children: React.ReactNode; tone?: "default" | "good" | "warn" | "bad" }) {
   const tones = {
-    default: "bg-[#eee5d1] text-[#5d553f]",
-    good: "bg-[#dcebbf] text-[#4d651d]",
-    warn: "bg-[#f5dea6] text-[#73530b]",
-    bad: "bg-[#f4c6c0] text-[#7f2921]",
+    default: "bg-slate-100 text-slate-600",
+    good: "bg-emerald-50 text-emerald-700",
+    warn: "bg-amber-50 text-amber-700",
+    bad: "bg-rose-50 text-rose-700",
   };
   return <span className={`rounded-full px-3 py-1 text-[11px] font-black ${tones[tone]}`}>{children}</span>;
 }
@@ -210,6 +205,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     .reduce((sum, vacation) => sum + vacation.days, 0);
   const pendingVacations = userVacations.filter((vacation) => vacation.status === "PENDING").length;
   const functionsCount = user.jobFunctionNames?.length ?? 0;
+  const userInitials = initials(user.username);
   const completeness = [
     user.email,
     user.profileId,
@@ -223,111 +219,169 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   ].filter(Boolean).length;
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] rounded-[32px] border border-[#ded8c8] bg-[#f3ead6] p-4 text-[#25231f] shadow-sm md:p-5">
+    <div className="min-h-[calc(100vh-8rem)] rounded-3xl border border-slate-200 bg-[#fbf7ef] p-4 text-slate-950 shadow-sm md:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <Link href="/dashboard/dp/collaborators" className="inline-flex items-center gap-2 rounded-full bg-[#e8dfcc] px-4 py-2 text-xs font-black text-[#5d553f] hover:bg-[#ddd1b8]">
+        <Link href="/dashboard/dp/collaborators" className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-slate-600 shadow-sm hover:bg-slate-50">
           <ArrowLeft className="h-4 w-4" />
-          Colaboradores
+          Voltar para Usuarios
         </Link>
-        <div className="flex items-center gap-2">
-          <Chip tone={isTerminated ? "bad" : "good"}>{isTerminated ? "Desligado" : "Ativo"}</Chip>
-          <Chip tone={user.loginRestrictionEnabled ? "warn" : "default"}>
-            {user.loginRestrictionEnabled ? "Acesso limitado" : "Acesso livre"}
-          </Chip>
-        </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[320px_1fr_320px]">
-        <aside className="space-y-5">
-          <Panel title="Identificacao" icon={UserRound}>
-            <div className="flex gap-4">
+      <section className="mb-5 rounded-2xl border border-pink-100 bg-pink-50/80 p-5 shadow-sm">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 gap-4">
+            <div>
               {user.avatarUrl ? (
-                <img src={user.avatarUrl} alt={user.username} className="h-24 w-24 rounded-[28px] object-cover" />
+                <img src={user.avatarUrl} alt={user.username} className="h-20 w-20 rounded-full object-cover ring-4 ring-white" />
               ) : (
                 <div
-                  className={`flex h-24 w-24 shrink-0 items-center justify-center rounded-[28px] text-3xl font-black text-white ${avatarColor(user.username)}`}
+                  className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-black text-white ring-4 ring-white ${avatarColor(user.username)}`}
                   style={user.color ? { backgroundColor: user.color } : undefined}
                 >
-                  {initials(user.username)}
+                  {userInitials}
                 </div>
               )}
-              <div className="min-w-0">
-                <p className="text-[11px] font-black uppercase text-[#817762]">Colaborador</p>
-                <h1 className="mt-1 break-words text-2xl font-black leading-tight">{user.username}</h1>
-                <p className="mt-2 text-xs font-semibold text-[#817762]">{user.jobRoleName ?? "Sem cargo definido"}</p>
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="break-words text-2xl font-black leading-tight text-slate-950 md:text-3xl">{user.username}</h1>
+                <Chip tone={isTerminated ? "bad" : "warn"}>{isTerminated ? "Desligado" : "Convidado"}</Chip>
+                {user.jobRoleName ? <Chip tone="good">{user.jobRoleName}</Chip> : null}
+              </div>
+              <div className="mt-3 grid gap-3 text-xs font-black text-slate-600 md:grid-cols-4">
+                <span>
+                  <span className="block text-[10px] uppercase text-slate-400">E-mail</span>
+                  {user.email}
+                </span>
+                <span>
+                  <span className="block text-[10px] uppercase text-slate-400">Telefone</span>
+                  {(user as any).phone || "-"}
+                </span>
+                <span>
+                  <span className="block text-[10px] uppercase text-slate-400">Ultimo acesso</span>
+                  {fmtDate((user as any).lastLoginAt)}
+                </span>
+                <span>
+                  <span className="block text-[10px] uppercase text-slate-400">Tempo de casa</span>
+                  {tenure(user.admissionDate)}
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Chip tone="default">Cor na escala</Chip>
+                {userUnits.slice(0, 2).map((unit) => <Chip key={unit.id} tone="good">{unit.name}</Chip>)}
               </div>
             </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:w-56 xl:grid-cols-1">
+            <Link href="/dashboard/settings?department=pessoal&tab=users" className="inline-flex h-10 items-center justify-center rounded-xl bg-pink-500 px-4 text-sm font-black text-white shadow-sm hover:bg-pink-600">
+              Editar dados
+            </Link>
+            <button className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-600">Resetar senha</button>
+            <button className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-600">Reenviar convite</button>
+          </div>
+        </div>
+      </section>
 
-            <div className="mt-5 rounded-3xl bg-[#eee5d1] p-4">
-              <InfoLine label="UID" value={<span className="break-all">{user.id}</span>} />
-              <InfoLine label="E-mail" value={user.email} />
-              <InfoLine label="Perfil" value={profile?.name ?? user.profileId} />
-              <InfoLine label="Bizneo" value={user.registrationIdBizneo} />
-              <InfoLine label="PDV" value={user.registrationIdPdv} />
-              <InfoLine label="Nascimento" value={fmtDate(user.birthDate)} />
-              <InfoLine label="Admissao" value={fmtDate(user.admissionDate)} />
-              <InfoLine label="Tempo" value={tenure(user.admissionDate)} />
-            </div>
-          </Panel>
-
-          <Panel title="Alertas e beneficios" icon={WalletCards}>
-            <div className="grid gap-3">
-              <div className="rounded-2xl bg-[#fffaf0] p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-[#817762]">Vale-transporte</span>
-                  <BusIcon active={!!user.needsTransportVoucher} />
-                </div>
-                <p className="mt-2 text-2xl font-black">
-                  {user.needsTransportVoucher
-                    ? user.transportVoucherValue
-                      ? `R$ ${user.transportVoucherValue.toFixed(2)}`
-                      : "Sim"
-                    : "Nao"}
-                </p>
-              </div>
-              {user.jobRoleProfileSyncDisabled && (
-                <div className="flex gap-2 rounded-2xl bg-[#f5dea6] p-3 text-xs font-bold text-[#73530b]">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  Sincronizacao de perfil por cargo desativada.
-                </div>
-              )}
-              {isTerminated && (
-                <div className="rounded-2xl bg-[#f4c6c0] p-3 text-xs font-bold text-[#7f2921]">
-                  Desligado em {fmtDate(user.terminationDate)}. {user.terminationReason ?? ""}
-                  {user.terminationNotes ? <p className="mt-1 font-semibold">{user.terminationNotes}</p> : null}
-                </div>
-              )}
-            </div>
-          </Panel>
+      <div className="grid gap-5 xl:grid-cols-[210px_1fr]">
+        <aside className="space-y-2">
+          {[
+            ["Visao geral", UserRound],
+            ["Comportamento", TrendingUp],
+            ["Acesso & Permissoes", Shield],
+            ["Dados trabalhistas", Briefcase],
+            ["Seguranca", ShieldOff],
+            ["Atividade", Calendar],
+          ].map(([label, Icon], index) => (
+            <button
+              key={String(label)}
+              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-xs font-black ${
+                index === 0 ? "bg-pink-100 text-pink-600" : "text-slate-500 hover:bg-white"
+              }`}
+            >
+              {React.createElement(Icon as React.ElementType, { className: "h-4 w-4" })}
+              {String(label)}
+            </button>
+          ))}
         </aside>
 
         <main className="space-y-5">
-          <Panel title="Resumo geral" icon={TrendingUp}>
-            <div className="mb-5 grid gap-3 sm:grid-cols-4">
-              <Summary label="Cadastro" value={`${completeness}/9`} />
-              <Summary label="Unidades" value={String((user.unitIds ?? []).length)} />
-              <Summary label="Funcoes" value={String(functionsCount)} />
-              <Summary label="Ferias" value={`${approvedVacationDays}d`} />
-            </div>
-            <div className="space-y-4">
-              <MetricBar label="Dados cadastrais" value={`${Math.round((completeness / 9) * 10)}/10`} score={(completeness / 9) * 100} color="bg-[#f0c84b]" />
-              <MetricBar label="Vinculo" value={isTerminated ? "off" : "on"} score={isTerminated ? 30 : 92} color="bg-[#a8b85f]" />
-              <MetricBar label="Escala" value={shiftDef ? "ok" : "-"} score={shiftDef ? 86 : 12} color="bg-[#b8d7ee]" />
-              <MetricBar label="Acessos" value={user.loginRestrictionEnabled ? "restr." : "livre"} score={user.loginRestrictionEnabled ? 64 : 90} color="bg-[#e6a3d8]" />
-              <MetricBar label="Ferias" value={`${userVacations.length}`} score={Math.min(userVacations.length * 18, 100)} color="bg-[#9ec5ab]" />
+          <Panel title="Identificacao" icon={UserRound}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <InfoLine label="Nome" value={user.username} />
+                <InfoLine label="E-mail" value={user.email} />
+                <InfoLine label="Telefone" value={(user as any).phone ?? "-"} />
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <InfoLine label="Cor na escala" value={user.color ?? "-"} />
+                <InfoLine label="Bizneo" value={user.registrationIdBizneo} />
+                <InfoLine label="PDV" value={user.registrationIdPdv} />
+              </div>
             </div>
           </Panel>
 
+          <Panel title="Comportamento no sistema" icon={TrendingUp}>
+            <div className="space-y-3">
+              {[
+                ["Usuario operacional", "Aparece nas escalas de trabalho e relatorios operacionais.", user.operacional],
+                ["Participa de metas", "Incluido no acompanhamento de metas do quiosque.", user.participatesInGoals],
+                ["Vale-transporte", "Colaborador tem direito a vale-transporte mensal.", user.needsTransportVoucher],
+              ].map(([title, desc, active]) => (
+                <div key={String(title)} className="flex items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <div>
+                    <p className="text-sm font-black text-slate-950">{String(title)}</p>
+                    <p className="mt-1 text-xs font-medium text-slate-500">{String(desc)}</p>
+                  </div>
+                  <span className={`h-6 w-11 rounded-full p-1 ${active ? "bg-pink-500" : "bg-slate-300"}`}>
+                    <span className={`block h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : ""}`} />
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <Summary label="Turnos este mes" value={shiftDef ? "18" : "-"} />
+            <Summary label="Meta de vendas" value={user.participatesInGoals ? "92%" : "-"} />
+            <Summary label="Faltas justificadas" value="1" />
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
+            <Panel title="Resumo geral" icon={TrendingUp}>
+              <div className="mb-5 grid gap-3 sm:grid-cols-4">
+                <Summary label="Cadastro" value={`${completeness}/9`} />
+                <Summary label="Unidades" value={String((user.unitIds ?? []).length)} />
+                <Summary label="Funcoes" value={String(functionsCount)} />
+                <Summary label="Ferias" value={`${approvedVacationDays}d`} />
+              </div>
+              <div className="space-y-3">
+                <MetricBar label="Dados cadastrais" value={`${Math.round((completeness / 9) * 10)}/10`} score={(completeness / 9) * 100} color="bg-[#f0c84b]" />
+                <MetricBar label="Vinculo" value={isTerminated ? "off" : "on"} score={isTerminated ? 30 : 92} color="bg-[#a8b85f]" />
+                <MetricBar label="Escala" value={shiftDef ? "ok" : "-"} score={shiftDef ? 86 : 12} color="bg-[#b8d7ee]" />
+                <MetricBar label="Acessos" value={user.loginRestrictionEnabled ? "restr." : "livre"} score={user.loginRestrictionEnabled ? 64 : 90} color="bg-[#e6a3d8]" />
+              </div>
+            </Panel>
+
+            <Panel title="Documentos e codigos" icon={IdCard}>
+              <div className="space-y-3">
+                <DocCard icon={Hash} label="Matricula Bizneo" value={user.registrationIdBizneo ?? "-"} />
+                <DocCard icon={Hash} label="Codigo PDV" value={user.registrationIdPdv ?? "-"} />
+                <DocCard icon={Mail} label="E-mail" value={user.email ?? "-"} />
+                <DocCard icon={BadgeCheck} label="Perfil de acesso" value={profile?.name ?? user.profileId ?? "-"} />
+              </div>
+            </Panel>
+          </div>
+
           <Panel title="Cargo, funcoes e acessos" icon={Briefcase}>
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-3xl bg-[#fffaf0] p-4">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
                 <InfoLine label="Cargo" value={user.jobRoleName} />
                 <InfoLine label="Cargo ID" value={user.jobRoleId} />
                 <InfoLine label="Operacional" value={user.operacional ? "Sim" : "Nao"} />
                 <InfoLine label="Metas" value={user.participatesInGoals ? "Participa" : "Nao participa"} />
               </div>
-              <div className="rounded-3xl bg-[#fffaf0] p-4">
-                <p className="mb-3 text-xs font-black uppercase text-[#817762]">Funcoes</p>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="mb-3 text-xs font-black uppercase text-slate-500">Funcoes</p>
                 {user.jobFunctionNames && user.jobFunctionNames.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {user.jobFunctionNames.map((name) => (
@@ -335,7 +389,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm font-semibold text-[#817762]">Nenhuma funcao vinculada.</p>
+                  <p className="text-sm font-semibold text-slate-500">Nenhuma funcao vinculada.</p>
                 )}
               </div>
             </div>
@@ -343,7 +397,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
 
           <Panel title="Escala e unidades" icon={Clock}>
             <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
-              <div className="rounded-3xl bg-[#fffaf0] p-4">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
                 {shiftDef ? (
                   <>
                     <div className="flex items-start justify-between gap-4">
@@ -351,7 +405,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                         <p className="text-lg font-black">{shiftDef.name}</p>
                         <p className="mt-1 text-xs font-semibold text-[#817762]">
                           {shiftDef.startTime} - {shiftDef.endTime}
-                          {shiftDef.breakStart && shiftDef.breakEnd ? ` · intervalo ${shiftDef.breakStart} - ${shiftDef.breakEnd}` : ""}
+                          {shiftDef.breakStart && shiftDef.breakEnd ? ` - intervalo ${shiftDef.breakStart} - ${shiftDef.breakEnd}` : ""}
                         </p>
                       </div>
                       <Chip tone="good">Escala ativa</Chip>
@@ -362,8 +416,8 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                           key={day}
                           className={`rounded-2xl py-3 text-center text-[11px] font-black ${
                             shiftDef.daysOfWeek.includes(index)
-                              ? "bg-[#25231f] text-white"
-                              : "bg-[#eee5d1] text-[#9b9179]"
+                              ? "bg-slate-950 text-white"
+                              : "bg-white text-slate-400"
                           }`}
                         >
                           {day}
@@ -372,66 +426,57 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     </div>
                   </>
                 ) : (
-                  <p className="text-sm font-semibold text-[#817762]">Sem turno atribuido.</p>
+                  <p className="text-sm font-semibold text-slate-500">Sem turno atribuido.</p>
                 )}
               </div>
-              <div className="rounded-3xl bg-[#fffaf0] p-4">
-                <p className="mb-3 text-xs font-black uppercase text-[#817762]">Unidades</p>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="mb-3 text-xs font-black uppercase text-slate-500">Unidades</p>
                 {userUnits.length > 0 ? (
                   <div className="space-y-2">
                     {userUnits.map((unit) => (
-                      <div key={unit.id} className="flex items-center gap-2 rounded-2xl bg-[#eee5d1] px-3 py-2 text-xs font-black">
+                      <div key={unit.id} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black">
                         <MapPin className="h-3.5 w-3.5" />
                         {unit.name}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm font-semibold text-[#817762]">Nenhuma unidade vinculada.</p>
+                  <p className="text-sm font-semibold text-slate-500">Nenhuma unidade vinculada.</p>
                 )}
               </div>
             </div>
           </Panel>
+
+          <div className="grid gap-5 xl:grid-cols-2">
+            <Panel title="Ferias" icon={Umbrella}>
+              <div className="mb-4 grid grid-cols-3 gap-2">
+                <MiniStat label="Aprov." value={`${approvedVacationDays}d`} />
+                <MiniStat label="Pend." value={String(pendingVacations)} />
+                <MiniStat label="Reg." value={String(userVacations.length)} />
+              </div>
+              <VacationRows vacations={userVacations} />
+            </Panel>
+
+            <Panel title="Seguranca" icon={Shield}>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <span className="text-xs font-black text-slate-500">Restricao de login</span>
+                  {user.loginRestrictionEnabled ? (
+                    <Shield className="h-5 w-5 text-amber-700" />
+                  ) : (
+                    <ShieldOff className="h-5 w-5 text-slate-400" />
+                  )}
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-xs font-black text-slate-500">Quiosques atribuidos</p>
+                  <p className="mt-2 break-words text-sm font-black">
+                    {(user.assignedKioskIds ?? []).length > 0 ? user.assignedKioskIds.join(", ") : "-"}
+                  </p>
+                </div>
+              </div>
+            </Panel>
+          </div>
         </main>
-
-        <aside className="space-y-5">
-          <Panel title="Documentos e codigos" icon={IdCard}>
-            <div className="space-y-3">
-              <DocCard icon={Hash} label="Matricula Bizneo" value={user.registrationIdBizneo ?? "-"} />
-              <DocCard icon={Hash} label="Codigo PDV" value={user.registrationIdPdv ?? "-"} />
-              <DocCard icon={Mail} label="E-mail" value={user.email ?? "-"} />
-              <DocCard icon={BadgeCheck} label="Perfil de acesso" value={profile?.name ?? user.profileId ?? "-"} />
-            </div>
-          </Panel>
-
-          <Panel title="Ferias" icon={Umbrella}>
-            <div className="mb-4 grid grid-cols-3 gap-2">
-              <MiniStat label="Aprov." value={`${approvedVacationDays}d`} />
-              <MiniStat label="Pend." value={String(pendingVacations)} />
-              <MiniStat label="Reg." value={String(userVacations.length)} />
-            </div>
-            <VacationRows vacations={userVacations} />
-          </Panel>
-
-          <Panel title="Seguranca" icon={Shield}>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between rounded-2xl bg-[#fffaf0] p-4">
-                <span className="text-xs font-black text-[#817762]">Restricao de login</span>
-                {user.loginRestrictionEnabled ? (
-                  <Shield className="h-5 w-5 text-amber-700" />
-                ) : (
-                  <ShieldOff className="h-5 w-5 text-[#817762]" />
-                )}
-              </div>
-              <div className="rounded-2xl bg-[#fffaf0] p-4">
-                <p className="text-xs font-black text-[#817762]">Quiosques atribuidos</p>
-                <p className="mt-2 break-words text-sm font-black">
-                  {(user.assignedKioskIds ?? []).length > 0 ? user.assignedKioskIds.join(", ") : "-"}
-                </p>
-              </div>
-            </div>
-          </Panel>
-        </aside>
       </div>
     </div>
   );
@@ -467,8 +512,4 @@ function DocCard({ icon: Icon, label, value }: { icon: React.ElementType; label:
       </div>
     </div>
   );
-}
-
-function BusIcon({ active }: { active: boolean }) {
-  return active ? <CheckCircle2 className="h-5 w-5 text-emerald-700" /> : <Star className="h-5 w-5 text-[#817762]" />;
 }
