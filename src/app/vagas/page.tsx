@@ -272,20 +272,14 @@ export default function VagasPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4ecd9] text-[#2a1d29]">
+    <div className="min-h-screen overflow-x-hidden bg-[#f4ecd9] text-[#2a1d29]">
       <header className="sticky top-0 z-40 border-b border-[#2a1d29]/10 bg-[#f4ecd9]/95 backdrop-blur">
-        <div className="mx-auto flex h-[92px] max-w-[1728px] items-center justify-between px-6 sm:px-10 lg:px-24">
+        <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8 lg:px-10">
           <Link href="/vagas" aria-label="Coala Shakes vagas">
             <Logo />
           </Link>
 
-          <nav className="hidden items-center gap-9 text-lg font-bold text-[#5f5360] lg:flex">
-            <a href="#cardapio" className="transition hover:text-[#2a1d29]">
-              Cardapio
-            </a>
-            <a href="#unidades" className="transition hover:text-[#2a1d29]">
-              Unidades
-            </a>
+          <nav className="hidden items-center gap-8 text-lg font-bold text-[#5f5360] lg:flex">
             <button onClick={scrollToList} className="inline-flex items-center gap-2 text-[#df69a6]">
               Vagas
               <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#df69a6] px-2 text-sm text-white">
@@ -300,13 +294,13 @@ export default function VagasPage() {
           <div className="flex items-center gap-4">
             <a
               href="mailto:trabalheconosco@coalashakes.com"
-              className="hidden text-base font-bold text-[#5f5360] transition hover:text-[#2a1d29] md:inline-flex"
+              className="hidden text-base font-bold text-[#5f5360] transition hover:text-[#2a1d29] xl:inline-flex"
             >
               Acompanhar candidatura
             </a>
             <button
               onClick={scrollToList}
-              className="inline-flex h-14 items-center gap-3 rounded-full bg-[#2a1d29] px-7 text-base font-black text-white shadow-[0_4px_0_rgba(42,29,41,0.2)] transition hover:-translate-y-0.5"
+              className="inline-flex h-12 shrink-0 items-center gap-2 rounded-full bg-[#2a1d29] px-5 text-sm font-black text-white shadow-[0_4px_0_rgba(42,29,41,0.2)] transition hover:-translate-y-0.5 sm:h-14 sm:px-7 sm:text-base"
             >
               Candidatar-se
               <ArrowRight className="h-5 w-5" />
@@ -316,11 +310,11 @@ export default function VagasPage() {
       </header>
 
       <main>
-        <section className="relative overflow-hidden px-6 pb-20 pt-24 sm:px-10 lg:px-24 lg:pb-28 lg:pt-28">
+        <section className="relative overflow-hidden px-5 pb-16 pt-16 sm:px-8 lg:px-10 lg:pb-24 lg:pt-24">
           <div className="absolute left-0 top-36 h-56 w-56 rounded-full bg-[#61bed7]/20 blur-3xl" />
-          <div className="absolute right-8 top-16 h-80 w-80 rounded-full bg-[#df69a6]/25 blur-3xl" />
+          <div className="absolute right-0 top-16 h-80 w-80 rounded-full bg-[#df69a6]/25 blur-3xl" />
 
-          <div className="mx-auto grid max-w-[1728px] gap-12 lg:grid-cols-[1fr_640px] lg:items-end">
+          <div className="mx-auto grid max-w-7xl gap-10 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-end">
             <div className="relative z-10">
               <div className="flex flex-wrap items-center gap-4">
                 <span className="inline-flex items-center gap-3 rounded-full bg-white px-5 py-3 text-sm font-black uppercase text-[#2a1d29] shadow-[0_3px_0_rgba(42,29,41,0.12)]">
@@ -332,36 +326,36 @@ export default function VagasPage() {
                 </span>
               </div>
 
-              <h1 className="mt-14 max-w-[920px] text-[76px] font-black leading-[0.92] text-[#2a1d29] sm:text-[104px] lg:text-[132px]">
+              <h1 className="mt-12 max-w-[820px] text-[52px] font-black leading-[0.96] text-[#2a1d29] sm:text-[76px] lg:text-[96px]">
                 cresce com
                 <br />
                 <span className="text-[#df69a6]">a gente.</span>
-                <Coffee className="ml-5 inline h-14 w-14 align-middle text-[#df69a6] sm:h-20 sm:w-20" />
+                <Coffee className="ml-4 inline h-12 w-12 align-middle text-[#df69a6] sm:h-16 sm:w-16" />
               </h1>
 
-              <p className="mt-10 max-w-[780px] text-2xl leading-relaxed text-[#665b67]">
+              <p className="mt-8 max-w-[760px] text-xl leading-relaxed text-[#665b67] sm:text-2xl">
                 Somos <strong className="text-[#2a1d29]">5 lojas Coala Shakes</strong> em Sao Paulo e{" "}
                 <strong className="text-[#2a1d29]">68 coalas</strong> servindo shake todo dia. Vagas pra quem gosta de
                 gente, de movimento e de aprender num lugar onde da pra crescer de verdade.
               </p>
 
-              <div className="mt-12 flex flex-wrap gap-4">
+              <div className="mt-10 flex flex-wrap gap-4">
                 <button
                   onClick={scrollToList}
-                  className="inline-flex h-20 items-center gap-3 rounded-full bg-[#df69a6] px-9 text-xl font-black text-white shadow-[0_5px_0_rgba(42,29,41,0.16)] transition hover:-translate-y-0.5"
+                  className="inline-flex h-16 items-center gap-3 rounded-full bg-[#df69a6] px-7 text-base font-black text-white shadow-[0_5px_0_rgba(42,29,41,0.16)] transition hover:-translate-y-0.5 sm:h-20 sm:px-9 sm:text-xl"
                 >
                   Ver vagas abertas
                   <ArrowDown className="h-6 w-6" />
                 </button>
                 <a
                   href="mailto:trabalheconosco@coalashakes.com?subject=Cadastro%20espontaneo%20-%20Coala%20Shakes"
-                  className="inline-flex h-20 items-center rounded-full bg-white px-9 text-xl font-black text-[#2a1d29] shadow-[0_4px_0_rgba(42,29,41,0.14)] transition hover:-translate-y-0.5"
+                  className="inline-flex h-16 items-center rounded-full bg-white px-7 text-base font-black text-[#2a1d29] shadow-[0_4px_0_rgba(42,29,41,0.14)] transition hover:-translate-y-0.5 sm:h-20 sm:px-9 sm:text-xl"
                 >
                   Cadastro espontaneo
                 </a>
               </div>
 
-              <div className="mt-12 flex max-w-full gap-3 overflow-x-auto pb-2">
+              <div className="mt-12 flex max-w-full flex-wrap gap-3">
                 {categories.slice(0, 7).map((category, index) => {
                   const Icon = ROLE_ICONS[index % ROLE_ICONS.length];
                   const active = filterCategory === category.name;
@@ -372,7 +366,7 @@ export default function VagasPage() {
                         setFilterCategory(active ? "" : category.name);
                         scrollToList();
                       }}
-                      className={`inline-flex h-14 flex-shrink-0 items-center gap-3 rounded-full px-6 text-base font-black shadow-[0_3px_0_rgba(42,29,41,0.12)] transition ${
+                      className={`inline-flex min-h-12 max-w-full items-center gap-3 rounded-full px-5 text-sm font-black shadow-[0_3px_0_rgba(42,29,41,0.12)] transition sm:min-h-14 sm:px-6 sm:text-base ${
                         active ? "bg-[#df69a6] text-white" : "bg-white text-[#2a1d29]"
                       }`}
                     >
@@ -384,7 +378,7 @@ export default function VagasPage() {
               </div>
             </div>
 
-            <div className="relative z-10 lg:pb-4">
+            <div className="relative z-10 hidden max-w-full xl:block xl:pb-4">
               <div className="rounded-[34px] bg-[#2a1d29] p-7 shadow-[0_5px_0_rgba(42,29,41,0.18)]">
                 <div className="flex items-start gap-5 rounded-[22px] bg-[#fbf0d4] p-6">
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#d7d0d8] text-[#2a1d29]">
