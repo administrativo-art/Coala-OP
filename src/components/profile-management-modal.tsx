@@ -23,6 +23,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@r
 import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
+import { useAuth } from '@/hooks/use-auth';
+import { createAuditLog } from '@/features/audit/client';
 
 const permissionsSchema = z.object({}).passthrough(); 
 
@@ -38,6 +40,33 @@ type ProfileManagementModalProps = {
   onOpenChange: (open: boolean) => void;
   canEdit: boolean;
 };
+
+function flattenPermissions(value: unknown, prefix = ""): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return prefix ? { [prefix]: value ?? null } : {};
+  }
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, unknown>>((acc, [key, entry]) => {
+    const nextPrefix = prefix ? `${prefix}.${key}` : key;
+    if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+      Object.assign(acc, flattenPermissions(entry, nextPrefix));
+    } else {
+      acc[nextPrefix] = entry ?? null;
+    }
+    return acc;
+  }, {});
+}
+
+function permissionDiff(before: unknown, after: unknown) {
+  const beforeFlat = flattenPermissions(before);
+  const afterFlat = flattenPermissions(after);
+  const keys = Array.from(new Set([...Object.keys(beforeFlat), ...Object.keys(afterFlat)])).sort();
+  return keys.reduce<Record<string, { before: unknown; after: unknown }>>((acc, key) => {
+    if (JSON.stringify(beforeFlat[key] ?? null) !== JSON.stringify(afterFlat[key] ?? null)) {
+      acc[key] = { before: beforeFlat[key] ?? null, after: afterFlat[key] ?? null };
+    }
+    return acc;
+  }, {});
+}
 
 function DuplicateProfileModal({
   profileToDuplicate,
@@ -87,6 +116,7 @@ function DuplicateProfileModal({
 
 export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileManagementModalProps) {
   const { profiles, addProfile, updateProfile, deleteProfile, adminProfileId } = useProfiles();
+  const { firebaseUser } = useAuth();
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
@@ -158,6 +188,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const handleDeleteConfirm = async () => {
     if (profileToDelete) {
       await deleteProfile(profileToDelete.id);
+      await logProfileAudit('profile_deleted', profileToDelete, {
+        name: profileToDelete.name,
+        is_default_admin: profileToDelete.isDefaultAdmin === true,
+      });
       setProfileToDelete(null);
     }
   };
@@ -166,21 +200,57 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     setProfileToDuplicate(profile);
   };
 
-  const handleDuplicateConfirm = (newName: string) => {
+  const handleDuplicateConfirm = async (newName: string) => {
     if (profileToDuplicate) {
-      addProfile({
+      await addProfile({
         name: newName,
         permissions: profileToDuplicate.permissions,
+      });
+      await logProfileAudit('profile_duplicated', profileToDuplicate, {
+        source_profile_id: profileToDuplicate.id,
+        source_profile_name: profileToDuplicate.name,
+        new_name: newName,
       });
       setProfileToDuplicate(null);
     }
   };
 
-  const onSubmit = (values: ProfileFormValues) => {
+  const logProfileAudit = async (
+    action: string,
+    target: Pick<Profile, 'id' | 'name'> | null,
+    metadata: Record<string, unknown> = {}
+  ) => {
+    if (!firebaseUser) return;
+    try {
+      await createAuditLog(firebaseUser, {
+        module: 'settings.profiles',
+        action,
+        targetType: 'profile',
+        targetId: target?.id,
+        targetName: target?.name,
+        metadata,
+      });
+    } catch (error) {
+      console.warn('[ProfileManagementModal] Falha ao registrar auditoria.', error);
+    }
+  };
+
+  const onSubmit = async (values: ProfileFormValues) => {
     if (editingProfile) {
-      updateProfile({ ...editingProfile, permissions: values.permissions, name: values.name });
+      const changes = permissionDiff(editingProfile.permissions, values.permissions);
+      await updateProfile({ ...editingProfile, permissions: values.permissions, name: values.name });
+      await logProfileAudit('profile_updated', editingProfile, {
+        before_name: editingProfile.name,
+        after_name: values.name,
+        changed_permissions: Object.keys(changes),
+        permission_changes: changes,
+      });
     } else {
-      addProfile(values);
+      await addProfile(values);
+      await logProfileAudit('profile_created', { id: '', name: values.name }, {
+        name: values.name,
+        permission_count: Object.keys(flattenPermissions(values.permissions)).length,
+      });
     }
     setShowForm(false);
     setEditingProfile(null);

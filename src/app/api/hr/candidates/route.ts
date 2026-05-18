@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
+import { logAction } from '@/lib/log-action';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -88,6 +89,23 @@ export async function POST(request: NextRequest) {
     createdBy: existingData?.createdBy ?? access.decoded.uid,
     firstAppliedAt: existingData?.firstAppliedAt ?? existingData?.appliedAt ?? body.appliedAt ?? now,
   }, { merge: true });
+
+  await logAction({
+    user_id: access.decoded.uid,
+    username: access.decoded.email ?? null,
+    module: 'recruitment.candidates',
+    action: existing.empty ? 'candidate_created' : 'candidate_updated',
+    metadata: {
+      target_type: 'candidate',
+      target_id: candidateRef.id,
+      target_name: body.name ?? email,
+      email,
+      job_opening_id: body.jobOpeningId ?? null,
+      latest_application_id: latestApplicationId,
+      reused: !existing.empty,
+    },
+    ttl_days: 365,
+  });
 
   return NextResponse.json({ id: candidateRef.id, reused: !existing.empty }, { status: existing.empty ? 201 : 200 });
 }

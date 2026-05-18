@@ -3,7 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { WORKSPACE_ID } from "@/lib/workspace";
 
-const DEFAULT_TTL_DAYS = 90;
+const DEFAULT_TTL_DAYS = 365;
 
 export type LogActionParams = {
   workspace_id?: string | null;

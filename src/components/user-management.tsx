@@ -32,6 +32,7 @@ import { Label } from '@/components/ui/label';
 import { storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { pickUserColor, getUserColor } from '@/lib/utils/user-colors';
+import { createAuditLog } from '@/features/audit/client';
 
 function timestampToDateInput(ts: Timestamp | undefined): string {
   if (!ts) return '';
@@ -72,8 +73,44 @@ const userSchema = z.object({
 
 type UserFormValues = z.infer<typeof userSchema>;
 
+const USER_AUDIT_FIELDS = [
+  'username',
+  'profileId',
+  'assignedKioskIds',
+  'operacional',
+  'participatesInGoals',
+  'registrationIdBizneo',
+  'registrationIdPdv',
+  'admissionDate',
+  'birthDate',
+  'shiftDefinitionId',
+  'needsTransportVoucher',
+  'transportVoucherValue',
+  'loginRestrictionEnabled',
+] as const;
+
+function auditValue(value: unknown): unknown {
+  if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return [...value].sort();
+  return value ?? null;
+}
+
+function userAuditDiff(before: User, after: Partial<User>) {
+  const changes: Record<string, { before: unknown; after: unknown }> = {};
+  USER_AUDIT_FIELDS.forEach((field) => {
+    const beforeValue = auditValue((before as any)[field]);
+    const afterValue = auditValue((after as any)[field]);
+    if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+      changes[field] = { before: beforeValue, after: afterValue };
+    }
+  });
+  return changes;
+}
+
 export function UserManagement() {
-  const { permissions, users, addUser, deleteUser, user: currentUser, updateUser, resetPassword } = useAuth();
+  const { permissions, users, addUser, deleteUser, user: currentUser, firebaseUser, updateUser, resetPassword } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const { shiftDefinitions } = useDP();
@@ -202,6 +239,26 @@ export function UserManagement() {
     setPdvOperatorIds(existing);
     setShowForm(true);
   };
+
+  const logUserAudit = async (
+    action: string,
+    target: Pick<User, 'id' | 'username' | 'email'> | null,
+    metadata: Record<string, unknown> = {}
+  ) => {
+    if (!firebaseUser) return;
+    try {
+      await createAuditLog(firebaseUser, {
+        module: 'settings.users',
+        action,
+        targetType: 'user',
+        targetId: target?.id,
+        targetName: target?.username ?? target?.email,
+        metadata,
+      });
+    } catch (error) {
+      console.warn('[UserManagement] Falha ao registrar auditoria.', error);
+    }
+  };
   
   const profileIsAdmin = (profileId: string) => profileId === adminProfileId;
   const handleDeleteClick = (user: User) => {
@@ -212,6 +269,10 @@ export function UserManagement() {
   const handleDeleteConfirm = async () => {
     if (userToDelete) {
       await deleteUser(userToDelete.id);
+      await logUserAudit('user_deleted', userToDelete, {
+        email: userToDelete.email,
+        profile_id: userToDelete.profileId,
+      });
       setUserToDelete(null);
     }
   };
@@ -220,6 +281,10 @@ export function UserManagement() {
     if (userToResetPassword) {
       const success = await resetPassword(userToResetPassword.email);
       if (success) {
+        await logUserAudit('password_reset_email_sent', userToResetPassword, {
+          email: userToResetPassword.email,
+          source: 'settings_users',
+        });
         toast({
           title: "E-mail de redefinição enviado!",
           description: `Um link para redefinir a senha foi enviado para ${userToResetPassword.email}.`
@@ -261,7 +326,14 @@ export function UserManagement() {
           transportVoucherValue: values.needsTransportVoucher ? values.transportVoucherValue : undefined,
       };
       delete (updatedData as any).password;
-      await updateUser({ ...editingUser, ...updatedData });
+      const mergedUser = { ...editingUser, ...updatedData };
+      const changes = userAuditDiff(editingUser, mergedUser);
+      await updateUser(mergedUser);
+      await logUserAudit('user_updated', editingUser, {
+        email: editingUser.email,
+        changed_fields: Object.keys(changes),
+        changes,
+      });
     } else {
         if (!values.password) {
              form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
@@ -285,6 +357,11 @@ export function UserManagement() {
         return;
       }
       toast({ title: 'Usuário criado com sucesso.' });
+      await logUserAudit('user_created', { id: uid, username: values.username, email: values.email }, {
+        email: values.email,
+        profile_id: values.profileId,
+        assigned_kiosk_count: values.assignedKioskIds.length,
+      });
     }
     setShowForm(false);
     setEditingUser(null);
@@ -302,6 +379,10 @@ export function UserManagement() {
       // even if the user closes the form without clicking "Salvar alterações"
       if (editingUser) {
         await updateUser({ ...editingUser, avatarUrl: downloadURL });
+        await logUserAudit('user_updated', editingUser, {
+          changed_fields: ['avatarUrl'],
+          source: 'photo_update',
+        });
       }
       toast({ title: "Foto atualizada!" });
     } catch (error) {
@@ -378,23 +459,6 @@ export function UserManagement() {
       return `ha ${days} dias`;
     } catch {
       return 'Nunca';
-    }
-  };
-
-  const tenureLabel = (value: unknown) => {
-    if (!value) return 'novo';
-    try {
-      const date = typeof value === 'object' && value && 'toDate' in value && typeof (value as any).toDate === 'function'
-        ? (value as any).toDate()
-        : new Date(value as any);
-      const months = Math.max(0, Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24 * 30)));
-      if (months < 1) return 'novo';
-      if (months < 12) return `${months} m`;
-      const years = Math.floor(months / 12);
-      const rest = months % 12;
-      return rest ? `${years} a ${rest} m` : `${years} a`;
-    } catch {
-      return 'novo';
     }
   };
 
@@ -798,7 +862,7 @@ export function UserManagement() {
                   </div>
                   <div className="divide-y divide-slate-100">
                     {group.users.map(user => (
-                      <div key={user.id} className="grid gap-3 px-4 py-3 transition-colors hover:bg-pink-50/30 lg:grid-cols-[minmax(260px,1.3fr)_minmax(180px,1fr)_110px_90px_132px] lg:items-center">
+                      <div key={user.id} className="grid gap-3 px-4 py-3 transition-colors hover:bg-pink-50/30 lg:grid-cols-[minmax(260px,1.3fr)_minmax(180px,1fr)_110px_132px] lg:items-center">
                         <div className="flex min-w-0 items-center gap-3">
                           <input type="checkbox" className="h-4 w-4 rounded border-slate-300" aria-label={`Selecionar ${user.username}`} />
                           <Avatar className="h-10 w-10 shrink-0">
@@ -809,7 +873,13 @@ export function UserManagement() {
                           </Avatar>
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="truncate text-sm font-black text-slate-900">{user.username}</p>
+                              <button
+                                type="button"
+                                onClick={() => handleEdit(user)}
+                                className="truncate text-left text-sm font-black text-slate-900 underline-offset-4 hover:text-pink-600 hover:underline"
+                              >
+                                {user.username}
+                              </button>
                               {user.operacional && <Badge className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700" variant="outline">2FA</Badge>}
                               {user.isActive === false && <Badge className="border-slate-200 bg-slate-100 text-[10px] text-slate-500" variant="outline">Inativo</Badge>}
                             </div>
@@ -836,10 +906,6 @@ export function UserManagement() {
                         <div className="text-xs font-black text-slate-700">
                           {lastAccessLabel((user as any).lastLoginAt)}
                           <p className="text-[10px] font-semibold text-slate-400">ultimo acesso</p>
-                        </div>
-                        <div className="text-xs font-black text-slate-700">
-                          {tenureLabel(user.admissionDate)}
-                          <p className="text-[10px] font-semibold text-slate-400">de casa</p>
                         </div>
                         <div className="flex items-center justify-end gap-1">
                           {permissions.settings.manageUsers && (

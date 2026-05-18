@@ -125,6 +125,14 @@ const PurchasingAccountingSettings = dynamic(
   () => import("@/components/purchasing/purchasing-accounting-settings").then((m) => m.PurchasingAccountingSettings),
   { ssr: false }
 );
+const InternalPrivacySettings = dynamic(
+  () => import("@/components/privacy/internal-privacy-settings").then((m) => m.InternalPrivacySettings),
+  { ssr: false }
+);
+const InternalAuditPanel = dynamic(
+  () => import("@/components/privacy/internal-audit-panel").then((m) => m.InternalAuditPanel),
+  { ssr: false }
+);
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -538,6 +546,20 @@ export default function SettingsPage() {
       ),
     },
     {
+      value: "privacy",
+      label: "Privacidade",
+      title: "Privacidade Interna",
+      description: "Aviso interno, inventário LGPD, fornecedores, retenção e pendências de governança.",
+      content: <InternalPrivacySettings />,
+    },
+    {
+      value: "audit",
+      label: "Auditoria",
+      title: "Auditoria",
+      description: "Eventos críticos de acesso, usuários, senha e visualização de dados internos.",
+      content: <InternalAuditPanel />,
+    },
+    {
       value: "shifts",
       label: "Turnos",
       title: "Turnos",
@@ -570,6 +592,21 @@ export default function SettingsPage() {
         permissions.settings.manageUsers ||
         permissions.dp?.collaborators?.edit ||
         permissions.dp?.collaborators?.terminate
+      );
+    }
+    if (tab.value === "privacy") {
+      return !!(
+        permissions.settings.view ||
+        permissions.settings.manageUsers ||
+        permissions.settings.manageProfiles ||
+        permissions.dp?.collaborators?.edit ||
+        permissions.dp?.collaborators?.terminate
+      );
+    }
+    if (tab.value === "audit") {
+      return !!(
+        permissions.settings.manageUsers ||
+        permissions.settings.manageProfiles
       );
     }
     if (tab.value === "shifts") {

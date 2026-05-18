@@ -56,6 +56,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, CalendarDays, Trash2, Download, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { createAuditLog } from '@/features/audit/client';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -302,7 +303,7 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
   shiftDefinitions: any[];
 }) {
   const now = new Date();
-  const { activeUsers } = useAuth();
+  const { activeUsers, firebaseUser } = useAuth();
   const { toast } = useToast();
 
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -433,6 +434,26 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Escala');
       XLSX.writeFile(wb, `bizneo_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`);
+
+      if (firebaseUser) {
+        await createAuditLog(firebaseUser, {
+          module: 'dp.schedules',
+          action: 'schedule_export_created',
+          targetType: 'export',
+          targetId: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`,
+          targetName: 'Exportacao Bizneo',
+          metadata: {
+            format: 'xlsx',
+            month: selectedMonth,
+            year: selectedYear,
+            schedule_count: schedulesToExport.length,
+            shift_count: rows.length,
+            unit_ids: schedulesToExport.map((schedule) => schedule.unitId ?? null),
+          },
+        }).catch((error) => {
+          console.warn('[DPSchedulesList] Falha ao registrar auditoria.', error);
+        });
+      }
 
       toast({ title: 'Arquivo exportado.', description: `${rows.length} turno(s) em ${schedulesToExport.length} unidade(s).` });
       onOpenChange(false);

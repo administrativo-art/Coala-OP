@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
+import { logAction } from '@/lib/log-action';
 import type { HrFormQuestion, HrQuestionType } from '@/types';
 
 export const runtime = 'nodejs';
@@ -132,6 +133,23 @@ export async function POST(request: NextRequest) {
     createdAt: now,
     updatedAt: now,
     createdBy: access.decoded.uid,
+  });
+
+  await logAction({
+    user_id: access.decoded.uid,
+    username: access.decoded.email ?? null,
+    module: 'recruitment.openings',
+    action: 'opening_created',
+    metadata: {
+      target_type: 'job_opening',
+      target_id: ref.id,
+      target_name: title.trim(),
+      job_role_id: jobRoleId,
+      job_role_name: jobRoleName ?? null,
+      slots: Number(slots) || 1,
+      status: 'open',
+    },
+    ttl_days: 365,
   });
 
   return NextResponse.json({ id: ref.id, slug }, { status: 201 });

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use } from "react";
+import React, { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { format, differenceInMonths, differenceInYears } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -24,6 +24,8 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useProfiles } from "@/hooks/use-profiles";
+import { useToast } from "@/hooks/use-toast";
+import { createAuditLog } from "@/features/audit/client";
 import type { DPVacationRecord, User } from "@/types";
 
 const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
@@ -173,9 +175,11 @@ function VacationRows({ vacations }: { vacations: DPVacationRecord[] }) {
 
 export default function CollaboratorProfilePage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = use(params);
-  const { activeUsers, terminatedUsers, permissions } = useAuth();
+  const { activeUsers, terminatedUsers, permissions, firebaseUser, resetPassword } = useAuth();
   const { profiles } = useProfiles();
   const { shiftDefinitions, units, vacations } = useDPBootstrap();
+  const { toast } = useToast();
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   if (!permissions.dp?.collaborators?.view) {
     return <p className="p-6 text-sm text-muted-foreground">Sem permissao para acessar este perfil.</p>;
@@ -217,6 +221,58 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     user.shiftDefinitionId,
     (user.unitIds ?? []).length > 0,
   ].filter(Boolean).length;
+
+  useEffect(() => {
+    if (!firebaseUser || !user) return;
+    void createAuditLog(firebaseUser, {
+      module: "dp.collaborators",
+      action: "collaborator_profile_viewed",
+      targetType: "user",
+      targetId: user.id,
+      targetName: user.username,
+      metadata: {
+        email: user.email,
+        profile_id: user.profileId,
+        source: "collaborator_detail",
+      },
+    }).catch((error) => {
+      console.warn("[CollaboratorProfilePage] Falha ao registrar auditoria.", error);
+    });
+  }, [firebaseUser, user]);
+
+  const handleResetPassword = async (auditAction: "password_reset_email_sent" | "invite_resent") => {
+    if (!user.email || resettingPassword) return;
+    setResettingPassword(true);
+    const success = await resetPassword(user.email);
+    setResettingPassword(false);
+    if (success) {
+      if (firebaseUser) {
+        await createAuditLog(firebaseUser, {
+          module: "settings.users",
+          action: auditAction,
+          targetType: "user",
+          targetId: user.id,
+          targetName: user.username,
+          metadata: {
+            email: user.email,
+            source: "collaborator_detail",
+          },
+        }).catch((error) => {
+          console.warn("[CollaboratorProfilePage] Falha ao registrar auditoria.", error);
+        });
+      }
+      toast({
+        title: auditAction === "invite_resent" ? "Convite reenviado" : "E-mail de redefinicao enviado",
+        description: `O link foi enviado para ${user.email}.`,
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Nao foi possivel enviar",
+        description: "Verifique o e-mail cadastrado e tente novamente.",
+      });
+    }
+  };
 
   return (
     <div className="min-h-[calc(100vh-8rem)] rounded-3xl border border-slate-200 bg-[#fbf7ef] p-4 text-slate-950 shadow-sm md:p-5">
@@ -276,8 +332,22 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             <Link href="/dashboard/settings?department=pessoal&tab=users" className="inline-flex h-10 items-center justify-center rounded-xl bg-pink-500 px-4 text-sm font-black text-white shadow-sm hover:bg-pink-600">
               Editar dados
             </Link>
-            <button className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-600">Resetar senha</button>
-            <button className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-600">Reenviar convite</button>
+            <button
+              type="button"
+              onClick={() => void handleResetPassword("password_reset_email_sent")}
+              disabled={resettingPassword || !user.email}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {resettingPassword ? "Enviando..." : "Resetar senha"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleResetPassword("invite_resent")}
+              disabled={resettingPassword || !user.email}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Reenviar convite
+            </button>
           </div>
         </div>
       </section>
