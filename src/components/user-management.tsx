@@ -9,6 +9,7 @@ import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProfiles } from '@/hooks/use-profiles';
+import { useHrBootstrap } from '@/hooks/use-hr-bootstrap';
 import { useDP } from '@/components/dp-context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ import { storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { pickUserColor, getUserColor } from '@/lib/utils/user-colors';
 import { createAuditLog } from '@/features/audit/client';
+import { MultiSelect } from '@/components/ui/multi-select';
 
 function timestampToDateInput(ts: Timestamp | undefined): string {
   if (!ts) return '';
@@ -52,6 +54,8 @@ const userSchema = z.object({
   // Departamento Pessoal
   registrationIdBizneo: z.string().optional(),
   registrationIdPdv: z.string().optional(),
+  jobRoleId: z.string().optional(),
+  jobFunctionIds: z.array(z.string()).optional(),
   admissionDate: z.string().optional(),
   birthDate: z.string().optional(),
   shiftDefinitionId: z.string().optional(),
@@ -81,6 +85,10 @@ const USER_AUDIT_FIELDS = [
   'participatesInGoals',
   'registrationIdBizneo',
   'registrationIdPdv',
+  'jobRoleId',
+  'jobRoleName',
+  'jobFunctionIds',
+  'jobFunctionNames',
   'admissionDate',
   'birthDate',
   'shiftDefinitionId',
@@ -113,6 +121,7 @@ export function UserManagement() {
   const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
+  const { roles, functions, loading: hrLoading } = useHrBootstrap();
   const { shiftDefinitions } = useDP();
   const { toast } = useToast();
   
@@ -143,6 +152,8 @@ export function UserManagement() {
         participatesInGoals: false,
         registrationIdBizneo: '',
         registrationIdPdv: '',
+        jobRoleId: '',
+        jobFunctionIds: [],
         admissionDate: '',
         birthDate: '',
         shiftDefinitionId: '',
@@ -150,6 +161,52 @@ export function UserManagement() {
         transportVoucherValue: undefined,
     }
   });
+
+  const selectedRoleId = form.watch('jobRoleId') ?? '';
+  const selectedFunctionIds = form.watch('jobFunctionIds') ?? [];
+  const selectedRole = useMemo(
+    () => roles.find((role) => role.id === selectedRoleId) ?? null,
+    [roles, selectedRoleId]
+  );
+  const compatibleFunctions = useMemo(() => {
+    if (!selectedRoleId) return [];
+    return functions.filter((item) => {
+      const compatibleRoleIds = item.compatibleRoleIds ?? [];
+      return compatibleRoleIds.length === 0 || compatibleRoleIds.includes(selectedRoleId);
+    });
+  }, [functions, selectedRoleId]);
+  const selectedFunctions = useMemo(
+    () => functions.filter((item) => selectedFunctionIds.includes(item.id)),
+    [functions, selectedFunctionIds]
+  );
+  const effectiveDefaultProfileId = useMemo(
+    () =>
+      selectedFunctions.find((item) => item.defaultProfileId)?.defaultProfileId ??
+      selectedRole?.defaultProfileId ??
+      '',
+    [selectedFunctions, selectedRole]
+  );
+  const effectiveDefaultProfileName = useMemo(
+    () => profiles.find((profile) => profile.id === effectiveDefaultProfileId)?.name,
+    [effectiveDefaultProfileId, profiles]
+  );
+
+  useEffect(() => {
+    const allowedFunctionIds = new Set(compatibleFunctions.map((item) => item.id));
+    const nextValue = selectedFunctionIds.filter((id) => allowedFunctionIds.has(id));
+    if (nextValue.length !== selectedFunctionIds.length) {
+      form.setValue('jobFunctionIds', nextValue, { shouldDirty: true });
+    }
+  }, [compatibleFunctions, form, selectedFunctionIds]);
+
+  useEffect(() => {
+    if (!effectiveDefaultProfileId) return;
+    const isProtectedUser = editingUser?.username === 'Tiago Brasil' || editingUser?.email === 'administrativo@coalas.com';
+    if (isProtectedUser) return;
+    if (form.getValues('profileId') !== effectiveDefaultProfileId) {
+      form.setValue('profileId', effectiveDefaultProfileId, { shouldDirty: true });
+    }
+  }, [effectiveDefaultProfileId, editingUser, form]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
@@ -205,6 +262,8 @@ export function UserManagement() {
       participatesInGoals: false,
       registrationIdBizneo: '',
       registrationIdPdv: '',
+      jobRoleId: '',
+      jobFunctionIds: [],
       admissionDate: '',
       birthDate: '',
       shiftDefinitionId: '',
@@ -228,6 +287,8 @@ export function UserManagement() {
       participatesInGoals: user.participatesInGoals || false,
       registrationIdBizneo: user.registrationIdBizneo ?? '',
       registrationIdPdv: user.registrationIdPdv ?? '',
+      jobRoleId: user.jobRoleId ?? '',
+      jobFunctionIds: user.jobFunctionIds ?? [],
       admissionDate: timestampToDateInput(user.admissionDate),
       birthDate: timestampToDateInput(user.birthDate),
       shiftDefinitionId: user.shiftDefinitionId ?? '',
@@ -325,6 +386,10 @@ export function UserManagement() {
           ),
           registrationIdBizneo: values.registrationIdBizneo || undefined,
           registrationIdPdv: values.registrationIdPdv || undefined,
+          jobRoleId: selectedRole?.id,
+          jobRoleName: selectedRole?.name,
+          jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
+          jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           admissionDate,
           birthDate,
           shiftDefinitionId: values.shiftDefinitionId || undefined,
@@ -361,6 +426,10 @@ export function UserManagement() {
           transportVoucherValue: values.needsTransportVoucher ? values.transportVoucherValue : undefined,
           registrationIdBizneo: values.registrationIdBizneo || undefined,
           registrationIdPdv: values.registrationIdPdv || undefined,
+          jobRoleId: selectedRole?.id,
+          jobRoleName: selectedRole?.name,
+          jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
+          jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           admissionDate,
           birthDate,
       }, values.email, values.password);
