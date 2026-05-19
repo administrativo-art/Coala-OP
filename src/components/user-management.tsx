@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Trash2, Shield, ChevronsUpDown, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, ArrowLeft, MoreHorizontal, Send, Download, UserPlus, CircleDot } from 'lucide-react';
+import { Edit, Trash2, Shield, ChevronsUpDown, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, ArrowLeft, MoreHorizontal, Download, UserPlus, CircleDot } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -773,9 +773,6 @@ export function UserManagement() {
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" className="h-10 rounded-xl border-slate-200 bg-white" disabled>
                 <Download className="mr-2 h-4 w-4" /> Exportar
-              </Button>
-              <Button variant="outline" className="h-10 rounded-xl border-slate-200 bg-white" onClick={() => setUserToResetPassword(filteredUsers[0] ?? null)} disabled={!permissions.settings.manageUsers || filteredUsers.length === 0}>
-                <Send className="mr-2 h-4 w-4" /> Convidar em massa
               </Button>
               <Button variant="outline" className="h-10 rounded-xl border-slate-200 bg-white" onClick={() => setIsProfilesModalOpen(true)} disabled={!permissions.settings.manageProfiles}>
                 <Shield className="mr-2 h-4 w-4" /> Perfis
