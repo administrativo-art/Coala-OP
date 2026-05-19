@@ -21,19 +21,24 @@ export async function POST(
     }
 
     const roleData = roleSnap.data() ?? {};
-    const defaultProfileId =
+    const roleDefaultProfileId =
       typeof roleData.defaultProfileId === "string" && roleData.defaultProfileId
         ? roleData.defaultProfileId
         : null;
 
-    if (!defaultProfileId) {
+    const functionsSnap = await hrDbAdmin.collection("jobFunctions").get();
+    const functionById = new Map(
+      functionsSnap.docs.map((doc) => [doc.id, doc.data() ?? {}])
+    );
+
+    if (!roleDefaultProfileId) {
       return NextResponse.json(
         { error: "Este cargo não possui perfil padrão configurado." },
         { status: 400 }
       );
     }
 
-    const profileSnap = await dbAdmin.collection("profiles").doc(defaultProfileId).get();
+    const profileSnap = await dbAdmin.collection("profiles").doc(roleDefaultProfileId).get();
     if (!profileSnap.exists) {
       return NextResponse.json(
         { error: "O perfil padrão configurado para este cargo não foi encontrado." },
@@ -42,6 +47,9 @@ export async function POST(
     }
 
     const isDefaultAdmin = profileSnap.data()?.isDefaultAdmin === true;
+    const profileAdminById = new Map<string, boolean>([
+      [roleDefaultProfileId, isDefaultAdmin],
+    ]);
     const usersSnap = await dbAdmin
       .collection("users")
       .where("jobRoleId", "==", roleId)
@@ -62,6 +70,37 @@ export async function POST(
           : userDoc.id;
       const currentProfileId =
         typeof userData.profileId === "string" ? userData.profileId : undefined;
+      const isProtectedUser =
+        username === "Tiago Brasil" ||
+        userData.email === "administrativo@coalas.com";
+
+      if (isProtectedUser) {
+        skippedUsers.push({
+          id: userDoc.id,
+          username,
+          reason: "protected_user",
+        });
+        continue;
+      }
+
+      const functionProfileId = Array.isArray(userData.jobFunctionIds)
+        ? userData.jobFunctionIds
+            .map((functionId: unknown) =>
+              typeof functionId === "string"
+                ? functionById.get(functionId)?.defaultProfileId
+                : null
+            )
+            .find((profileId: unknown): profileId is string =>
+              typeof profileId === "string" && profileId.length > 0
+            )
+        : null;
+      const defaultProfileId = functionProfileId ?? roleDefaultProfileId;
+      let effectiveIsDefaultAdmin = profileAdminById.get(defaultProfileId);
+      if (effectiveIsDefaultAdmin === undefined) {
+        const effectiveProfileSnap = await dbAdmin.collection("profiles").doc(defaultProfileId).get();
+        effectiveIsDefaultAdmin = effectiveProfileSnap.data()?.isDefaultAdmin === true;
+        profileAdminById.set(defaultProfileId, effectiveIsDefaultAdmin);
+      }
 
       if (currentProfileId === defaultProfileId) {
         skippedUsers.push({
@@ -75,7 +114,7 @@ export async function POST(
       await userDoc.ref.update({ profileId: defaultProfileId });
       await authAdmin.setCustomUserClaims(userDoc.id, {
         profileId: defaultProfileId,
-        isDefaultAdmin,
+        isDefaultAdmin: effectiveIsDefaultAdmin,
       });
 
       changedUsers.push({
@@ -87,7 +126,7 @@ export async function POST(
 
     return NextResponse.json({
       roleId,
-      targetProfileId: defaultProfileId,
+      targetProfileId: roleDefaultProfileId,
       targetProfileName: profileSnap.data()?.name ?? null,
       matchedActiveUsers: activeUsers.length,
       updatedUsers: changedUsers,

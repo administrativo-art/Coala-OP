@@ -649,6 +649,7 @@ export type JobFunction = {
   publicResponsibilities?: string[];
   requirements?: string[];
   compatibleRoleIds?: string[];
+  defaultProfileId?: string;
   formQuestions?: HrFormQuestion[];
   isActive: boolean;
   createdAt: string;

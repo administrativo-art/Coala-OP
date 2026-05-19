@@ -180,6 +180,7 @@ function EditSheet({
   }, [user, open, form]);
 
   const selectedRoleId = form.watch('jobRoleId') ?? '';
+  const selectedFunctionIds = form.watch('jobFunctionIds') ?? [];
   const selectedRole = useMemo(
     () => roles.find((role) => role.id === selectedRoleId) ?? null,
     [roles, selectedRoleId]
@@ -191,6 +192,18 @@ function EditSheet({
         : null,
     [profiles, selectedRole]
   );
+  const selectedFunctionDefaultProfile = useMemo(() => {
+    const functionWithProfile = functionsCatalog.find(
+      (item) =>
+        selectedFunctionIds.includes(item.id) &&
+        item.defaultProfileId
+    );
+
+    return functionWithProfile?.defaultProfileId
+      ? profiles.find((profile) => profile.id === functionWithProfile.defaultProfileId) ?? null
+      : null;
+  }, [functionsCatalog, profiles, selectedFunctionIds]);
+  const selectedEffectiveProfile = selectedFunctionDefaultProfile ?? selectedRoleDefaultProfile;
   const currentProfile = useMemo(
     () =>
       user?.profileId
@@ -221,6 +234,7 @@ function EditSheet({
   async function onSubmit(values: CollaboratorFormValues) {
     if (!user) return;
     try {
+      const isProtectedUser = user.username === 'Tiago Brasil' || user.email === 'administrativo@coalas.com';
       const selectedFunctions = functionsCatalog.filter((item) =>
         (values.jobFunctionIds ?? []).includes(item.id)
       );
@@ -240,11 +254,13 @@ function EditSheet({
         transportVoucherValue: values.needsTransportVoucher ? values.transportVoucherValue : undefined,
       };
 
+      const functionProfileId = selectedFunctions.find((item) => item.defaultProfileId)?.defaultProfileId;
+      const effectiveProfileId = functionProfileId ?? selectedRole?.defaultProfileId;
       const shouldSyncRoleProfile =
-        !(values.jobRoleProfileSyncDisabled ?? false) && !!selectedRole?.defaultProfileId;
+        !isProtectedUser && !(values.jobRoleProfileSyncDisabled ?? false) && !!effectiveProfileId;
 
-      if (shouldSyncRoleProfile && selectedRole?.defaultProfileId) {
-        updates.profileId = selectedRole.defaultProfileId;
+      if (shouldSyncRoleProfile && effectiveProfileId) {
+        updates.profileId = effectiveProfileId;
       }
 
       if (values.admissionDate) {
@@ -378,11 +394,13 @@ function EditSheet({
                   </p>
                 </div>
                 <div className="rounded-md border bg-muted/30 p-3">
-                  <p className="font-medium text-foreground">Perfil padrão do cargo</p>
+                  <p className="font-medium text-foreground">Perfil efetivo</p>
                   <p className="mt-1">
-                    {selectedRoleDefaultProfile?.name ??
+                    {selectedFunctionDefaultProfile?.name ??
+                      selectedRoleDefaultProfile?.name ??
+                      selectedFunctionDefaultProfile?.id ??
                       selectedRole?.defaultProfileId ??
-                      (selectedRole ? 'Cargo sem perfil padrão' : 'Selecione um cargo')}
+                      (selectedRole ? 'Sem perfil por cargo/função' : 'Selecione um cargo')}
                   </p>
                 </div>
               </div>
@@ -396,11 +414,11 @@ function EditSheet({
                       <div className="space-y-1">
                         <FormLabel>Manter perfil manual</FormLabel>
                         <p className="text-xs text-muted-foreground">
-                          Quando desligado, o perfil acompanha automaticamente o cargo sempre que houver <code>defaultProfileId</code>. Quando ligado, o perfil atual é preservado como exceção manual.
+                          Quando desligado, o perfil acompanha automaticamente a função quando ela tiver perfil padrão; caso contrário, acompanha o cargo. Quando ligado, o perfil atual é preservado como exceção manual.
                         </p>
-                        {!selectedRole?.defaultProfileId && !profileSyncDisabled && (
+                        {!selectedEffectiveProfile && !profileSyncDisabled && (
                           <p className="text-xs text-amber-700">
-                            O cargo atual ainda não tem perfil padrão. O perfil existente será mantido.
+                            O cargo/função atual ainda não tem perfil padrão. O perfil existente será mantido.
                           </p>
                         )}
                       </div>
@@ -412,9 +430,9 @@ function EditSheet({
                 )}
               />
 
-              {!profileSyncDisabled && selectedRoleDefaultProfile && user?.profileId !== selectedRoleDefaultProfile.id && (
+              {!profileSyncDisabled && selectedEffectiveProfile && user?.profileId !== selectedEffectiveProfile.id && (
                 <p className="text-xs text-emerald-700">
-                  Ao salvar, o perfil deste colaborador será atualizado automaticamente para <strong>{selectedRoleDefaultProfile.name}</strong>.
+                  Ao salvar, o perfil deste colaborador será atualizado automaticamente para <strong>{selectedEffectiveProfile.name}</strong>.
                 </p>
               )}
 

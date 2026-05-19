@@ -93,6 +93,7 @@ const functionSchema = z.object({
   departmentId: z.string().optional(),
   parentId: z.string().optional(),
   compatibleRoleIds: z.array(z.string()).default([]),
+  defaultProfileId: z.string().optional(),
   isActive: z.boolean().default(true),
   description: z.string().trim().optional(),
   publicDescription: z.string().trim().optional(),
@@ -861,6 +862,7 @@ function FunctionDialog({
     currentFunction: JobFunction | null
   ) => Promise<void>;
 }) {
+  const { profiles } = useProfiles();
   const form = useForm<FunctionFormValues>({
     resolver: zodResolver(functionSchema),
     defaultValues: {
@@ -869,6 +871,7 @@ function FunctionDialog({
       departmentId: "",
       parentId: "",
       compatibleRoleIds: [],
+      defaultProfileId: "",
       isActive: true,
       description: "",
       publicDescription: "",
@@ -883,6 +886,7 @@ function FunctionDialog({
       departmentId: item?.departmentId ?? "",
       parentId: item?.parentId ?? defaultParentId ?? "",
       compatibleRoleIds: item?.compatibleRoleIds ?? [],
+      defaultProfileId: item?.defaultProfileId ?? "",
       isActive: item?.isActive ?? true,
       description: item?.description ?? "",
       publicDescription: item?.publicDescription ?? "",
@@ -1015,6 +1019,37 @@ function FunctionDialog({
                       placeholder="Selecione os cargos que podem usar essa função"
                     />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="defaultProfileId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Perfil padrão da função</FormLabel>
+                  <Select
+                    value={field.value || "__none__"}
+                    onValueChange={(value) =>
+                      field.onChange(value === "__none__" ? "" : value)
+                    }
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sem perfil padrão" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sem perfil padrão</SelectItem>
+                      {profiles.map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -1247,6 +1282,7 @@ export function DPSettingsRoles() {
       departmentName: values.departmentId ? departmentNameById.get(values.departmentId) ?? null : null,
       parentId: values.parentId || null,
       compatibleRoleIds: values.compatibleRoleIds,
+      defaultProfileId: values.defaultProfileId || undefined,
       isActive: values.isActive,
       description: values.description || undefined,
       publicDescription: values.publicDescription || undefined,
@@ -1502,6 +1538,7 @@ export function DPSettingsRoles() {
           <>
             {item.departmentId ? <Badge variant="outline">{departmentNameById.get(item.departmentId) ?? item.departmentName ?? "Departamento removido"}</Badge> : <span>Sem departamento</span>}
             {(item.compatibleRoleIds ?? []).length > 0 ? item.compatibleRoleIds?.map((roleId) => <Badge key={roleId} variant="secondary">{roleNameById.get(roleId) ?? roleId}</Badge>) : <span>Sem restrição de cargo</span>}
+            {item.defaultProfileId ? <Badge variant="secondary"><ShieldCheck className="mr-1 h-3.5 w-3.5" />{profileNameById.get(item.defaultProfileId) ?? item.defaultProfileId}</Badge> : null}
           </>
         )}
         onAddRoot={() => {

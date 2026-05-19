@@ -94,6 +94,7 @@ const jobFunctionBaseSchema = z.object({
   publicResponsibilities: stringListSchema,
   requirements: stringListSchema,
   compatibleRoleIds: z.array(z.string().trim().min(1)).default([]),
+  defaultProfileId: z.string().trim().min(1).optional(),
   formQuestions: z.array(formQuestionSchema).default([]),
   isActive: z.boolean().default(true),
 });
