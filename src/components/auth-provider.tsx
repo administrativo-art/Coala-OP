@@ -38,7 +38,7 @@ export interface AuthContextType {
     loginAccessGate?: HrLoginAccessPayload | null;
   }>;
   logout: () => void;
-  addUser: (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => Promise<string | null>;
+  addUser: (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => Promise<{ uid: string } | { error: string }>;
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   terminateUser: (payload: TerminateUserPayload) => Promise<void>;
@@ -280,6 +280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await createUserFn({
         email,
         password,
+        userData,
         username: userData.username,
         profileId: userData.profileId,
         assignedKioskIds: userData.assignedKioskIds,
@@ -288,10 +289,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       const { uid } = result.data as { uid: string };
-      return uid;
-    } catch (error) {
+      return { uid };
+    } catch (error: any) {
       console.error("Error adding user:", error);
-      return null;
+      return { error: error?.message || 'Erro ao criar usuário.' };
     }
   }, []);
 

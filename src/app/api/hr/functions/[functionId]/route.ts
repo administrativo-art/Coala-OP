@@ -34,6 +34,12 @@ export async function PATCH(
     const payload = normalizeJobFunctionPatch(
       jobFunctionPatchSchema.parse(await request.json())
     );
+    if (payload.parentId === functionId) {
+      return NextResponse.json(
+        { error: "Uma função não pode ser pai dela mesma." },
+        { status: 400 }
+      );
+    }
     const current = existing.data() ?? {};
     const nextData = stripUndefined({
       ...current,

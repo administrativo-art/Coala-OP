@@ -483,11 +483,16 @@ export const syncGoalsForRange = onCall(
   }
 );
 
+const internalAppCors = [
+  /op\.coalashakes\.com$/,
+  /smart-converter-752gf\.web\.app$/,
+  /smart-converter-752gf\.firebaseapp\.com$/,
+  /localhost(:\d+)?$/,
+];
+
 // --- Criar usuário (Auth + Firestore) server-side ---
 export const createUser = onCall(
-  { 
-    cors: [/smart-converter-752gf\.web\.app$/, /smart-converter-752gf\.firebaseapp\.com$/, /localhost(:\d+)?$/] 
-  },
+  { cors: internalAppCors },
   async (request: any) => {
     // Apenas admins podem criar usuários
     if (!request.auth) {
@@ -499,7 +504,12 @@ export const createUser = onCall(
       throw new HttpsError('permission-denied', 'Apenas administradores podem criar novos usuários.');
     }
 
-    const { email, password, username, profileId, assignedKioskIds, avatarUrl, operacional } = request.data;
+    const { email, password, userData = {} } = request.data;
+    const username = request.data.username ?? userData.username;
+    const profileId = request.data.profileId ?? userData.profileId;
+    const assignedKioskIds = request.data.assignedKioskIds ?? userData.assignedKioskIds;
+    const avatarUrl = request.data.avatarUrl ?? userData.avatarUrl;
+    const operacional = request.data.operacional ?? userData.operacional;
 
     if (!email || !password || !username || !profileId) {
       throw new HttpsError('invalid-argument', 'Campos obrigatórios: email, password, username, profileId.');
@@ -521,7 +531,13 @@ export const createUser = onCall(
       await auth.setCustomUserClaims(userRecord.uid, { profileId, isDefaultAdmin });
 
       // 4. Cria documento no Firestore
+      const cleanUserData = JSON.parse(JSON.stringify(userData));
+      delete cleanUserData.password;
+      delete cleanUserData.email;
+      delete cleanUserData.id;
+
       await db.collection('users').doc(userRecord.uid).set({
+        ...cleanUserData,
         email,
         username,
         profileId,
@@ -540,7 +556,7 @@ export const createUser = onCall(
 
 // --- Deletar usuário (Auth + Firestore) server-side ---
 export const deleteUser = onCall(
-  { cors: [/smart-converter-752gf\.web\.app$/, /smart-converter-752gf\.firebaseapp\.com$/, /localhost(:\d+)?$/] },
+  { cors: internalAppCors },
   async (request: any) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Não autenticado.');
@@ -569,7 +585,7 @@ export const deleteUser = onCall(
 
 // --- Desligamento DP: remove do Auth, mantém no Firestore para histórico ---
 export const terminateUser = onCall(
-  { cors: [/smart-converter-752gf\.web\.app$/, /smart-converter-752gf\.firebaseapp\.com$/, /localhost(:\d+)?$/] },
+  { cors: internalAppCors },
   async (request: any) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
     if (!request.auth.token.isDefaultAdmin) {

@@ -31,6 +31,12 @@ export async function PATCH(
     const payload = normalizeJobRolePatch(
       jobRolePatchSchema.parse(await request.json())
     );
+    if (payload.parentId === roleId || payload.reportsTo === roleId) {
+      return NextResponse.json(
+        { error: "Um cargo não pode ser pai dele mesmo." },
+        { status: 400 }
+      );
+    }
     const current = existing.data() ?? {};
     const nextData = stripUndefined({
       ...current,

@@ -4,7 +4,7 @@ import React from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Briefcase, ChevronDown, ChevronRight, Pencil, Plus, ShieldCheck, Trash2, Users2, Workflow } from "lucide-react";
+import { Briefcase, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Plus, PlusCircle, ShieldCheck, Trash2, Users2, Workflow } from "lucide-react";
 
 import type { HrFormQuestion, HrQuestionType, JobDepartment, JobFunction, JobRole } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
@@ -15,6 +15,7 @@ import {
   createHrFunction,
   createHrRole,
   syncHrRoleProfile,
+  updateHrDepartment,
   updateHrFunction,
   updateHrRole,
 } from "@/features/hr/lib/client";
@@ -63,18 +64,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const roleSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do cargo."),
   publicTitle: z.string().trim().optional(),
   departmentId: z.string().optional(),
+  parentId: z.string().optional(),
   reportsTo: z.string().optional(),
   defaultProfileId: z.string().optional(),
   loginRestricted: z.boolean().default(false),
@@ -89,6 +91,7 @@ const functionSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome da função."),
   publicTitle: z.string().trim().optional(),
   departmentId: z.string().optional(),
+  parentId: z.string().optional(),
   compatibleRoleIds: z.array(z.string()).default([]),
   isActive: z.boolean().default(true),
   description: z.string().trim().optional(),
@@ -96,6 +99,15 @@ const functionSchema = z.object({
 });
 
 type FunctionFormValues = z.infer<typeof functionSchema>;
+
+const departmentSchema = z.object({
+  name: z.string().trim().min(2, "Informe o nome do departamento."),
+  parentId: z.string().optional(),
+  description: z.string().trim().optional(),
+  isActive: z.boolean().default(true),
+});
+
+type DepartmentFormValues = z.infer<typeof departmentSchema>;
 
 const QUESTION_TYPE_LABELS: Record<HrQuestionType, string> = {
   text: 'Texto livre',
@@ -116,12 +128,288 @@ function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+type HrTreeItem = {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  reportsTo?: string | null;
+  departmentName?: string | null;
+  isActive?: boolean;
+  order?: number;
+};
+
+type HrTreeNode<T extends HrTreeItem> = T & { children: Array<HrTreeNode<T>> };
+
+function getTreeParentId(item: HrTreeItem) {
+  return item.parentId ?? item.reportsTo ?? null;
+}
+
+function buildHrTree<T extends HrTreeItem>(items: T[], parentId: string | null = null): Array<HrTreeNode<T>> {
+  return items
+    .filter((item) => getTreeParentId(item) === parentId)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name))
+    .map((item) => ({ ...item, children: buildHrTree(items, item.id) }));
+}
+
+function HrTreeSection<T extends HrTreeItem>({
+  title,
+  description,
+  icon,
+  items,
+  emptyLabel,
+  addRootLabel,
+  addChildLabel,
+  canManage,
+  meta,
+  onAddRoot,
+  onAddChild,
+  onEdit,
+}: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  items: T[];
+  emptyLabel: string;
+  addRootLabel: string;
+  addChildLabel: string;
+  canManage: boolean;
+  meta?: (item: T) => React.ReactNode;
+  onAddRoot: () => void;
+  onAddChild: (parentId: string) => void;
+  onEdit: (item: T) => void;
+}) {
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+  const tree = React.useMemo(() => buildHrTree(items), [items]);
+
+  React.useEffect(() => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      tree.forEach((node) => next.add(node.id));
+      return next;
+    });
+  }, [tree]);
+
+  function toggle(id: string) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function renderNode(node: HrTreeNode<T>, depth: number, number: string) {
+    const hasChildren = node.children.length > 0;
+    const isExpanded = expanded.has(node.id);
+
+    return (
+      <div key={node.id} className="space-y-1">
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-lg border border-transparent px-2 py-2 text-sm transition-colors hover:bg-muted/40",
+            node.isActive === false && "opacity-60"
+          )}
+          style={{ paddingLeft: `${8 + depth * 20}px` }}
+        >
+          <button
+            type="button"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+            onClick={() => hasChildren && toggle(node.id)}
+          >
+            {hasChildren ? (
+              isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+            ) : (
+              <span className="h-4 w-4" />
+            )}
+          </button>
+          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{number}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className={cn("truncate", depth === 0 && "font-semibold")}>{node.name}</span>
+              {node.isActive === false && <StatusBadge active={false} />}
+            </div>
+            {meta ? <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-muted-foreground">{meta(node)}</div> : null}
+          </div>
+          {canManage && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel className="max-w-52 truncate text-xs font-normal text-muted-foreground">
+                  {node.name}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onAddChild(node.id)}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  {addChildLabel}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onEdit(node)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+        {hasChildren && isExpanded && (
+          <div className="space-y-1">
+            {node.children.map((child, index) => renderNode(child, depth + 1, `${number}.${index + 1}`))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              {icon}
+              {title}
+            </CardTitle>
+            <CardDescription>{description}</CardDescription>
+          </div>
+          {canManage && (
+            <Button type="button" onClick={onAddRoot}>
+              {addRootLabel}
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {tree.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+            {emptyLabel}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {tree.map((node, index) => renderNode(node, 0, String(index + 1)))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DepartmentDialog({
+  open,
+  onOpenChange,
+  department,
+  departments,
+  defaultParentId,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (value: boolean) => void;
+  department: JobDepartment | null;
+  departments: JobDepartment[];
+  defaultParentId: string | null;
+  onSubmit: (values: DepartmentFormValues, currentDepartment: JobDepartment | null) => Promise<void>;
+}) {
+  const form = useForm<DepartmentFormValues>({
+    resolver: zodResolver(departmentSchema),
+    defaultValues: { name: "", parentId: "", description: "", isActive: true },
+  });
+
+  React.useEffect(() => {
+    if (!open) return;
+    form.reset({
+      name: department?.name ?? "",
+      parentId: department?.parentId ?? defaultParentId ?? "",
+      description: department?.description ?? "",
+      isActive: department?.isActive ?? true,
+    });
+  }, [defaultParentId, department, form, open]);
+
+  const parentOptions = departments.filter((item) => item.id !== department?.id);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{department ? "Editar departamento" : "Novo departamento"}</DialogTitle>
+          <DialogDescription>Crie níveis livres para organizar áreas, subáreas e times.</DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(async (values) => {
+              await onSubmit(values, department);
+              onOpenChange(false);
+            })}
+            className="space-y-4"
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome</FormLabel>
+                  <FormControl><Input placeholder="Ex: Operacional" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="parentId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Departamento pai</FormLabel>
+                  <Select value={field.value || "__none__"} onValueChange={(value) => field.onChange(value === "__none__" ? "" : value)}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Sem pai" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sem pai</SelectItem>
+                      {parentOptions.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Descrição</FormLabel>
+                  <FormControl><Textarea rows={3} placeholder="Descrição interna opcional." {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="isActive"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                  <FormLabel>Ativo</FormLabel>
+                  <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>{department ? "Salvar" : "Criar"}</Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function RoleDialog({
   open,
   onOpenChange,
   role,
   roles,
   departments,
+  defaultParentId,
   onSubmit,
 }: {
   open: boolean;
@@ -129,6 +417,7 @@ function RoleDialog({
   role: JobRole | null;
   roles: JobRole[];
   departments: JobDepartment[];
+  defaultParentId: string | null;
   onSubmit: (values: RoleFormValues, formQuestions: HrFormQuestion[], currentRole: JobRole | null) => Promise<void>;
 }) {
   const { profiles } = useProfiles();
@@ -138,6 +427,7 @@ function RoleDialog({
       name: "",
       publicTitle: "",
       departmentId: "",
+      parentId: "",
       reportsTo: "",
       defaultProfileId: "",
       loginRestricted: false,
@@ -160,7 +450,8 @@ function RoleDialog({
       name: role?.name ?? "",
       publicTitle: role?.publicTitle ?? "",
       departmentId: role?.departmentId ?? "",
-      reportsTo: role?.reportsTo ?? "",
+      parentId: role?.parentId ?? role?.reportsTo ?? defaultParentId ?? "",
+      reportsTo: role?.reportsTo ?? role?.parentId ?? defaultParentId ?? "",
       defaultProfileId: role?.defaultProfileId ?? "",
       loginRestricted: role?.loginRestricted ?? false,
       isActive: role?.isActive ?? true,
@@ -171,7 +462,7 @@ function RoleDialog({
     setShowQSection(false);
     setShowQForm(false);
     setNewQ({ text: '', type: 'text', required: false, eliminatory: false, options: '' });
-  }, [form, open, role]);
+  }, [defaultParentId, form, open, role]);
 
   function addQuestion() {
     const text = newQ.text.trim();
@@ -280,10 +571,10 @@ function RoleDialog({
               />
               <FormField
                 control={form.control}
-                name="reportsTo"
+                name="parentId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Reporta para</FormLabel>
+                    <FormLabel>Cargo pai</FormLabel>
                     <Select
                       value={field.value || "__none__"}
                       onValueChange={(value) =>
@@ -292,11 +583,11 @@ function RoleDialog({
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Sem superior direto" />
+                          <SelectValue placeholder="Sem cargo pai" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="__none__">Sem superior direto</SelectItem>
+                        <SelectItem value="__none__">Sem cargo pai</SelectItem>
                         {reportsToOptions.map((item) => (
                           <SelectItem key={item.id} value={item.id}>
                             {item.name}
@@ -554,6 +845,8 @@ function FunctionDialog({
   item,
   roles,
   departments,
+  functions,
+  defaultParentId,
   onSubmit,
 }: {
   open: boolean;
@@ -561,6 +854,8 @@ function FunctionDialog({
   item: JobFunction | null;
   roles: JobRole[];
   departments: JobDepartment[];
+  functions: JobFunction[];
+  defaultParentId: string | null;
   onSubmit: (
     values: FunctionFormValues,
     currentFunction: JobFunction | null
@@ -572,6 +867,7 @@ function FunctionDialog({
       name: "",
       publicTitle: "",
       departmentId: "",
+      parentId: "",
       compatibleRoleIds: [],
       isActive: true,
       description: "",
@@ -585,14 +881,16 @@ function FunctionDialog({
       name: item?.name ?? "",
       publicTitle: item?.publicTitle ?? "",
       departmentId: item?.departmentId ?? "",
+      parentId: item?.parentId ?? defaultParentId ?? "",
       compatibleRoleIds: item?.compatibleRoleIds ?? [],
       isActive: item?.isActive ?? true,
       description: item?.description ?? "",
       publicDescription: item?.publicDescription ?? "",
     });
-  }, [form, item, open]);
+  }, [defaultParentId, form, item, open]);
 
   const roleOptions = roles.map((role) => ({ value: role.id, label: role.name }));
+  const parentOptions = functions.filter((functionItem) => functionItem.id !== item?.id);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -640,36 +938,68 @@ function FunctionDialog({
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="departmentId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Departamento</FormLabel>
-                  <Select
-                    value={field.value || "__none__"}
-                    onValueChange={(value) =>
-                      field.onChange(value === "__none__" ? "" : value)
-                    }
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sem departamento" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="__none__">Sem departamento</SelectItem>
-                      {departments.filter((department) => department.isActive !== false).map((department) => (
-                        <SelectItem key={department.id} value={department.id}>
-                          {department.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="departmentId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Departamento</FormLabel>
+                    <Select
+                      value={field.value || "__none__"}
+                      onValueChange={(value) =>
+                        field.onChange(value === "__none__" ? "" : value)
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sem departamento" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sem departamento</SelectItem>
+                        {departments.filter((department) => department.isActive !== false).map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="parentId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Função pai</FormLabel>
+                    <Select
+                      value={field.value || "__none__"}
+                      onValueChange={(value) =>
+                        field.onChange(value === "__none__" ? "" : value)
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sem função pai" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sem função pai</SelectItem>
+                        {parentOptions.map((functionItem) => (
+                          <SelectItem key={functionItem.id} value={functionItem.id}>
+                            {functionItem.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
@@ -783,14 +1113,18 @@ export function DPSettingsRoles() {
 
   const [roleDialogOpen, setRoleDialogOpen] = React.useState(false);
   const [functionDialogOpen, setFunctionDialogOpen] = React.useState(false);
+  const [departmentDialogOpen, setDepartmentDialogOpen] = React.useState(false);
   const [editingRole, setEditingRole] = React.useState<JobRole | null>(null);
   const [editingFunction, setEditingFunction] = React.useState<JobFunction | null>(null);
+  const [editingDepartment, setEditingDepartment] = React.useState<JobDepartment | null>(null);
+  const [defaultRoleParentId, setDefaultRoleParentId] = React.useState<string | null>(null);
+  const [defaultFunctionParentId, setDefaultFunctionParentId] = React.useState<string | null>(null);
+  const [defaultDepartmentParentId, setDefaultDepartmentParentId] = React.useState<string | null>(null);
   const [syncRole, setSyncRole] = React.useState<JobRole | null>(null);
   const [syncingRoleId, setSyncingRoleId] = React.useState<string | null>(null);
   const [roleQuery, setRoleQuery] = React.useState("");
   const [functionQuery, setFunctionQuery] = React.useState("");
-  const [departmentName, setDepartmentName] = React.useState("");
-  const [creatingDepartment, setCreatingDepartment] = React.useState(false);
+  const [departmentQuery, setDepartmentQuery] = React.useState("");
 
   const filteredRoles = React.useMemo(() => {
     const normalized = roleQuery.trim().toLowerCase();
@@ -801,6 +1135,16 @@ export function DPSettingsRoles() {
         .some((value) => value!.toLowerCase().includes(normalized))
     );
   }, [roleQuery, roles]);
+
+  const filteredDepartments = React.useMemo(() => {
+    const normalized = departmentQuery.trim().toLowerCase();
+    if (!normalized) return departments;
+    return departments.filter((department) =>
+      [department.name, department.slug, department.description]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(normalized))
+    );
+  }, [departmentQuery, departments]);
 
   const filteredFunctions = React.useMemo(() => {
     const normalized = functionQuery.trim().toLowerCase();
@@ -858,7 +1202,8 @@ export function DPSettingsRoles() {
       publicTitle: values.publicTitle || undefined,
       departmentId: values.departmentId || null,
       departmentName: values.departmentId ? departmentNameById.get(values.departmentId) ?? null : null,
-      reportsTo: values.reportsTo || null,
+      parentId: values.parentId || null,
+      reportsTo: values.parentId || null,
       defaultProfileId: values.defaultProfileId || undefined,
       loginRestricted: values.loginRestricted,
       isActive: values.isActive,
@@ -900,6 +1245,7 @@ export function DPSettingsRoles() {
       publicTitle: values.publicTitle || undefined,
       departmentId: values.departmentId || null,
       departmentName: values.departmentId ? departmentNameById.get(values.departmentId) ?? null : null,
+      parentId: values.parentId || null,
       compatibleRoleIds: values.compatibleRoleIds,
       isActive: values.isActive,
       description: values.description || undefined,
@@ -928,16 +1274,27 @@ export function DPSettingsRoles() {
     }
   }
 
-  async function handleCreateDepartment() {
+  async function handleDepartmentSubmit(values: DepartmentFormValues, department: JobDepartment | null) {
     if (!firebaseUser) return;
-    const name = departmentName.trim();
+    const name = values.name.trim();
     if (!name) return;
 
     try {
-      setCreatingDepartment(true);
-      await createHrDepartment(firebaseUser, { name, isActive: true });
-      setDepartmentName("");
-      toast({ title: "Departamento criado." });
+      const payload = {
+        name,
+        parentId: values.parentId || null,
+        description: values.description || undefined,
+        isActive: values.isActive,
+      };
+
+      if (department) {
+        await updateHrDepartment(firebaseUser, department.id, payload);
+        toast({ title: "Departamento atualizado." });
+      } else {
+        await createHrDepartment(firebaseUser, payload);
+        toast({ title: "Departamento criado." });
+      }
+      setEditingDepartment(null);
       await refresh();
     } catch (departmentError) {
       toast({
@@ -947,8 +1304,7 @@ export function DPSettingsRoles() {
             : "Erro ao criar departamento.",
         variant: "destructive",
       });
-    } finally {
-      setCreatingDepartment(false);
+      throw departmentError;
     }
   }
 
@@ -1041,339 +1397,145 @@ export function DPSettingsRoles() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Briefcase className="h-5 w-5" />
-              Cargos
-            </CardTitle>
-            <CardDescription>
-              Base do organograma. Cada cargo pode apontar para um perfil padrão sem trocar o modelo atual de acesso.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Input
-                value={roleQuery}
-                onChange={(event) => setRoleQuery(event.target.value)}
-                placeholder="Buscar cargo por nome, título público ou slug"
-              />
-              {access.canManageCatalog && (
-                <Button
-                  onClick={() => {
-                    setEditingRole(null);
-                    setRoleDialogOpen(true);
-                  }}
-                >
-                  Novo cargo
-                </Button>
-              )}
-            </div>
-
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cargo</TableHead>
-                  <TableHead>Departamento</TableHead>
-                  <TableHead>Hierarquia</TableHead>
-                  <TableHead>Perfil padrão</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRoles.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
-                      Nenhum cargo cadastrado.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredRoles.map((role) => (
-                    <TableRow key={role.id}>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="font-medium">{role.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Público: {role.publicTitle}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {role.departmentId ? (
-                          <Badge variant="outline">
-                            {departmentNameById.get(role.departmentId) ?? role.departmentName ?? "Departamento removido"}
-                          </Badge>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Sem departamento</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1 text-sm">
-                          <div>
-                            Reporta para:{" "}
-                            <span className="text-muted-foreground">
-                              {role.reportsTo ? roleNameById.get(role.reportsTo) ?? "Cargo removido" : "Topo da estrutura"}
-                            </span>
-                          </div>
-                          {role.loginRestricted && (
-                            <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-                              Login restrito por escala
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-2">
-                          {role.defaultProfileId ? (
-                            <Badge variant="secondary">
-                              <ShieldCheck className="mr-1 h-3.5 w-3.5" />
-                              {profileNameById.get(role.defaultProfileId) ?? role.defaultProfileId}
-                            </Badge>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Sem perfil padrão</span>
-                          )}
-                          <div className="text-xs text-muted-foreground">
-                            {(() => {
-                              const syncSummary = roleSyncSummary.get(role.id) ?? { assigned: 0, mismatched: 0 };
-
-                              if (syncSummary.assigned === 0) {
-                                return "Nenhum colaborador ativo vinculado a este cargo.";
-                              }
-
-                              if (!role.defaultProfileId) {
-                                return `${syncSummary.assigned} colaborador(es) ativo(s) sem perfil padrão para sincronizar.`;
-                              }
-
-                              if (syncSummary.mismatched === 0) {
-                                return `${syncSummary.assigned} colaborador(es) já seguem o perfil padrão.`;
-                              }
-
-                              return `${syncSummary.mismatched} de ${syncSummary.assigned} colaborador(es) estão fora do perfil padrão.`;
-                            })()}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge active={role.isActive} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {access.canManageCatalog && (
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={
-                                syncingRoleId === role.id ||
-                                !role.defaultProfileId ||
-                                (roleSyncSummary.get(role.id)?.assigned ?? 0) === 0 ||
-                                (roleSyncSummary.get(role.id)?.mismatched ?? 0) === 0
-                              }
-                              onClick={() => setSyncRole(role)}
-                            >
-                              {syncingRoleId === role.id ? "Aplicando..." : "Aplicar perfil"}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setEditingRole(role);
-                                setRoleDialogOpen(true);
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm text-muted-foreground">Departamentos ativos</div>
+            <div className="mt-1 text-3xl font-semibold">{departments.filter((department) => department.isActive !== false).length}</div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Workflow className="h-5 w-5" />
-              Resumo
-            </CardTitle>
-            <CardDescription>
-              Camada nova e paralela. Nada aqui substitui o `profileId` atual.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded-lg border p-4">
-              <div className="text-sm text-muted-foreground">Departamentos</div>
-              <div className="mt-1 text-3xl font-semibold">
-                {departments.filter((department) => department.isActive !== false).length}
-              </div>
-            </div>
-            <div className="rounded-lg border p-4">
-              <div className="text-sm text-muted-foreground">Cargos ativos</div>
-              <div className="mt-1 text-3xl font-semibold">
-                {roles.filter((role) => role.isActive).length}
-              </div>
-            </div>
-            <div className="rounded-lg border p-4">
-              <div className="text-sm text-muted-foreground">Funções ativas</div>
-              <div className="mt-1 text-3xl font-semibold">
-                {functions.filter((item) => item.isActive).length}
-              </div>
-            </div>
-            <div className="rounded-lg border p-4 text-sm text-muted-foreground">
-              O perfil padrão do cargo agora pode ser aplicado manualmente aos colaboradores vinculados, sem substituir a autoridade atual de `profileId`.
-            </div>
-            {access.canManageCatalog && (
-              <div className="rounded-lg border p-4 space-y-3">
-                <div>
-                  <div className="text-sm font-medium">Novo departamento</div>
-                  <div className="text-xs text-muted-foreground">Use para agrupar cargos e funções no organograma.</div>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={departmentName}
-                    onChange={(event) => setDepartmentName(event.target.value)}
-                    placeholder="Ex: Operacional"
-                  />
-                  <Button
-                    type="button"
-                    onClick={() => void handleCreateDepartment()}
-                    disabled={creatingDepartment || !departmentName.trim()}
-                  >
-                    Criar
-                  </Button>
-                </div>
-                {departments.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {departments.map((department) => (
-                      <Badge key={department.id} variant="secondary">
-                        {department.name}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+          <CardContent className="p-4">
+            <div className="text-sm text-muted-foreground">Cargos ativos</div>
+            <div className="mt-1 text-3xl font-semibold">{roles.filter((role) => role.isActive).length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm text-muted-foreground">Funções ativas</div>
+            <div className="mt-1 text-3xl font-semibold">{functions.filter((item) => item.isActive).length}</div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <Users2 className="h-5 w-5" />
-            Funções
-          </CardTitle>
-          <CardDescription>
-            Funções operacionais compatíveis com cargos específicos.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Input
-              value={functionQuery}
-              onChange={(event) => setFunctionQuery(event.target.value)}
-              placeholder="Buscar função por nome, título público ou slug"
-            />
-            {access.canManageCatalog && (
-              <Button
-                onClick={() => {
-                  setEditingFunction(null);
-                  setFunctionDialogOpen(true);
-                }}
-              >
-                Nova função
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Input value={departmentQuery} onChange={(event) => setDepartmentQuery(event.target.value)} placeholder="Buscar departamento" />
+        <Input value={roleQuery} onChange={(event) => setRoleQuery(event.target.value)} placeholder="Buscar cargo" />
+        <Input value={functionQuery} onChange={(event) => setFunctionQuery(event.target.value)} placeholder="Buscar função" />
+      </div>
+
+      <HrTreeSection
+        title="Departamentos"
+        description="Estruture áreas e subáreas com níveis livres."
+        icon={<Workflow className="h-5 w-5" />}
+        items={filteredDepartments}
+        emptyLabel="Nenhum departamento cadastrado."
+        addRootLabel="Novo departamento"
+        addChildLabel="Adicionar subdepartamento"
+        canManage={access.canManageCatalog}
+        meta={(department) => department.description ? <span>{department.description}</span> : <span>{department.parentId ? "Subdepartamento" : "Raiz"}</span>}
+        onAddRoot={() => {
+          setEditingDepartment(null);
+          setDefaultDepartmentParentId(null);
+          setDepartmentDialogOpen(true);
+        }}
+        onAddChild={(parentId) => {
+          setEditingDepartment(null);
+          setDefaultDepartmentParentId(parentId);
+          setDepartmentDialogOpen(true);
+        }}
+        onEdit={(department) => {
+          setEditingDepartment(department);
+          setDefaultDepartmentParentId(null);
+          setDepartmentDialogOpen(true);
+        }}
+      />
+
+      <HrTreeSection
+        title="Cargos"
+        description="Base do organograma. Crie níveis de cargo como no plano de contas."
+        icon={<Briefcase className="h-5 w-5" />}
+        items={filteredRoles}
+        emptyLabel="Nenhum cargo cadastrado."
+        addRootLabel="Novo cargo"
+        addChildLabel="Adicionar subcargo"
+        canManage={access.canManageCatalog}
+        meta={(role) => (
+          <>
+            {role.departmentId ? <Badge variant="outline">{departmentNameById.get(role.departmentId) ?? role.departmentName ?? "Departamento removido"}</Badge> : <span>Sem departamento</span>}
+            {role.defaultProfileId ? <Badge variant="secondary"><ShieldCheck className="mr-1 h-3.5 w-3.5" />{profileNameById.get(role.defaultProfileId) ?? role.defaultProfileId}</Badge> : null}
+            {role.loginRestricted ? <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">Login restrito por escala</Badge> : null}
+            {access.canManageCatalog && role.defaultProfileId && (roleSyncSummary.get(role.id)?.mismatched ?? 0) > 0 ? (
+              <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" disabled={syncingRoleId === role.id} onClick={() => setSyncRole(role)}>
+                {syncingRoleId === role.id ? "Aplicando..." : "Aplicar perfil"}
               </Button>
-            )}
-          </div>
+            ) : null}
+          </>
+        )}
+        onAddRoot={() => {
+          setEditingRole(null);
+          setDefaultRoleParentId(null);
+          setRoleDialogOpen(true);
+        }}
+        onAddChild={(parentId) => {
+          setEditingRole(null);
+          setDefaultRoleParentId(parentId);
+          setRoleDialogOpen(true);
+        }}
+        onEdit={(role) => {
+          setEditingRole(role);
+          setDefaultRoleParentId(null);
+          setRoleDialogOpen(true);
+        }}
+      />
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Função</TableHead>
-                <TableHead>Departamento</TableHead>
-                <TableHead>Cargos compatíveis</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredFunctions.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    Nenhuma função cadastrada.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredFunctions.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          Público: {item.publicTitle}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {item.departmentId ? (
-                        <Badge variant="outline">
-                          {departmentNameById.get(item.departmentId) ?? item.departmentName ?? "Departamento removido"}
-                        </Badge>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">Sem departamento</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        {(item.compatibleRoleIds ?? []).length > 0 ? (
-                          item.compatibleRoleIds?.map((roleId) => (
-                            <Badge key={roleId} variant="secondary">
-                              {roleNameById.get(roleId) ?? roleId}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            Sem restrição cadastrada
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge active={item.isActive} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {access.canManageCatalog && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setEditingFunction(item);
-                            setFunctionDialogOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <HrTreeSection
+        title="Funções"
+        description="Atribuições complementares, compatíveis com um ou mais cargos."
+        icon={<Users2 className="h-5 w-5" />}
+        items={filteredFunctions}
+        emptyLabel="Nenhuma função cadastrada."
+        addRootLabel="Nova função"
+        addChildLabel="Adicionar subfunção"
+        canManage={access.canManageCatalog}
+        meta={(item) => (
+          <>
+            {item.departmentId ? <Badge variant="outline">{departmentNameById.get(item.departmentId) ?? item.departmentName ?? "Departamento removido"}</Badge> : <span>Sem departamento</span>}
+            {(item.compatibleRoleIds ?? []).length > 0 ? item.compatibleRoleIds?.map((roleId) => <Badge key={roleId} variant="secondary">{roleNameById.get(roleId) ?? roleId}</Badge>) : <span>Sem restrição de cargo</span>}
+          </>
+        )}
+        onAddRoot={() => {
+          setEditingFunction(null);
+          setDefaultFunctionParentId(null);
+          setFunctionDialogOpen(true);
+        }}
+        onAddChild={(parentId) => {
+          setEditingFunction(null);
+          setDefaultFunctionParentId(parentId);
+          setFunctionDialogOpen(true);
+        }}
+        onEdit={(item) => {
+          setEditingFunction(item);
+          setDefaultFunctionParentId(null);
+          setFunctionDialogOpen(true);
+        }}
+      />
 
+      <DepartmentDialog
+        open={departmentDialogOpen}
+        onOpenChange={setDepartmentDialogOpen}
+        department={editingDepartment}
+        departments={departments}
+        defaultParentId={defaultDepartmentParentId}
+        onSubmit={handleDepartmentSubmit}
+      />
       <RoleDialog
         open={roleDialogOpen}
         onOpenChange={setRoleDialogOpen}
         role={editingRole}
         roles={roles}
         departments={departments}
+        defaultParentId={defaultRoleParentId}
         onSubmit={handleRoleSubmit}
       />
 
@@ -1383,6 +1545,8 @@ export function DPSettingsRoles() {
         item={editingFunction}
         roles={roles}
         departments={departments}
+        functions={functions}
+        defaultParentId={defaultFunctionParentId}
         onSubmit={handleFunctionSubmit}
       />
 

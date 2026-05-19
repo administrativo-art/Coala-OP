@@ -521,8 +521,11 @@ function EditSheet({
               control={form.control}
               name="needsTransportVoucher"
               render={({ field }) => (
-                <FormItem className="flex items-center justify-between">
-                  <FormLabel>Vale-transporte</FormLabel>
+                  <FormItem className="flex items-center justify-between">
+                  <div>
+                    <FormLabel>Vale-transporte</FormLabel>
+                    <p className="text-xs text-muted-foreground">Valor calculado por dia trabalhado na escala.</p>
+                  </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
@@ -536,7 +539,7 @@ function EditSheet({
                 name="transportVoucherValue"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Valor mensal (R$)</FormLabel>
+                    <FormLabel>Valor diário (R$)</FormLabel>
                     <FormControl>
                       <Input
                         type="number"

@@ -48,6 +48,8 @@ const formQuestionSchema = z.object({
 export const jobDepartmentCreateSchema = z.object({
   name: z.string().trim().min(2).max(120),
   slug: z.string().trim().min(1).max(120).optional(),
+  parentId: z.string().trim().min(1).nullable().optional(),
+  order: z.number().int().nonnegative().optional(),
   description: z.string().trim().max(1000).optional(),
   isActive: z.boolean().default(true),
 });
@@ -58,6 +60,8 @@ const jobRoleBaseSchema = z.object({
   slug: z.string().trim().min(1).max(120).optional(),
   departmentId: z.string().trim().min(1).nullable().optional(),
   departmentName: z.string().trim().min(1).max(120).nullable().optional(),
+  parentId: z.string().trim().min(1).nullable().optional(),
+  order: z.number().int().nonnegative().optional(),
   reportsTo: z.string().trim().min(1).nullable().optional(),
   description: z.string().trim().max(4000).optional(),
   publicDescription: z.string().trim().max(4000).optional(),
@@ -82,6 +86,8 @@ const jobFunctionBaseSchema = z.object({
   slug: z.string().trim().min(1).max(120).optional(),
   departmentId: z.string().trim().min(1).nullable().optional(),
   departmentName: z.string().trim().min(1).max(120).nullable().optional(),
+  parentId: z.string().trim().min(1).nullable().optional(),
+  order: z.number().int().nonnegative().optional(),
   description: z.string().trim().max(4000).optional(),
   publicDescription: z.string().trim().max(4000).optional(),
   responsibilities: stringListSchema,
@@ -94,6 +100,10 @@ const jobFunctionBaseSchema = z.object({
 
 export const jobRoleCreateSchema = jobRoleBaseSchema;
 export const jobFunctionCreateSchema = jobFunctionBaseSchema;
+export const jobDepartmentPatchSchema = jobDepartmentCreateSchema.partial().refine(
+  (value) => Object.keys(value).length > 0,
+  { message: "Informe ao menos um campo para atualização." }
+);
 
 export const jobRolePatchSchema = jobRoleBaseSchema.partial().refine(
   (value) => Object.keys(value).length > 0,
@@ -111,7 +121,27 @@ export function normalizeJobDepartmentInput(
   return stripUndefined({
     ...input,
     slug: input.slug?.trim() || slugify(input.name),
+    parentId: input.parentId ?? null,
     description: input.description?.trim() || undefined,
+  });
+}
+
+export function normalizeJobDepartmentPatch(
+  input: z.infer<typeof jobDepartmentPatchSchema>
+) {
+  return stripUndefined({
+    ...input,
+    slug:
+      input.slug === undefined
+        ? input.name
+          ? slugify(input.name)
+          : undefined
+        : input.slug.trim() || (input.name ? slugify(input.name) : undefined),
+    parentId: input.parentId === undefined ? undefined : input.parentId,
+    description:
+      input.description === undefined
+        ? undefined
+        : input.description.trim() || undefined,
   });
 }
 
@@ -162,6 +192,7 @@ export function normalizeJobRoleInput(
     ...input,
     publicTitle: input.publicTitle?.trim() || input.name,
     slug: input.slug?.trim() || slugify(input.name),
+    parentId: input.parentId ?? input.reportsTo ?? null,
     reportsTo: input.reportsTo ?? null,
     responsibilities: normalizeStringList(input.responsibilities),
     publicResponsibilities: normalizeStringList(input.publicResponsibilities),
@@ -189,6 +220,12 @@ export function normalizeJobRolePatch(
           : undefined
         : input.slug.trim() || (input.name ? slugify(input.name) : undefined),
     reportsTo: input.reportsTo === undefined ? undefined : input.reportsTo,
+    parentId:
+      input.parentId === undefined
+        ? input.reportsTo === undefined
+          ? undefined
+          : input.reportsTo
+        : input.parentId,
     responsibilities:
       input.responsibilities === undefined
         ? undefined
@@ -227,6 +264,7 @@ export function normalizeJobFunctionInput(
     ...input,
     publicTitle: input.publicTitle?.trim() || input.name,
     slug: input.slug?.trim() || slugify(input.name),
+    parentId: input.parentId ?? null,
     responsibilities: normalizeStringList(input.responsibilities),
     publicResponsibilities: normalizeStringList(input.publicResponsibilities),
     requirements: normalizeStringList(input.requirements),
@@ -250,6 +288,7 @@ export function normalizeJobFunctionPatch(
           ? slugify(input.name)
           : undefined
         : input.slug.trim() || (input.name ? slugify(input.name) : undefined),
+    parentId: input.parentId === undefined ? undefined : input.parentId,
     responsibilities:
       input.responsibilities === undefined
         ? undefined

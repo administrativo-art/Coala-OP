@@ -210,6 +210,22 @@ export async function createHrDepartment(
   );
 }
 
+export async function updateHrDepartment(
+  firebaseUser: FirebaseUserLike,
+  departmentId: string,
+  payload: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ department: JobDepartment }>(
+    `/api/hr/departments/${departmentId}`,
+    firebaseUser,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    "Falha ao atualizar departamento."
+  );
+}
+
 export async function createHrRole(
   firebaseUser: FirebaseUserLike,
   payload: Record<string, unknown>

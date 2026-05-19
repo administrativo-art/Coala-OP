@@ -596,6 +596,8 @@ export type JobDepartment = {
   id: string;
   name: string;
   slug: string;
+  parentId?: string | null;
+  order?: number;
   description?: string;
   isActive: boolean;
   createdAt: string;
@@ -610,6 +612,8 @@ export type JobRole = {
   slug: string;
   departmentId?: string | null;
   departmentName?: string | null;
+  parentId?: string | null;
+  order?: number;
   reportsTo?: string | null;
   description?: string;
   publicDescription?: string;
@@ -637,6 +641,8 @@ export type JobFunction = {
   slug: string;
   departmentId?: string | null;
   departmentName?: string | null;
+  parentId?: string | null;
+  order?: number;
   description?: string;
   publicDescription?: string;
   responsibilities?: string[];

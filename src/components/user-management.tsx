@@ -302,15 +302,14 @@ export function UserManagement() {
 
   const onSubmit = async (values: UserFormValues) => {
     const avatarUrl = values.avatarUrl || '';
-    if (editingUser) {
-      // Converte datas DP para Timestamp
-      const admissionDate = values.admissionDate
-        ? Timestamp.fromDate(new Date(values.admissionDate + 'T12:00:00'))
-        : undefined;
-      const birthDate = values.birthDate
-        ? Timestamp.fromDate(new Date(values.birthDate + 'T12:00:00'))
-        : undefined;
+    const admissionDate = values.admissionDate
+      ? Timestamp.fromDate(new Date(values.admissionDate + 'T12:00:00'))
+      : undefined;
+    const birthDate = values.birthDate
+      ? Timestamp.fromDate(new Date(values.birthDate + 'T12:00:00'))
+      : undefined;
 
+    if (editingUser) {
       const updatedData: Partial<User> = {
           ...values,
           avatarUrl,
@@ -339,7 +338,7 @@ export function UserManagement() {
              form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
              return;
         }
-      const uid = await addUser({
+      const createResult = await addUser({
           username: values.username,
           profileId: values.profileId,
           assignedKioskIds: values.assignedKioskIds,
@@ -350,12 +349,20 @@ export function UserManagement() {
           pdvOperatorIds: Object.fromEntries(
             Object.entries(pdvOperatorIds).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)])
           ),
+          shiftDefinitionId: values.shiftDefinitionId || undefined,
+          needsTransportVoucher: values.needsTransportVoucher,
+          transportVoucherValue: values.needsTransportVoucher ? values.transportVoucherValue : undefined,
+          registrationIdBizneo: values.registrationIdBizneo || undefined,
+          registrationIdPdv: values.registrationIdPdv || undefined,
+          admissionDate,
+          birthDate,
       }, values.email, values.password);
 
-      if (!uid) {
-        toast({ title: 'Erro ao criar usuário.', description: 'Verifique o console para detalhes.', variant: 'destructive' });
+      if ('error' in createResult) {
+        toast({ title: 'Erro ao criar usuário.', description: createResult.error, variant: 'destructive' });
         return;
       }
+      const uid = createResult.uid;
       toast({ title: 'Usuário criado com sucesso.' });
       await logUserAudit('user_created', { id: uid, username: values.username, email: values.email }, {
         email: values.email,
@@ -603,19 +610,19 @@ export function UserManagement() {
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
                     <div className="space-y-0.5">
                       <FormLabel className="font-medium">Vale-transporte</FormLabel>
-                      <FormDescription className="text-xs">Colaborador tem direito a vale-transporte mensal.</FormDescription>
+                      <FormDescription className="text-xs">Colaborador tem direito a vale-transporte por dia trabalhado.</FormDescription>
                     </div>
                     <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
                 )} />
                 <div
                   className="overflow-hidden transition-all duration-200"
-                  style={{ maxHeight: form.watch('needsTransportVoucher') ? '80px' : '0', opacity: form.watch('needsTransportVoucher') ? 1 : 0 }}
+                  style={{ maxHeight: form.watch('needsTransportVoucher') ? '120px' : '0', opacity: form.watch('needsTransportVoucher') ? 1 : 0 }}
                 >
                   <div className="pt-2">
                     <FormField control={form.control} name="transportVoucherValue" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Valor mensal (R$)</FormLabel>
+                        <FormLabel>Valor diário (R$)</FormLabel>
                         <FormControl>
                           <Input type="number" step="0.01" min="0" placeholder="0,00" {...field} value={field.value ?? ''} className="max-w-[180px]" />
                         </FormControl>

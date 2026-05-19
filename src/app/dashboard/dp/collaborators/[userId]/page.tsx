@@ -395,7 +395,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
               {[
                 ["Usuario operacional", "Aparece nas escalas de trabalho e relatorios operacionais.", user.operacional],
                 ["Participa de metas", "Incluido no acompanhamento de metas do quiosque.", user.participatesInGoals],
-                ["Vale-transporte", "Colaborador tem direito a vale-transporte mensal.", user.needsTransportVoucher],
+                ["Vale-transporte", "Colaborador tem direito a vale-transporte por dia trabalhado.", user.needsTransportVoucher],
               ].map(([title, desc, active]) => (
                 <div key={String(title)} className="flex items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
                   <div>
