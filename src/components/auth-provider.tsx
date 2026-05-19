@@ -2,14 +2,14 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth, functions } from '@/lib/firebase';
-import { collection, onSnapshot, doc, query, getDoc, getDocFromCache, updateDoc, deleteDoc, deleteField } from "firebase/firestore";
+import { collection, onSnapshot, doc, query, getDoc, getDocFromCache, updateDoc, deleteDoc, deleteField, serverTimestamp } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
+import { ChangePasswordModal } from './change-password-modal';
 import {
   fetchHrLoginAccess,
   type HrLoginAccessPayload,
@@ -347,6 +347,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
+      await updateDoc(doc(db, "users", user.uid), {
+        mustChangePassword: false,
+        passwordChangedAt: serverTimestamp(),
+      });
+      setAppUser((current) =>
+        current && current.id === user.uid
+          ? { ...current, mustChangePassword: false }
+          : current
+      );
       return { success: true };
     } catch (error: any) {
       let errorMessage = 'Ocorreu um erro ao alterar a senha.';
@@ -380,5 +389,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, resetPassword, changePassword,
   ]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <ChangePasswordModal
+        open={!!appUser?.mustChangePassword}
+        onOpenChange={() => undefined}
+        forceChange
+      />
+    </AuthContext.Provider>
+  );
 }

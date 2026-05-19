@@ -303,7 +303,7 @@ function OrgRoleBranch({
                     {!node.role.isActive && <Badge variant="outline">Inativo</Badge>}
                     {node.detached && (
                       <Badge className="border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50" variant="outline">
-                        Hierarquia ajustada
+                        Superior não encontrado
                       </Badge>
                     )}
                     {node.role.loginRestricted && (
@@ -538,10 +538,10 @@ export function DPOrgChart() {
             <ShieldAlert className="mt-0.5 h-5 w-5 text-amber-700" />
             <div className="space-y-1">
               <p className="text-sm font-medium text-amber-900">
-                A hierarquia tem {chart.detachedRoleCount} ramo{chart.detachedRoleCount === 1 ? "" : "s"} ajustado{chart.detachedRoleCount === 1 ? "" : "s"} automaticamente.
+                {chart.detachedRoleCount} cargo{chart.detachedRoleCount === 1 ? "" : "s"} sem hierarquia definida.
               </p>
               <p className="text-sm text-amber-800">
-                Isso acontece quando um cargo aponta para um superior inexistente, para si mesmo ou entra em um ciclo. A tela mantém esses cargos visíveis sem afetar a usabilidade atual.
+                {chart.detachedRoleCount === 1 ? "Esse cargo aponta" : "Esses cargos apontam"} para um superior inexistente ou removido. Corrija em <strong>Cargos &amp; Funções</strong>.
               </p>
             </div>
           </CardContent>
@@ -570,20 +570,6 @@ export function DPOrgChart() {
         </div>
 
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Leitura da estrutura</CardTitle>
-              <CardDescription>
-                A árvore usa o campo <strong>Reporta para</strong> do cargo e os vínculos dos colaboradores.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>Permissões continuam vindo de <code>profileId</code>.</p>
-              <p>O cargo só organiza RH e prepara regras futuras como restrição de login por escala.</p>
-              <p>Colaboradores sem cargo ficam fora da árvore até serem vinculados.</p>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Colaboradores sem cargo</CardTitle>

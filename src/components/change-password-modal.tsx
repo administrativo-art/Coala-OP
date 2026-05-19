@@ -35,9 +35,10 @@ type FormValues = z.infer<typeof changePasswordSchema>;
 interface ChangePasswordModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  forceChange?: boolean;
 }
 
-export function ChangePasswordModal({ open, onOpenChange }: ChangePasswordModalProps) {
+export function ChangePasswordModal({ open, onOpenChange, forceChange = false }: ChangePasswordModalProps) {
   const { changePassword } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,19 +73,26 @@ export function ChangePasswordModal({ open, onOpenChange }: ChangePasswordModalP
   };
 
   const handleClose = () => {
+    if (forceChange) return;
     form.reset();
     onOpenChange(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent>
+      <DialogContent
+        hideClose={forceChange}
+        onEscapeKeyDown={forceChange ? (event) => event.preventDefault() : undefined}
+        onInteractOutside={forceChange ? (event) => event.preventDefault() : undefined}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <KeyRound /> Alterar senha
+            <KeyRound /> {forceChange ? 'Defina uma nova senha' : 'Alterar senha'}
           </DialogTitle>
           <DialogDescription>
-            Para sua segurança, insira sua senha antiga e depois defina uma nova.
+            {forceChange
+              ? 'Antes de continuar no sistema, altere a senha provisória criada no cadastro.'
+              : 'Para sua segurança, insira sua senha antiga e depois defina uma nova.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -129,9 +137,11 @@ export function ChangePasswordModal({ open, onOpenChange }: ChangePasswordModalP
               )}
             />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
-                Cancelar
-              </Button>
+              {!forceChange && (
+                <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
+                  Cancelar
+                </Button>
+              )}
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar nova senha

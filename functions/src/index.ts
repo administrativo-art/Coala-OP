@@ -16,6 +16,12 @@ const hrDb = getFirestore('coala-rh');
 const auth = getAuth();
 
 const BRT = 'America/Sao_Paulo';
+const DEV_DELETE_USER_UIDS = new Set(
+  (process.env.DEV_DELETE_USER_UIDS ?? 'U0Q9YZIl7XhQU2B0tB5U6Zpt5Td2')
+    .split(',')
+    .map((uid) => uid.trim())
+    .filter(Boolean)
+);
 
 function getBrtDate(date: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: BRT, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -544,6 +550,7 @@ export const createUser = onCall(
         assignedKioskIds: assignedKioskIds || [],
         avatarUrl: avatarUrl || '',
         operacional: operacional || false,
+        mustChangePassword: true,
       });
 
       return { uid: userRecord.uid };
@@ -560,6 +567,9 @@ export const deleteUser = onCall(
   async (request: any) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Não autenticado.');
+    }
+    if (!DEV_DELETE_USER_UIDS.has(request.auth.uid)) {
+      throw new HttpsError('permission-denied', 'Exclusão permanente restrita ao acesso técnico.');
     }
     if (!request.auth.token.isDefaultAdmin) {
       throw new HttpsError('permission-denied', 'Apenas administradores podem excluir usuários.');

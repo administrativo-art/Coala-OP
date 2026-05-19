@@ -497,6 +497,8 @@ export type User = {
   jobFunctionIds?: string[];
   jobFunctionNames?: string[];
   jobRoleProfileSyncDisabled?: boolean;
+  mustChangePassword?: boolean;
+  passwordChangedAt?: Timestamp;
   unitIds?: string[];               // unidade(s) de trabalho
   admissionDate?: Timestamp;
   birthDate?: Timestamp;

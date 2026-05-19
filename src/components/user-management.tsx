@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Trash2, Shield, ChevronsUpDown, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, ArrowLeft, MoreHorizontal, Download, UserPlus, CircleDot } from 'lucide-react';
+import { Edit, Shield, ChevronsUpDown, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, ArrowLeft, MoreHorizontal, Download, UserPlus, CircleDot, UserX } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -110,7 +110,7 @@ function userAuditDiff(before: User, after: Partial<User>) {
 }
 
 export function UserManagement() {
-  const { permissions, users, addUser, deleteUser, user: currentUser, firebaseUser, updateUser, resetPassword } = useAuth();
+  const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const { shiftDefinitions } = useDP();
@@ -118,7 +118,7 @@ export function UserManagement() {
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToInactivate, setUserToInactivate] = useState<User | null>(null);
   const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -261,19 +261,26 @@ export function UserManagement() {
   };
   
   const profileIsAdmin = (profileId: string) => profileId === adminProfileId;
-  const handleDeleteClick = (user: User) => {
-    if (user.id === currentUser?.id || profileIsAdmin(user.profileId)) return;
-    setUserToDelete(user);
+  const handleInactivateClick = (user: User) => {
+    if (user.id === currentUser?.id || profileIsAdmin(user.profileId) || user.isActive === false) return;
+    setUserToInactivate(user);
   };
 
-  const handleDeleteConfirm = async () => {
-    if (userToDelete) {
-      await deleteUser(userToDelete.id);
-      await logUserAudit('user_deleted', userToDelete, {
-        email: userToDelete.email,
-        profile_id: userToDelete.profileId,
+  const handleInactivateConfirm = async () => {
+    if (userToInactivate) {
+      await terminateUser({
+        uid: userToInactivate.id,
+        terminationNotes: 'Inativado pela tela de usuarios.',
       });
-      setUserToDelete(null);
+      await logUserAudit('user_inactivated', userToInactivate, {
+        email: userToInactivate.email,
+        profile_id: userToInactivate.profileId,
+      });
+      setUserToInactivate(null);
+      toast({
+        title: 'Usuário inativado.',
+        description: `${userToInactivate.username} não poderá mais acessar o sistema.`,
+      });
     }
   };
   
@@ -934,11 +941,12 @@ export function UserManagement() {
                           </Button>
                           {permissions.settings.manageUsers && (
                             <Button
-                              variant="outline" size="icon" className="h-8 w-8 rounded-lg border-rose-200 text-rose-500 hover:text-rose-600"
-                              onClick={() => handleDeleteClick(user)}
-                              disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId)}
+                              variant="outline" size="icon" className="h-8 w-8 rounded-lg border-amber-200 text-amber-600 hover:text-amber-700"
+                              onClick={() => handleInactivateClick(user)}
+                              disabled={user.id === currentUser?.id || profileIsAdmin(user.profileId) || user.isActive === false}
+                              title="Inativar usuário"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <UserX className="h-3.5 w-3.5" />
                             </Button>
                           )}
                         </div>
@@ -964,13 +972,16 @@ export function UserManagement() {
         onPhotoCaptured={handlePhotoCaptured}
       />
 
-      {userToDelete && (
+      {userToInactivate && (
         <DeleteConfirmationDialog
-          open={!!userToDelete}
+          open={!!userToInactivate}
           isDeleting={false}
-          onOpenChange={() => setUserToDelete(null)}
-          onConfirm={handleDeleteConfirm}
-          itemName={`o usuário "${userToDelete.username}"`}
+          onOpenChange={() => setUserToInactivate(null)}
+          onConfirm={handleInactivateConfirm}
+          title={`Inativar ${userToInactivate.username}?`}
+          description="O usuário será removido do acesso ao Firebase Auth, mas o cadastro permanecerá no sistema para histórico e auditoria."
+          confirmButtonText="Sim, inativar"
+          confirmButtonVariant="destructive"
         />
       )}
       
