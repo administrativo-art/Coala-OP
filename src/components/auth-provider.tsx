@@ -142,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (userDocSnap?.exists()) {
           // Força refresh do token para garantir claims atualizados (profileId, isDefaultAdmin)
           await user.getIdToken(true);
+          void recordLoginAccess(user);
           const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
           setAppUser(userData);
         } else {
@@ -233,13 +234,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPermissionsReady(true);
   }, [appUser, profiles, loading, profilesLoading, adminProfileId, mergeRecursive]);
 
-  const recordLoginAccess = useCallback(async () => {
-    const user = auth.currentUser;
+  const recordLoginAccess = useCallback(async (targetUser?: FirebaseUser | null) => {
+    const user = targetUser ?? auth.currentUser;
     if (!user) return;
 
     try {
-      await updateDoc(doc(db, "users", user.uid), {
-        lastLoginAt: serverTimestamp(),
+      const token = await user.getIdToken();
+      await fetch("/api/auth/last-login", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
     } catch (error) {
       console.warn("[AuthProvider] Falha ao registrar ultimo acesso.", error);
