@@ -404,6 +404,15 @@ export type PermissionSet = {
     predefinedLists: { view: true, manage: true }
   };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
+  commercial: {
+    technicalSheets: {
+      view: boolean;
+      create: boolean;
+      edit: boolean;
+      delete: boolean;
+      export: boolean;
+    };
+  };
   settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
   tasks: { view: boolean; manage: boolean; };
   goals: { view: boolean; manage: boolean; };
@@ -1332,6 +1341,9 @@ export const defaultGuestPermissions: PermissionSet = {
       predefinedLists: { view: true, manage: true }
     },
     pricing: { view: false, simulate: false, manageParameters: false },
+    commercial: {
+      technicalSheets: { view: false, create: false, edit: false, delete: false, export: false },
+    },
     settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
     tasks: { view: false, manage: false },
     goals: { view: false, manage: false },
@@ -1400,6 +1412,9 @@ export const defaultAdminPermissions: PermissionSet = {
     registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
     stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true }, predefinedLists: { view: true, manage: true } },
     pricing: { view: true, simulate: true, manageParameters: true },
+    commercial: {
+      technicalSheets: { view: true, create: true, edit: true, delete: true, export: true },
+    },
     settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
     tasks: { view: true, manage: true },
     goals: { view: true, manage: true },

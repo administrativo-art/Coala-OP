@@ -17,18 +17,46 @@ export interface ProductSimulationCategoryContextType {
 
 export const ProductSimulationCategoryContext = createContext<ProductSimulationCategoryContextType | undefined>(undefined);
 
+async function fetchCatalogLinesFallback(): Promise<SimulationCategory[]> {
+    try {
+        const response = await fetch('/api/catalogo');
+        if (!response.ok) return [];
+        const data = await response.json();
+        if (!Array.isArray(data?.lines)) return [];
+        return data.lines.map((line: { id: string; name: string; color?: string }) => ({
+            id: line.id,
+            name: line.name,
+            color: line.color ?? '',
+            type: 'line' as const,
+        }));
+    } catch (error) {
+        console.warn("Error fetching catalog lines fallback:", error);
+        return [];
+    }
+}
+
 export function ProductSimulationCategoryProvider({ children }: { children: React.ReactNode }) {
     const [categories, setCategories] = useState<SimulationCategory[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const q = query(collection(db, "productSimulationCategories"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SimulationCategory));
-            setCategories(data.sort((a,b) => a.name.localeCompare(b.name)));
+            const hasLines = data.some(category => category.type === 'line');
+            const fallbackLines = hasLines ? [] : await fetchCatalogLinesFallback();
+            const merged = [...data];
+            fallbackLines.forEach((line) => {
+                if (!merged.some(category => category.id === line.id)) {
+                    merged.push(line);
+                }
+            });
+            setCategories(merged.sort((a,b) => a.name.localeCompare(b.name)));
             setLoading(false);
-        }, (error) => {
+        }, async (error) => {
             console.error("Error fetching simulation categories:", error);
+            const fallbackLines = await fetchCatalogLinesFallback();
+            setCategories(fallbackLines.sort((a,b) => a.name.localeCompare(b.name)));
             setLoading(false);
         });
         return () => unsubscribe();

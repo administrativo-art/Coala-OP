@@ -13,7 +13,8 @@ import { useDPShifts } from '@/hooks/use-dp-shifts';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
 import { useAuth } from '@/hooks/use-auth';
-import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit } from '@/types';
+import { useKiosks } from '@/hooks/use-kiosks';
+import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, Kiosk, User } from '@/types';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,7 @@ import {
   getPrimaryShiftDefinitionUnitId,
   shiftDefinitionMatchesUnit,
 } from '@/lib/dp-shift-definitions';
+import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
 import { buildShiftStreakState, isDayOffShift, isWorkShift } from '@/lib/dp-shift-rules';
 import { DPBulkShiftEditDialog } from '@/components/dp/dp-bulk-shift-edit-dialog';
 
@@ -78,6 +80,20 @@ const MONTHS = [
 
 function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase();
+}
+
+function userMatchesDPUnit(user: Pick<User, 'unitIds' | 'assignedKioskIds'>, unitId: string | undefined, units: DPUnit[], kiosks: Kiosk[]) {
+  if (!unitId) return true;
+  if (user.unitIds?.includes(unitId)) return true;
+
+  const assignedKioskIds = user.assignedKioskIds ?? [];
+  if (assignedKioskIds.length === 0 || units.length === 0 || kiosks.length === 0) return false;
+
+  return assignedKioskIds.some((kioskId) => {
+    const kiosk = kiosks.find((item) => item.id === kioskId);
+    if (!kiosk) return false;
+    return matchDPUnitForKiosk(kiosk.name, units)?.id === unitId;
+  });
 }
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
@@ -112,6 +128,7 @@ function ShiftDialog({
   scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied,
 }: ShiftDialogProps) {
   const { activeUsers } = useAuth();
+  const { kiosks } = useKiosks();
   const { addShift, updateShift } = useDPShifts(scheduleId);
   const { toast } = useToast();
   const isEdit = !!shift;
@@ -122,11 +139,11 @@ function ShiftDialog({
   // Active unit for filtering (defaultUnitId when locked, or single unit in per-unit mode)
   const activeUnitIdForDefs = defaultUnitId ?? (units.length === 1 ? units[0].id : undefined);
 
-  // In per-unit mode, only show users linked to this unit via unitIds
+  // In per-unit mode, show users linked by DP unit or by the matching kiosk assignment.
   const operationalUsers = (() => {
     const all = activeUsers.filter(u => u.operacional === true);
     if (!activeUnitIdForDefs) return all;
-    const linked = all.filter(u => u.unitIds?.includes(activeUnitIdForDefs));
+    const linked = all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks));
     return linked.length > 0 ? linked : all; // fallback to all if no unitIds configured
   })();
 
@@ -476,6 +493,7 @@ interface DPScheduleEditorProps {
 export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const router = useRouter();
   const { activeUsers, permissions, updateUser } = useAuth();
+  const { kiosks } = useKiosks();
   const {
     updateSchedule,
     units,
@@ -774,13 +792,13 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const consecutiveCountMap = streakState.countByShiftId;
 
   // ghostIndex[date][userId] = { shift, unitName, consecutiveDayCount }[]
-  // Shows users from sibling units who are also linked to the current unit via unitIds
+  // Shows users from sibling units who are also linked to the current unit.
   const ghostIndex = useMemo(() => {
     if (!isPerUnit || !schedule.unitId) return {} as Record<string, Record<string, { shift: DPShift; unitName: string; consecutiveDayCount: number }[]>>;
     // Users who are officially linked to this unit (multi-unit workers)
     const linkedUserIds = new Set(
       operationalUsers
-        .filter(u => u.unitIds?.includes(schedule.unitId!))
+        .filter(u => userMatchesDPUnit(u, schedule.unitId, units, kiosks))
         .map(u => u.id)
     );
     const idx: Record<string, Record<string, { shift: DPShift; unitName: string; consecutiveDayCount: number }[]>> = {};
@@ -793,7 +811,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       idx[s.date][s.userId].push({ shift: s, unitName, consecutiveDayCount });
     }
     return idx;
-  }, [isPerUnit, schedule.unitId, siblingWorkShifts, operationalUsers, units, consecutiveCountMap]);
+  }, [isPerUnit, schedule.unitId, siblingWorkShifts, operationalUsers, units, kiosks, consecutiveCountMap]);
 
   // Cross-unit conflict detection: userId → dates occupied in sibling units
   const siblingOccupied = useMemo(() => {
@@ -852,7 +870,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     visibleExplicitDayOffs.forEach((shift) => {
       let displayUnitId = shift.unitId;
       if (isPerUnit && schedule.unitId) {
-        const linkedToCurrent = operationalUsers.find((user) => user.id === shift.userId)?.unitIds?.includes(schedule.unitId);
+        const linkedToCurrentUser = operationalUsers.find((user) => user.id === shift.userId);
+        const linkedToCurrent = linkedToCurrentUser
+          ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks)
+          : false;
         if (linkedToCurrent || shift.unitId === schedule.unitId) displayUnitId = schedule.unitId;
         else return;
       }
@@ -863,7 +884,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       items.forEach((item) => {
         let displayUnitId = item.sourceUnitId;
         if (isPerUnit && schedule.unitId) {
-          const linkedToCurrent = operationalUsers.find((user) => user.id === userId)?.unitIds?.includes(schedule.unitId);
+          const linkedToCurrentUser = operationalUsers.find((user) => user.id === userId);
+          const linkedToCurrent = linkedToCurrentUser
+            ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks)
+            : false;
           if (linkedToCurrent || item.sourceUnitId === schedule.unitId) displayUnitId = schedule.unitId;
           else return;
         }
@@ -885,10 +909,12 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     currentMonthDateSet,
     dayOffShifts,
     isPerUnit,
+    kiosks,
     operationalUsers,
     schedule.unitId,
     siblingDayOffShifts,
     streakState.predictedDayOffsByUser,
+    units,
     userFilter,
   ]);
 

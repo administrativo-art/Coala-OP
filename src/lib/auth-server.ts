@@ -44,6 +44,17 @@ function clonePermissionSet(value: PermissionSet | undefined, label: string): Pe
   return structuredClone(value) as PermissionSet;
 }
 
+function applyCommercialPermissionFallbacks(permissions: PermissionSet) {
+  const legacyCanViewSheets = permissions.dashboard?.technicalSheets === true;
+  const legacyCanEditSheets = permissions.pricing?.simulate === true;
+
+  permissions.commercial.technicalSheets.view ||= legacyCanViewSheets;
+  permissions.commercial.technicalSheets.create ||= legacyCanEditSheets;
+  permissions.commercial.technicalSheets.edit ||= legacyCanEditSheets;
+  permissions.commercial.technicalSheets.delete ||= legacyCanEditSheets;
+  permissions.commercial.technicalSheets.export ||= legacyCanViewSheets || legacyCanEditSheets;
+}
+
 export function buildPermissionSet(
   profilePermissions: Partial<PermissionSet> | undefined,
   isDefaultAdmin: boolean
@@ -60,6 +71,8 @@ export function buildPermissionSet(
       profilePermissions as Record<string, unknown>
     );
   }
+
+  applyCommercialPermissionFallbacks(merged);
 
   return merged;
 }

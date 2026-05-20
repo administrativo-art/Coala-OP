@@ -21,6 +21,8 @@ import { Separator } from '@/components/ui/separator';
 import { Trash2, Loader2, Info, LayoutDashboard, ClipboardList, Check, Search, Edit, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/use-auth';
+import { canDeleteTechnicalSheets, canExportTechnicalSheets } from '@/lib/commercial-permissions';
 
 import { CostAnalysisTab } from './product-modal/cost-analysis-tab';
 import FullTechnicalSheetView from './product-modal/full-technical-sheet-view';
@@ -47,6 +49,9 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
   const { baseProducts } = useBaseProducts();
   const { categories } = useProductSimulationCategories();
   const { toast } = useToast();
+  const { permissions } = useAuth();
+  const canDeleteSheet = canDeleteTechnicalSheets(permissions);
+  const canExportSheet = canExportTechnicalSheets(permissions);
 
   const pdfData = useMemo(() => {
     if (!simulation) return null;
@@ -170,17 +175,19 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
           {/* Footer */}
           <div className="flex justify-between items-center px-6 py-3 border-t bg-gray-50 flex-shrink-0">
             <div className="flex gap-2">
-              <Button 
-                variant="ghost" 
-                className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                onClick={() => setIsDeleteConfirmOpen(true)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Excluir
-              </Button>
+              {canDeleteSheet && (
+                <Button 
+                  variant="ghost" 
+                  className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                  onClick={() => setIsDeleteConfirmOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir
+                </Button>
+              )}
             </div>
             <div className="flex gap-2">
-              {isViewOnlyMode && pdfData && (
+              {isViewOnlyMode && pdfData && canExportSheet && (
                 <PDFDownloadLink
                   document={<FichaTecnicaCompletaDocument data={pdfData as any} />}
                   fileName={`ficha_completa_${simulation.name.replace(/ /g, '_')}.pdf`}

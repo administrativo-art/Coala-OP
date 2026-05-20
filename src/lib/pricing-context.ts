@@ -11,7 +11,8 @@ export function resolveEffectivePrice(
   channels: SalesChannel[],
   overrides: PriceOverride[]
 ): EffectivePriceResolution {
-  if (unitId && !(simulation.kioskIds ?? []).includes(unitId)) {
+  const scopedUnitIds = simulation.kioskIds ?? [];
+  if (unitId && scopedUnitIds.length > 0 && !scopedUnitIds.includes(unitId)) {
     return {
       price: null,
       available: false,

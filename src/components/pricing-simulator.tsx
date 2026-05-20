@@ -71,6 +71,12 @@ import { useToast } from "@/hooks/use-toast";
 import { ProductModal } from "./product-modal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { PricingHistoryAnalysis } from "./pricing-history-analysis";
+import {
+    canCreateTechnicalSheets,
+    canDeleteTechnicalSheets,
+    canEditTechnicalSheets,
+    canExportTechnicalSheets,
+} from "@/lib/commercial-permissions";
 
 
 const PDFDownloadLink = dynamic(
@@ -163,6 +169,10 @@ export function PricingSimulator() {
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
     const { pricingParameters, loading: loadingParams } = useCompanySettings();
     const { permissions } = useAuth();
+    const canCreateSheet = canCreateTechnicalSheets(permissions);
+    const canEditSheet = canEditTechnicalSheets(permissions);
+    const canDeleteSheet = canDeleteTechnicalSheets(permissions);
+    const canExportSheet = canExportTechnicalSheets(permissions);
     const { kiosks, loading: kiosksLoading } = useKiosks();
     const { channels } = useChannels();
     const { toast } = useToast();
@@ -809,9 +819,13 @@ export function PricingSimulator() {
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem onClick={() => handleViewTechnicalSheet(sim)}><Eye className="mr-2 h-4 w-4" /> Ficha Técnica de Instrução</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleEdit(sim, 'ficha')}><ClipboardList className="mr-2 h-4 w-4" /> Ficha Técnica Completa</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleEdit(sim, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" /> Editar Ficha</DropdownMenuItem>
+                                                {canEditSheet && (
+                                                    <DropdownMenuItem onClick={() => handleEdit(sim, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" /> Editar Ficha</DropdownMenuItem>
+                                                )}
                                                 <DropdownMenuSeparator />
-                                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                                {canDeleteSheet && (
+                                                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
@@ -945,9 +959,13 @@ export function PricingSimulator() {
                                                         <DropdownMenuContent align="end">
                                                             <DropdownMenuItem onClick={() => handleToggleSimulationActive(sim, true)} className="text-green-700 focus:text-green-700 font-medium"><CheckCircle2 className="mr-2 h-4 w-4" /> Reativar mercadoria</DropdownMenuItem>
                                                             <DropdownMenuSeparator />
-                                                            <DropdownMenuItem onClick={() => handleEdit(sim, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" /> Editar Ficha</DropdownMenuItem>
+                                                            {canEditSheet && (
+                                                                <DropdownMenuItem onClick={() => handleEdit(sim, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" /> Editar Ficha</DropdownMenuItem>
+                                                            )}
                                                             <DropdownMenuSeparator />
-                                                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                                            {canDeleteSheet && (
+                                                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(sim)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                                                            )}
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </div>
@@ -1014,19 +1032,24 @@ export function PricingSimulator() {
                         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pb-4">
                             {/* Left side actions & filters */}
                             <div className="flex flex-wrap items-center gap-2">
-                                <Button onClick={handleAddNew} className="bg-pink-600 hover:bg-pink-700 text-white gap-2 font-bold text-xs uppercase rounded-xl h-10">
-                                    <PlusCircle className="h-4 w-4" />
-                                    Mercadoria
-                                </Button>
-                                <Button variant="outline" onClick={() => setIsBatchEditModalOpen(true)} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
-                                    Alterar em lote
-                                </Button>
+                                {canCreateSheet && (
+                                    <Button onClick={handleAddNew} className="bg-pink-600 hover:bg-pink-700 text-white gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                        <PlusCircle className="h-4 w-4" />
+                                        Mercadoria
+                                    </Button>
+                                )}
+                                {canEditSheet && (
+                                    <Button variant="outline" onClick={() => setIsBatchEditModalOpen(true)} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                        Alterar em lote
+                                    </Button>
+                                )}
                                 {permissions.pricing.manageParameters && (
                                     <Button variant="outline" onClick={() => setIsParamsModalOpen(true)} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
                                         <Settings className="h-4 w-4" />
                                         Parâmetros
                                     </Button>
                                 )}
+                                {canExportSheet && (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="outline" disabled={filteredSimulations.length === 0} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
@@ -1065,6 +1088,7 @@ export function PricingSimulator() {
                                         <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaCsv}>Ficha técnica simplificada (CSV)</DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
+                                )}
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>

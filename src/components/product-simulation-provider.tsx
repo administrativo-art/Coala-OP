@@ -11,6 +11,7 @@ import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useChannels } from '@/hooks/use-channels';
 import { convertValue } from '@/lib/conversion';
 import { buildPriceOverrideId, calculateSimulationMetrics, resolveEffectivePrice } from '@/lib/pricing-context';
+import { canViewTechnicalSheets } from '@/lib/commercial-permissions';
 
 interface SimulationData {
     name: string;
@@ -131,7 +132,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
     }, [rawSimulations, simulationItems, baseProducts, loading, pricingParameters]);
 
     useEffect(() => {
-        const canRead = permissions?.pricing?.view || permissions?.dashboard?.technicalSheets;
+        const canRead = permissions?.pricing?.view || canViewTechnicalSheets(permissions);
         if (!canRead) {
             setRawSimulations([]);
             setSimulationItems([]);
@@ -189,7 +190,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             unsubHistory();
             unsubOverrides();
         };
-    }, [loadingBases, permissions?.pricing?.view, permissions?.dashboard?.technicalSheets]);
+    }, [loadingBases, permissions]);
 
     const getSimulationOverrides = useCallback((simulationId: string) => {
         return priceOverrides.filter(override => override.simulationId === simulationId);
@@ -204,7 +205,8 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             throw new Error('Override global não é permitido. Edite o preço base da mercadoria.');
         }
 
-        if (unitId && !(simulation.kioskIds || []).includes(unitId)) {
+        const scopedUnitIds = simulation.kioskIds || [];
+        if (unitId && scopedUnitIds.length > 0 && !scopedUnitIds.includes(unitId)) {
             throw new Error('Habilite a mercadoria nesta unidade antes de criar o override.');
         }
 
@@ -230,12 +232,12 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
         validateOverrideScope(simulation, data.unitId, data.channelId);
 
-        if (data.finalPrice === null || data.finalPrice === undefined) {
+        if ((data.finalPrice === null || data.finalPrice === undefined) && data.available) {
             await deletePriceOverride(buildPriceOverrideId(data.simulationId, data.unitId, data.channelId));
             return;
         }
 
-        if (data.available && data.finalPrice <= 0) {
+        if (data.available && data.finalPrice != null && data.finalPrice <= 0) {
             throw new Error('Preço zero ou negativo não é permitido para override disponível. Deixe o campo vazio ou use "Remover override".');
         }
 

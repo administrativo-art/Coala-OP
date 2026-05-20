@@ -488,7 +488,7 @@ function LineCard({ line, count, index, onClick }: { line: Line; count: number; 
 
 // ─── CatalogoView ─────────────────────────────────────────────────────────────
 
-export function CatalogoView() {
+export function CatalogoView({ embedded = false }: { embedded?: boolean } = {}) {
   const [lines, setLines] = useState<Line[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -543,7 +543,7 @@ export function CatalogoView() {
 
   return (
     <>
-      <div className="min-h-screen flex flex-col">
+      <div className={embedded ? "flex flex-col overflow-hidden rounded-[28px] border bg-[#f8f9fa] shadow-sm" : "min-h-screen flex flex-col"}>
         {/* Sticky header */}
         <div
           className="sticky top-0 z-40 flex-shrink-0"

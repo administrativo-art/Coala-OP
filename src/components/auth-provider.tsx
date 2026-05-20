@@ -83,6 +83,17 @@ function sanitizeFirestoreUpdate(value: unknown): unknown {
   return value;
 }
 
+function applyCommercialPermissionFallbacks(permissions: PermissionSet) {
+  const legacyCanViewSheets = permissions.dashboard?.technicalSheets === true;
+  const legacyCanEditSheets = permissions.pricing?.simulate === true;
+
+  permissions.commercial.technicalSheets.view ||= legacyCanViewSheets;
+  permissions.commercial.technicalSheets.create ||= legacyCanEditSheets;
+  permissions.commercial.technicalSheets.edit ||= legacyCanEditSheets;
+  permissions.commercial.technicalSheets.delete ||= legacyCanEditSheets;
+  permissions.commercial.technicalSheets.export ||= legacyCanViewSheets || legacyCanEditSheets;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<User | null>(null);
@@ -215,6 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     const finalPermissions = produce(defaultGuestPermissions, (draft: any) => {
         mergeRecursive(draft, userProfile.permissions);
+        applyCommercialPermissionFallbacks(draft);
     });
 
     setPermissions(finalPermissions);

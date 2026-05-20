@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -21,11 +21,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { ChevronsUpDown, Calculator } from 'lucide-react';
+import { ChevronsUpDown } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProductSheetTab } from './product-sheet-tab';
 import { cn } from '@/lib/utils';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 
@@ -52,6 +51,11 @@ const formatCurrency = (value: number | undefined | null) => {
     return isNegative ? `- ${formatted}` : formatted;
 };
 
+const parseCurrencyInput = (value: string) => {
+  const parsed = Number(value.trim().replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const fmtNCM = (v: string) => {
     const d = v.replace(/\D/g, '').slice(0, 8);
     if (d.length <= 4) return d;
@@ -65,6 +69,18 @@ const fmtCEST = (v: string) => {
     if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
     return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
 };
+
+function normalizeUnitName(name: string) {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function isCommercialSalesUnit(name: string) {
+  const normalized = normalizeUnitName(name);
+  return !normalized.includes('matriz') && !normalized.includes('centro de distribuicao');
+}
 
 export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: ProductSimulation, onOpenChange: (open: boolean) => void }) {
   const { updateSimulation, getSimulationOverrides, resolveSimulationPrice, upsertPriceOverride, deletePriceOverride } = useProductSimulation();
@@ -92,83 +108,50 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
   });
 
   const watchedSalePrice = useWatch({ control: form.control, name: 'salePrice' }) || 0;
-  const [simulatedPrice, setSimulatedPrice] = useState<number | null>(null);
-  const [simulatedGoal, setSimulatedGoal] = useState<number | null>(null);
-  const [selectedUnitId, setSelectedUnitId] = useState<string>('all');
-  const [selectedChannelId, setSelectedChannelId] = useState<string>('all');
+  const watchedKioskIds = useWatch({ control: form.control, name: 'kioskIds' }) || [];
   const [editingOverride, setEditingOverride] = useState<{ unitId: string | null; channelId: string | null } | null>(null);
   const [overridePriceInput, setOverridePriceInput] = useState<string>('');
   const [overrideAvailable, setOverrideAvailable] = useState(true);
   const [overrideUpdatedAt, setOverrideUpdatedAt] = useState<string | undefined>(undefined);
+  const [unitPriceDrafts, setUnitPriceDrafts] = useState<Record<string, string>>({});
 
   const cmv = simulation.totalCmv || 0;
-  const scopedKiosks = useMemo(() => kiosks.filter(kiosk => (simulation.kioskIds || []).includes(kiosk.id)), [kiosks, simulation.kioskIds]);
+  const commercialSalesKiosks = useMemo(
+    () => kiosks.filter((kiosk) => isCommercialSalesUnit(kiosk.name)),
+    [kiosks]
+  );
+  const scopedKiosks = useMemo(() => {
+    if (watchedKioskIds.length === 0) return commercialSalesKiosks;
+    return kiosks.filter(kiosk => watchedKioskIds.includes(kiosk.id));
+  }, [commercialSalesKiosks, kiosks, watchedKioskIds]);
   const activeChannels = useMemo(() => channels.filter(channel => channel.active), [channels]);
   const overrides = useMemo(() => getSimulationOverrides(simulation.id), [getSimulationOverrides, simulation.id]);
-  const previewSimulation = useMemo(() => ({ ...simulation, salePrice: watchedSalePrice }), [simulation, watchedSalePrice]);
-  const selectedResolution = useMemo(() => {
-    return resolveSimulationPrice(
-      previewSimulation,
-      selectedUnitId === 'all' ? null : selectedUnitId,
-      selectedChannelId === 'all' ? null : selectedChannelId
-    );
-  }, [previewSimulation, resolveSimulationPrice, selectedUnitId, selectedChannelId]);
-  const effectiveSalePrice = (selectedUnitId !== 'all' || selectedChannelId !== 'all')
-    ? (selectedResolution.price ?? 0)
-    : watchedSalePrice;
+  const previewSimulation = useMemo(
+    () => ({ ...simulation, kioskIds: scopedKiosks.map(kiosk => kiosk.id), salePrice: watchedSalePrice }),
+    [simulation, scopedKiosks, watchedSalePrice]
+  );
+  const unitPriceDraftsKey = useMemo(
+    () => scopedKiosks.map(kiosk => kiosk.id).join('|'),
+    [scopedKiosks]
+  );
+
+  useEffect(() => {
+    if ((simulation.kioskIds ?? []).length === 0 && commercialSalesKiosks.length > 0 && watchedKioskIds.length === 0) {
+      form.setValue('kioskIds', commercialSalesKiosks.map(kiosk => kiosk.id), { shouldDirty: false });
+      return;
+    }
+
+    const nextDrafts: Record<string, string> = {};
+    scopedKiosks.forEach((kiosk) => {
+      const existing = overrides.find(override => override.unitId === kiosk.id && override.channelId === null);
+      const price = existing?.finalPrice ?? simulation.salePrice ?? 0;
+      nextDrafts[kiosk.id] = price ? String(price).replace('.', ',') : '';
+    });
+    setUnitPriceDrafts(nextDrafts);
+  }, [commercialSalesKiosks, form, simulation.id, simulation.kioskIds, simulation.salePrice, unitPriceDraftsKey, overrides, scopedKiosks, watchedKioskIds.length]);
+
+  const getUnitDraftPrice = (unitId: string) => parseCurrencyInput(unitPriceDrafts[unitId] ?? '');
   
-  const results = useMemo(() => {
-    const price = effectiveSalePrice;
-    const tax = pricingParameters?.averageTaxPercentage || 0;
-    const fee = pricingParameters?.averageCardFeePercentage || 0;
-    const metrics = calculateSimulationMetrics(price, cmv, tax, fee);
-
-    return {
-      netRev: metrics.netRevenue,
-      taxVal: price * (tax / 100),
-      feeVal: price * (fee / 100),
-      margin: metrics.profitValue,
-      marginPct: metrics.profitPercentage,
-      grossMargin: metrics.grossMargin,
-      grossMarginPct: metrics.grossMarginPct,
-      markup: metrics.markup,
-    };
-  }, [effectiveSalePrice, cmv, pricingParameters]);
-
-  const handleSimPriceChange = (val: string) => {
-    const p = parseFloat(val);
-    setSimulatedPrice(p);
-    if (!isNaN(p) && p > 0) {
-      const tax = pricingParameters?.averageTaxPercentage || 0;
-      const fee = pricingParameters?.averageCardFeePercentage || 0;
-      const net = p * (1 - (tax + fee) / 100);
-      setSimulatedGoal(((net - cmv) / p * 100));
-    } else {
-      setSimulatedGoal(null);
-    }
-  };
-
-  const handleSimGoalChange = (val: string) => {
-    const g = parseFloat(val);
-    setSimulatedGoal(g);
-    if (!isNaN(g)) {
-      const tax = pricingParameters?.averageTaxPercentage || 0;
-      const fee = pricingParameters?.averageCardFeePercentage || 0;
-      const denom = (1 - (tax + fee) / 100) - (g / 100);
-      setSimulatedPrice(denom > 0 ? cmv / denom : null);
-    } else {
-      setSimulatedPrice(null);
-    }
-  };
-
-  const applySimulation = () => {
-    if (simulatedPrice !== null) form.setValue('salePrice', simulatedPrice);
-    if (simulatedGoal !== null) form.setValue('profitGoal', simulatedGoal);
-    setSimulatedPrice(null);
-    setSimulatedGoal(null);
-    toast({ title: "Simulação aplicada!" });
-  };
-
   const openOverrideEditor = (unitId: string | null, channelId: string | null) => {
     if (unitId === null && channelId === null) {
       return;
@@ -204,7 +187,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
         updatedAt: overrideUpdatedAt,
       });
       setEditingOverride(null);
-      toast({ title: 'Override salvo com sucesso.' });
+      toast({ title: 'Preço específico salvo.' });
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -220,9 +203,9 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
     try {
       await deletePriceOverride(buildPriceOverrideId(simulation.id, editingOverride.unitId, editingOverride.channelId));
       setEditingOverride(null);
-      toast({ title: 'Override removido. A herança foi restaurada.' });
+      toast({ title: 'Preço específico removido. A herança foi restaurada.' });
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Erro ao remover override.' });
+      toast({ variant: 'destructive', title: 'Erro ao remover preço específico.' });
     }
   };
 
@@ -231,11 +214,55 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
     await handleDeleteOverride();
   };
 
+  const handleToggleContextAvailability = async (
+    unitId: string,
+    channelId: string,
+    available: boolean
+  ) => {
+    const existing = overrides.find(
+      override => override.unitId === unitId && override.channelId === channelId
+    ) ?? null;
+
+    try {
+      if (available && existing?.finalPrice == null) {
+        await deletePriceOverride(buildPriceOverrideId(simulation.id, unitId, channelId));
+        return;
+      }
+
+      await upsertPriceOverride({
+        simulationId: simulation.id,
+        unitId,
+        channelId,
+        finalPrice: existing?.finalPrice ?? null,
+        available,
+        updatedAt: existing?.updatedAt,
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao atualizar disponibilidade.',
+        description: error instanceof Error ? error.message : 'Erro inesperado.',
+      });
+    }
+  };
+
   const onSubmit = async (values: CostAnalysisFormValues) => {
     try {
+      const invalidUnit = scopedKiosks.find((kiosk) => getUnitDraftPrice(kiosk.id) <= 0);
+      if (invalidUnit) {
+        toast({
+          variant: "destructive",
+          title: "Preço por unidade obrigatório",
+          description: `Informe um preço maior que zero para ${invalidUnit.name}.`,
+        });
+        return;
+      }
+
       await updateSimulation({
         ...simulation,
         ...values,
+        salePrice: scopedKiosks[0] ? getUnitDraftPrice(scopedKiosks[0].id) : values.salePrice,
+        kioskIds: scopedKiosks.map(kiosk => kiosk.id),
         ppo: {
           ...simulation.ppo,
           ncm: values.ncm,
@@ -243,6 +270,17 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
           cfop: values.cfop,
         } as any
       });
+      await Promise.all(scopedKiosks.map((kiosk) => {
+        const existing = overrides.find(override => override.unitId === kiosk.id && override.channelId === null);
+        return upsertPriceOverride({
+          simulationId: simulation.id,
+          unitId: kiosk.id,
+          channelId: null,
+          finalPrice: getUnitDraftPrice(kiosk.id),
+          available: true,
+          updatedAt: existing?.updatedAt,
+        });
+      }));
       toast({ title: "Análise de custo salva com sucesso!" });
       onOpenChange(false);
     } catch (error) {
@@ -272,9 +310,9 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
   }, [editingOverride, overrides]);
 
   const sourceLabels: Record<string, string> = {
-    'override:unit+channel': 'Override específico',
-    'override:unit': 'Override da unidade',
-    'override:channel': 'Override do canal',
+    'override:unit+channel': 'Preço específico',
+    'override:unit': 'Preço da unidade',
+    'override:channel': 'Preço do canal',
     'channel-default-rule': 'Regra do canal',
     'global': 'Preço global',
     'unit-disabled': 'Unidade desabilitada',
@@ -290,7 +328,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
               1. Precificação e Fiscal
             </TabsTrigger>
             <TabsTrigger value="contexts" className="data-[state=active]:bg-white data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-gray-200 px-3 py-1.5 text-xs font-bold rounded-lg transition-all">
-              2. Preços por Contexto
+              2. Preço por Canal
             </TabsTrigger>
             <TabsTrigger value="ficha" className="data-[state=active]:bg-white data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-gray-200 px-3 py-1.5 text-xs font-bold rounded-lg transition-all">
               3. Composição e Preparo
@@ -301,8 +339,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
         <TabsContent value="cost" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex">
           <Form {...form}>
             <form id="product-modal-form" onSubmit={form.handleSubmit(onSubmit)} className="flex w-full h-full">
-              {/* Left Side - Form */}
-              <ScrollArea className="flex-1 p-6 border-r">
+              <ScrollArea className="flex-1 p-6">
                 <div className="space-y-6">
                   {/* Categorização */}
                   <div className="grid grid-cols-3 gap-4">
@@ -315,7 +352,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="outline" className="w-full justify-between text-xs font-normal">
-                                {field.value?.length ? `${field.value.length} selecionado(s)` : "Todos"}
+                                {field.value?.length ? `${field.value.length} selecionado(s)` : "Selecione unidades"}
                                 <ChevronsUpDown className="h-3 w-3 opacity-50" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -445,72 +482,83 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
 
                   {/* Definição de Preço */}
                   <div className="p-5 border rounded-xl bg-white shadow-sm space-y-4">
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Definição de Preço</h4>
-                    
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center gap-4">
                       <div>
-                        <p className="text-sm font-semibold text-gray-800">Custo da mercadoria (CMV)</p>
-                        <p className="text-xs text-gray-400">Calculado pela composição na aba Ficha</p>
+                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Definição de preço por unidade</h4>
+                        <p className="mt-1 text-xs text-gray-500">Preço balcão individual por unidade comercial.</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-lg font-bold text-gray-900">{formatCurrency(cmv)}</span>
+                        <p className="text-xs font-semibold text-gray-400">CMV</p>
+                        <p className="text-lg font-bold text-gray-900">{formatCurrency(cmv)}</p>
                       </div>
                     </div>
 
-                    <Separator className="bg-gray-100" />
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {scopedKiosks.map((kiosk) => {
+                        const unitPrice = getUnitDraftPrice(kiosk.id);
+                        const tax = pricingParameters?.averageTaxPercentage || 0;
+                        const fee = pricingParameters?.averageCardFeePercentage || 0;
+                        const metrics = calculateSimulationMetrics(unitPrice, cmv, tax, fee);
+                        const goal = form.getValues('profitGoal') || 0;
 
-                    <FormField
-                      control={form.control}
-                      name="salePrice"
-                      render={({ field }) => (
-                        <FormItem className="flex justify-between items-center space-y-0">
-                          <FormLabel className="text-sm font-semibold text-gray-800">Preço de venda</FormLabel>
-                          <div className="relative w-32">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium">R$</span>
-                            <Input 
-                              type="number" 
-                              step="0.01" 
-                              className="pl-8 text-right font-bold text-gray-900 focus:ring-pink-200" 
-                              {...field} 
-                            />
+                        return (
+                          <div key={kiosk.id} className="rounded-xl border bg-gray-50/50 p-4">
+                            <div className="mb-3 flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-bold text-gray-900">{kiosk.name}</p>
+                                <p className="mt-0.5 text-xs text-gray-400">Preço balcão da unidade</p>
+                              </div>
+                              <Badge variant="outline" className="bg-white text-[10px]">Balcão</Badge>
+                            </div>
+
+                            <div className="relative mb-4">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium">R$</span>
+                              <Input
+                                inputMode="decimal"
+                                className="pl-8 text-right font-bold text-gray-900 focus:ring-pink-200"
+                                value={unitPriceDrafts[kiosk.id] ?? ''}
+                                onChange={(event) =>
+                                  setUnitPriceDrafts((current) => ({
+                                    ...current,
+                                    [kiosk.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+
+                            <div className="space-y-2 text-xs">
+                              <div className="flex justify-between text-gray-400">
+                                <span>Impostos {tax}% + Taxas {fee}%</span>
+                                <span className="font-medium">({formatCurrency(unitPrice * ((tax + fee) / 100))})</span>
+                              </div>
+                              <Separator className="bg-gray-100" />
+                              <div className="flex justify-between">
+                                <span className="font-bold text-green-700">Margem de Contribuição</span>
+                                <div className="text-right">
+                                  <p className="font-bold text-green-700">{formatCurrency(metrics.profitValue)}</p>
+                                  <p className="text-green-600">{metrics.profitPercentage.toFixed(1)}%</p>
+                                </div>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="font-bold text-gray-700">Margem Bruta</span>
+                                <div className="text-right">
+                                  <p className={cn(
+                                    "text-lg font-black",
+                                    metrics.grossMarginPct >= goal ? "text-green-600" : "text-orange-500"
+                                  )}>
+                                    {metrics.grossMarginPct.toFixed(1)}%
+                                  </p>
+                                  <p className="text-gray-400">{goal ? `Meta: ${goal}%` : 'Sem meta'}</p>
+                                </div>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="font-medium text-gray-500">Markup</span>
+                                <span className="font-bold text-gray-700">{metrics.markup.toFixed(2)}x</span>
+                              </div>
+                            </div>
                           </div>
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="flex justify-between items-center text-xs text-gray-400">
-                      <span>— Impostos {pricingParameters?.averageTaxPercentage}% + Taxas {pricingParameters?.averageCardFeePercentage}%</span>
-                      <span className="font-medium">({formatCurrency(results.taxVal + results.feeVal)})</span>
-                    </div>
-
-                    <Separator className="bg-gray-100" />
-
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-bold text-green-700">= Margem de Contribuição</span>
-                      <div className="text-right">
-                        <p className="text-lg font-bold text-green-700">{formatCurrency(results.margin)}</p>
-                        <p className="text-xs text-green-600 font-medium">{results.marginPct.toFixed(1)}%</p>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-bold text-gray-700">Margem Bruta</span>
-                      <div className="text-right">
-                        <p className={cn(
-                          "text-2xl font-black",
-                          results.grossMarginPct >= (form.getValues('profitGoal') || 0) ? "text-green-600" : "text-orange-500"
-                        )}>
-                          {results.grossMarginPct.toFixed(1)}%
-                        </p>
-                        <p className="text-xs font-medium text-gray-400">
-                          {form.getValues('profitGoal') ? `Meta: ${form.getValues('profitGoal')}%` : 'Sem meta'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-center pt-1">
-                      <span className="text-xs font-medium text-gray-500">Markup</span>
-                      <span className="text-sm font-bold text-gray-700">{results.markup.toFixed(2)}x</span>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -529,139 +577,6 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                 </div>
                 <button type="submit" id="product-modal-submit-btn" className="hidden" />
               </ScrollArea>
-
-              {/* Right Side - What If Simulator */}
-              <div className="w-[320px] bg-blue-50/50 flex-shrink-0 overflow-y-auto">
-                <div className="p-6 space-y-6">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Calculator className="h-4 w-4 text-blue-600" />
-                      <h4 className="text-sm font-bold text-blue-900">Simulador</h4>
-                    </div>
-                    <p className="text-xs text-blue-600 leading-relaxed">
-                      Insira o preço <em>ou</em> a meta desejada para calcular o outro automaticamente.
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-blue-700 uppercase">Unidade</label>
-                      <Select value={selectedUnitId} onValueChange={setSelectedUnitId}>
-                        <SelectTrigger className="bg-white border-blue-200 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todas as unidades</SelectItem>
-                          {scopedKiosks.map((kiosk) => (
-                            <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-blue-700 uppercase">Canal</label>
-                      <Select value={selectedChannelId} onValueChange={setSelectedChannelId}>
-                        <SelectTrigger className="bg-white border-blue-200 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos os canais</SelectItem>
-                          {activeChannels.map((channel) => (
-                            <SelectItem key={channel.id} value={channel.id}>{channel.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="rounded-lg border border-blue-100 bg-white p-3 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Fonte</span>
-                        <span className="font-semibold text-blue-700">{selectedResolution.source}</span>
-                      </div>
-                      <div className="mt-2 flex justify-between">
-                        <span className="text-gray-500">Disponibilidade</span>
-                        <span className={cn("font-semibold", selectedResolution.available ? "text-emerald-600" : "text-rose-600")}>
-                          {selectedResolution.available ? 'Disponível' : 'Indisponível'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-blue-700 uppercase">Simular Preço (R$)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300 text-xs font-bold">R$</span>
-                        <Input 
-                          type="number" 
-                          placeholder="Ex: 14.90" 
-                          value={simulatedPrice === null ? '' : simulatedPrice}
-                          onChange={(e) => handleSimPriceChange(e.target.value)}
-                          className="pl-8 bg-white border-blue-200 text-sm focus:ring-blue-300"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-center">
-                      <span className="text-[10px] font-black text-blue-200">OU</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-blue-700 uppercase">Simular Meta (%)</label>
-                      <div className="relative">
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-300 text-xs font-bold">%</span>
-                        <Input 
-                          type="number" 
-                          placeholder="Ex: 65" 
-                          value={simulatedGoal === null ? '' : simulatedGoal?.toFixed(1)}
-                          onChange={(e) => handleSimGoalChange(e.target.value)}
-                          className="pr-8 bg-white border-blue-200 text-sm focus:ring-blue-300"
-                        />
-                      </div>
-                    </div>
-
-                    {(simulatedPrice !== null || simulatedGoal !== null) && (
-                      <div className="bg-white rounded-lg p-3 border border-blue-100 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-gray-500">Preço</span>
-                            <span className="font-bold text-gray-900">{formatCurrency(simulatedPrice)}</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-gray-500">M. Bruta</span>
-                            <span className="font-bold text-blue-600">{(simulatedGoal || 0).toFixed(1)}%</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <Button 
-                      type="button"
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold h-9 shadow-sm"
-                      disabled={simulatedPrice === null && simulatedGoal === null}
-                      onClick={applySimulation}
-                    >
-                      Aplicar Valores →
-                    </Button>
-                  </div>
-
-                  <Separator className="bg-blue-100" />
-
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-blue-500 font-medium">CMV Atual</span>
-                      <span className="text-blue-900 font-bold">{formatCurrency(cmv)}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-blue-400">Impostos</span>
-                      <span className="text-blue-700">{pricingParameters?.averageTaxPercentage}%</span>
-                    </div>
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-blue-400">Taxa Cartão</span>
-                      <span className="text-blue-700">{pricingParameters?.averageCardFeePercentage}%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </form>
           </Form>
         </TabsContent>
@@ -670,63 +585,70 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
           <ScrollArea className="flex-1 p-6">
             <div className="space-y-4">
               <div>
-                <h4 className="text-sm font-semibold text-gray-900">Matriz de preços por contexto</h4>
+                <h4 className="text-sm font-semibold text-gray-900">Preços por canal de venda</h4>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Edite overrides por unidade, por canal ou por unidade + canal. A célula global continua sendo o `salePrice`.
+                  O balcão vem da definição por unidade. Use esta etapa para cadastrar preços dos demais canais.
                 </p>
               </div>
 
-              <div className="rounded-xl border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[220px]">Unidade \\ Canal</TableHead>
-                      <TableHead className="min-w-[170px]">Todos os canais</TableHead>
-                      {activeChannels.map((channel) => (
-                        <TableHead key={channel.id} className="min-w-[170px]">{channel.name}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[{ id: null, name: 'Todas as unidades' }, ...scopedKiosks.map(kiosk => ({ id: kiosk.id, name: kiosk.name }))].map((row) => (
-                      <TableRow key={row.id ?? 'all-units'}>
-                        <TableCell className="font-medium">{row.name}</TableCell>
-                        {[null, ...activeChannels.map(channel => channel.id)].map((columnChannelId) => {
-                          const isGlobalCell = row.id === null && columnChannelId === null;
-                          const resolution = resolveSimulationPrice(previewSimulation, row.id, columnChannelId);
-                          const exactOverride = overrides.find(
-                            (override) => override.unitId === row.id && override.channelId === columnChannelId
-                          ) ?? null;
+              <div className="grid gap-4">
+                {scopedKiosks.map((unit) => (
+                  <div key={unit.id} className="rounded-xl border bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h5 className="text-sm font-bold text-gray-900">{unit.name}</h5>
+                      <Badge variant="outline" className="bg-gray-50 text-[10px]">Unidade comercial</Badge>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {activeChannels.map((channel) => {
+                        const resolution = resolveSimulationPrice(previewSimulation, unit.id, channel.id);
+                        const exactOverride = overrides.find(
+                          (override) => override.unitId === unit.id && override.channelId === channel.id
+                        ) ?? null;
 
-                          return (
-                            <TableCell key={`${row.id ?? 'all'}:${columnChannelId ?? 'all'}`}>
-                              <button
-                                type="button"
-                                disabled={isGlobalCell}
-                                onClick={() => openOverrideEditor(row.id, columnChannelId)}
-                                className={cn(
-                                  "w-full rounded-lg border p-3 text-left transition-colors",
-                                  isGlobalCell ? "cursor-default bg-gray-50" : "hover:bg-gray-50"
-                                )}
+                        return (
+                          <button
+                            key={`${unit.id}:${channel.id}`}
+                            type="button"
+                            onClick={() => openOverrideEditor(unit.id, channel.id)}
+                            className="rounded-lg border bg-gray-50/50 p-3 text-left transition-colors hover:bg-gray-50"
+                          >
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <span className="truncate text-sm font-semibold text-gray-800">{channel.name}</span>
+                              <div
+                                className="flex items-center gap-2"
+                                onClick={(event) => event.stopPropagation()}
                               >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-sm font-semibold">{resolution.price === null ? 'Indisponível' : formatCurrency(resolution.price)}</span>
-                                  <Badge variant={resolution.available ? 'outline' : 'destructive'}>
-                                    {resolution.available ? 'Disponível' : 'Indisponível'}
-                                  </Badge>
-                                </div>
-                                <p className="mt-2 text-[11px] text-muted-foreground">{sourceLabels[resolution.source] ?? resolution.source}</p>
-                                <p className="text-[11px] text-muted-foreground">
-                                  {exactOverride ? 'Override aplicado' : 'Herdado'}
+                                <span className={cn(
+                                  "text-[10px] font-bold",
+                                  resolution.available ? "text-emerald-600" : "text-rose-600"
+                                )}>
+                                  {resolution.available ? 'Ativo' : 'Inativo'}
+                                </span>
+                                <Switch
+                                  checked={resolution.available}
+                                  onCheckedChange={(checked) => handleToggleContextAvailability(unit.id, channel.id, checked)}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-end justify-between gap-3">
+                              <div>
+                                <p className="text-lg font-black text-gray-900">
+                                  {resolution.price === null ? 'Indisponível' : formatCurrency(resolution.price)}
                                 </p>
-                              </button>
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                                <p className="mt-1 text-[11px] text-muted-foreground">{sourceLabels[resolution.source] ?? resolution.source}</p>
+                              </div>
+                              {exactOverride && (
+                                <span className="text-[11px] font-medium text-muted-foreground">
+                                  Preço específico
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </ScrollArea>
@@ -740,7 +662,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
       <Dialog open={!!editingOverride} onOpenChange={(open) => !open && setEditingOverride(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar override de preço</DialogTitle>
+            <DialogTitle>Editar preço</DialogTitle>
             <DialogDescription>
               Defina um preço final para este contexto ou marque-o como indisponível sem perder o valor salvo.
             </DialogDescription>
@@ -751,12 +673,12 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
               <label className="text-sm font-medium">Preço final</label>
               <Input
                 inputMode="decimal"
-                placeholder="Deixe vazio para remover o override"
+                placeholder="Deixe vazio para remover o preço específico"
                 value={overridePriceInput}
                 onChange={(event) => setOverridePriceInput(event.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Campo vazio remove o override. `0` continua sendo uma tentativa explícita de preço zero e será rejeitado.
+                Campo vazio remove o preço específico. `0` continua sendo uma tentativa explícita de preço zero e será rejeitado.
               </p>
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
@@ -780,7 +702,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
             <div className="flex gap-2">
               {editingHasManualOverride && (
                 <Button type="button" variant="outline" onClick={handleDeleteOverride}>
-                  Remover override
+                  Remover preço específico
                 </Button>
               )}
               {editingChannelRulePrice !== null && (

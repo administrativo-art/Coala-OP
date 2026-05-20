@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import { useAllTasks } from "@/hooks/use-all-tasks";
 import { canViewPurchasing } from "@/lib/purchasing-permissions";
+import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 import {
   ChevronDown, X, LayoutDashboard, Package, ListTodo, Target,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
@@ -89,7 +90,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         icon: Target,
         color: SECTION_COLORS.com,
         items: [
-          { label: "Painel Comercial", href: "/dashboard/commercial", icon: LayoutGrid, show: permissions.dashboard.pricing || permissions.dashboard.technicalSheets },
+          { label: "Ficha técnica", href: "/dashboard/commercial", icon: FileText, show: canViewTechnicalSheets(permissions) },
           { label: "Metas de Vendas", href: "/dashboard/goals", icon: Target, show: permissions.goals?.view },
           { label: "Gestão de Preços", href: "/dashboard/pricing", icon: DollarSign, show: permissions.pricing.view },
         ],

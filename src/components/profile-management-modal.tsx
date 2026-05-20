@@ -19,8 +19,8 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@radix-ui/react-accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, ListPlus, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useAuth } from '@/hooks/use-auth';
@@ -66,6 +66,17 @@ function permissionDiff(before: unknown, after: unknown) {
     }
     return acc;
   }, {});
+}
+
+function applyCommercialPermissionFallbacks(permissions: PermissionSet) {
+  const legacyCanViewSheets = permissions.dashboard?.technicalSheets === true;
+  const legacyCanEditSheets = permissions.pricing?.simulate === true;
+
+  permissions.commercial.technicalSheets.view ||= legacyCanViewSheets;
+  permissions.commercial.technicalSheets.create ||= legacyCanEditSheets;
+  permissions.commercial.technicalSheets.edit ||= legacyCanEditSheets;
+  permissions.commercial.technicalSheets.delete ||= legacyCanEditSheets;
+  permissions.commercial.technicalSheets.export ||= legacyCanViewSheets || legacyCanEditSheets;
 }
 
 function DuplicateProfileModal({
@@ -173,6 +184,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     
     const initialPermissions = JSON.parse(JSON.stringify(defaultGuestPermissions));
     mergeRecursive(initialPermissions, profile.permissions || {});
+    applyCommercialPermissionFallbacks(initialPermissions);
 
     form.reset({
       name: profile.name,
@@ -344,6 +356,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const returnsViewWatch = form.watch('permissions.stock.returns.view' as any);
   const registrationViewWatch = form.watch('permissions.registration.view' as any);
   const pricingViewWatch = form.watch('permissions.pricing.view' as any);
+  const technicalSheetsViewWatch = form.watch('permissions.commercial.technicalSheets.view' as any);
   const tasksViewWatch = form.watch('permissions.tasks.view' as any);
   const goalsViewWatch = form.watch('permissions.goals.view' as any);
   const settingsViewWatch = form.watch('permissions.settings.view' as any);
@@ -389,7 +402,23 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </FormItem>
                             )}
                             />
-                            <Accordion type="multiple" defaultValue={['dashboard', 'stock']} className="w-full">
+                            <Accordion
+                              type="multiple"
+                              defaultValue={[
+                                'dashboard',
+                                'stock',
+                                'commercial',
+                                'settings',
+                                'tasks',
+                                'forms',
+                                'signage',
+                                'financial',
+                                'purchasing_v2',
+                                'dp',
+                                'help',
+                              ]}
+                              className="w-full"
+                            >
                             
                             {/* ── DASHBOARD ── */}
                             <AccordionItem value="dashboard">
@@ -398,27 +427,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderModuleToggle("permissions.dashboard.view" as any, "Acessar painéis principais", "Permite abrir a página inicial e os painéis departamentais.")}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Painel de Operações</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
-                                        <FormField control={form.control} name="permissions.dashboard.pricing" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Painel Comercial - Preços</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
-                                        <FormField control={form.control} name="permissions.dashboard.technicalSheets" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Painel Comercial - Fichas Técnicas</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                         <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Indicadores de Auditoria</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                     </div>
-                                </AccordionContent>
-                            </AccordionItem>
-
-                            {/* ── CADASTROS ── */}
-                            <AccordionItem value="registration">
-                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><ListPlus className="mr-2 h-5 w-5" /> Cadastros</div></AccordionTrigger>
-                                <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.registration.view" as any, "Acessar Cadastros Operacionais")}
-                                    {renderPermissionSwitch("permissions.registration.items.add" as any, "Adicionar Insumos", "Permite cadastrar novos insumos (itens físicos).", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.items.edit" as any, "Editar Insumos", "Permite editar insumos existentes.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.items.delete" as any, "Excluir Insumos", "Permite excluir insumos (ação perigosa).", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.baseProducts.add" as any, "Adicionar Produtos Base", "Permite criar novos produtos base.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.baseProducts.edit" as any, "Editar Produtos Base", "Permite editar produtos base existentes.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.baseProducts.delete" as any, "Excluir Produtos Base", "Permite excluir produtos base.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.entities.add" as any, "Adicionar Entidades", "Permite cadastrar Pessoas e Empresas.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.entities.edit" as any, "Editar Entidades", "Permite editar Pessoas e Empresas.", !registrationViewWatch)}
-                                    {renderPermissionSwitch("permissions.registration.entities.delete" as any, "Excluir Entidades", "Permite excluir Pessoas e Empresas.", !registrationViewWatch)}
                                 </AccordionContent>
                             </AccordionItem>
 
@@ -508,13 +518,44 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </AccordionContent>
                             </AccordionItem>
 
-                            {/* ── CUSTO E PREÇO ── */}
-                            <AccordionItem value="pricing">
-                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><DollarSign className="mr-2 h-5 w-5" /> Gestão de Preços e Margens</div></AccordionTrigger>
-                                <AccordionContent className="space-y-2 pt-4 p-1">
-                                    {renderModuleToggle("permissions.pricing.view" as any, "Acessar Gestão de Preços", "Permite abrir preços, comparação de concorrentes e fichas de custo.")}
-                                    {renderPermissionSwitch("permissions.pricing.simulate" as any, "Simular Ficha de Custo e Margem", "Permite criar e editar fichas técnicas e simulações.", !pricingViewWatch)}
-                                    {renderPermissionSwitch("permissions.pricing.manageParameters" as any, "Gerenciar Parâmetros de Preço", "Permite editar o % operacional e faixas de lucro.", !pricingViewWatch)}
+                            {/* ── COMERCIAL ── */}
+                            <AccordionItem value="commercial">
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><TrendingUp className="mr-2 h-5 w-5" /> Comercial</div></AccordionTrigger>
+                                <AccordionContent className="space-y-4 p-1 pt-4">
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                      <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><FileText className="h-4 w-4" /> Ficha Técnica</h4>
+                                      {renderPermissionSwitch("permissions.commercial.technicalSheets.view" as any, "Visualizar fichas técnicas", "Permite consultar fichas técnicas e instruções de montagem.", false)}
+                                      <div className="pl-6 space-y-2">
+                                        {renderPermissionSwitch("permissions.commercial.technicalSheets.create" as any, "Criar ficha técnica", "Permite criar novas fichas técnicas.", !technicalSheetsViewWatch, true)}
+                                        {renderPermissionSwitch("permissions.commercial.technicalSheets.edit" as any, "Editar ficha técnica", "Permite alterar montagem, imagem, ingredientes e dados operacionais da ficha.", !technicalSheetsViewWatch, true)}
+                                        {renderPermissionSwitch("permissions.commercial.technicalSheets.delete" as any, "Excluir ficha técnica", "Permite excluir mercadorias/fichas técnicas.", !technicalSheetsViewWatch, true)}
+                                        {renderPermissionSwitch("permissions.commercial.technicalSheets.export" as any, "Exportar ficha técnica", "Permite baixar PDF e exportações da ficha técnica.", !technicalSheetsViewWatch, true)}
+                                      </div>
+                                    </div>
+
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                      <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><DollarSign className="h-4 w-4" /> Ficha de Custo e Margem</h4>
+                                      {renderModuleToggle("permissions.pricing.view" as any, "Acessar ficha de custo e margem", "Permite abrir composições, CMV, margem e preço de venda.")}
+                                      <div className="pl-6 space-y-2">
+                                        {renderPermissionSwitch("permissions.pricing.simulate" as any, "Criar/editar composição de custo", "Permite criar e editar composição, CMV e simulações de preço.", !pricingViewWatch, true)}
+                                        {renderPermissionSwitch("permissions.pricing.manageParameters" as any, "Gerenciar parâmetros de margem/preço", "Permite editar parâmetros de precificação e faixas de margem.", !pricingViewWatch, true)}
+                                      </div>
+                                    </div>
+
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                      <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><BarChart3 className="h-4 w-4" /> Estudo de Preço</h4>
+                                      <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+                                        Usa a permissão de acesso à ficha de custo e margem para comparar preços de venda e concorrentes.
+                                      </div>
+                                    </div>
+
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                      <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Target className="h-4 w-4" /> Metas</h4>
+                                      {renderModuleToggle("permissions.goals.view" as any, "Visualizar metas", "Permite acompanhar metas por período, quiosque e colaborador.")}
+                                      <div className="pl-6 space-y-2">
+                                        {renderPermissionSwitch("permissions.goals.manage" as any, "Gerenciar metas", "Permite criar templates, instanciar períodos e encerrar metas.", !goalsViewWatch, true)}
+                                      </div>
+                                    </div>
                                 </AccordionContent>
                             </AccordionItem>
                             
@@ -528,6 +569,20 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                       <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Warehouse className="h-4 w-4" /> Operacional</h4>
                                       {renderPermissionSwitch("permissions.settings.manageKiosks" as any, "Gerenciar Unidades", "Permite criar, editar e excluir unidades operacionais.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.registration.view" as any, "Acessar Cadastros Operacionais", "Permite abrir os cadastros de insumos, produtos base e pessoas/empresas dentro das configurações.", !settingsViewWatch)}
+                                      {settingsViewWatch && registrationViewWatch && (
+                                        <div className="ml-6 space-y-2 border-l-2 pl-4">
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Permissões de cadastro</p>
+                                          {renderPermissionSwitch("permissions.registration.items.add" as any, "Adicionar Insumos", "Permite cadastrar novos insumos (itens físicos).", false, true)}
+                                          {renderPermissionSwitch("permissions.registration.items.edit" as any, "Editar Insumos", "Permite editar insumos existentes.", false, true)}
+                                          {renderPermissionSwitch("permissions.registration.items.delete" as any, "Excluir Insumos", "Permite excluir insumos (ação perigosa).", false, true)}
+                                          {renderPermissionSwitch("permissions.registration.baseProducts.add" as any, "Adicionar Produtos Base", "Permite criar novos produtos base.", false, true)}
+                                          {renderPermissionSwitch("permissions.registration.baseProducts.edit" as any, "Editar Produtos Base", "Permite editar produtos base existentes.", false, true)}
+                                          {renderPermissionSwitch("permissions.registration.baseProducts.delete" as any, "Excluir Produtos Base", "Permite excluir produtos base.", false, true)}
+                                          {renderPermissionSwitch("permissions.registration.entities.add" as any, "Adicionar Pessoas/Empresas", "Permite cadastrar pessoas e empresas.", false, true)}
+                                          {renderPermissionSwitch("permissions.registration.entities.edit" as any, "Editar Pessoas/Empresas", "Permite editar pessoas e empresas.", false, true)}
+                                          {renderPermissionSwitch("permissions.registration.entities.delete" as any, "Excluir Pessoas/Empresas", "Permite excluir pessoas e empresas.", false, true)}
+                                        </div>
+                                      )}
                                       {renderPermissionSwitch("permissions.settings.manageLabels" as any, "Configurar Etiquetas de Estoque", "Permite alterar o tamanho padrão das etiquetas de lote.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.checklists.manageTemplates" as any, "Gerenciar Templates de Checklists", "Permite manter templates de checklists operacionais.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.settings.manageChecklistTypes" as any, "Gerenciar Tipos de Checklist", "Permite criar e editar tipos de checklist.", !settingsViewWatch)}
@@ -582,17 +637,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 {renderPermissionSwitch("permissions.forms.global.create_projects" as any, "Criar Projetos", "Permite criar e gerenciar projetos de formulários.", false)}
                                 {renderPermissionSwitch("permissions.forms.global.manage_templates" as any, "Gerenciar Templates", "Permite criar e editar templates de formulários.", !formsAccessWatch)}
                                 {renderPermissionSwitch("permissions.forms.global.view_analytics" as any, "Ver Análises", "Permite acessar indicadores e análises dos formulários.", !formsAccessWatch)}
-                              </AccordionContent>
-                            </AccordionItem>
-
-                            {/* ── METAS ── */}
-                            <AccordionItem value="goals">
-                              <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b">
-                                <div className="flex items-center"><Target className="mr-2 h-5 w-5" /> Metas</div>
-                              </AccordionTrigger>
-                              <AccordionContent className="space-y-2 pt-4 p-1">
-                                {renderModuleToggle("permissions.goals.view" as any, "Visualizar Metas", "Permite acessar o módulo de metas.")}
-                                {renderPermissionSwitch("permissions.goals.manage" as any, "Gerenciar Metas", "Permite criar templates, instanciar períodos e encerrar metas.", !goalsViewWatch)}
                               </AccordionContent>
                             </AccordionItem>
 

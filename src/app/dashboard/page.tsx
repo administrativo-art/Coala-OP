@@ -11,6 +11,7 @@ import { ptBR } from 'date-fns/locale'
 import { Wifi, Users, LayoutDashboard, Briefcase, Calculator, Layers, ArrowRight, Wallet } from 'lucide-react'
 import { collection, onSnapshot, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 
 interface OnlineUser {
     id: string;
@@ -176,7 +177,7 @@ export default function DashboardPage() {
                 />
               )}
               
-              {permissions.dashboard.pricing && (
+              {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
                 <SectionShortcut 
                   title="Comercial"
                   description="Gestão de preços de venda, fichas técnicas, margem de contribuição e análise de metas."
