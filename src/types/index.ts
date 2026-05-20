@@ -499,6 +499,7 @@ export type User = {
   jobRoleProfileSyncDisabled?: boolean;
   mustChangePassword?: boolean;
   passwordChangedAt?: Timestamp;
+  lastLoginAt?: Timestamp;
   unitIds?: string[];               // unidade(s) de trabalho
   admissionDate?: Timestamp;
   birthDate?: Timestamp;
@@ -506,9 +507,32 @@ export type User = {
   loginRestrictionEnabled?: boolean;
   needsTransportVoucher?: boolean;
   transportVoucherValue?: number;
+  transportVoucherHistory?: Array<{
+    id: string;
+    fromStatus: 'none' | 'active' | 'suspended';
+    toStatus: 'active' | 'suspended';
+    effectiveDate: string;
+    reason: string;
+    value?: number;
+    changedAt: string;
+    changedBy?: {
+      userId: string;
+      username: string;
+    };
+  }>;
   isActive?: boolean;
+  inactivationType?: 'temporary' | 'contract_termination';
+  inactivationHistory?: Array<{
+    type: 'temporary' | 'contract_termination' | 'reactivation';
+    at: string;
+    actorUid?: string;
+    reason?: string | null;
+    cause?: string | null;
+    notes?: string | null;
+    terminationDate?: string | null;
+  }>;
   terminationDate?: Timestamp;
-  terminationReason?: 'Sem Justa Causa' | 'Pedido de Demissão' | 'Acordo' | 'Justa Causa';
+  terminationReason?: string;
   terminationCause?: string;
   terminationNotes?: string;
 };

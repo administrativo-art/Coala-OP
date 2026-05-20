@@ -17,7 +17,8 @@ import {
 
 export interface TerminateUserPayload {
   uid: string;
-  terminationReason?: 'Sem Justa Causa' | 'Pedido de Demissão' | 'Acordo' | 'Justa Causa';
+  inactivationType?: 'temporary' | 'contract_termination';
+  terminationReason?: string;
   terminationCause?: string;
   terminationNotes?: string;
   terminationDate?: string;
@@ -44,6 +45,7 @@ export interface AuthContextType {
   terminateUser: (payload: TerminateUserPayload) => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  recordLoginAccess: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -219,6 +221,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPermissionsReady(true);
   }, [appUser, profiles, loading, profilesLoading, adminProfileId, mergeRecursive]);
 
+  const recordLoginAccess = useCallback(async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        lastLoginAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.warn("[AuthProvider] Falha ao registrar ultimo acesso.", error);
+    }
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     try {
       setLoading(true);
@@ -253,6 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('[AuthProvider] Falha ao validar acesso por escala no login. Mantendo fluxo atual.', loginAccessError);
       }
 
+      await recordLoginAccess();
       return { success: true };
     } catch (error) {
       console.error("Login error:", error);
@@ -263,7 +279,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error: 'E-mail ou senha inválidos. Verifique seus dados e tente novamente.',
       };
     }
-  }, []);
+  }, [recordLoginAccess]);
 
   const logout = useCallback(async () => {
     await signOut(auth);
@@ -384,9 +400,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     terminateUser,
     resetPassword,
     changePassword,
+    recordLoginAccess,
   }), [
     appUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading,
-    permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, resetPassword, changePassword,
+    permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, resetPassword, changePassword, recordLoginAccess,
   ]);
 
   return (

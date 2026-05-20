@@ -1,4 +1,5 @@
 import { dbAdmin } from '@/lib/firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 
 const BASE_URL = 'https://coala.bizneohr.com/api/v1';
 
@@ -20,7 +21,28 @@ export type BizneoUser = {
   last_name: string;
   email: string;
   external_id: string | null;
+  avatar_url?: string | null;
+  birthday?: string | null;
+  work_contracts?: Array<{
+    id: number;
+    start_at: string | null;
+    end_at: string | null;
+    fte?: number | null;
+  }>;
 };
+
+function parseBizneoDate(value?: string | null): Timestamp | undefined {
+  if (!value) return undefined;
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : Timestamp.fromDate(date);
+}
+
+function resolveAdmissionDate(user: BizneoUser): string | null {
+  const contracts = user.work_contracts ?? [];
+  const activeContract = contracts.find((contract) => !contract.end_at && contract.start_at);
+  if (activeContract?.start_at) return activeContract.start_at;
+  return contracts.find((contract) => contract.start_at)?.start_at ?? null;
+}
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +65,20 @@ export async function fetchBizneoUsers(): Promise<BizneoUser[]> {
     page++;
   }
 
-  return all;
+  return Promise.all(
+    all.map(async (user) => {
+      try {
+        const res = await fetch(`${BASE_URL}/users/${user.id}?token=${token}`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) return user;
+        const data = await res.json();
+        return { ...user, ...(data.user ?? data) } as BizneoUser;
+      } catch {
+        return user;
+      }
+    })
+  );
 }
 
 // ─── Sync user IDs by email ───────────────────────────────────────────────────
@@ -76,8 +111,13 @@ export async function syncBizneoUserIds(): Promise<SyncUsersResult> {
     const bizneoUser = bizneoByEmail.get(email);
 
     if (bizneoUser) {
+      const admissionDate = parseBizneoDate(resolveAdmissionDate(bizneoUser));
+      const birthDate = parseBizneoDate(bizneoUser.birthday);
       batch.update(doc.ref, {
         registrationIdBizneo: String(bizneoUser.id),
+        ...(bizneoUser.avatar_url ? { avatarUrl: bizneoUser.avatar_url } : {}),
+        ...(admissionDate ? { admissionDate } : {}),
+        ...(birthDate ? { birthDate } : {}),
       });
       matched++;
       matchedEmails.add(email);

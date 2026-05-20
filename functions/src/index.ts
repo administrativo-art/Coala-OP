@@ -1,11 +1,13 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { syncDayAdmin } from './pdv-sync';
+import { randomUUID } from 'node:crypto';
 
 initializeApp();
 setGlobalOptions({ maxInstances: 10 });
@@ -14,6 +16,8 @@ const db = getFirestore('coala');
 const checklistDb = getFirestore('coala-checklist');
 const hrDb = getFirestore('coala-rh');
 const auth = getAuth();
+const STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET ?? 'smart-converter-752gf.firebasestorage.app';
+const BIZNEO_BASE_URL = 'https://coala.bizneohr.com/api/v1';
 
 const BRT = 'America/Sao_Paulo';
 const DEV_DELETE_USER_UIDS = new Set(
@@ -77,6 +81,145 @@ function diffCalendarDays(left: string, right: string): number {
   const leftDate = new Date(`${left}T12:00:00Z`);
   const rightDate = new Date(`${right}T12:00:00Z`);
   return Math.round((leftDate.getTime() - rightDate.getTime()) / 86400000);
+}
+
+type BizneoUserPayload = {
+  id: number;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  avatar_url?: string | null;
+  birthday?: string | null;
+  work_contracts?: { start_at?: string | null; end_at?: string | null }[];
+};
+
+function parseBizneoTimestamp(value?: string | null): Timestamp | undefined {
+  if (!value) return undefined;
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : Timestamp.fromDate(date);
+}
+
+function resolveBizneoAdmissionDate(user: BizneoUserPayload): string | null {
+  return user.work_contracts?.find((contract) => !contract.end_at && contract.start_at)?.start_at
+    ?? user.work_contracts?.find((contract) => contract.start_at)?.start_at
+    ?? null;
+}
+
+async function uploadBizneoAvatar(userId: string, avatarUrl?: string | null): Promise<string | undefined> {
+  if (!avatarUrl) return undefined;
+
+  const response = await fetch(avatarUrl);
+  if (!response.ok) {
+    console.warn(`[syncBizneoUsersMonthly] Falha ao baixar avatar de ${userId}: ${response.status}`);
+    return undefined;
+  }
+
+  const contentType = response.headers.get('content-type') ?? 'image/jpeg';
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const token = randomUUID();
+  const objectPath = `avatars/${userId}/bizneo-profile`;
+  const file = getStorage().bucket(STORAGE_BUCKET).file(objectPath);
+
+  await file.save(buffer, {
+    resumable: false,
+    metadata: {
+      contentType,
+      metadata: {
+        firebaseStorageDownloadTokens: token,
+      },
+    },
+  });
+
+  return `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+}
+
+async function fetchBizneoUsersForSync(): Promise<BizneoUserPayload[]> {
+  const token = process.env.BIZNEO_TOKEN;
+  if (!token) throw new Error('BIZNEO_TOKEN não configurado.');
+
+  const all: BizneoUserPayload[] = [];
+  let page = 1;
+
+  while (true) {
+    const response = await fetch(`${BIZNEO_BASE_URL}/users?token=${encodeURIComponent(token)}&page_size=100&page=${page}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error(`Bizneo users fetch falhou: ${response.status}`);
+
+    const data = await response.json();
+    const users = (data.users ?? data) as BizneoUserPayload[];
+    if (!Array.isArray(users) || users.length === 0) break;
+    all.push(...users);
+
+    const totalPages = data.pagination?.total_pages;
+    if (!totalPages || page >= totalPages) break;
+    page += 1;
+  }
+
+  const detailed: BizneoUserPayload[] = [];
+  for (const user of all) {
+    try {
+      const response = await fetch(`${BIZNEO_BASE_URL}/users/${user.id}?token=${encodeURIComponent(token)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        detailed.push(user);
+        continue;
+      }
+      const data = await response.json();
+      detailed.push({ ...user, ...(data.user ?? data) });
+    } catch (error) {
+      console.warn(`[syncBizneoUsersMonthly] Falha ao detalhar usuário Bizneo ${user.id}:`, error);
+      detailed.push(user);
+    }
+  }
+
+  return detailed;
+}
+
+async function syncBizneoUsersIntoCoala(source: string) {
+  const [bizneoUsers, coalaUsersSnap] = await Promise.all([
+    fetchBizneoUsersForSync(),
+    db.collection('users').get(),
+  ]);
+
+  const bizneoByEmail = new Map(
+    bizneoUsers
+      .filter((user) => typeof user.email === 'string' && user.email.trim())
+      .map((user) => [user.email.toLowerCase(), user])
+  );
+
+  let matched = 0;
+  let avatarSynced = 0;
+  let unmatched = 0;
+
+  for (const userDoc of coalaUsersSnap.docs) {
+    const userData = userDoc.data();
+    const email = String(userData.email ?? '').toLowerCase();
+    const bizneoUser = bizneoByEmail.get(email);
+
+    if (!bizneoUser) {
+      if (userData.isActive !== false) unmatched += 1;
+      continue;
+    }
+
+    const admissionDate = parseBizneoTimestamp(resolveBizneoAdmissionDate(bizneoUser));
+    const birthDate = parseBizneoTimestamp(bizneoUser.birthday);
+    const avatarUrl = await uploadBizneoAvatar(userDoc.id, bizneoUser.avatar_url);
+    if (avatarUrl) avatarSynced += 1;
+
+    await userDoc.ref.update({
+      registrationIdBizneo: String(bizneoUser.id),
+      ...(avatarUrl ? { avatarUrl } : {}),
+      ...(admissionDate ? { admissionDate } : {}),
+      ...(birthDate ? { birthDate } : {}),
+      bizneoSyncedAt: new Date().toISOString(),
+      bizneoSyncSource: source,
+    });
+    matched += 1;
+  }
+
+  return { matched, avatarSynced, unmatched, totalBizneoUsers: bizneoUsers.length };
 }
 
 function monthLastDay(date: string): number {
@@ -386,6 +529,17 @@ export const cleanupExpiredActionLogs = onSchedule({
   console.log(`[cleanupExpiredActionLogs] ${snap.size} log(s) removido(s).`);
 });
 
+export const syncBizneoUsersMonthly = onSchedule({
+  schedule: '0 3 1 * *',
+  timeZone: BRT,
+  retryCount: 2,
+  memory: '512MiB',
+}, async () => {
+  console.log('[syncBizneoUsersMonthly] Iniciando sincronização mensal Bizneo.');
+  const result = await syncBizneoUsersIntoCoala('monthly-schedule');
+  console.log('[syncBizneoUsersMonthly] Concluído.', result);
+});
+
 // --- Rotina Diária de Sincronização (PDV Legal -> Coala) ---
 // --- Rotina Horária de Sincronização (PDV Legal -> Coala) ---
 // Mantém as metas atualizadas durante o dia de funcionamento
@@ -593,7 +747,7 @@ export const deleteUser = onCall(
   }
 );
 
-// --- Desligamento DP: remove do Auth, mantém no Firestore para histórico ---
+// --- Desligamento/Inativação DP: bloqueia no Auth e mantém no Firestore para histórico ---
 export const terminateUser = onCall(
   { cors: internalAppCors },
   async (request: any) => {
@@ -602,21 +756,38 @@ export const terminateUser = onCall(
       throw new HttpsError('permission-denied', 'Apenas administradores podem desligar usuários.');
     }
 
-    const { uid, terminationReason, terminationCause, terminationNotes, terminationDate } = request.data;
+    const { uid, inactivationType, terminationReason, terminationCause, terminationNotes, terminationDate } = request.data;
     if (!uid) throw new HttpsError('invalid-argument', 'O UID do usuário é obrigatório.');
 
     try {
-      // 1. Remove do Firebase Auth (não consegue mais logar)
-      await auth.deleteUser(uid);
+      // 1. Desativa no Firebase Auth para bloquear login sem perder o UID.
+      await auth.updateUser(uid, { disabled: true });
 
-      // 2. Mantém o documento no Firestore marcado como inativo
-      await db.collection('users').doc(uid).update({
+      // 2. Mantém o documento no Firestore marcado como inativo.
+      const normalizedType = inactivationType === 'contract_termination' ? 'contract_termination' : 'temporary';
+      const nowIso = new Date().toISOString();
+      const updatePayload: Record<string, unknown> = {
         isActive: false,
-        terminationDate: terminationDate ?? new Date().toISOString(),
-        terminationReason: terminationReason ?? null,
-        terminationCause: terminationCause ?? null,
-        terminationNotes: terminationNotes ?? null,
-      });
+        inactivationType: normalizedType,
+        inactivationHistory: FieldValue.arrayUnion({
+          type: normalizedType,
+          at: nowIso,
+          actorUid: request.auth.uid,
+          reason: terminationReason ?? null,
+          cause: terminationCause ?? null,
+          notes: terminationNotes ?? null,
+          terminationDate: normalizedType === 'contract_termination' ? (terminationDate ?? nowIso) : null,
+        }),
+      };
+
+      if (normalizedType === 'contract_termination') {
+        updatePayload.terminationDate = terminationDate ?? nowIso;
+        updatePayload.terminationReason = terminationReason ?? null;
+        updatePayload.terminationCause = terminationCause ?? null;
+        updatePayload.terminationNotes = terminationNotes ?? null;
+      }
+
+      await db.collection('users').doc(uid).update(updatePayload);
 
       return { success: true };
     } catch (error: any) {

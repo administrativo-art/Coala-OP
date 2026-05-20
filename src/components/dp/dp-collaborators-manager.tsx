@@ -848,8 +848,12 @@ export function DPCollaboratorsManager() {
       if (!data.success) throw new Error(data.error ?? 'Erro ao buscar usuários do Bizneo.');
 
       // 2. Cruza por email e atualiza cada usuário Coala via Firestore client
-      const bizneoByEmail = new Map<string, number>(
-        (data.users as { id: number; email: string }[]).map(u => [u.email.toLowerCase(), u.id])
+      const bizneoByEmail = new Map<
+        string,
+        { id: number; email: string; avatar_url?: string | null; birthday?: string | null; work_contracts?: { start_at?: string | null; end_at?: string | null }[] }
+      >(
+        (data.users as { id: number; email: string; avatar_url?: string | null; birthday?: string | null; work_contracts?: { start_at?: string | null; end_at?: string | null }[] }[])
+          .map(u => [u.email.toLowerCase(), u])
       );
 
       let matched = 0;
@@ -857,9 +861,17 @@ export function DPCollaboratorsManager() {
       const updates: Promise<void>[] = [];
 
       for (const user of activeUsers) {
-        const bizneoId = bizneoByEmail.get((user.email ?? '').toLowerCase());
-        if (bizneoId) {
-          updates.push(updateUser({ ...user, registrationIdBizneo: String(bizneoId) }));
+        const bizneoUser = bizneoByEmail.get((user.email ?? '').toLowerCase());
+        if (bizneoUser) {
+          const admissionDate = bizneoUser.work_contracts?.find((contract) => !contract.end_at && contract.start_at)?.start_at
+            ?? bizneoUser.work_contracts?.find((contract) => contract.start_at)?.start_at;
+          updates.push(updateUser({
+            ...user,
+            registrationIdBizneo: String(bizneoUser.id),
+            ...(bizneoUser.avatar_url ? { avatarUrl: bizneoUser.avatar_url } : {}),
+            ...(admissionDate ? { admissionDate: Timestamp.fromDate(new Date(`${admissionDate}T12:00:00`)) } : {}),
+            ...(bizneoUser.birthday ? { birthDate: Timestamp.fromDate(new Date(`${bizneoUser.birthday}T12:00:00`)) } : {}),
+          }));
           matched++;
         } else {
           unmatched.push(user.username);
@@ -869,8 +881,8 @@ export function DPCollaboratorsManager() {
       await Promise.all(updates);
 
       toast({
-        title: 'Matrículas Bizneo sincronizadas',
-        description: `${matched} vinculado(s) · ${unmatched.length} sem correspondência.`,
+        title: 'Dados Bizneo sincronizados',
+        description: `${matched} vinculado(s) com foto, matrícula, admissão e nascimento · ${unmatched.length} sem correspondência.`,
       });
     } catch (e: any) {
       toast({ title: 'Erro ao sincronizar com Bizneo.', description: e.message, variant: 'destructive' });

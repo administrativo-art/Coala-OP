@@ -26,7 +26,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isAuthenticated, loading, firebaseUser, logout } = useAuth();
+  const { login, isAuthenticated, loading, firebaseUser, logout, recordLoginAccess } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [loginAccessGate, setLoginAccessGate] = useState<HrLoginAccessPayload | null>(null);
@@ -82,6 +82,7 @@ export default function LoginPage() {
         payload.evaluation.status === "allowed" ||
         payload.evaluation.reason === "after_shift_extension_active"
       ) {
+        await recordLoginAccess();
         router.push("/dashboard");
         return;
       }

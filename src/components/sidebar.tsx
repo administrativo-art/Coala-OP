@@ -222,28 +222,27 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         onMouseEnter={() => setHoverExpanded(true)}
         onMouseLeave={() => setHoverExpanded(false)}
         className={cn(
-          "fixed left-0 top-0 bottom-0 z-50 flex flex-col overflow-hidden border-r transition-all duration-300",
+          "fixed left-4 top-4 bottom-4 z-50 flex flex-col overflow-hidden border bg-white shadow-[0_18px_45px_rgba(15,23,42,0.12)] transition-all duration-300",
           open
             ? "translate-x-0 pointer-events-auto"
-            : "-translate-x-full pointer-events-none lg:translate-x-0 lg:pointer-events-auto"
+            : "-translate-x-[130%] pointer-events-none lg:translate-x-0 lg:pointer-events-auto"
         )}
-        style={{ width: expanded ? 256 : 72, background: "#ffffff" }}
+        style={{ width: expanded ? 336 : 84, borderRadius: 28 }}
       >
         {/* Logo area */}
-        <div className={cn("relative flex-shrink-0 pt-4 pb-3", expanded ? "px-4" : "px-3")}>
+        <div className={cn("relative flex-shrink-0", expanded ? "px-6 pb-5 pt-6" : "px-3 pb-5 pt-7")}>
           {expanded ? (
-            <img
-              src={brand.logo}
-              alt={brand.name}
-              style={{ height: 130, width: "100%", objectFit: "cover", objectPosition: "center" }}
-            />
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-2xl bg-white">
+                <img src={brand.logo} alt={brand.name} className="max-h-8 max-w-8 object-contain" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xl font-semibold tracking-normal text-slate-900">Coala Shakes</p>
+              </div>
+            </div>
           ) : (
-            <div
-              className="mx-auto grid h-11 w-11 place-items-center rounded-2xl text-lg font-black text-white shadow-sm"
-              style={{ background: "linear-gradient(135deg, #e0528d, #56b6d1)" }}
-              title={brand.name}
-            >
-              C
+            <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-2xl bg-white" title={brand.name}>
+              <img src={brand.logo} alt={brand.name} className="max-h-9 max-w-9 object-contain" />
             </div>
           )}
           <button
@@ -255,55 +254,61 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           </button>
         </div>
 
-        <div className="mx-4 h-px bg-border" />
+        {expanded ? null : <div className="mx-4 h-px bg-slate-200" />}
 
-        {/* Painel Central — static single item */}
-        <div className="flex-shrink-0 px-3 pt-2 pb-1">
+        <div className={cn("flex-shrink-0", expanded ? "px-4 pb-2" : "px-3 pb-2 pt-4")}>
           <Link
             href="/dashboard"
             onClick={() => onOpenChange(false)}
             className={cn(
-              "flex items-center gap-2.5 rounded-lg py-2 text-xs font-medium transition-colors",
+              "flex items-center transition-colors",
+              expanded
+                ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
+                : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
               pathname === "/dashboard"
-                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                ? "border border-stone-200 bg-stone-50 text-slate-950"
+                : ""
             )}
-            style={{
-              justifyContent: expanded ? "flex-start" : "center",
-              paddingLeft: expanded ? 12 : 0,
-              paddingRight: expanded ? 12 : 0,
-              borderLeft: pathname === "/dashboard" ? "3px solid #6366f1" : "3px solid transparent",
-            }}
             title="Painel Central"
           >
-            <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
+            <LayoutDashboard className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
             {expanded ? <span>Painel Central</span> : null}
           </Link>
         </div>
 
         {/* Accordion nav */}
-        <nav className="flex-1 overflow-y-auto px-3 py-1">
+        <nav className={cn("flex-1 overflow-y-auto", expanded ? "px-4 py-1" : "px-3 py-1")}>
           {expanded ? (
             navSections.map(section => {
               const isOpen = openSections.has(section.key);
               const hasActive = section.items.some(isItemActive);
+              const SectionIcon = section.icon;
 
               return (
-                <div key={section.key} className="mb-1">
+                <div
+                  key={section.key}
+                  className={cn(
+                    "mb-2 rounded-2xl transition-colors",
+                    hasActive && "border border-stone-200 bg-stone-50"
+                  )}
+                >
                   <button
                     type="button"
                     onClick={() => toggleSection(section.key)}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors hover:text-foreground"
-                    style={{ color: hasActive ? section.color.text : undefined }}
+                    className={cn(
+                      "flex h-12 w-full items-center gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 transition-colors hover:bg-stone-50",
+                      hasActive && "text-slate-950"
+                    )}
                   >
+                    <SectionIcon className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
                     <span className="flex-1 text-left">{section.label}</span>
                     <ChevronDown
-                      className={cn("h-3 w-3 transition-transform duration-200", isOpen && "rotate-180")}
+                      className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-180")}
                     />
                   </button>
 
                   {isOpen && (
-                    <div className="mt-0.5 space-y-px">
+                    <div className="mb-3 ml-8 mt-1 space-y-1 border-l border-stone-200 py-1 pl-6">
                       {section.items.map(item => {
                         const Icon = item.icon;
                         const active = isItemActive(item);
@@ -314,15 +319,12 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                             key={item.href}
                             href={item.href}
                             onClick={() => onOpenChange(false)}
-                            className="flex items-center gap-2.5 rounded-lg py-2 text-xs font-medium transition-colors hover:bg-muted"
-                            style={{
-                              paddingLeft: 40,
-                              paddingRight: 10,
-                              borderLeft: active ? `3px solid ${section.color.border}` : "3px solid transparent",
-                              background: active ? section.color.bg : undefined,
-                              color: active ? section.color.text : undefined,
-                            }}
+                            className={cn(
+                              "relative flex min-h-9 items-center gap-2.5 rounded-xl px-3 py-1.5 text-[15px] font-medium text-slate-700 transition-colors hover:bg-white",
+                              active && "font-semibold text-slate-950"
+                            )}
                           >
+                            {active && <span className="absolute -left-[27px] top-1/2 h-8 w-0.5 -translate-y-1/2 rounded-full bg-slate-900" />}
                             <Icon className="h-4 w-4 flex-shrink-0" />
                             <span className="flex-1">{item.label}</span>
                             {item.badge && item.badge.count > 0 && badgeColors && (
@@ -360,15 +362,13 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                       });
                       setHoverExpanded(true);
                     }}
-                    className="relative flex h-10 w-full items-center justify-center rounded-xl transition-colors hover:bg-muted"
-                    style={{
-                      borderLeft: active ? `3px solid ${section.color.border}` : "3px solid transparent",
-                      background: active ? section.color.bg : undefined,
-                      color: active ? section.color.text : undefined,
-                    }}
+                    className={cn(
+                      "relative mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-slate-800 transition-colors hover:bg-stone-50",
+                      active && "border border-stone-200 bg-stone-50 text-slate-950"
+                    )}
                     title={section.label}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-6 w-6 stroke-[2.2]" />
                     {badgeCount > 0 && (
                       <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
                     )}
@@ -379,13 +379,13 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           )}
         </nav>
 
-        <div className="mx-4 h-px bg-border mb-2" />
+        <div className={cn("mx-4 h-px bg-slate-200", expanded ? "mb-4" : "mb-3")} />
 
         {/* Footer */}
-        <div className={cn("flex-shrink-0 pb-4", expanded ? "px-4" : "px-3")}>
+        <div className={cn("flex-shrink-0 pb-5", expanded ? "px-5" : "px-3")}>
           <div className={cn("flex items-center", expanded ? "gap-2.5" : "justify-center")}>
             <div
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
               style={{ background: "linear-gradient(135deg, #f43f5e, #14b8a6)" }}
             >
               {userInitial}

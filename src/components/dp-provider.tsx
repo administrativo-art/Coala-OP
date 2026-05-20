@@ -66,7 +66,7 @@ type DPScope = 'inactive' | 'dashboard' | 'settings' | 'schedules' | 'vacations'
 const SCOPE_RESOURCES: Record<DPScope, DPResourceKey[]> = {
   inactive: [],
   dashboard: ['units', 'shiftDefs', 'schedules', 'vacations'],
-  settings: ['units', 'shiftDefs', 'calendars'],
+  settings: ['units', 'shiftDefs', 'vacations', 'calendars'],
   schedules: ['units', 'shiftDefs', 'schedules', 'calendars'],
   vacations: ['units', 'vacations'],
   collaborators: ['shiftDefs'],
