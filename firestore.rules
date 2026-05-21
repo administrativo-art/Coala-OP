@@ -50,6 +50,14 @@ service cloud.firestore {
       return purchasingPerm('receivePurchase') || getPerms().stock.purchasing.approve == true;
     }
 
+    function canReadUsersDirectory() {
+      return isAdmin()
+        || getPerms().settings.manageUsers == true
+        || getPerms().dp.collaborators.view == true
+        || getPerms().dp.collaborators.edit == true
+        || getPerms().dp.collaborators.terminate == true;
+    }
+
     // --- FUNÇÕES DE VALIDAÇÃO DE SCHEMA ---
 
     function isValidUser(data) {
@@ -128,7 +136,7 @@ service cloud.firestore {
 
     // Usuários - Somente leitura via SDK, escrita via API
     match /users/{userId} {
-      allow read: if isAuth();
+      allow read: if isAuth() && (request.auth.uid == userId || canReadUsersDirectory());
       allow write: if false;
     }
 
@@ -206,6 +214,11 @@ service cloud.firestore {
       }
     }
 
+    match /{path=**}/items/{itemId} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
     match /purchase_financials/{financialId} {
       allow read: if isAuth();
       allow write: if false;
@@ -234,9 +247,135 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Cadastros e configurações lidos pelo cliente. Escritas seguem via APIs/Admin SDK.
+    match /channels/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /classifications/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /competitorGroups/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /concorrentes/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /concorrente_produtos/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /concorrente_precos/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /consumptionReports/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /dp_units/{id} {
+      allow read: if isAuth() && canReadUsersDirectory();
+      allow write: if false;
+    }
+    match /dp_unitGroups/{id} {
+      allow read: if isAuth() && canReadUsersDirectory();
+      allow write: if false;
+    }
+    match /dp_shiftDefinitions/{id} {
+      allow read: if isAuth() && canReadUsersDirectory();
+      allow write: if false;
+    }
+    match /dp_schedules/{id} {
+      allow read: if isAuth() && canReadUsersDirectory();
+      allow write: if false;
+      match /shifts/{shiftId} {
+        allow read: if isAuth() && canReadUsersDirectory();
+        allow write: if false;
+      }
+    }
+    match /dp_calendars/{id} {
+      allow read: if isAuth() && canReadUsersDirectory();
+      allow write: if false;
+      match /holidays/{holidayId} {
+        allow read: if isAuth() && canReadUsersDirectory();
+        allow write: if false;
+      }
+    }
+    match /dp_vacations/{id} {
+      allow read: if isAuth() && canReadUsersDirectory();
+      allow write: if false;
+    }
+    match /employeeGoals/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /goalPeriods/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /goalTemplates/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /locations/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /predefinedLists/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /priceHistory/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /priceOverrides/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /productSimulationCategories/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /productSimulationItems/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /productSimulations/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /purchaseItems/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /purchaseSessions/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /salesReports/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /settings/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /simulationPriceHistory/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /userPresence/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
     // CATCH-ALL
     match /{document=**} {
-      allow read: if isAuth();
+      allow read: if false;
       allow write: if false;
     }
   }

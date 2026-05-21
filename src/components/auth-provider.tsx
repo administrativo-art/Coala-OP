@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth, functions } from '@/lib/firebase';
-import { collection, onSnapshot, doc, query, getDoc, getDocFromCache, updateDoc, deleteDoc, deleteField, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, doc, query, getDoc, getDocFromCache } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
@@ -63,24 +63,6 @@ function buildBlockedLoginMessage(payload: HrLoginAccessPayload) {
     default:
       return 'Seu acesso está bloqueado pela política de escala.';
   }
-}
-
-function sanitizeFirestoreUpdate(value: unknown): unknown {
-  if (value === undefined) {
-    return deleteField();
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(item => sanitizeFirestoreUpdate(item));
-  }
-
-  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, sanitizeFirestoreUpdate(entry)])
-    );
-  }
-
-  return value;
 }
 
 function applyCommercialPermissionFallbacks(permissions: PermissionSet) {
@@ -157,14 +139,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (profilesLoading) return; 
+    if (profilesLoading || !permissionsReady) return;
+
+    if (!appUser) {
+      setUsers([]);
+      return;
+    }
+
+    const canReadUsersDirectory =
+      permissions.settings.manageUsers ||
+      permissions.dp?.collaborators?.view === true ||
+      permissions.dp?.collaborators?.edit === true ||
+      permissions.dp?.collaborators?.terminate === true;
+
+    if (!canReadUsersDirectory) {
+      setUsers([appUser]);
+      return;
+    }
+
     const q = query(collection(db, "users"));
     const unsubscribeUsers = onSnapshot(q, (snapshot) => {
         const usersData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
         setUsers(usersData);
+    }, (error) => {
+        console.error("[AuthProvider] Falha ao carregar diretório de usuários.", error);
+        setUsers([appUser]);
     });
     return () => unsubscribeUsers();
-  }, [profilesLoading]);
+  }, [appUser, permissions, permissionsReady, profilesLoading]);
 
   const mergeRecursive = useCallback((target: Record<string, any>, source: Record<string, any>) => {
     if (!source || typeof source !== 'object' || Array.isArray(source)) return;
@@ -330,10 +332,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateUser = useCallback(async (updatedUser: User) => {
-    const userRef = doc(db, "users", updatedUser.id);
     const { id, email, ...dataToUpdate } = updatedUser as any;
     delete dataToUpdate.password;
-    await updateDoc(userRef, sanitizeFirestoreUpdate(dataToUpdate) as Record<string, unknown>);
+
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error("Usuário não autenticado.");
+
+    const response = await fetch(`/api/users/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(dataToUpdate),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error ?? "Erro ao atualizar usuário.");
+    }
   }, []);
   
   const deleteUser = useCallback(async (userId: string) => {
@@ -380,10 +397,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
-      await updateDoc(doc(db, "users", user.uid), {
-        mustChangePassword: false,
-        passwordChangedAt: serverTimestamp(),
+
+      const token = await user.getIdToken();
+      const response = await fetch("/api/auth/password-changed", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error ?? "Senha alterada, mas falhou ao atualizar o cadastro.");
+      }
+
       setAppUser((current) =>
         current && current.id === user.uid
           ? { ...current, mustChangePassword: false }
