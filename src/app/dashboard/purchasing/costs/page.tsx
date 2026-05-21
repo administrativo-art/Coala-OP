@@ -3,11 +3,18 @@
 import { useState, useEffect, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { RefreshCw, GitBranch } from 'lucide-react';
+import { RefreshCw, GitBranch, Search } from 'lucide-react';
 
 import { BackButton } from '@/components/navigation/back-button';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import {
   Select,
   SelectContent,
@@ -32,6 +39,13 @@ import { TraceDrawer } from '@/components/purchasing/trace-drawer';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
 import { type EffectiveCostEntry } from '@/types';
 
+const normalizeSearch = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
 export default function EffectiveCostsPage() {
   const { permissions } = useAuth();
   const { entries, loading, fetchCosts } = useEffectiveCosts();
@@ -41,19 +55,67 @@ export default function EffectiveCostsPage() {
 
   const [filterBaseItem, setFilterBaseItem] = useState('_all');
   const [filterSupplier, setFilterSupplier] = useState('_all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [traceEntry, setTraceEntry] = useState<EffectiveCostEntry | null>(null);
 
   useEffect(() => {
-    fetchCosts({ limitCount: 200 });
+    fetchCosts({ limitCount: 500 });
   }, [fetchCosts]);
 
+  const baseProductsById = useMemo(
+    () => new Map(baseProducts.map((bp) => [bp.id, bp])),
+    [baseProducts],
+  );
+
+  const suppliersById = useMemo(
+    () => new Map(entities.map((entity) => [entity.id, entity])),
+    [entities],
+  );
+
+  const lastNegotiationsByItem = useMemo(() => {
+    const map = new Map<string, EffectiveCostEntry[]>();
+
+    for (const entry of entries) {
+      const itemEntries = map.get(entry.baseItemId) ?? [];
+      if (itemEntries.length < 3) {
+        itemEntries.push(entry);
+        map.set(entry.baseItemId, itemEntries);
+      }
+    }
+
+    return map;
+  }, [entries]);
+
   const filtered = useMemo(() => {
+    const tokens = normalizeSearch(searchTerm).split(/\s+/).filter(Boolean);
+
     return entries.filter((e) => {
       if (filterBaseItem !== '_all' && e.baseItemId !== filterBaseItem) return false;
       if (filterSupplier !== '_all' && e.supplierId !== filterSupplier) return false;
+      if (tokens.length === 0) return true;
+
+      const base = baseProductsById.get(e.baseItemId);
+      const supplier = suppliersById.get(e.supplierId);
+      const occurredAt = e.occurredAt ? format(parseISO(e.occurredAt), 'dd/MM/yyyy', { locale: ptBR }) : '';
+      const searchable = normalizeSearch([
+        base?.name,
+        e.baseItemId,
+        supplier?.fantasyName,
+        supplier?.name,
+        e.supplierId,
+        e.unitCost?.toString(),
+        e.purchasePrice?.toString(),
+        e.quantity?.toString(),
+        e.purchaseUnitLabel,
+        e.purchaseReceiptLotId,
+        e.purchaseReceiptLotId?.slice(-8),
+        occurredAt,
+      ].filter(Boolean).join(' '));
+
+      if (!tokens.every((token) => searchable.includes(token))) return false;
       return true;
     });
-  }, [entries, filterBaseItem, filterSupplier]);
+  }, [entries, filterBaseItem, filterSupplier, searchTerm, baseProductsById, suppliersById]);
 
   // Last effective price per base item (first entry per baseItemId since sorted DESC)
   const lastPriceByItem = useMemo(() => {
@@ -81,7 +143,7 @@ export default function EffectiveCostsPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => fetchCosts({ limitCount: 200 })}
+          onClick={() => fetchCosts({ limitCount: 500 })}
           disabled={loading}
         >
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -91,6 +153,16 @@ export default function EffectiveCostsPage() {
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
+        <div className="relative min-w-72 flex-1 sm:flex-none">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Buscar por insumo, fornecedor, lote, data..."
+            className="pl-9"
+          />
+        </div>
+
         <Select value={filterBaseItem} onValueChange={setFilterBaseItem}>
           <SelectTrigger className="w-56">
             <SelectValue placeholder="Todos os insumos" />
@@ -155,11 +227,49 @@ export default function EffectiveCostsPage() {
             </TableHeader>
             <TableBody>
               {filtered.map((entry) => {
-                const base = baseProducts.find((bp) => bp.id === entry.baseItemId);
-                const supplier = entities.find((e) => e.id === entry.supplierId);
+                const base = baseProductsById.get(entry.baseItemId);
+                const supplier = suppliersById.get(entry.supplierId);
+                const negotiations = lastNegotiationsByItem.get(entry.baseItemId) ?? [];
                 return (
                   <TableRow key={entry.id}>
-                    <TableCell className="font-medium">{base?.name ?? entry.baseItemId}</TableCell>
+                    <TableCell className="min-w-56 align-top">
+                      <Accordion type="single" collapsible>
+                        <AccordionItem value={entry.id} className="border-0">
+                          <AccordionTrigger className="py-0 text-left font-medium hover:no-underline">
+                            <span>{base?.name ?? entry.baseItemId}</span>
+                          </AccordionTrigger>
+                          <AccordionContent className="pt-3 pb-0">
+                            {negotiations.length > 0 ? (
+                              <div className="space-y-2">
+                                {negotiations.map((negotiation) => {
+                                  const negotiationSupplier = suppliersById.get(negotiation.supplierId);
+                                  return (
+                                    <div
+                                      key={negotiation.id}
+                                      className="rounded-md border bg-muted/30 px-3 py-2"
+                                    >
+                                      <div className="flex items-center justify-between gap-3">
+                                        <span className="font-mono text-xs font-semibold">
+                                          {negotiation.unitCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/{base?.unit ?? ''}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                          {format(parseISO(negotiation.occurredAt), "dd/MM/yyyy", { locale: ptBR })}
+                                        </span>
+                                      </div>
+                                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                                        {negotiationSupplier?.fantasyName ?? negotiationSupplier?.name ?? 'Fornecedor não identificado'}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">Sem negociações anteriores.</p>
+                            )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {supplier?.fantasyName ?? supplier?.name ?? '—'}
                     </TableCell>

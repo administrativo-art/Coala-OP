@@ -70,11 +70,23 @@ const destLotIdKey = (params: {
 
 // --- PROVIDER COMPONENT ---
 export function ExpiryProductsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [lots, setLots] = useState<LotEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
+    if (!user) {
+      setLots([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     const q = query(collection(db, "lots"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const lotsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LotEntry));
@@ -85,7 +97,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [authLoading, user]);
 
   const addMovementRecord = (batchOrTx: any, record: Omit<MovementRecord, 'id'>) => {
     const movementHistoryRef = doc(collection(db, "movementHistory"));
