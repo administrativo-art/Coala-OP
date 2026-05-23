@@ -52,6 +52,7 @@ export interface StockEntryItemInput {
   receiptItemId: string;
   purchaseOrderItemId: string;
   baseItemId: string;
+  entryType?: 'stock' | 'uniform' | 'asset';
   productId: string;     // specific Product variant for stock entry
   productName?: string;
   purchaseUnitType?: PurchaseReceiptItem['purchaseUnitType'];

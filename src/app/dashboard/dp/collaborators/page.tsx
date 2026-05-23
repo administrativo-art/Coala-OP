@@ -1,101 +1,94 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, Users, UserX, Clock, Building2, Briefcase, Calendar } from 'lucide-react';
+import { Briefcase, Calendar, Grid2X2, List, Mail, MapPin, Search, Users, UserX } from 'lucide-react';
+
 import { useAuth } from '@/hooks/use-auth';
 import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
-import type { User, DPShiftDefinition } from '@/types';
+import type { User } from '@/types';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 function initials(name: string) {
-  return name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase();
+  return name.split(' ').filter(Boolean).slice(0, 2).map((n) => n[0]).join('').toUpperCase();
 }
 
-const AVATAR_COLORS = [
-  'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-blue-500',
-  'bg-teal-500',   'bg-orange-500', 'bg-green-500', 'bg-rose-500',
-  'bg-cyan-500',   'bg-amber-500',  'bg-violet-500','bg-emerald-500',
-];
-
-function avatarColor(name: string, colorHex?: string) {
-  if (colorHex) return '';
-  return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
+function fmtDate(value: any) {
+  if (!value) return '-';
+  try {
+    const date = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
+    return format(date, "dd 'de' MMM. yyyy", { locale: ptBR });
+  } catch {
+    return '-';
+  }
 }
 
-function fmtDate(ts: any) {
-  try { return format(ts.toDate(), "dd 'de' MMM. yyyy", { locale: ptBR }); } catch { return '—'; }
+function AvatarMark({ user }: { user: User }) {
+  return (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-violet-100 text-xs font-bold text-violet-700"
+      style={user.color ? { backgroundColor: user.color, color: '#fff' } : undefined}
+    >
+      {initials(user.username)}
+    </div>
+  );
 }
 
-function CollaboratorCard({ user, shiftDefinitions, onClick }: {
+function CollaboratorCard({
+  user,
+  unitNames,
+  shiftName,
+  onOpen,
+}: {
   user: User;
-  shiftDefinitions: DPShiftDefinition[];
-  onClick: () => void;
+  unitNames: string[];
+  shiftName: string | null;
+  onOpen: () => void;
 }) {
-  const shiftDef = shiftDefinitions.find(d => d.id === user.shiftDefinitionId);
-  const color = avatarColor(user.username, user.color);
-  const isTerminated = user.isActive === false;
+  const isActive = user.isActive !== false;
 
   return (
     <button
-      onClick={onClick}
-      className={`group w-full text-left p-5 rounded-2xl border transition-all ${
-        isTerminated
-          ? 'bg-slate-900/30 border-slate-800/50 hover:border-slate-700'
-          : 'bg-slate-900/60 border-slate-800 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/5'
-      }`}
+      type="button"
+      onClick={onOpen}
+      className="overflow-hidden rounded-md border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {/* Avatar + name */}
-      <div className="flex items-start gap-3 mb-4">
-        <div
-          className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0 ${color}`}
-          style={user.color ? { backgroundColor: user.color } : {}}
-        >
-          {initials(user.username)}
-        </div>
-        <div className="flex-1 min-w-0 pt-0.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-white text-sm group-hover:text-indigo-300 transition-colors truncate">
-              {user.username}
-            </p>
-            {isTerminated && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
-                Desligado
-              </span>
-            )}
-          </div>
-          {user.jobRoleName && (
-            <p className="text-xs text-slate-500 truncate mt-0.5">{user.jobRoleName}</p>
-          )}
-        </div>
+      <div className="flex items-start justify-between bg-violet-50 px-4 py-3">
+        <Badge variant="outline" className="bg-white text-[10px] uppercase text-violet-700">
+          Colaborador
+        </Badge>
+        {isActive ? (
+          <Badge className="bg-emerald-600 text-[10px] text-white hover:bg-emerald-600">Ativo</Badge>
+        ) : (
+          <Badge variant="secondary" className="text-[10px]">Desligado</Badge>
+        )}
       </div>
-
-      {/* Metadata chips */}
-      <div className="flex flex-wrap gap-2">
-        {shiftDef && (
-          <span className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-800/70 px-2.5 py-1 rounded-lg">
-            <Clock className="h-3 w-3 text-slate-500" />
-            {shiftDef.startTime}–{shiftDef.endTime}
-          </span>
-        )}
-        {user.admissionDate && (
-          <span className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-800/70 px-2.5 py-1 rounded-lg">
-            <Calendar className="h-3 w-3 text-slate-500" />
-            {fmtDate(user.admissionDate)}
-          </span>
-        )}
-        {user.unitIds && user.unitIds.length > 0 && (
-          <span className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-800/70 px-2.5 py-1 rounded-lg">
-            <Building2 className="h-3 w-3 text-slate-500" />
-            {user.unitIds.length} unidade{user.unitIds.length !== 1 ? 's' : ''}
-          </span>
-        )}
-        {isTerminated && user.terminationDate && (
-          <span className="flex items-center gap-1.5 text-[11px] text-red-400/70 bg-red-500/5 px-2.5 py-1 rounded-lg">
-            Deslig. {fmtDate(user.terminationDate)}
-          </span>
-        )}
+      <div className="space-y-4 p-4">
+        <div className="flex items-start gap-3">
+          <AvatarMark user={user} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{user.username}</p>
+            <p className="truncate text-xs text-muted-foreground">{user.jobRoleName || '-'}</p>
+          </div>
+        </div>
+        <div className="space-y-1.5 text-xs text-muted-foreground">
+          {user.email ? <p className="flex items-center gap-1.5"><Mail className="h-3 w-3" />{user.email}</p> : null}
+          <p className="flex items-center gap-1.5"><MapPin className="h-3 w-3" />{unitNames.length ? unitNames.join(', ') : 'Sem unidade'}</p>
+          <p className="flex items-center gap-1.5"><Calendar className="h-3 w-3" />{shiftName || 'Sem turno padrão'}</p>
+        </div>
+        <div className="flex items-center justify-between border-t pt-3 text-xs">
+          <span className="text-muted-foreground">desde {fmtDate(user.admissionDate)}</span>
+          <span className="font-medium text-violet-700">Abrir</span>
+        </div>
       </div>
     </button>
   );
@@ -103,97 +96,217 @@ function CollaboratorCard({ user, shiftDefinitions, onClick }: {
 
 export default function DPCollaboratorsPage() {
   const { permissions, activeUsers, terminatedUsers } = useAuth();
-  const { shiftDefinitions, shiftDefsLoading } = useDPBootstrap();
+  const { shiftDefinitions, shiftDefsLoading, units } = useDPBootstrap();
   const router = useRouter();
 
-  const [tab, setTab] = useState<'active' | 'terminated'>('active');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'terminated'>('active');
+  const [unitFilter, setUnitFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
-  if (!permissions.dp?.collaborators?.view) {
-    return <p className="text-slate-400 p-6">Sem permissão para acessar Colaboradores.</p>;
-  }
+  const allUsers = useMemo(() => [...activeUsers, ...terminatedUsers], [activeUsers, terminatedUsers]);
 
-  const pool = tab === 'active' ? activeUsers : terminatedUsers;
+  const roleOptions = useMemo(() => {
+    return Array.from(new Set(allUsers.map((user) => user.jobRoleName).filter(Boolean) as string[]))
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [allUsers]);
+
+  const unitNameById = useMemo(() => new Map(units.map((unit) => [unit.id, unit.name])), [units]);
+  const shiftNameById = useMemo(() => new Map(shiftDefinitions.map((shift) => [shift.id, shift.name])), [shiftDefinitions]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return pool;
-    const q = search.toLowerCase();
-    return pool.filter(u =>
-      u.username.toLowerCase().includes(q) ||
-      (u.registrationIdBizneo ?? '').toLowerCase().includes(q) ||
-      (u.registrationIdPdv ?? '').toLowerCase().includes(q) ||
-      (u.jobRoleName ?? '').toLowerCase().includes(q)
-    );
-  }, [pool, search]);
+    const q = search.trim().toLowerCase();
+    return allUsers.filter((user) => {
+      const isActive = user.isActive !== false;
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'active' && isActive) ||
+        (statusFilter === 'terminated' && !isActive);
+      const matchesUnit = unitFilter === 'all' || (user.unitIds ?? []).includes(unitFilter);
+      const matchesRole = roleFilter === 'all' || user.jobRoleName === roleFilter;
+      const matchesSearch = !q || [
+        user.username,
+        user.email,
+        user.jobRoleName,
+        user.registrationIdBizneo,
+        user.registrationIdPdv,
+      ].filter(Boolean).some((value) => String(value).toLowerCase().includes(q));
+
+      return matchesStatus && matchesUnit && matchesRole && matchesSearch;
+    });
+  }, [allUsers, search, statusFilter, unitFilter, roleFilter]);
+
+  if (!permissions.dp?.collaborators?.view) {
+    return <p className="p-6 text-sm text-muted-foreground">Sem permissão para acessar Colaboradores.</p>;
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Colaboradores</h1>
-          <p className="text-slate-400 mt-1 text-sm">
-            {activeUsers.length} ativo{activeUsers.length !== 1 ? 's' : ''} · {terminatedUsers.length} desligado{terminatedUsers.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-          <input
-            type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por nome, cargo, matrícula…"
-            className="pl-10 pr-4 py-2.5 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 w-72 text-sm"
-          />
+          <p className="text-xs text-muted-foreground">Pessoal / Colaboradores</p>
+          <h1 className="text-3xl font-bold tracking-tight">Colaboradores</h1>
+          <p className="text-sm text-muted-foreground">Perfis da equipe, vínculos, escalas e histórico operacional.</p>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 bg-slate-900/50 border border-slate-800 rounded-xl p-1 w-fit">
-        <button onClick={() => setTab('active')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            tab === 'active' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'
-          }`}>
-          <Users className="h-4 w-4" />
-          Ativos
-          <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-            {activeUsers.length}
-          </span>
-        </button>
-        <button onClick={() => setTab('terminated')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            tab === 'terminated' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'
-          }`}>
-          <UserX className="h-4 w-4" />
-          Desligados
-          <span className="bg-slate-700 text-slate-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-            {terminatedUsers.length}
-          </span>
-        </button>
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Cadastros</p><p className="mt-1 text-2xl font-bold">{allUsers.length}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ativos</p><p className="mt-1 text-2xl font-bold text-emerald-600">{activeUsers.length}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Desligados</p><p className="mt-1 text-2xl font-bold text-slate-600">{terminatedUsers.length}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Funções</p><p className="mt-1 text-2xl font-bold">{roleOptions.length}</p></CardContent></Card>
       </div>
 
-      {/* Grid */}
+      <div className="space-y-3 rounded-md border bg-card p-3">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className="relative min-w-64 flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por nome, e-mail, cargo, matrícula..."
+              className="pl-9"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
+            <SelectTrigger className="w-full lg:w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos status</SelectItem>
+              <SelectItem value="active">Ativos</SelectItem>
+              <SelectItem value="terminated">Desligados</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={unitFilter} onValueChange={setUnitFilter}>
+            <SelectTrigger className="w-full lg:w-52"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas unidades</SelectItem>
+              {units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-full lg:w-52"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas funções</SelectItem>
+              {roleOptions.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => value && setViewMode(value as 'table' | 'cards')}
+            className="justify-start rounded-md border p-1"
+          >
+            <ToggleGroupItem value="cards" aria-label="Cards"><Grid2X2 className="h-4 w-4" /></ToggleGroupItem>
+            <ToggleGroupItem value="table" aria-label="Tabela"><List className="h-4 w-4" /></ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant={statusFilter === 'all' ? 'default' : 'outline'} className="h-7 rounded-full" onClick={() => setStatusFilter('all')}>Todos {allUsers.length}</Button>
+          <Button size="sm" variant={statusFilter === 'active' ? 'default' : 'outline'} className="h-7 rounded-full" onClick={() => setStatusFilter('active')}>Ativos {activeUsers.length}</Button>
+          <Button size="sm" variant={statusFilter === 'terminated' ? 'default' : 'outline'} className="h-7 rounded-full" onClick={() => setStatusFilter('terminated')}>Desligados {terminatedUsers.length}</Button>
+        </div>
+      </div>
+
       {shiftDefsLoading && shiftDefinitions.length === 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {[...Array(8)].map((_, i) => (
-            <div key={i} className="h-36 bg-slate-900/40 border border-slate-800/50 rounded-2xl animate-pulse" />
-          ))}
-        </div>
+        viewMode === 'cards' ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[...Array(8)].map((_, index) => <Skeleton key={index} className="h-56 w-full" />)}
+          </div>
+        ) : (
+          <div className="rounded-md border bg-card p-3">
+            {[...Array(6)].map((_, index) => <Skeleton key={index} className="mb-2 h-10 w-full last:mb-0" />)}
+          </div>
+        )
       ) : filtered.length === 0 ? (
-        <div className="py-20 text-center">
-          <Briefcase className="h-10 w-10 text-slate-700 mx-auto mb-3" />
-          <p className="text-slate-500">
-            {search ? 'Nenhum colaborador encontrado.' : `Nenhum colaborador ${tab === 'active' ? 'ativo' : 'desligado'}.`}
-          </p>
+        <div className="rounded-md border bg-card py-16 text-center text-muted-foreground">
+          <Briefcase className="mx-auto mb-2 h-8 w-8" />
+          Nenhum colaborador encontrado.
+        </div>
+      ) : viewMode === 'cards' ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {filtered.map((user) => {
+            const unitNames = (user.unitIds ?? []).map((id) => unitNameById.get(id) ?? id);
+            const shiftName = user.shiftDefinitionId ? shiftNameById.get(user.shiftDefinitionId) ?? null : null;
+            return (
+              <CollaboratorCard
+                key={user.id}
+                user={user}
+                unitNames={unitNames}
+                shiftName={shiftName}
+                onOpen={() => router.push(`/dashboard/dp/collaborators/${user.id}`)}
+              />
+            );
+          })}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map(user => (
-            <CollaboratorCard
-              key={user.id}
-              user={user}
-              shiftDefinitions={shiftDefinitions}
-              onClick={() => router.push(`/dashboard/dp/collaborators/${user.id}`)}
-            />
-          ))}
+        <div className="rounded-md border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Colaborador</TableHead>
+                <TableHead>Cargo/Função</TableHead>
+                <TableHead>Unidades</TableHead>
+                <TableHead>Turno padrão</TableHead>
+                <TableHead>Admissão</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((user) => {
+                  const unitNames = (user.unitIds ?? []).map((id) => unitNameById.get(id) ?? id);
+                  const shiftName = user.shiftDefinitionId ? shiftNameById.get(user.shiftDefinitionId) : null;
+                  return (
+                    <TableRow
+                      key={user.id}
+                      className="cursor-pointer"
+                      onClick={() => router.push(`/dashboard/dp/collaborators/${user.id}`)}
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <AvatarMark user={user} />
+                          <div>
+                            <p className="font-semibold">{user.username}</p>
+                            <p className="text-xs text-muted-foreground">{user.email || '-'}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-medium">{user.jobRoleName || '-'}</p>
+                        <p className="text-xs text-muted-foreground">{user.jobFunctionNames?.join(', ') || '-'}</p>
+                      </TableCell>
+                      <TableCell>{unitNames.length ? unitNames.join(', ') : '-'}</TableCell>
+                      <TableCell>
+                        {shiftName ? (
+                          <span className="inline-flex items-center gap-1 text-sm"><Calendar className="h-3.5 w-3.5 text-muted-foreground" />{shiftName}</span>
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell>{fmtDate(user.admissionDate)}</TableCell>
+                      <TableCell>
+                        {user.isActive === false ? (
+                          <Badge variant="secondary"><UserX className="mr-1 h-3 w-3" />Desligado</Badge>
+                        ) : (
+                          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600"><Users className="mr-1 h-3 w-3" />Ativo</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            router.push(`/dashboard/dp/collaborators/${user.id}`);
+                          }}
+                        >
+                          Abrir
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

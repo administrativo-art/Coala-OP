@@ -34,6 +34,12 @@ export type ConsumeLotParams = {
   quantityToConsume: number;
   type: MovementType;
   notes?: string;
+  uniformDelivery?: {
+    collaboratorUserId: string;
+    collaboratorName: string;
+    occurredAt: string;
+    kioskName?: string;
+  };
 };
 
 export interface ExpiryProductsContextType {
@@ -327,6 +333,12 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
         const newQuantity = totalQty - params.quantityToConsume;
         
+        const movementRecordRef = doc(collection(db, "movementHistory"));
+        const uniformEventRef = params.type === 'SAIDA_ENTREGA_UNIFORME' ? doc(collection(db, "uniformEvents")) : null;
+        if (params.type === 'SAIDA_ENTREGA_UNIFORME' && !params.uniformDelivery?.collaboratorUserId) {
+            throw new Error("Informe o colaborador que recebeu o uniforme.");
+        }
+
         const movementRecord: Omit<MovementRecord, 'id'> = {
             lotId: params.lotId,
             productId: currentLot.productId,
@@ -339,9 +351,36 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             username: user.username,
             timestamp: new Date().toISOString(),
             notes: params.notes,
+            ...(uniformEventRef ? {
+              uniformEventId: uniformEventRef.id,
+              deliveredToUserId: params.uniformDelivery!.collaboratorUserId,
+              deliveredToUserName: params.uniformDelivery!.collaboratorName,
+              deliveredAt: params.uniformDelivery!.occurredAt,
+            } : {}),
         };
 
-        addMovementRecord(transaction, movementRecord);
+        transaction.set(movementRecordRef, pruneUndefined(movementRecord));
+        if (uniformEventRef) {
+            const now = new Date().toISOString();
+            transaction.set(uniformEventRef, pruneUndefined({
+                eventType: 'UNIFORME_ENTREGA',
+                movementId: movementRecordRef.id,
+                lotId: params.lotId,
+                productId: currentLot.productId,
+                productName: currentLot.productName,
+                kioskId: currentLot.kioskId,
+                kioskName: params.uniformDelivery?.kioskName,
+                quantity: params.quantityToConsume,
+                collaboratorUserId: params.uniformDelivery!.collaboratorUserId,
+                collaboratorName: params.uniformDelivery!.collaboratorName,
+                occurredAt: params.uniformDelivery!.occurredAt,
+                registeredByUserId: user.id,
+                registeredByUserName: user.username,
+                notes: params.notes,
+                createdAt: now,
+                updatedAt: now,
+            }));
+        }
         transaction.update(lotRef, { quantity: newQuantity });
     });
   }, []);

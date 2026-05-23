@@ -23,8 +23,9 @@ import {
 } from '@/components/ui/select';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useProducts } from '@/hooks/use-products';
+import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
-import { type PurchaseOrderItem, type PurchaseUnitType } from '@/types';
+import { type PurchaseOrderItem, type PurchaseStockEntryType, type PurchaseUnitType } from '@/types';
 import { cn } from '@/lib/utils';
 
 type DraftItem = {
@@ -32,11 +33,15 @@ type DraftItem = {
   id?: string;
   productId: string;
   baseItemId: string;
+  itemName: string;
+  operationalCategoryId: string;
+  operationalCategoryName?: string;
   unit: string;
   purchaseUnitType: PurchaseUnitType;
   quantityOrdered: number;
   unitPriceOrdered: number;
   discountOrdered: number;
+  entryType: PurchaseStockEntryType;
   notes: string;
 };
 
@@ -61,11 +66,15 @@ function newDraftItem(): DraftItem {
     key: Math.random().toString(36).slice(2),
     productId: '',
     baseItemId: '',
+    itemName: '',
+    operationalCategoryId: '',
+    operationalCategoryName: undefined,
     unit: '',
     purchaseUnitType: 'content',
     quantityOrdered: 0,
     unitPriceOrdered: 0,
     discountOrdered: 0,
+    entryType: 'stock',
     notes: '',
   };
 }
@@ -155,6 +164,7 @@ function ProductCombobox({
 
 export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChange, onSuccess }: Props) {
   const { products, getProductFullName } = useProducts();
+  const { activeCategories } = useOperationalItemCategories();
   const { updateOrder } = usePurchaseOrders();
   const [items, setItems] = useState<DraftItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -162,27 +172,50 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
   useEffect(() => {
     if (open) {
       setItems(
-        initialItems.map((item) => ({
-          key: item.id,
-          id: item.id,
-          productId: item.productId ?? '',
-          baseItemId: item.baseItemId,
-          unit: item.unit,
-          purchaseUnitType: item.purchaseUnitType ?? 'content',
-          quantityOrdered: item.quantityOrdered,
-          unitPriceOrdered: item.unitPriceOrdered,
-          discountOrdered: item.discountOrdered ?? 0,
-          notes: item.notes ?? '',
-        })),
+        initialItems.map((item) => {
+          const product = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
+          const entryType = item.entryType === 'asset' || item.entryType === 'uniform' ? item.entryType : 'stock';
+          const inferredCategory =
+            activeCategories.find((category) => category.id === item.operationalCategoryId) ??
+            activeCategories.find((category) => product?.operationalCategoryId && category.id === product.operationalCategoryId) ??
+            activeCategories.find((category) => category.destination === entryType);
+
+          return {
+            key: item.id,
+            id: item.id,
+            productId: item.productId ?? '',
+            baseItemId: item.baseItemId,
+            itemName: item.itemName ?? '',
+            operationalCategoryId: inferredCategory?.id ?? '',
+            operationalCategoryName: inferredCategory?.name ?? item.operationalCategoryName,
+            unit: item.unit,
+            purchaseUnitType: item.purchaseUnitType ?? 'content',
+            quantityOrdered: item.quantityOrdered,
+            unitPriceOrdered: item.unitPriceOrdered,
+            discountOrdered: item.discountOrdered ?? 0,
+            entryType,
+            notes: item.notes ?? '',
+          };
+        }),
       );
     }
-  }, [open, initialItems]);
+  }, [activeCategories, open, initialItems, products]);
 
   const updateItem = (key: string, patch: Partial<DraftItem>) => {
     setItems((prev) =>
       prev.map((item) => {
         if (item.key !== key) return item;
         const next = { ...item, ...patch };
+        if (patch.operationalCategoryId) {
+          const category = activeCategories.find((entry) => entry.id === patch.operationalCategoryId);
+          next.entryType = category?.destination === 'asset' ? 'asset' : category?.destination === 'uniform' ? 'uniform' : 'stock';
+          next.operationalCategoryName = category?.name;
+          next.productId = '';
+          next.baseItemId = '';
+          next.itemName = '';
+          next.unit = category?.destination === 'asset' ? 'un' : '';
+          next.purchaseUnitType = 'content';
+        }
         if (patch.productId) {
           const product = products.find((entry) => entry.id === patch.productId);
           if (product) {
@@ -193,6 +226,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
               purchaseUnitOptions[0]?.label ??
               product.unit;
             next.baseItemId = product.baseProductId ?? '';
+            next.itemName = getProductFullName(product);
             next.purchaseUnitType = purchaseUnitType;
             next.unit = purchaseUnitLabel;
           }
@@ -229,9 +263,11 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
     [items],
   );
 
-  const validItems = items.filter(
-    (item) => item.baseItemId && item.quantityOrdered > 0 && item.unitPriceOrdered > 0,
-  );
+  const validItems = items.filter((item) => {
+    const category = activeCategories.find((entry) => entry.id === item.operationalCategoryId);
+    const hasItem = category?.destination === 'asset' ? item.itemName.trim().length > 0 : !!item.baseItemId;
+    return !!category && hasItem && item.quantityOrdered > 0 && item.unitPriceOrdered > 0;
+  });
 
   const handleSave = async () => {
     if (validItems.length === 0) return;
@@ -241,12 +277,17 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
         items: validItems.map((item) => ({
           baseItemId: item.baseItemId,
           productId: item.productId || undefined,
+          itemName: item.itemName || undefined,
+          operationalCategoryId: item.operationalCategoryId,
+          operationalCategoryName: item.operationalCategoryName,
+          itemDestination: item.entryType,
           unit: item.unit,
           purchaseUnitType: item.purchaseUnitType,
           purchaseUnitLabel: item.unit,
           quantityOrdered: item.quantityOrdered,
           unitPriceOrdered: item.unitPriceOrdered,
           discountOrdered: item.discountOrdered,
+          entryType: item.entryType,
           notes: item.notes || undefined,
         })),
       });
@@ -278,20 +319,62 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           </div>
 
           <div className="space-y-3">
-            {items.map((item) => (
-              <div key={item.key} className="grid grid-cols-1 md:grid-cols-[1fr_90px_100px_110px_90px_36px] gap-2 items-end rounded-md border p-3 bg-muted/20">
+            {items.map((item) => {
+              const selectedCategory = activeCategories.find((category) => category.id === item.operationalCategoryId);
+              const categoryDestination = selectedCategory?.destination;
+              const availableProducts = categoryDestination
+                ? purchasableProducts.filter((option) => {
+                    const product = products.find((entry) => entry.id === option.id);
+                    if (categoryDestination === 'uniform') return product?.operationalDestination === 'uniform';
+                    return product?.operationalCategoryId === selectedCategory.id || (!product?.operationalCategoryId && categoryDestination === 'stock');
+                  })
+                : [];
+
+              return (
+              <div key={item.key} className="grid grid-cols-1 md:grid-cols-[150px_1fr_90px_100px_110px_90px_36px] gap-2 items-end rounded-md border p-3 bg-muted/20">
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-semibold text-muted-foreground">Insumo</label>
-                  <ProductCombobox
-                    value={item.productId}
-                    onChange={(value) => updateItem(item.key, { productId: value })}
-                    options={purchasableProducts}
-                  />
+                  <label className="text-[10px] uppercase font-semibold text-muted-foreground">Categoria</label>
+                  <Select
+                    value={item.operationalCategoryId}
+                    onValueChange={(value) => updateItem(item.key, { operationalCategoryId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeCategories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-semibold text-muted-foreground">
+                    {categoryDestination === 'asset' ? 'Patrimônio' : 'Insumo'}
+                  </label>
+                  {categoryDestination === 'asset' ? (
+                    <Input
+                      placeholder="Ex: Máquina de sorvete"
+                      value={item.itemName}
+                      onChange={(event) => updateItem(item.key, { itemName: event.target.value })}
+                    />
+                  ) : (
+                    <ProductCombobox
+                      value={item.productId}
+                      onChange={(value) => updateItem(item.key, { productId: value })}
+                      options={availableProducts}
+                    />
+                  )}
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">Un.</label>
                   {(() => {
                     const selectedProduct = purchasableProducts.find((option) => option.id === item.productId);
+                    if (categoryDestination === 'asset') {
+                      return <Input value="un" readOnly className="bg-muted" />;
+                    }
                     if (selectedProduct && selectedProduct.purchaseUnitOptions.length > 1) {
                       return (
                         <Select
@@ -325,10 +408,16 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">Qtd.</label>
                   <Input
                     type="number"
-                    step="0.001"
+                    step={item.entryType === 'asset' ? '1' : '0.001'}
+                    min={item.entryType === 'asset' ? 1 : undefined}
                     placeholder="0,00"
                     value={item.quantityOrdered || ''}
-                    onChange={(event) => updateItem(item.key, { quantityOrdered: parseFloat(event.target.value) || 0 })}
+                    onChange={(event) => {
+                      const nextQuantity = parseFloat(event.target.value) || 0;
+                      updateItem(item.key, {
+                        quantityOrdered: item.entryType === 'asset' ? Math.floor(nextQuantity) : nextQuantity,
+                      });
+                    }}
                   />
                 </div>
                 <div className="space-y-1">
@@ -354,16 +443,22 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
-                <div className="md:col-span-5">
+                <div className="md:col-span-6 md:col-start-2 space-y-1">
                    <Input 
                      placeholder="Observações do item..." 
                      className="text-xs h-8"
                      value={item.notes}
                      onChange={(e) => updateItem(item.key, { notes: e.target.value })}
                    />
+                   {categoryDestination === 'asset' && (
+                     <p className="text-xs text-muted-foreground">
+                       No recebimento, cada unidade vira um patrimônio individual com etiqueta.
+                     </p>
+                   )}
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
 

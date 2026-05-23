@@ -37,10 +37,17 @@ import {
 } from '@/components/ui/select';
 import { useEntities } from '@/hooks/use-entities';
 import { useCompanySettings } from '@/hooks/use-company-settings';
+import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useProducts } from '@/hooks/use-products';
 import { getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
-import { type PaymentMethod, type PurchasePaymentCondition, type PurchaseReceiptMode, type PurchaseUnitType } from '@/types';
+import {
+  type PaymentMethod,
+  type PurchasePaymentCondition,
+  type PurchaseReceiptMode,
+  type PurchaseStockEntryType,
+  type PurchaseUnitType,
+} from '@/types';
 import { cn } from '@/lib/utils';
 
 const schema = z.object({
@@ -60,10 +67,13 @@ type DraftItem = {
   key: string;
   productId: string;
   baseItemId: string;
+  itemName: string;
+  operationalCategoryId: string;
   unit: string;
   purchaseUnitType: PurchaseUnitType;
   quantityOrdered: number;
   unitPriceOrdered: number;
+  entryType: PurchaseStockEntryType;
 };
 
 interface Props {
@@ -98,10 +108,13 @@ function newDraftItem(): DraftItem {
     key: Math.random().toString(36).slice(2),
     productId: '',
     baseItemId: '',
+    itemName: '',
+    operationalCategoryId: '',
     unit: '',
     purchaseUnitType: 'content',
     quantityOrdered: 0,
     unitPriceOrdered: 0,
+    entryType: 'stock',
   };
 }
 
@@ -192,6 +205,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
   const router = useRouter();
   const { entities } = useEntities();
   const { purchasingDefaults } = useCompanySettings();
+  const { activeCategories } = useOperationalItemCategories();
   const { products, getProductFullName } = useProducts();
   const { createPurchase } = usePurchaseOrders();
   const [items, setItems] = useState<DraftItem[]>([newDraftItem()]);
@@ -223,6 +237,15 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
       prev.map((item) => {
         if (item.key !== key) return item;
         const next = { ...item, ...patch };
+        if (patch.operationalCategoryId) {
+          const category = activeCategories.find((entry) => entry.id === patch.operationalCategoryId);
+          next.entryType = category?.destination === 'asset' ? 'asset' : category?.destination === 'uniform' ? 'uniform' : 'stock';
+          next.productId = '';
+          next.baseItemId = '';
+          next.itemName = '';
+          next.unit = category?.destination === 'asset' ? 'un' : '';
+          next.purchaseUnitType = 'content';
+        }
         if (patch.productId) {
           const product = products.find((entry) => entry.id === patch.productId);
           if (product) {
@@ -243,7 +266,11 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
   };
 
   const validItems = items.filter(
-    (item) => item.baseItemId && item.quantityOrdered > 0 && item.unitPriceOrdered > 0,
+    (item) => {
+      const category = activeCategories.find((entry) => entry.id === item.operationalCategoryId);
+      const hasItem = category?.destination === 'asset' ? item.itemName.trim().length > 0 : !!item.baseItemId;
+      return !!category && hasItem && item.quantityOrdered > 0 && item.unitPriceOrdered > 0;
+    },
   );
 
   const purchasableProducts = useMemo<PurchasableProductOption[]>(
@@ -291,15 +318,23 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
         accountPlanId: purchasingDefaults.goodsAccountPlanId ?? undefined,
         freightAccountPlanId: purchasingDefaults.freightAccountPlanId ?? undefined,
         notes: values.notes || undefined,
-        items: validItems.map(({ productId, baseItemId, unit, purchaseUnitType, quantityOrdered, unitPriceOrdered }) => ({
+        items: validItems.map(({ productId, baseItemId, itemName, operationalCategoryId, unit, purchaseUnitType, quantityOrdered, unitPriceOrdered, entryType }) => {
+          const category = activeCategories.find((entry) => entry.id === operationalCategoryId);
+          return {
           productId,
           baseItemId,
+          itemName: itemName || undefined,
+          operationalCategoryId,
+          operationalCategoryName: category?.name,
+          itemDestination: category?.destination,
           unit,
           purchaseUnitType,
           purchaseUnitLabel: unit,
           quantityOrdered,
           unitPriceOrdered,
-        })),
+          entryType,
+        };
+        }),
       });
       if (orderId) {
         form.reset();
@@ -477,20 +512,59 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
               </div>
 
               <div className="space-y-2">
-                {items.map((item) => (
-                  <div key={item.key} className="grid grid-cols-1 sm:grid-cols-[1fr_90px_120px_120px_36px] gap-2 items-end rounded-md border p-3">
+                {items.map((item) => {
+                  const selectedCategory = activeCategories.find((category) => category.id === item.operationalCategoryId);
+                  const categoryDestination = selectedCategory?.destination;
+                  const availableProducts = categoryDestination
+                    ? purchasableProducts.filter((option) => {
+                        const product = products.find((entry) => entry.id === option.id);
+                        if (categoryDestination === 'uniform') return product?.operationalDestination === 'uniform';
+                        return product?.operationalCategoryId === item.operationalCategoryId || (!product?.operationalCategoryId && categoryDestination === 'stock');
+                      })
+                    : [];
+                  return (
+                  <div key={item.key} className="grid grid-cols-1 sm:grid-cols-[130px_1fr_90px_120px_120px_36px] gap-2 items-end rounded-md border p-3">
                     <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Insumo</label>
-                      <DirectPurchaseProductCombobox
-                        value={item.productId}
-                        onChange={(value) => updateItem(item.key, { productId: value })}
-                        options={purchasableProducts}
-                      />
+                      <label className="text-xs text-muted-foreground">Categoria</label>
+                      <Select
+                        value={item.operationalCategoryId}
+                        onValueChange={(value) => updateItem(item.key, { operationalCategoryId: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {activeCategories.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{categoryDestination === 'asset' ? 'Patrimônio' : 'Insumo'}</label>
+                      {categoryDestination === 'asset' ? (
+                        <Input
+                          placeholder="Ex: Máquina de sorvete"
+                          value={item.itemName}
+                          onChange={(event) => updateItem(item.key, { itemName: event.target.value })}
+                        />
+                      ) : (
+                        <DirectPurchaseProductCombobox
+                          value={item.productId}
+                          onChange={(value) => updateItem(item.key, { productId: value })}
+                          options={availableProducts}
+                        />
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">Un.</label>
                       {(() => {
                         const selectedProduct = purchasableProducts.find((option) => option.id === item.productId);
+                        if (categoryDestination === 'asset') {
+                          return <Input value="un" readOnly className="bg-muted" />;
+                        }
                         if (selectedProduct && selectedProduct.purchaseUnitOptions.length > 1) {
                           return (
                             <Select
@@ -532,10 +606,16 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                       <label className="text-xs text-muted-foreground">Qtd.</label>
                       <Input
                         type="number"
-                        step="0.001"
+                        step={item.entryType === 'asset' ? '1' : '0.001'}
+                        min={item.entryType === 'asset' ? 1 : undefined}
                         placeholder="0,00"
                         value={item.quantityOrdered || ''}
-                        onChange={(event) => updateItem(item.key, { quantityOrdered: parseFloat(event.target.value) || 0 })}
+                        onChange={(event) => {
+                          const nextQuantity = parseFloat(event.target.value) || 0;
+                          updateItem(item.key, {
+                            quantityOrdered: item.entryType === 'asset' ? Math.floor(nextQuantity) : nextQuantity,
+                          });
+                        }}
                       />
                     </div>
                     <div className="space-y-1">
@@ -554,8 +634,14 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                    {categoryDestination === 'asset' && (
+                      <p className="sm:col-span-5 sm:col-start-2 text-xs text-muted-foreground">
+                        No recebimento, cada unidade vira um patrimônio individual com etiqueta.
+                      </p>
+                    )}
                   </div>
-                ))}
+                );
+                })}
               </div>
             </div>
 

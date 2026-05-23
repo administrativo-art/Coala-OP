@@ -20,13 +20,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import Image from 'next/image';
-import { format, parseISO } from 'date-fns';
 import { ScrollArea } from './ui/scroll-area';
 import { type MovementType } from '@/types';
-import Link from 'next/link';
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
     { value: 'SAIDA_CONSUMO', label: 'Consumo / Venda' },
+    { value: 'SAIDA_ENTREGA_UNIFORME', label: 'Entrega de uniforme' },
     { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por Vencimento' },
     { value: 'SAIDA_DESCARTE_AVARIA', label: 'Descarte por Avaria/Quebra' },
     { value: 'SAIDA_DESCARTE_PERDA', label: 'Extravio de mercadoria' },
@@ -38,6 +37,8 @@ const writeDownItemSchema = z.object({
   quantity: z.coerce.number().min(0.01, "Deve ser > 0"),
   type: z.custom<MovementType>(val => typeof val === 'string' && DIVERGENCE_REASONS.some(r => r.value === val), 'Selecione um tipo válido'),
   notes: z.string().optional(),
+  collaboratorUserId: z.string().optional(),
+  occurredAt: z.string().optional(),
 }).refine(data => {
     if (data.type === 'SAIDA_DESCARTE_OUTROS' && (!data.notes || data.notes.trim() === '')) {
         return false;
@@ -46,6 +47,12 @@ const writeDownItemSchema = z.object({
 }, {
     message: 'A observação é obrigatória para o tipo "Outros".',
     path: ['notes'],
+}).refine(data => {
+    if (data.type !== 'SAIDA_ENTREGA_UNIFORME') return true;
+    return !!data.collaboratorUserId && !!data.occurredAt;
+}, {
+    message: 'Informe colaborador e data da entrega.',
+    path: ['collaboratorUserId'],
 });
 
 const writeDownFormSchema = z.object({
@@ -55,7 +62,7 @@ const writeDownFormSchema = z.object({
 type WriteDownFormValues = z.infer<typeof writeDownFormSchema>;
 
 export function StockWriteDown() {
-  const { user } = useAuth();
+  const { user, activeUsers } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading: lotsLoading, consumeFromLot } = useExpiryProducts();
   const { products, getProductFullName, loading: productsLoading } = useProducts();
@@ -76,7 +83,6 @@ export function StockWriteDown() {
 
   const kioskLots = useMemo(() => {
     if (!selectedKioskId) return [];
-    const lotMap = new Map(lots.map(l => [l.id, l]));
     const productMap = new Map(products.map(p => [p.id, p]));
     
     return lots
@@ -96,7 +102,7 @@ export function StockWriteDown() {
   const handleAddItem = (lotId: string) => {
     const existingIndex = fields.findIndex(field => field.lotId === lotId);
     if (existingIndex === -1) {
-        append({ lotId: lotId, quantity: 1, type: 'SAIDA_CONSUMO', notes: '' });
+        append({ lotId: lotId, quantity: 1, type: 'SAIDA_CONSUMO', notes: '', collaboratorUserId: '', occurredAt: new Date().toISOString().slice(0, 10) });
     }
   };
 
@@ -108,11 +114,20 @@ export function StockWriteDown() {
     setIsSubmitting(true);
     try {
         for (const item of values.items) {
+            const lot = lots.find(l => l.id === item.lotId);
+            const kiosk = kiosks.find(k => k.id === lot?.kioskId);
+            const collaborator = activeUsers.find(u => u.id === item.collaboratorUserId);
             await consumeFromLot({
                 lotId: item.lotId,
                 quantityToConsume: item.quantity,
                 type: item.type,
                 notes: item.notes,
+                uniformDelivery: item.type === 'SAIDA_ENTREGA_UNIFORME' && collaborator ? {
+                  collaboratorUserId: collaborator.id,
+                  collaboratorName: collaborator.username,
+                  occurredAt: item.occurredAt || new Date().toISOString().slice(0, 10),
+                  kioskName: kiosk?.name,
+                } : undefined,
             }, user);
         }
         toast({ title: 'Sucesso!', description: 'Baixas registradas com sucesso.' });
@@ -227,6 +242,37 @@ export function StockWriteDown() {
                                                   )}
                                                 />
                                             </div>
+                                            {form.watch(`items.${index}.type`) === 'SAIDA_ENTREGA_UNIFORME' && (
+                                              <div className="grid grid-cols-2 gap-4">
+                                                <FormField
+                                                  control={form.control}
+                                                  name={`items.${index}.collaboratorUserId`}
+                                                  render={({ field }) => (
+                                                    <FormItem>
+                                                      <FormLabel>Colaborador</FormLabel>
+                                                      <Select value={field.value || ''} onValueChange={field.onChange}>
+                                                        <FormControl><SelectTrigger><SelectValue placeholder="Recebedor..." /></SelectTrigger></FormControl>
+                                                        <SelectContent>
+                                                          {activeUsers.map((u) => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
+                                                        </SelectContent>
+                                                      </Select>
+                                                      <FormMessage />
+                                                    </FormItem>
+                                                  )}
+                                                />
+                                                <FormField
+                                                  control={form.control}
+                                                  name={`items.${index}.occurredAt`}
+                                                  render={({ field }) => (
+                                                    <FormItem>
+                                                      <FormLabel>Data da entrega</FormLabel>
+                                                      <FormControl><Input type="date" {...field} /></FormControl>
+                                                      <FormMessage />
+                                                    </FormItem>
+                                                  )}
+                                                />
+                                              </div>
+                                            )}
                                              <FormField
                                                   control={form.control}
                                                   name={`items.${index}.notes`}

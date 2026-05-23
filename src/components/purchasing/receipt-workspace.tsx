@@ -24,6 +24,7 @@ import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
 import { useKiosks } from '@/hooks/use-kiosks';
+import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { useAuth } from '@/hooks/use-auth';
 import { canReceivePurchase } from '@/lib/purchasing-permissions';
 import { storage } from '@/lib/firebase';
@@ -45,6 +46,9 @@ interface ItemDraft {
   purchaseOrderItemId: string;
   baseItemId: string;
   productId: string;
+  itemName?: string;
+  operationalCategoryId?: string;
+  operationalCategoryName?: string;
   unit: string;
   purchaseUnitType: PurchaseReceiptItem['purchaseUnitType'];
   purchaseUnitLabel: string;
@@ -54,6 +58,7 @@ interface ItemDraft {
   divergenceReason: string;
   lots: LotDraft[];
   expiryDate?: string;
+  entryType: 'stock' | 'uniform' | 'asset';
 }
 
 function generateLotCode(baseItemName: string) {
@@ -81,6 +86,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
   const { financials } = usePurchaseFinancials();
   const { baseProducts } = useBaseProducts();
   const { products } = useProducts();
+  const { activeCategories } = useOperationalItemCategories();
   const { kiosks } = useKiosks();
 
   const order = useMemo(() => orders.find((o) => o.id === receipt.purchaseOrderId), [orders, receipt.purchaseOrderId]);
@@ -157,6 +163,9 @@ export function ReceiptWorkspace({ receipt }: Props) {
               purchaseOrderItemId: item.purchaseOrderItemId,
               baseItemId: item.baseItemId,
               productId: item.productId || '',
+              itemName: item.itemName ?? undefined,
+              operationalCategoryId: item.operationalCategoryId,
+              operationalCategoryName: item.operationalCategoryName,
               unit: item.unit || item.purchaseUnitLabel || base?.unit || '',
               purchaseUnitType: item.purchaseUnitType ?? 'content',
               purchaseUnitLabel: item.purchaseUnitLabel || item.unit || base?.unit || '',
@@ -165,6 +174,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
               unitPriceConfirmed: item.unitPriceConfirmed || item.unitPriceOrdered,
               divergenceReason: '',
               expiryDate: '',
+              entryType: item.itemDestination === 'asset' || item.entryType === 'asset' ? 'asset' : item.itemDestination === 'uniform' || item.entryType === 'uniform' ? 'uniform' : 'stock',
               lots: [
                 {
                   _key: lotKey(),
@@ -228,6 +238,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
   const lotsValid = useMemo(
     () =>
       drafts.every((d) => {
+        if (d.entryType === 'asset') return true;
         const lotSum = d.lots.reduce((s, l) => s + (l.quantity || 0), 0);
         return Math.abs(lotSum - d.quantityReceived) < 0.001;
       }),
@@ -257,6 +268,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
     lotsValid &&
     immediateValid &&
     drafts.every((d) => {
+      if (d.entryType === 'asset') return d.quantityReceived > 0;
       if (!d.productId) return false;
       const base = baseProducts.find((bp) => bp.id === d.baseItemId);
       const product = products.find((p) => p.id === d.productId);
@@ -301,6 +313,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
           receiptItemId: d.receiptItemId,
           purchaseOrderItemId: d.purchaseOrderItemId,
           baseItemId: d.baseItemId,
+          itemName: d.itemName,
           unit: d.unit,
           purchaseUnitType: d.purchaseUnitType,
           purchaseUnitLabel: d.purchaseUnitLabel,
@@ -347,12 +360,17 @@ export function ReceiptWorkspace({ receipt }: Props) {
         items: drafts.map((d) => ({
           ...(() => {
             const product = products.find((p) => p.id === d.productId);
-            return { productName: product?.baseName ?? d.baseItemId };
+            return { productName: product?.baseName ?? d.itemName ?? d.baseItemId };
           })(),
           receiptItemId: d.receiptItemId,
           purchaseOrderItemId: d.purchaseOrderItemId,
           baseItemId: d.baseItemId,
+          itemName: d.itemName,
+          operationalCategoryId: d.operationalCategoryId,
+          operationalCategoryName: d.operationalCategoryName,
+          itemDestination: d.entryType,
           productId: d.productId,
+          entryType: d.entryType,
           purchaseUnitType: d.purchaseUnitType,
           purchaseUnitLabel: d.purchaseUnitLabel,
           lots: d.lots.map(({ _key, ...rest }) => rest),
@@ -457,8 +475,9 @@ export function ReceiptWorkspace({ receipt }: Props) {
                     (p) => p.baseProductId === draft.baseItemId && !p.isArchived,
                   );
                   const selectedStockProduct = products.find((p) => p.id === draft.productId);
+                  const isAssetEntry = draft.entryType === 'asset';
                   const lotSum = draft.lots.reduce((s, l) => s + (l.quantity || 0), 0);
-                  const lotValid = Math.abs(lotSum - draft.quantityReceived) < 0.001;
+                  const lotValid = isAssetEntry || Math.abs(lotSum - draft.quantityReceived) < 0.001;
                   const hasDivergence =
                     Math.abs(draft.quantityReceived - draft.quantityOrdered) > 0.001 ||
                     !!draft.divergenceReason;
@@ -472,7 +491,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                     )}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <p className="font-semibold text-lg">{base?.name ?? draft.baseItemId}</p>
+                          <p className="font-semibold text-lg">{base?.name ?? draft.itemName ?? draft.baseItemId}</p>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <span>Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmt(draft.unitPriceConfirmed)}</span>
                             {base && (
@@ -494,6 +513,31 @@ export function ReceiptWorkspace({ receipt }: Props) {
                       </div>
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {isInStockEntry && (
+                          <div className="space-y-1">
+                            <Label className="text-xs">Categoria do item</Label>
+                            <Select
+                              value={draft.operationalCategoryId}
+                              onValueChange={(value) => {
+                                const category = activeCategories.find((entry) => entry.id === value);
+                                updateDraft(idx, {
+                                  operationalCategoryId: category?.id,
+                                  operationalCategoryName: category?.name,
+                                  entryType: category?.destination ?? 'stock',
+                                });
+                              }}
+                            >
+                              <SelectTrigger disabled={isReadonly}><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {activeCategories.map((category) => (
+                                  <SelectItem key={category.id} value={category.id}>
+                                    {category.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <div className="space-y-1">
                           <Label className="text-xs">Qtd. recebida</Label>
                           <Input
@@ -514,7 +558,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
-                        {isInStockEntry && (
+                        {isInStockEntry && !isAssetEntry && (
                           <div className="space-y-1">
                             <Label className="text-xs">Unidade estoque</Label>
                             {selectedStockProduct ? (
@@ -554,7 +598,13 @@ export function ReceiptWorkspace({ receipt }: Props) {
                         </div>
                       )}
 
-                      {isInStockEntry && (
+                      {isInStockEntry && isAssetEntry && (
+                        <div className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+                          A confirmação criará {draft.quantityReceived} patrimônio(s) unitário(s), com código interno e QR Code. Nenhum lote de estoque será criado para este item.
+                        </div>
+                      )}
+
+                      {isInStockEntry && !isAssetEntry && (
                         <div className="space-y-3 pt-2">
                            <div className="flex items-center justify-between">
                             <Label className="text-xs font-medium">Lotes ({lotSum.toFixed(3)} / {draft.quantityReceived.toFixed(3)})</Label>

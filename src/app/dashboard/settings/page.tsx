@@ -157,15 +157,15 @@ function OperationalCadastrosPanel() {
   return (
     <Tabs defaultValue="items" className="w-full space-y-4">
       <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl border bg-background p-1 shadow-sm">
-        <TabsTrigger value="items" className="rounded-xl px-4 py-2 text-sm font-medium">Insumos</TabsTrigger>
-        <TabsTrigger value="base-products" className="rounded-xl px-4 py-2 text-sm font-medium">Produtos Base</TabsTrigger>
-        <TabsTrigger value="entities" className="rounded-xl px-4 py-2 text-sm font-medium">Pessoas & Empresas</TabsTrigger>
+        <TabsTrigger value="base-products" className="rounded-xl px-4 py-2 text-sm font-medium">Insumo base</TabsTrigger>
+        <TabsTrigger value="items" className="rounded-xl px-4 py-2 text-sm font-medium">Insumo derivado</TabsTrigger>
+        <TabsTrigger value="entities" className="rounded-xl px-4 py-2 text-sm font-medium">Pessoas e empresas</TabsTrigger>
       </TabsList>
-      <TabsContent value="items">
-        <ItemManagement />
-      </TabsContent>
       <TabsContent value="base-products">
         <BaseProductManagement />
+      </TabsContent>
+      <TabsContent value="items">
+        <ItemManagement />
       </TabsContent>
       <TabsContent value="entities">
         <EntityManagement />

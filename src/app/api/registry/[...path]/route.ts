@@ -32,6 +32,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
     'entities': 'entities',
     'stock-audit': 'stockAuditSessions',
     'competitors': 'concorrentes',
+    'operational-categories': 'operationalItemCategories',
   };
 
   const collectionName = collectionMap[resource];
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     'entities': 'entities',
     'stock-audit': 'stockAuditSessions',
     'competitors': 'concorrentes',
+    'operational-categories': 'operationalItemCategories',
   };
 
   const collectionName = collectionMap[resource];
@@ -91,15 +93,30 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     'entities': 'entities',
     'stock-audit': 'stockAuditSessions',
     'competitors': 'concorrentes',
+    'operational-categories': 'operationalItemCategories',
   };
 
   const collectionName = collectionMap[resource];
   if (!collectionName || !id) return jsonError('Recurso ou ID inválido.', 404);
 
-  await dbAdmin.collection(collectionName).doc(id).update({
+  const updatePayload = {
     ...body,
     updatedAt: new Date().toISOString(),
-  });
+  };
+
+  if (resource === 'operational-categories') {
+    await dbAdmin.collection(collectionName).doc(id).set(
+      {
+        ...updatePayload,
+        workspaceId: WORKSPACE_ID,
+        createdAt: body.createdAt ?? new Date().toISOString(),
+        createdBy: body.createdBy ?? decoded.uid,
+      },
+      { merge: true },
+    );
+  } else {
+    await dbAdmin.collection(collectionName).doc(id).update(updatePayload);
+  }
 
   return NextResponse.json({ ok: true });
 }
@@ -117,6 +134,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     'entities': 'entities',
     'stock-audit': 'stockAuditSessions',
     'competitors': 'concorrentes',
+    'operational-categories': 'operationalItemCategories',
   };
 
   const collectionName = collectionMap[resource];

@@ -518,6 +518,23 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </AccordionContent>
                             </AccordionItem>
 
+                            <AccordionItem value="assets">
+                                <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><Warehouse className="mr-2 h-5 w-5" /> Patrimônio</div></AccordionTrigger>
+                                <AccordionContent className="space-y-4 p-1 pt-4">
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                      {renderPermissionSwitch("permissions.assets.view" as any, "Visualizar Patrimônio", "Permite acessar máquinas e equipamentos patrimoniais.", false)}
+                                      <div className="pl-6 space-y-2">
+                                        {renderPermissionSwitch("permissions.assets.create" as any, "Cadastrar Patrimônio", "Permite cadastrar bens patrimoniais manualmente.", false, true)}
+                                        {renderPermissionSwitch("permissions.assets.edit" as any, "Editar Patrimônio", "Permite editar dados e status de bens patrimoniais.", false, true)}
+                                        {renderPermissionSwitch("permissions.assets.transfer" as any, "Transferir Patrimônio", "Permite transferir bens entre unidades.", false, true)}
+                                        {renderPermissionSwitch("permissions.assets.retire" as any, "Baixar Patrimônio", "Permite marcar bens como baixados.", false, true)}
+                                        {renderPermissionSwitch("permissions.assets.printLabels" as any, "Imprimir Etiquetas", "Permite gerar e reimprimir QR Code patrimonial.", false, true)}
+                                        {renderPermissionSwitch("permissions.assets.viewHistory" as any, "Ver Histórico", "Permite consultar histórico de movimentações patrimoniais.", false, true)}
+                                      </div>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+
                             {/* ── COMERCIAL ── */}
                             <AccordionItem value="commercial">
                                 <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b"><div className="flex items-center"><TrendingUp className="mr-2 h-5 w-5" /> Comercial</div></AccordionTrigger>

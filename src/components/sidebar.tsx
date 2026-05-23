@@ -14,7 +14,7 @@ import {
   ChevronDown, X, LayoutDashboard, Package, ListTodo, Target,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
-  LogOut, DollarSign, ShoppingCart, Network, Users
+  LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -102,6 +102,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         color: SECTION_COLORS.dp,
         items: [
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
+          { label: "Colaboradores", href: "/dashboard/dp/collaborators", icon: Users, show: permissions.dp?.collaborators?.view },
           { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Network, show: permissions.dp?.view },
           { label: "Recrutamento", href: "/dashboard/hr/recruitment", icon: Users, show: permissions.dp?.view },
           { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
@@ -128,6 +129,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view },
           { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", icon: DollarSign, show: permissions.financial?.financialFlow },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
+          { label: "Patrimônio", href: "/dashboard/financial/assets", icon: PackageCheck, show: permissions.assets?.view },
         ],
       },
       {

@@ -36,6 +36,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useEntities } from '@/hooks/use-entities';
 import { usePurchase } from '@/hooks/use-purchase';
 import { useProducts } from '@/hooks/use-products';
+import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { useQuotations } from '@/hooks/use-quotations';
 import { BarcodeScanner } from './barcode-scanner';
 import { PriceComparisonSheet } from './price-comparison-sheet';
@@ -46,6 +47,8 @@ import { type PriceHistoryEntry, type PurchaseUnitType, type QuotationMode } fro
 const schema = z.object({
   baseItemId: z.string().optional(),
   productId: z.string().optional(),
+  itemName: z.string().optional(),
+  operationalCategoryId: z.string().min(1, 'Selecione a categoria.'),
   freeText: z.string().optional(),
   unit: z.string().min(1, 'Informe a unidade.'),
   purchaseUnitType: z.enum(['content', 'logistic'] as const).optional(),
@@ -53,9 +56,9 @@ const schema = z.object({
   unitPrice: z.coerce.number().min(0.01, 'Preço obrigatório.'),
   discount: z.coerce.number().min(0).optional(),
   observation: z.string().optional(),
-}).refine((v) => v.baseItemId || (v.freeText && v.freeText.length > 0), {
-  message: 'Selecione um insumo ou informe a descrição.',
-  path: ['freeText'],
+}).refine((v) => v.baseItemId || (v.itemName && v.itemName.length > 0), {
+  message: 'Selecione/cadastre um item antes de salvar.',
+  path: ['itemName'],
 }).refine((v) => (v.discount ?? 0) <= v.quantity * v.unitPrice, {
   message: 'O desconto não pode ser maior que o valor bruto do item.',
   path: ['discount'],
@@ -105,6 +108,7 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
   const { entities } = useEntities();
   const { priceHistory, loading: purchaseLoading } = usePurchase();
   const { products, getProductFullName } = useProducts();
+  const { activeCategories } = useOperationalItemCategories();
   const { addItem } = useQuotations();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -126,6 +130,8 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
     defaultValues: {
       baseItemId: '',
       productId: '',
+      itemName: '',
+      operationalCategoryId: '',
       freeText: '',
       unit: '',
       purchaseUnitType: 'content',
@@ -138,6 +144,7 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
 
   const selectedBaseItemId = form.watch('baseItemId');
   const selectedProductId = form.watch('productId');
+  const selectedOperationalCategoryId = form.watch('operationalCategoryId');
   const unitPrice = form.watch('unitPrice') ?? 0;
   const quantity = form.watch('quantity') ?? 0;
   const discount = form.watch('discount') ?? 0;
@@ -185,6 +192,11 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
     [productOptions, selectedBaseItemId, selectedProductId],
   );
 
+  const selectedOperationalCategory = useMemo(
+    () => activeCategories.find((category) => category.id === selectedOperationalCategoryId),
+    [activeCategories, selectedOperationalCategoryId],
+  );
+
   const recentPriceHistory = useMemo<
     Array<
       PriceHistoryEntry & {
@@ -214,13 +226,24 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
 
   const filteredOptions = useMemo(() => {
     const tokens = normalizeSearchText(search).split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return productOptions;
-    return productOptions.filter((option) => tokens.every((token) => option.searchText.includes(token)));
-  }, [productOptions, search]);
+    const categoryFiltered = selectedOperationalCategory
+      ? productOptions.filter((option) => {
+          const product = products.find((entry) => entry.id === option.id);
+          if (selectedOperationalCategory.destination === 'uniform') {
+            return product?.operationalDestination === 'uniform';
+          }
+          return product?.operationalCategoryId === selectedOperationalCategory.id ||
+            (!product?.operationalCategoryId && selectedOperationalCategory.destination === 'stock');
+        })
+      : [];
+    if (tokens.length === 0) return categoryFiltered;
+    return categoryFiltered.filter((option) => tokens.every((token) => option.searchText.includes(token)));
+  }, [productOptions, products, search, selectedOperationalCategory]);
 
   const handleSelectProduct = (option: ProductOption) => {
     form.setValue('baseItemId', option.baseItemId);
     form.setValue('productId', option.id);
+    form.setValue('itemName', option.label);
     form.setValue('freeText', '');
     form.setValue('purchaseUnitType', option.defaultPurchaseUnitType);
     const defaultOption =
@@ -236,6 +259,7 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
     setIsFreeText(true);
     form.setValue('baseItemId', '');
     form.setValue('productId', '');
+    form.setValue('itemName', '');
     form.setValue('unit', '');
     form.setValue('purchaseUnitType', 'content');
   };
@@ -277,6 +301,10 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
       await addItem(quotationId, {
         baseItemId: values.baseItemId || undefined,
         productId: values.productId || undefined,
+        itemName: selectedOperationalCategory?.destination === 'asset' ? values.itemName : values.itemName || undefined,
+        operationalCategoryId: values.operationalCategoryId,
+        operationalCategoryName: selectedOperationalCategory?.name,
+        itemDestination: selectedOperationalCategory?.destination,
         freeText: values.freeText || undefined,
         barcode: lastScannedBarcode ?? undefined,
         unit: values.unit,
@@ -343,8 +371,55 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Insumo */}
+          <FormField
+            control={form.control}
+            name="operationalCategoryId"
+            render={({ field }) => (
+              <FormItem className="sm:col-span-2">
+                <FormLabel>Categoria do item</FormLabel>
+                <Select
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    const category = activeCategories.find((entry) => entry.id === value);
+                    form.setValue('baseItemId', '');
+                    form.setValue('productId', '');
+                    form.setValue('itemName', '');
+                    form.setValue('freeText', '');
+                    form.setValue('unit', category?.destination === 'asset' ? 'un' : '');
+                    form.setValue('purchaseUnitType', 'content');
+                    setIsFreeText(false);
+                  }}
+                  value={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger><SelectValue placeholder="Selecione a categoria" /></SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {activeCategories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <div className="sm:col-span-2">
-            {!isFreeText ? (
+            {selectedOperationalCategory?.destination === 'asset' ? (
+              <FormField
+                control={form.control}
+                name="itemName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Patrimônio</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: Máquina de sorvete" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : !isFreeText ? (
               <FormField
                 control={form.control}
                 name="baseItemId"
@@ -362,7 +437,7 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
                               !field.value && 'text-muted-foreground',
                             )}
                           >
-                            {selectedProduct?.label ?? 'Buscar insumo...'}
+                            {selectedOperationalCategory ? selectedProduct?.label ?? 'Buscar insumo...' : 'Selecione a categoria primeiro'}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </FormControl>
@@ -379,15 +454,7 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
                         <div className="max-h-[300px] overflow-y-auto p-1">
                           {filteredOptions.length === 0 ? (
                             <div className="p-3 text-center space-y-2">
-                              <p className="text-sm text-muted-foreground">Nenhum insumo encontrado.</p>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={handleFreeTextToggle}
-                                type="button"
-                              >
-                                Adicionar como item livre
-                              </Button>
+                              <p className="text-sm text-muted-foreground">Nenhum insumo encontrado para esta categoria.</p>
                             </div>
                           ) : (
                             filteredOptions.map((option) => (
@@ -410,17 +477,6 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
                               </button>
                             ))
                           )}
-                          <div className="p-2 border-t">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="w-full text-muted-foreground"
-                              onClick={handleFreeTextToggle}
-                              type="button"
-                            >
-                              + Item livre (sem insumo vinculado)
-                            </Button>
-                          </div>
                         </div>
                       </PopoverContent>
                     </Popover>

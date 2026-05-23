@@ -29,10 +29,12 @@ import { StockAuditProvider } from '@/components/stock-audit-provider';
 import { TaskProvider } from '@/components/task-provider';
 import { AuthorBoardDiaryProvider } from '@/components/author-board-diary-provider';
 import { ClassificationsProvider } from '@/components/classifications-provider';
+import { OperationalItemCategoriesProvider } from '@/components/operational-item-categories-provider';
 import { CompetitorProvider } from '@/components/competitor-provider';
 import { ProfilesProvider } from '@/components/profiles-provider';
 import { SalesReportProvider } from '@/components/sales-report-provider';
 import { DPProvider } from '@/components/dp-provider';
+import { AssetsProvider } from '@/components/assets-provider';
 import { Toaster } from "@/components/ui/toaster";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
@@ -75,6 +77,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                   <EntitiesProvider>
                     <BaseProductsProvider>
                       <ClassificationsProvider>
+                        <OperationalItemCategoriesProvider>
                         <ProductsProvider>
                           <TaskProvider>
                             <ItemAdditionProvider>
@@ -98,7 +101,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                                                                                 <CompetitorProvider>
                                                                                     <AllTasksProvider>
                                                                                         <DPProvider>
-                                                                                            {children}
+                                                                                            <AssetsProvider>
+                                                                                                {children}
+                                                                                            </AssetsProvider>
                                                                                         </DPProvider>
                                                                                     </AllTasksProvider>
                                                                                 </CompetitorProvider>
@@ -122,6 +127,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                             </ItemAdditionProvider>
                           </TaskProvider>
                         </ProductsProvider>
+                        </OperationalItemCategoriesProvider>
                       </ClassificationsProvider>
                     </BaseProductsProvider>
                   </EntitiesProvider>

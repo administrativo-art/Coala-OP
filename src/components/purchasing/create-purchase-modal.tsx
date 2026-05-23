@@ -39,7 +39,7 @@ import {
 } from '@/components/ui/select';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
-import { type Quotation, type QuotationItem } from '@/types';
+import { type PurchaseStockEntryType, type Quotation, type QuotationItem } from '@/types';
 import { cn } from '@/lib/utils';
 
 const schema = z.object({
@@ -75,7 +75,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
   const { createPurchase } = usePurchaseOrders();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
     const eligible = items.filter(
-      (i) => i.conversionStatus === 'selected' && !!i.baseItemId,
+      (i) => i.conversionStatus === 'selected' && (!!i.baseItemId || (i.itemDestination === 'asset' && !!i.itemName)),
     );
     return new Set(eligible.map((i) => i.id));
   });
@@ -88,7 +88,11 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
   );
 
   const freeSelectedCount = useMemo(
-    () => [...selectedIds].filter((id) => !items.find((i) => i.id === id)?.baseItemId).length,
+    () =>
+      [...selectedIds].filter((id) => {
+        const item = items.find((i) => i.id === id);
+        return !(item?.baseItemId || (item?.itemDestination === 'asset' && item.itemName));
+      }).length,
     [selectedIds, items],
   );
 
@@ -146,6 +150,11 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
         return {
           baseItemId: item.baseItemId!,
           productId: item.productId,
+          itemName: item.itemName,
+          operationalCategoryId: item.operationalCategoryId,
+          operationalCategoryName: item.operationalCategoryName,
+          itemDestination: item.itemDestination,
+          entryType: (item.itemDestination === 'asset' ? 'asset' : item.itemDestination === 'uniform' ? 'uniform' : 'stock') as PurchaseStockEntryType,
           quotationItemId: item.id,
           unit: item.unit,
           purchaseUnitType: item.purchaseUnitType ?? 'content',
@@ -215,7 +224,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
                 {eligibleItems.map((item) => {
                   const base = baseProducts.find((bp) => bp.id === item.baseItemId);
                   const checked = selectedIds.has(item.id);
-                  const isFree = !item.baseItemId;
+                  const isFree = !(item.baseItemId || (item.itemDestination === 'asset' && item.itemName));
                   return (
                     <button
                       key={item.id}
@@ -238,7 +247,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
                         <Square className="h-4 w-4 shrink-0 text-muted-foreground" />
                       )}
                       <span className="flex-1 text-sm truncate">
-                        {base?.name ?? item.freeText ?? '—'}
+                        {base?.name ?? item.itemName ?? item.freeText ?? '—'}
                       </span>
                       {isFree && (
                         <Badge variant="outline" className="text-amber-600 border-amber-400 text-xs shrink-0">

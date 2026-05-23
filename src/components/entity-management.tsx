@@ -18,6 +18,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from './ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 const entitySchema = z.object({
   type: z.enum(['pessoa_fisica', 'pessoa_juridica']),
@@ -285,35 +286,73 @@ export function EntityManagement() {
                 </Button>
             </div>
            
-            <div className="space-y-2 pt-4 border-t">
-                {loading ? (
-                    <div className="space-y-2">
-                        <Skeleton className="h-16 w-full" />
-                        <Skeleton className="h-16 w-full" />
-                    </div>
-                ) : filteredEntities.length > 0 ? (
-                    filteredEntities.map(entity => (
-                        <div key={entity.id} className="p-3 border rounded-lg flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-4">
-                                {entity.type === 'pessoa_juridica' ? <Building className="h-6 w-6 text-primary"/> : <User className="h-6 w-6 text-primary"/>}
-                                <div>
-                                    <p className="font-semibold">{entity.fantasyName || entity.name}</p>
-                                    <p className="text-sm text-muted-foreground">{entity.document}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center shrink-0">
-                                <Button variant="ghost" size="icon" onClick={() => handleEdit(entity)}><Edit className="h-4 w-4" /></Button>
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(entity)}><Trash2 className="h-4 w-4" /></Button>
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <div className="text-center text-muted-foreground py-8 border-2 border-dashed rounded-lg">
-                        <User className="mx-auto h-10 w-10 mb-2" />
-                        <p className="font-semibold">Nenhum cadastro encontrado.</p>
-                        <p className="text-sm">Tente ajustar a busca ou os filtros.</p>
-                    </div>
-                )}
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Nome / Razão social</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead>Documento</TableHead>
+                            <TableHead>Contato</TableHead>
+                            <TableHead>Cidade/UF</TableHead>
+                            <TableHead className="w-24 text-right">Ações</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {loading ? (
+                            [...Array(5)].map((_, index) => (
+                                <TableRow key={index}>
+                                    <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
+                                </TableRow>
+                            ))
+                        ) : filteredEntities.length > 0 ? (
+                            filteredEntities.map(entity => (
+                                <TableRow key={entity.id}>
+                                    <TableCell>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
+                                                {entity.type === 'pessoa_juridica' ? <Building className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold">{entity.fantasyName || entity.name}</p>
+                                                {entity.fantasyName ? <p className="text-xs text-muted-foreground">{entity.name}</p> : null}
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-sm">
+                                        {entity.type === 'pessoa_juridica' ? 'Pessoa jurídica' : 'Pessoa física'}
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs">{entity.document}</TableCell>
+                                    <TableCell>
+                                        <div className="space-y-1 text-xs text-muted-foreground">
+                                            {entity.contact?.email ? <p className="flex items-center gap-1"><Mail className="h-3 w-3" />{entity.contact.email}</p> : null}
+                                            {entity.contact?.phone ? <p className="flex items-center gap-1"><Phone className="h-3 w-3" />{entity.contact.phone}</p> : null}
+                                            {!entity.contact?.email && !entity.contact?.phone ? '-' : null}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        {entity.address?.city ? (
+                                            <span className="flex items-center gap-1 text-sm">
+                                                <MapPin className="h-3 w-3 text-muted-foreground" />
+                                                {entity.address.city}{entity.address.state ? `/${entity.address.state}` : ''}
+                                            </span>
+                                        ) : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(entity)}><Edit className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(entity)}><Trash2 className="h-4 w-4" /></Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                    Nenhum cadastro encontrado.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
             </div>
         </CardContent>
       </Card>

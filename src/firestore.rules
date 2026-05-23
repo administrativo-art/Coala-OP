@@ -176,6 +176,27 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /assets/{assetId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().assets.view == true);
+      allow write: if false;
+    }
+
+    match /assetMovements/{movementId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().assets.viewHistory == true);
+      allow write: if false;
+    }
+
+    match /assetCategories/{categoryId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().assets.view == true);
+      allow write: if false;
+    }
+
+    match /uniformEvents/{eventId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if false;
+    }
+
     // Sessões de contagem de estoque
     match /stockAuditSessions/{sessionId} {
       allow read: if isAuth() && (isAdmin() || getPerms().stock.stockCount.view == true);
@@ -351,6 +372,11 @@ service cloud.firestore {
     // --- COLEÇÕES AUXILIARES / CONFIGURAÇÕES ---
 
     match /classifications/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /operationalItemCategories/{id} {
       allow read: if isAuth();
       allow write: if isAdmin();
     }

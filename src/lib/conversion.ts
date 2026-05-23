@@ -6,15 +6,11 @@ export const units: ConversionUnits = {
     'l': 1,
     'ml': 0.001,
     'bag': 1, // Default bag = 1L (override by packageSize)
-    'un': 1,
-    'unidade': 1,
   },
   Massa: {
     'kg': 1,
     'g': 0.001,
     'mg': 0.000001,
-    'un': 1,
-    'unidade': 1,
   },
   Unidade: {
     'un': 1,

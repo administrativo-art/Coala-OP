@@ -8,6 +8,8 @@ import {
   type PurchaseReceiptItem,
   type PurchaseFinancial,
   type PurchaseFreightPaymentMode,
+  type OperationalItemDestination,
+  type PurchaseStockEntryType,
   type PurchaseUnitType,
 } from '@/types';
 import { db } from '@/lib/firebase';
@@ -49,6 +51,10 @@ export interface CreatePurchasePayload {
   items: Array<{
     baseItemId: string;
     productId?: string;
+    itemName?: string;
+    operationalCategoryId?: string;
+    operationalCategoryName?: string;
+    itemDestination?: OperationalItemDestination;
     quotationItemId?: string;
     unit: string;
     purchaseUnitType?: PurchaseUnitType;
@@ -56,6 +62,7 @@ export interface CreatePurchasePayload {
     quantityOrdered: number;
     unitPriceOrdered: number;
     discountOrdered?: number;
+    entryType?: PurchaseStockEntryType;
     notes?: string;
   }>;
 }
@@ -78,6 +85,10 @@ export type OrderEdits = {
   items?: Array<{
     baseItemId: string;
     productId?: string;
+    itemName?: string;
+    operationalCategoryId?: string;
+    operationalCategoryName?: string;
+    itemDestination?: OperationalItemDestination;
     quotationItemId?: string;
     unit: string;
     purchaseUnitType?: PurchaseUnitType;
@@ -85,6 +96,7 @@ export type OrderEdits = {
     quantityOrdered: number;
     unitPriceOrdered: number;
     discountOrdered?: number;
+    entryType?: PurchaseStockEntryType;
     notes?: string;
   }>;
 };

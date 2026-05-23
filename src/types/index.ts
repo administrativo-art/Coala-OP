@@ -33,6 +33,20 @@ export type Classification = {
   usageCount: number;
 };
 
+export type OperationalItemDestination = 'stock' | 'uniform' | 'asset';
+
+export type OperationalItemCategory = {
+  id: string;
+  name: string;
+  slug: string;
+  destination: OperationalItemDestination;
+  isArchived?: boolean;
+  workspaceId?: string;
+  createdAt: string;
+  updatedAt?: string;
+  createdBy?: string;
+};
+
 export type PriceHistoryEntry = {
   id: string;
   baseProductId: string;
@@ -100,6 +114,7 @@ export type LotEntry = {
 export type MovementType = 
     | 'ENTRADA' 
     | 'SAIDA_CONSUMO' 
+    | 'SAIDA_ENTREGA_UNIFORME'
     | 'SAIDA_DESCARTE_VENCIMENTO'
     | 'SAIDA_DESCARTE_AVARIA'
     | 'SAIDA_DESCARTE_PERDA'
@@ -132,6 +147,117 @@ export type MovementRecord = {
   activityId?: string;
   reverted?: boolean;
   revertedFromId?: string;
+  sourceType?: string;
+  sourceId?: string;
+  uniformEventId?: string;
+  deliveredToUserId?: string;
+  deliveredToUserName?: string;
+  deliveredAt?: string;
+};
+
+export type AssetStatus = 'ativo' | 'em_manutencao' | 'fora_de_uso' | 'baixado';
+
+export type AssetMovementType =
+  | 'CRIACAO'
+  | 'EDICAO'
+  | 'TRANSFERENCIA'
+  | 'ALTERACAO_STATUS'
+  | 'BAIXA'
+  | 'ETIQUETA_REIMPRESSA';
+
+export type Asset = {
+  id: string;
+  code: string;
+  name: string;
+  category?: string;
+  brand?: string;
+  model?: string;
+  serialNumber?: string;
+  currentKioskId: string;
+  currentKioskName?: string;
+  status: AssetStatus;
+  purchaseDate?: string;
+  purchaseValue?: number;
+  supplierId?: string;
+  supplierName?: string;
+  imageUrl?: string;
+  notes?: string;
+  sourceType?: 'manual' | 'purchase_receipt';
+  purchaseOrderId?: string;
+  purchaseReceiptId?: string;
+  purchaseReceiptItemId?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+};
+
+export type AssetCategory = {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+};
+
+export type AssetMovement = {
+  id: string;
+  assetId: string;
+  assetCode: string;
+  assetName: string;
+  type: AssetMovementType;
+  fromKioskId?: string;
+  fromKioskName?: string;
+  toKioskId?: string;
+  toKioskName?: string;
+  fromStatus?: AssetStatus;
+  toStatus?: AssetStatus;
+  userId: string;
+  username: string;
+  occurredAt: string;
+  notes?: string;
+  sourceType?: string;
+  sourceId?: string;
+};
+
+export type UniformEventType =
+  | 'UNIFORME_ENTREGA'
+  | 'UNIFORME_TROCA'
+  | 'UNIFORME_DEVOLUCAO'
+  | 'UNIFORME_PERDA'
+  | 'UNIFORME_DANO'
+  | 'UNIFORME_DESCARTE'
+  | 'UNIFORME_COBRANCA';
+
+export type UniformReturnedCondition = 'bom_estado' | 'usado' | 'danificado' | 'inutilizavel';
+export type UniformStockDisposition = 'retorna_estoque' | 'descartar' | 'reter_avaliacao';
+export type UniformChargeStatus = 'pendente' | 'aprovada' | 'cancelada' | 'quitada';
+
+export type UniformEvent = {
+  id: string;
+  eventType: UniformEventType;
+  movementId?: string;
+  lotId?: string;
+  productId: string;
+  productName: string;
+  kioskId: string;
+  kioskName?: string;
+  quantity: number;
+  collaboratorUserId: string;
+  collaboratorName: string;
+  occurredAt: string;
+  registeredByUserId: string;
+  registeredByUserName: string;
+  notes?: string;
+  returnedQuantity?: number;
+  returnedCondition?: UniformReturnedCondition;
+  stockDisposition?: UniformStockDisposition;
+  returnLotId?: string;
+  chargeAmount?: number;
+  chargeReason?: string;
+  chargeStatus?: UniformChargeStatus;
+  createdAt: string;
+  updatedAt: string;
 };
 
 
@@ -403,6 +529,7 @@ export type PermissionSet = {
     conversions: { view: boolean },
     predefinedLists: { view: true, manage: true }
   };
+  assets: { view: boolean; create: boolean; edit: boolean; transfer: boolean; retire: boolean; printLabels: boolean; viewHistory: boolean; };
   pricing: { view: boolean; simulate: boolean; manageParameters: boolean; };
   commercial: {
     technicalSheets: {
@@ -796,6 +923,9 @@ export type Product = {
   secondaryUnitValue?: number;
   isArchived?: boolean;
   baseProductId?: string;
+  operationalCategoryId?: string;
+  operationalCategoryName?: string;
+  operationalDestination?: OperationalItemDestination;
   apparelType?: string;
   apparelSize?: string;
   apparelColor?: string;
@@ -1024,6 +1154,10 @@ export type QuotationItem = {
   quotationId: string;
   baseItemId?: string; // ref → baseProducts; null = free item
   productId?: string; // ref → products; used when the purchased derivative is known
+  itemName?: string;
+  operationalCategoryId?: string;
+  operationalCategoryName?: string;
+  itemDestination?: OperationalItemDestination;
   freeText?: string;   // used when baseItemId is null
   barcode?: string;    // EAN scanned in in_loco mode
   unit: string;
@@ -1086,8 +1220,12 @@ export type PurchaseOrder = {
 export type PurchaseOrderItem = {
   id: string;
   purchaseOrderId: string;
-  baseItemId: string; // always required (item already normalized)
+  baseItemId: string; // required for stock/uniform items
   productId?: string; // ref → products; needed to confirm base-unit cost at purchase time
+  itemName?: string;
+  operationalCategoryId?: string;
+  operationalCategoryName?: string;
+  itemDestination?: OperationalItemDestination;
   quotationItemId?: string; // null in direct purchases
   unit: string;
   purchaseUnitType?: PurchaseUnitType;
@@ -1097,6 +1235,7 @@ export type PurchaseOrderItem = {
   discountOrdered?: number;
   totalOrdered: number;
   notes?: string;
+  entryType?: PurchaseStockEntryType;
   // filled during receipt
   quantityReceived?: number;
   unitPriceConfirmed?: number;
@@ -1140,6 +1279,7 @@ export type PurchaseReceipt = {
 };
 
 export type PurchaseReceiptItemStatus = 'pending' | 'received' | 'partial' | 'divergent' | 'cancelled';
+export type PurchaseStockEntryType = 'stock' | 'uniform' | 'asset';
 
 export type PurchaseReceiptItem = {
   id: string;
@@ -1147,6 +1287,10 @@ export type PurchaseReceiptItem = {
   purchaseOrderItemId: string;
   baseItemId: string;
   productId?: string;
+  itemName?: string;
+  operationalCategoryId?: string;
+  operationalCategoryName?: string;
+  itemDestination?: OperationalItemDestination;
   unit: string;
   purchaseUnitType?: PurchaseUnitType;
   purchaseUnitLabel?: string;
@@ -1157,6 +1301,7 @@ export type PurchaseReceiptItem = {
   totalConfirmed: number;
   status: PurchaseReceiptItemStatus;
   divergenceReason?: string;
+  entryType?: PurchaseStockEntryType;
   // subcollection lots are fetched separately; this array is used in-memory only
   lots?: PurchaseReceiptLot[];
 };
@@ -1340,6 +1485,7 @@ export const defaultGuestPermissions: PermissionSet = {
       conversions: { view: false }, 
       predefinedLists: { view: true, manage: true }
     },
+    assets: { view: false, create: false, edit: false, transfer: false, retire: false, printLabels: false, viewHistory: false },
     pricing: { view: false, simulate: false, manageParameters: false },
     commercial: {
       technicalSheets: { view: false, create: false, edit: false, delete: false, export: false },
@@ -1411,6 +1557,7 @@ export const defaultAdminPermissions: PermissionSet = {
     dashboard: { view: true, operational: true, pricing: true, audit: true, technicalSheets: true },
     registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
     stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true }, predefinedLists: { view: true, manage: true } },
+    assets: { view: true, create: true, edit: true, transfer: true, retire: true, printLabels: true, viewHistory: true },
     pricing: { view: true, simulate: true, manageParameters: true },
     commercial: {
       technicalSheets: { view: true, create: true, edit: true, delete: true, export: true },

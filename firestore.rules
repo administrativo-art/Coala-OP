@@ -176,6 +176,29 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Patrimônio - escrita via API
+    match /assets/{assetId} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
+    match /assetMovements/{movementId} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
+    match /assetCategories/{categoryId} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
+    // Eventos documentais de uniformes - escrita via fluxos de estoque/API
+    match /uniformEvents/{eventId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if false;
+    }
+
     // Sessões de contagem de estoque
     match /stockAuditSessions/{sessionId} {
       allow read: if isAuth();
@@ -253,6 +276,10 @@ service cloud.firestore {
       allow write: if false;
     }
     match /classifications/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /operationalItemCategories/{id} {
       allow read: if isAuth();
       allow write: if false;
     }

@@ -10,6 +10,7 @@ import dynamic from 'next/dynamic';
 
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
+import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { getUnitsForCategory, units, type UnitCategory, unitCategories, packageTypes, type PackageType } from '@/lib/conversion';
 import { type Product, type NutritionalData } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -52,6 +53,7 @@ const productFormSchema = z.object({
   unit: z.string().min(1, 'A unidade é obrigatória.'),
   notes: z.string().optional(),
   baseProductId: z.string().optional(),
+  operationalCategoryId: z.string().min(1, 'Selecione a categoria do item.'),
   defaultCountingUnit: z.enum(['package', 'base', 'content']).optional(),
   apparelType: z.string().optional(),
   apparelSize: z.string().optional(),
@@ -98,6 +100,7 @@ interface AddEditProductModalProps {
 export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
     const { baseProducts } = useBaseProducts();
+    const { activeCategories } = useOperationalItemCategories();
     const { toast } = useToast();
 
     const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -119,6 +122,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             packageType: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
             notes: '', baseProductId: '',
+            operationalCategoryId: '',
             apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
             defaultCountingUnit: 'package',
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
@@ -159,6 +163,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     unit: productToEdit.unit,
                     notes: productToEdit.notes || '',
                     baseProductId: productToEdit.baseProductId || '',
+                    operationalCategoryId: productToEdit.operationalCategoryId || '',
                     apparelType: productToEdit.apparelType || '',
                     apparelSize: productToEdit.apparelSize || '',
                     apparelColor: productToEdit.apparelColor || '',
@@ -181,6 +186,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     packageType: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
                     notes: '', baseProductId: '',
+                    operationalCategoryId: '',
                     apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
                     defaultCountingUnit: 'package',
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
@@ -254,6 +260,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
 
         const productData: Omit<Product, 'id'> = {
+            operationalCategoryId: values.operationalCategoryId,
+            operationalCategoryName: activeCategories.find((category) => category.id === values.operationalCategoryId)?.name,
+            operationalDestination: activeCategories.find((category) => category.id === values.operationalCategoryId)?.destination,
             baseName: values.baseName,
             brand: values.brand,
             barcode: values.barcode,
@@ -505,6 +514,37 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 
                                 <Card className="p-4 bg-violet-100 dark:bg-violet-900/20">
                                     <h3 className="font-medium mb-4">Vínculo e observações</h3>
+                                    <FormField control={form.control} name="operationalCategoryId" render={({ field }) => (
+                                        <FormItem className="mb-4">
+                                            <FormLabel>Categoria do item</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value}>
+                                                <FormControl>
+                                                    <SelectTrigger><SelectValue placeholder="Selecione a categoria do item..."/></SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {activeCategories
+                                                        .filter((category) => category.destination !== 'asset')
+                                                        .map((category) => (
+                                                            <SelectItem key={category.id} value={category.id}>
+                                                                {category.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormDescription>
+                                                Esta categoria define como o item será tratado nas compras e no recebimento.
+                                            </FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                    {activeCategories.length === 0 && (
+                                        <Alert className="mb-4">
+                                            <AlertTitle>Cadastre categorias operacionais</AlertTitle>
+                                            <AlertDescription>
+                                                As categorias padrão são Insumo, Material de limpeza, Vestimenta e Patrimônio.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
                                     <FormField control={form.control} name="baseProductId" render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Insumo base</FormLabel>

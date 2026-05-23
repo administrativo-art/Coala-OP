@@ -3,6 +3,13 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   transpilePackages: ['@react-pdf/renderer'],
+  serverExternalPackages: [
+    '@genkit-ai/core',
+    '@genkit-ai/google-genai',
+    '@genkit-ai/next',
+    'express',
+    'genkit',
+  ],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.openfoodfacts.org' },

@@ -16,17 +16,20 @@ import {
   MapPin,
   Shield,
   ShieldOff,
+  Shirt,
   TrendingUp,
   Umbrella,
   UserRound,
   UserX,
 } from "lucide-react";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useToast } from "@/hooks/use-toast";
 import { createAuditLog } from "@/features/audit/client";
-import type { DPVacationRecord, User } from "@/types";
+import { db } from "@/lib/firebase";
+import type { DPVacationRecord, UniformEvent, User } from "@/types";
 
 const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
 
@@ -180,6 +183,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const { shiftDefinitions, units, vacations } = useDPBootstrap();
   const { toast } = useToast();
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [uniformEvents, setUniformEvents] = useState<UniformEvent[]>([]);
 
   if (!permissions.dp?.collaborators?.view) {
     return <p className="p-6 text-sm text-muted-foreground">Sem permissao para acessar este perfil.</p>;
@@ -239,6 +243,18 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
       console.warn("[CollaboratorProfilePage] Falha ao registrar auditoria.", error);
     });
   }, [firebaseUser, user]);
+
+  useEffect(() => {
+    const q = query(collection(db, "uniformEvents"), where("collaboratorUserId", "==", user.id));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setUniformEvents(
+        snap.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() } as UniformEvent))
+          .sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt))),
+      );
+    });
+    return unsubscribe;
+  }, [user.id]);
 
   const handleResetPassword = async (auditAction: "password_reset_email_sent" | "invite_resent") => {
     if (!user.email || resettingPassword) return;
@@ -515,6 +531,29 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 )}
               </div>
             </div>
+          </Panel>
+
+          <Panel title="Uniformes" icon={Shirt}>
+            {uniformEvents.length === 0 ? (
+              <p className="rounded-2xl bg-[#eee5d1] p-4 text-sm font-semibold text-[#817762]">Nenhum uniforme documentado para este colaborador.</p>
+            ) : (
+              <div className="space-y-2">
+                {uniformEvents.slice(0, 8).map((event) => (
+                  <div key={event.id} className="rounded-2xl bg-[#fffaf0] p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-black text-[#25231f]">{event.productName}</p>
+                        <p className="mt-1 text-[11px] font-semibold text-[#817762]">
+                          {event.eventType.replace("UNIFORME_", "").toLowerCase()} · {event.quantity} un · {fmtDate(event.occurredAt)} · {event.kioskName ?? event.kioskId}
+                        </p>
+                        {event.notes ? <p className="mt-1 text-[11px] font-medium text-slate-500">{event.notes}</p> : null}
+                      </div>
+                      {event.chargeStatus ? <Chip tone="warn">{event.chargeStatus}</Chip> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Panel>
 
           <div className="grid gap-5 xl:grid-cols-2">

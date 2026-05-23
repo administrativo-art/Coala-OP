@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { addMonths } from 'date-fns';
 
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -10,7 +10,7 @@ import {
   calculatePricePerBaseUnit,
   calculateStockQuantityFromPurchase,
 } from '@/lib/purchasing-units';
-import { type Product, type BaseProduct } from '@/types';
+import { type Product, type BaseProduct, type PurchaseStockEntryType } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,6 +37,17 @@ function collectionData(snapshot: FirebaseFirestore.QuerySnapshot) {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
+async function nextAssetCode() {
+  const counterRef = dbAdmin.collection('counters').doc('assets');
+  const next = await dbAdmin.runTransaction(async (tx) => {
+    const snap = await tx.get(counterRef);
+    const current = Number(snap.data()?.next ?? 1);
+    tx.set(counterRef, { next: current + 1, updatedAt: new Date().toISOString() }, { merge: true });
+    return current;
+  });
+  return `PAT-${String(next).padStart(6, '0')}`;
+}
+
 function buildExpenseInstallments(totalValue: number, count: number, firstDueDateIso: string) {
   const safeCount = Math.max(2, count);
   const baseValue = Number.parseFloat((totalValue / safeCount).toFixed(2));
@@ -60,6 +71,14 @@ function normalizeFreightPaymentMode(
 ): 'included_with_goods' | 'separate' | null {
   if (!(deliveryFee > 0)) return null;
   return rawValue === 'included_with_goods' ? 'included_with_goods' : 'separate';
+}
+
+function normalizePurchaseStockEntryType(value: unknown): PurchaseStockEntryType {
+  return value === 'asset' || value === 'uniform' ? value : 'stock';
+}
+
+function normalizeItemDestination(item: Record<string, any>): PurchaseStockEntryType {
+  return normalizePurchaseStockEntryType(item.itemDestination ?? item.entryType);
 }
 
 function buildPurchaseAuditNotes(orderData: Record<string, any>) {
@@ -303,6 +322,42 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     return NextResponse.json({ id: ref.id }, { status: 201 });
   }
 
+  if (resource === 'quotations' && id && child === 'items') {
+    const quotationRef = dbAdmin.collection('quotations').doc(id);
+    const quotationSnap = await quotationRef.get();
+    if (!quotationSnap.exists) return jsonError('Cotação não encontrada.', 404);
+    const itemRef = quotationRef.collection('items').doc();
+    const quantity = Number(body.quantity ?? 0);
+    const unitPrice = Number(body.unitPrice ?? 0);
+    const discount = Number(body.discount ?? 0);
+    const itemDestination = normalizeItemDestination(body);
+    await itemRef.set({
+      quotationId: id,
+      baseItemId: body.baseItemId ?? null,
+      productId: body.productId ?? null,
+      itemName: body.itemName ?? null,
+      operationalCategoryId: body.operationalCategoryId ?? null,
+      operationalCategoryName: body.operationalCategoryName ?? null,
+      itemDestination,
+      freeText: body.freeText ?? null,
+      barcode: body.barcode ?? null,
+      unit: body.unit || '',
+      purchaseUnitType: body.purchaseUnitType ?? 'content',
+      purchaseUnitLabel: body.purchaseUnitLabel ?? body.unit ?? '',
+      quantity,
+      unitPrice,
+      discount,
+      totalPrice: Math.max(quantity * unitPrice - discount, 0),
+      deliveryEstimateDays: body.deliveryEstimateDays ?? null,
+      observation: body.observation ?? null,
+      conversionStatus: body.conversionStatus ?? 'pending',
+      createdAt: now,
+      updatedAt: now,
+      createdBy: decoded.uid,
+    });
+    return NextResponse.json({ id: itemRef.id }, { status: 201 });
+  }
+
   if (resource === 'orders' && !id) {
     const ref = dbAdmin.collection('purchase_orders').doc();
     const items = Array.isArray(body.items) ? body.items : [];
@@ -360,10 +415,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const q = Number(item.quantityOrdered || 0);
         const p = Number(item.unitPriceOrdered || 0);
         const d = Number(item.discountOrdered || 0);
+        const itemDestination = normalizeItemDestination(item);
         batch.set(itemRef, {
           purchaseOrderId: ref.id,
           baseItemId: item.baseItemId || '',
           productId: item.productId ?? null,
+          itemName: item.itemName ?? null,
+          operationalCategoryId: item.operationalCategoryId ?? null,
+          operationalCategoryName: item.operationalCategoryName ?? null,
+          itemDestination,
           unit: item.unit || '',
           purchaseUnitType: item.purchaseUnitType ?? 'content',
           purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
@@ -372,6 +432,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           discountOrdered: d,
           totalOrdered: Math.max((q * p) - d, 0),
           quotationItemId: item.quotationItemId ?? null,
+          entryType: itemDestination,
           notes: item.notes ?? null,
         });
       }
@@ -435,6 +496,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         purchaseOrderItemId: itemDoc.id,
         baseItemId: item.baseItemId,
         productId: item.productId ?? null,
+        itemName: item.itemName ?? null,
+        operationalCategoryId: item.operationalCategoryId ?? null,
+        operationalCategoryName: item.operationalCategoryName ?? null,
+        itemDestination: normalizeItemDestination(item),
         unit: item.unit,
         purchaseUnitType: item.purchaseUnitType || 'content',
         purchaseUnitLabel: item.purchaseUnitLabel || item.unit,
@@ -443,6 +508,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         quantityReceived: 0,
         unitPriceConfirmed: 0,
         status: 'pending',
+        entryType: normalizeItemDestination(item),
       });
     }
 
@@ -632,18 +698,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       for (const item of body.items) {
         const orderItem = orderItemsById.get(item.purchaseOrderItemId);
         const existingReceiptItem = receiptItemsById.get(item.receiptItemId);
+        const entryType = normalizeItemDestination(item);
 
-        const [productDoc, baseProductDoc] = await Promise.all([
-          dbAdmin.collection('products').doc(item.productId).get(),
-          dbAdmin.collection('baseProducts').doc(item.baseItemId).get(),
-        ]);
-
-        if (!productDoc.exists || !baseProductDoc.exists) {
-          return jsonError('Unidade de estoque ou insumo base não encontrado.');
-        }
-
-        const product = { id: productDoc.id, ...productDoc.data() } as Product;
-        const baseProduct = { id: baseProductDoc.id, ...baseProductDoc.data() } as BaseProduct;
+        const baseProductDoc = item.baseItemId
+          ? await dbAdmin.collection('baseProducts').doc(item.baseItemId).get()
+          : null;
+        if (entryType !== 'asset' && !baseProductDoc?.exists) return jsonError('Insumo base não encontrado.');
+        const baseProduct = baseProductDoc?.exists
+          ? ({ id: baseProductDoc.id, ...baseProductDoc.data() } as BaseProduct)
+          : null;
 
         const purchaseUnitType =
           item.purchaseUnitType ?? existingReceiptItem?.purchaseUnitType ?? orderItem?.purchaseUnitType ?? 'content';
@@ -658,10 +721,76 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const confirmedUnitPrice = existingReceiptItem?.unitPriceConfirmed ?? orderItem?.unitPriceOrdered ?? 0;
         const cumulativeReceived = existingReceiptItem?.quantityReceived ?? orderItem?.quantityOrdered ?? 0;
 
+        if (entryType === 'asset') {
+          totalConfirmed += cumulativeReceived * confirmedUnitPrice;
+          const receiptItemStatus = getReceiptItemStatus(
+            cumulativeReceived,
+            Number(orderItem?.quantityOrdered ?? cumulativeReceived),
+            confirmedUnitPrice,
+            Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
+            existingReceiptItem?.divergenceReason,
+          );
+          if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
+          if (receiptItemStatus === 'partial') hasRemaining = true;
+
+          const assetCount = Math.max(0, Math.floor(Number(cumulativeReceived || 0)));
+          for (let index = 0; index < assetCount; index += 1) {
+            const code = await nextAssetCode();
+            const assetRef = dbAdmin.collection('assets').doc();
+            const assetName = item.itemName || existingReceiptItem?.itemName || orderItem?.itemName || baseProduct?.name || item.baseItemId || 'Patrimônio';
+            batch.set(assetRef, {
+              workspaceId: WORKSPACE_ID,
+              code,
+              name: assetName,
+              category: 'Patrimônio',
+              currentKioskId: body.destinationKioskId,
+              currentKioskName: body.destinationKioskName,
+              status: 'ativo',
+              purchaseValue: confirmedUnitPrice,
+              supplierId: receipt.supplierId,
+              supplierName: receipt.supplierName ?? null,
+              sourceType: 'purchase_receipt',
+              purchaseOrderId: receipt.purchaseOrderId,
+              purchaseReceiptId: id,
+              purchaseReceiptItemId: item.receiptItemId,
+              createdAt: now,
+              updatedAt: now,
+              createdBy: decoded.uid,
+            });
+            batch.set(dbAdmin.collection('assetMovements').doc(), {
+              assetId: assetRef.id,
+              assetCode: code,
+              assetName,
+              type: 'CRIACAO',
+              toKioskId: body.destinationKioskId,
+              toKioskName: body.destinationKioskName,
+              toStatus: 'ativo',
+              userId: decoded.uid,
+              username: body.username ?? 'Sistema',
+              occurredAt: now,
+              notes: 'Entrada via recebimento de compra.',
+              sourceType: 'purchase_receipt',
+              sourceId: id,
+            });
+          }
+
+          batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
+            entryType,
+            status: receiptItemStatus,
+            stockedAt: now,
+            updatedAt: now,
+          });
+          continue;
+        }
+
+        const productDoc = await dbAdmin.collection('products').doc(item.productId).get();
+        if (!productDoc.exists) return jsonError('Unidade de estoque não encontrada.');
+        const product = { id: productDoc.id, ...productDoc.data() } as Product;
+
         const convertedPrice = calculatePricePerBaseUnit(
           confirmedUnitPrice,
           product,
-          baseProduct,
+          baseProduct!,
           purchaseUnitType,
         );
         if (!convertedPrice.ok) return jsonError(convertedPrice.error || 'Erro na conversão de preço.');
@@ -685,7 +814,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               lot.quantity,
               product,
               product,
-              baseProduct,
+              baseProduct!,
               purchaseUnitType,
             );
             if (!stockConversion.ok) return jsonError(stockConversion.error || 'Erro na conversão de estoque.');
@@ -741,8 +870,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               { merge: true },
             );
             // Need to fix increment logic for Admin SDK:
-            const adminIncrement = (val: number) => require('firebase-admin').firestore.FieldValue.increment(val);
-            batch.update(stockLotRef, { quantity: adminIncrement(stockConversion.stockQuantity) });
+            batch.update(stockLotRef, { quantity: FieldValue.increment(stockConversion.stockQuantity) });
 
             const movRef = dbAdmin.collection('movementHistory').doc();
             batch.set(movRef, {
@@ -759,9 +887,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               timestamp: now,
               sourceType: 'purchase_receipt',
               sourceId: id,
+              ...(entryType === 'uniform' ? { itemClass: 'uniform' } : {}),
             });
           }
         }
+
+        batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
+          entryType,
+          stockedAt: now,
+          updatedAt: now,
+        });
       }
     }
 
@@ -943,10 +1078,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
         const q = Number(item.quantityOrdered || 0);
         const p = Number(item.unitPriceOrdered || 0);
         const d = Number(item.discountOrdered || 0);
+        const itemDestination = normalizeItemDestination(item);
         batch.set(itemRef, {
           purchaseOrderId: id,
           baseItemId: item.baseItemId || '',
           productId: item.productId ?? null,
+          itemName: item.itemName ?? null,
+          operationalCategoryId: item.operationalCategoryId ?? null,
+          operationalCategoryName: item.operationalCategoryName ?? null,
+          itemDestination,
           unit: item.unit || '',
           purchaseUnitType: item.purchaseUnitType ?? 'content',
           purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
@@ -955,6 +1095,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
           discountOrdered: d,
           totalOrdered: Math.max((q * p) - d, 0),
           quotationItemId: item.quotationItemId ?? null,
+          entryType: itemDestination,
           notes: item.notes ?? null,
         });
       }
