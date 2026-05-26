@@ -358,6 +358,56 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     return NextResponse.json({ id: itemRef.id }, { status: 201 });
   }
 
+  if (resource === 'quotations' && id && child === 'finalize') {
+    const quotationRef = dbAdmin.collection('quotations').doc(id);
+    const quotationSnap = await quotationRef.get();
+    if (!quotationSnap.exists) return jsonError('Cotação não encontrada.', 404);
+
+    const quotation = quotationSnap.data()!;
+    if (quotation.status !== 'draft') return jsonError('Apenas cotações em rascunho podem ser finalizadas.', 400);
+
+    const selectedItemIds = new Set(Array.isArray(body.selectedItemIds) ? body.selectedItemIds : []);
+    if (selectedItemIds.size === 0) return jsonError('Selecione ao menos um item normalizado para finalizar a cotação.', 400);
+
+    const itemsSnap = await quotationRef.collection('items').get();
+    const selectedItems = itemsSnap.docs.filter((itemDoc) => selectedItemIds.has(itemDoc.id));
+    if (selectedItems.length !== selectedItemIds.size) return jsonError('Um ou mais itens selecionados não pertencem à cotação.', 400);
+    if (selectedItems.some((itemDoc) => !itemDoc.data().baseItemId)) {
+      return jsonError('Itens livres precisam ser normalizados antes da finalização.', 400);
+    }
+
+    const batch = dbAdmin.batch();
+    batch.update(quotationRef, {
+      status: 'quoted',
+      finalizedAt: now,
+      archivedAt: null,
+      updatedAt: now,
+    });
+
+    for (const itemDoc of itemsSnap.docs) {
+      batch.update(itemDoc.ref, {
+        conversionStatus: selectedItemIds.has(itemDoc.id) ? 'selected' : 'discarded',
+        updatedAt: now,
+      });
+    }
+
+    await batch.commit();
+    return NextResponse.json({ ok: true });
+  }
+
+  if (resource === 'quotations' && id && child === 'cancel') {
+    const quotationRef = dbAdmin.collection('quotations').doc(id);
+    const quotationSnap = await quotationRef.get();
+    if (!quotationSnap.exists) return jsonError('Cotação não encontrada.', 404);
+
+    await quotationRef.update({
+      status: 'cancelled',
+      cancelledAt: now,
+      updatedAt: now,
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   if (resource === 'orders' && !id) {
     const ref = dbAdmin.collection('purchase_orders').doc();
     const items = Array.isArray(body.items) ? body.items : [];
@@ -583,7 +633,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const quantityDiffers = Math.abs(quantityReceived - quantityOrdered) > 0.001;
     const priceDiffers = Math.abs(unitPriceConfirmed - unitPriceOrdered) > 0.01;
 
-    if (quantityReceived === 0) return 'cancelled';
+    if (quantityReceived === 0) return 'pending';
     if (quantityReceived < quantityOrdered) return 'partial';
     if (divergenceReason || quantityDiffers || priceDiffers) return 'divergent';
     return 'received';
@@ -603,48 +653,75 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     let totalConfirmed = 0;
     let hasDivergence = false;
     let hasRemaining = false;
+    let hasStockEntry = false;
 
     if (Array.isArray(body.items)) {
       for (const item of body.items) {
         const orderItem = orderItemsById.get(item.purchaseOrderItemId);
         const quantityOrdered = Number(orderItem?.quantityOrdered ?? item.quantityReceived);
         const unitPriceOrdered = Number(orderItem?.unitPriceOrdered ?? item.unitPriceConfirmed);
-        const itemStatus = getReceiptItemStatus(
-          item.quantityReceived,
-          quantityOrdered,
-          item.unitPriceConfirmed,
-          unitPriceOrdered,
-          item.divergenceReason,
-        );
+        const disposition = item.receiptDisposition ?? 'receive';
+        const quantityReceived = disposition === 'receive' ? Number(item.quantityReceived ?? 0) : 0;
+        const itemStatus =
+          disposition === 'returned'
+            ? 'cancelled'
+            : getReceiptItemStatus(
+                quantityReceived,
+                quantityOrdered,
+                item.unitPriceConfirmed,
+                unitPriceOrdered,
+                item.divergenceReason,
+              );
 
-        totalConfirmed += item.quantityReceived * item.unitPriceConfirmed;
-        if (itemStatus === 'partial') hasRemaining = true;
-        if (itemStatus === 'partial' || itemStatus === 'divergent') hasDivergence = true;
+        totalConfirmed += quantityReceived * item.unitPriceConfirmed;
+        if (quantityReceived > 0) hasStockEntry = true;
+        if (itemStatus === 'partial' || itemStatus === 'pending') hasRemaining = true;
+        if (itemStatus === 'partial' || itemStatus === 'divergent' || disposition !== 'receive') hasDivergence = true;
 
         batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
           unit: item.unit,
           purchaseUnitType: item.purchaseUnitType ?? orderItem?.purchaseUnitType ?? 'content',
           purchaseUnitLabel: item.purchaseUnitLabel ?? orderItem?.purchaseUnitLabel ?? item.unit,
-          quantityReceived: item.quantityReceived,
+          quantityReceived,
           unitPriceConfirmed: item.unitPriceConfirmed,
-          totalConfirmed: item.quantityReceived * item.unitPriceConfirmed,
+          totalConfirmed: quantityReceived * item.unitPriceConfirmed,
           status: itemStatus,
-          divergenceReason: item.divergenceReason?.trim() || null,
+          receiptDisposition: disposition,
+          divergenceReason:
+            item.divergenceReason?.trim() ||
+            (disposition === 'exchange_pending' ? 'Troca pendente com fornecedor.' : null),
         });
       }
     }
 
+    const nextReceiptStatus = hasStockEntry
+      ? 'awaiting_stock'
+      : hasRemaining
+      ? 'partially_stocked'
+      : hasDivergence
+      ? 'stocked_with_divergence'
+      : 'stocked';
+
     batch.update(receiptRef, {
-      status: 'awaiting_stock',
+      status: nextReceiptStatus,
       totalConfirmed,
       conferenceCompletedAt: now,
+      ...(nextReceiptStatus === 'stocked' || nextReceiptStatus === 'stocked_with_divergence'
+        ? { receivedAt: now }
+        : {}),
       updatedAt: now,
       notes: body.notes ?? receipt.notes ?? null,
       receiptProofUrl: body.receiptProofUrl ?? receipt.receiptProofUrl ?? null,
       receiptProofDescription: body.receiptProofDescription ?? receipt.receiptProofDescription ?? null,
     });
 
-    batch.update(orderRef, { totalConfirmed, updatedAt: now });
+    batch.update(orderRef, {
+      totalConfirmed,
+      ...(nextReceiptStatus === 'stocked' || nextReceiptStatus === 'stocked_with_divergence'
+        ? { receivedAt: now }
+        : {}),
+      updatedAt: now,
+    });
 
     const finSnap = await dbAdmin
       .collection('purchase_financials')
@@ -661,7 +738,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     });
 
     await batch.commit();
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, status: nextReceiptStatus });
   }
 
   if (resource === 'receipts' && id && child === 'start-stock-entry') {
@@ -719,21 +796,32 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           '';
 
         const confirmedUnitPrice = existingReceiptItem?.unitPriceConfirmed ?? orderItem?.unitPriceOrdered ?? 0;
-        const cumulativeReceived = existingReceiptItem?.quantityReceived ?? orderItem?.quantityOrdered ?? 0;
+        const previousReceived = Number(existingReceiptItem?.quantityReceived ?? 0);
+        const payloadReceivedQuantity =
+          typeof item.quantityReceived === 'number'
+            ? Number(item.quantityReceived)
+            : Array.isArray(item.lots)
+            ? item.lots.reduce((sum: number, lot: any) => sum + Number(lot.quantity ?? 0), 0)
+            : previousReceived;
+        const cumulativeReceived =
+          receipt.status === 'partially_stocked'
+            ? previousReceived + payloadReceivedQuantity
+            : payloadReceivedQuantity;
+        const quantityOrdered = Number(orderItem?.quantityOrdered ?? cumulativeReceived);
 
         if (entryType === 'asset') {
           totalConfirmed += cumulativeReceived * confirmedUnitPrice;
           const receiptItemStatus = getReceiptItemStatus(
             cumulativeReceived,
-            Number(orderItem?.quantityOrdered ?? cumulativeReceived),
+            quantityOrdered,
             confirmedUnitPrice,
             Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
             existingReceiptItem?.divergenceReason,
           );
           if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
-          if (receiptItemStatus === 'partial') hasRemaining = true;
+          if (receiptItemStatus === 'partial' || receiptItemStatus === 'pending') hasRemaining = true;
 
-          const assetCount = Math.max(0, Math.floor(Number(cumulativeReceived || 0)));
+          const assetCount = Math.max(0, Math.floor(Number(payloadReceivedQuantity || 0)));
           for (let index = 0; index < assetCount; index += 1) {
             const code = await nextAssetCode();
             const assetRef = dbAdmin.collection('assets').doc();
@@ -776,8 +864,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
           batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
             entryType,
+            quantityReceived: cumulativeReceived,
+            totalConfirmed: cumulativeReceived * confirmedUnitPrice,
             status: receiptItemStatus,
-            stockedAt: now,
+            ...(payloadReceivedQuantity > 0 ? { stockedAt: now } : {}),
             updatedAt: now,
           });
           continue;
@@ -799,17 +889,19 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
         const receiptItemStatus = getReceiptItemStatus(
           cumulativeReceived,
-          Number(orderItem?.quantityOrdered ?? cumulativeReceived),
+          quantityOrdered,
           confirmedUnitPrice,
           Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
           existingReceiptItem?.divergenceReason,
         );
 
         if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
-        if (receiptItemStatus === 'partial') hasRemaining = true;
+        if (receiptItemStatus === 'partial' || receiptItemStatus === 'pending') hasRemaining = true;
 
         if (Array.isArray(item.lots)) {
           for (const lot of item.lots) {
+            if (Number(lot.quantity ?? 0) <= 0) continue;
+
             const stockConversion = calculateStockQuantityFromPurchase(
               lot.quantity,
               product,
@@ -894,7 +986,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
         batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
           entryType,
-          stockedAt: now,
+          quantityReceived: cumulativeReceived,
+          totalConfirmed: cumulativeReceived * confirmedUnitPrice,
+          status: receiptItemStatus,
+          ...(payloadReceivedQuantity > 0 ? { stockedAt: now } : {}),
           updatedAt: now,
         });
       }
@@ -904,7 +999,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       if (payloadReceiptItemIds.has(rId)) return;
       totalConfirmed +=
         (existingItem.quantityReceived ?? 0) * (existingItem.unitPriceConfirmed ?? existingItem.unitPriceOrdered ?? 0);
-      if (existingItem.status === 'partial') hasRemaining = true;
+      if (existingItem.status === 'partial' || existingItem.status === 'pending') hasRemaining = true;
       if (existingItem.status === 'partial' || existingItem.status === 'divergent') hasDivergence = true;
     });
 
@@ -1032,6 +1127,30 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   const [resource, id, child, childId] = path;
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
+
+  if (resource === 'quotations' && id && !child) {
+    const quotationRef = dbAdmin.collection('quotations').doc(id);
+    const quotationSnap = await quotationRef.get();
+    if (!quotationSnap.exists) return jsonError('Cotação não encontrada.', 404);
+
+    const allowedFields = [
+      'supplierId',
+      'mode',
+      'validUntil',
+      'notes',
+      'status',
+      'finalizedAt',
+      'archivedAt',
+    ];
+    const update = Object.fromEntries(
+      Object.entries(body).filter(([key]) => allowedFields.includes(key)),
+    );
+
+    if (Object.keys(update).length === 0) return jsonError('Nenhum campo válido para atualizar.', 400);
+
+    await quotationRef.update({ ...update, updatedAt: now });
+    return NextResponse.json({ ok: true });
+  }
 
   if (resource === 'quotations' && id && child === 'items' && childId) {
     const update = { ...body };

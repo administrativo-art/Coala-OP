@@ -59,6 +59,7 @@ interface ItemDraft {
   lots: LotDraft[];
   expiryDate?: string;
   entryType: 'stock' | 'uniform' | 'asset';
+  receiptDisposition: 'receive' | 'exchange_pending' | 'returned';
 }
 
 function generateLotCode(baseItemName: string) {
@@ -175,6 +176,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
               divergenceReason: '',
               expiryDate: '',
               entryType: item.itemDestination === 'asset' || item.entryType === 'asset' ? 'asset' : item.itemDestination === 'uniform' || item.entryType === 'uniform' ? 'uniform' : 'stock',
+              receiptDisposition: 'receive',
               lots: [
                 {
                   _key: lotKey(),
@@ -250,10 +252,15 @@ export function ReceiptWorkspace({ receipt }: Props) {
       !isImmediate ||
       drafts.every(
         (d) =>
-          d.quantityReceived > 0 &&
+          d.quantityReceived >= 0 &&
           d.unitPriceConfirmed > 0,
       ),
     [drafts, isImmediate],
+  );
+
+  const hasAnyReceived = useMemo(
+    () => drafts.some((d) => d.receiptDisposition === 'receive' && d.quantityReceived > 0),
+    [drafts],
   );
 
   const canSaveConference =
@@ -265,9 +272,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
     canReceive &&
     isInStockEntry &&
     !!destinationKioskId &&
+    hasAnyReceived &&
     lotsValid &&
     immediateValid &&
     drafts.every((d) => {
+      if (d.quantityReceived <= 0) return true;
       if (d.entryType === 'asset') return d.quantityReceived > 0;
       if (!d.productId) return false;
       const base = baseProducts.find((bp) => bp.id === d.baseItemId);
@@ -320,6 +329,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
           quantityReceived: d.quantityReceived,
           unitPriceConfirmed: d.unitPriceConfirmed,
           divergenceReason: d.divergenceReason || undefined,
+          receiptDisposition: d.receiptDisposition,
         })),
       });
     } finally {
@@ -371,6 +381,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
           itemDestination: d.entryType,
           productId: d.productId,
           entryType: d.entryType,
+          quantityReceived: d.quantityReceived,
           purchaseUnitType: d.purchaseUnitType,
           purchaseUnitLabel: d.purchaseUnitLabel,
           lots: d.lots.map(({ _key, ...rest }) => rest),
@@ -478,7 +489,9 @@ export function ReceiptWorkspace({ receipt }: Props) {
                   const isAssetEntry = draft.entryType === 'asset';
                   const lotSum = draft.lots.reduce((s, l) => s + (l.quantity || 0), 0);
                   const lotValid = isAssetEntry || Math.abs(lotSum - draft.quantityReceived) < 0.001;
+                  const isNonStockDisposition = draft.receiptDisposition !== 'receive';
                   const hasDivergence =
+                    isNonStockDisposition ||
                     Math.abs(draft.quantityReceived - draft.quantityOrdered) > 0.001 ||
                     !!draft.divergenceReason;
                   
@@ -538,13 +551,38 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             </Select>
                           </div>
                         )}
+                        {isInConference && (
+                          <div className="space-y-1">
+                            <Label className="text-xs">Tratativa</Label>
+                            <Select
+                              value={draft.receiptDisposition}
+                              onValueChange={(value: ItemDraft['receiptDisposition']) => {
+                                const nextQuantity = value === 'receive' ? draft.quantityReceived : 0;
+                                updateDraft(idx, {
+                                  receiptDisposition: value,
+                                  quantityReceived: nextQuantity,
+                                  lots: draft.lots.map((lot) => ({ ...lot, quantity: nextQuantity > 0 ? lot.quantity : 0 })),
+                                });
+                              }}
+                            >
+                              <SelectTrigger disabled={isReadonly}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="receive">Receber</SelectItem>
+                                <SelectItem value="exchange_pending">Troca pendente</SelectItem>
+                                <SelectItem value="returned">Devolvido</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <div className="space-y-1">
                           <Label className="text-xs">Qtd. recebida</Label>
                           <Input
                             type="number"
                             step="0.001"
                             value={draft.quantityReceived}
-                            disabled={isReadonly || (!isImmediate && isInStockEntry)}
+                            disabled={isReadonly || isNonStockDisposition || (!isImmediate && isInStockEntry)}
                             onChange={(e) => updateDraft(idx, { quantityReceived: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
@@ -554,7 +592,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             type="number"
                             step="0.01"
                             value={draft.unitPriceConfirmed}
-                            disabled={isReadonly || (!isImmediate && isInStockEntry)}
+                            disabled={isReadonly || isNonStockDisposition || (!isImmediate && isInStockEntry)}
                             onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
                           />
                         </div>

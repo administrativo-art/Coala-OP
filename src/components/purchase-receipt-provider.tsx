@@ -46,6 +46,7 @@ export interface ReceiptItemInput {
   quantityReceived: number;
   unitPriceConfirmed: number;
   divergenceReason?: string;
+  receiptDisposition?: 'receive' | 'exchange_pending' | 'returned';
 }
 
 export interface StockEntryItemInput {
@@ -55,6 +56,7 @@ export interface StockEntryItemInput {
   entryType?: 'stock' | 'uniform' | 'asset';
   productId: string;     // specific Product variant for stock entry
   productName?: string;
+  quantityReceived?: number;
   purchaseUnitType?: PurchaseReceiptItem['purchaseUnitType'];
   purchaseUnitLabel?: string;
   lots: LotInput[];
@@ -98,7 +100,7 @@ function getReceiptItemStatus(
   const quantityDiffers = Math.abs(quantityReceived - quantityOrdered) > 0.001;
   const priceDiffers = Math.abs(unitPriceConfirmed - unitPriceOrdered) > 0.01;
 
-  if (quantityReceived === 0) return 'cancelled';
+  if (quantityReceived === 0) return 'pending';
   if (quantityReceived < quantityOrdered) return 'partial';
   if (divergenceReason || quantityDiffers || priceDiffers) return 'divergent';
   return 'received';
@@ -184,13 +186,14 @@ export function PurchaseReceiptProvider({ children }: { children: React.ReactNod
         throw new Error(err.error || 'Falha ao salvar a conferência.');
       }
 
+      const result = await response.json().catch(() => ({}));
       const receipt = receipts.find((r) => r.id === receiptId);
       if (receipt) {
         await syncPurchaseReceiptTask(firebaseUser, {
           receiptId: receipt.id,
           purchaseOrderId: receipt.purchaseOrderId,
           supplierId: receipt.supplierId,
-          status: 'awaiting_stock',
+          status: result.status ?? 'awaiting_stock',
           receiptMode: receipt.receiptMode,
           expectedDate: receipt.expectedDate,
           notes: payload.notes ?? receipt.notes,
