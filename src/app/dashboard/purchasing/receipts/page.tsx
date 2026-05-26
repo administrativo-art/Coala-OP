@@ -40,6 +40,7 @@ function ReceiptRow({ receipt }: { receipt: PurchaseReceipt }) {
   const supplier = entities.find((e) => e.id === receipt.supplierId);
   const phase = PHASE_CONFIG[receipt.status];
   const PhaseIcon = phase.icon;
+  const receivedByOtherMeans = Boolean((receipt as PurchaseReceipt & { receivedByOtherMeans?: boolean }).receivedByOtherMeans);
 
   return (
     <Link
@@ -58,6 +59,11 @@ function ReceiptRow({ receipt }: { receipt: PurchaseReceipt }) {
             <Badge variant="outline" className={`text-xs ${phase.className}`}>
               {phase.label}
             </Badge>
+            {receivedByOtherMeans && (
+              <Badge variant="outline" className="text-xs border-sky-300 bg-sky-50 text-sky-700">
+                Baixado por outro meio
+              </Badge>
+            )}
             <Badge variant="outline" className="text-xs">
               {receipt.receiptMode === 'immediate_pickup' ? '⚡ Retirada' : '🚚 Entrega futura'}
             </Badge>
@@ -71,7 +77,10 @@ function ReceiptRow({ receipt }: { receipt: PurchaseReceipt }) {
             {receipt.expectedDate && (
               <span>Previsto: {format(parseISO(receipt.expectedDate), 'dd/MM/yyyy', { locale: ptBR })}</span>
             )}
-            {receipt.stockEnteredAt && (
+            {receivedByOtherMeans && receipt.receivedAt && (
+              <span>Baixado: {format(parseISO(receipt.receivedAt), 'dd/MM/yyyy', { locale: ptBR })}</span>
+            )}
+            {!receivedByOtherMeans && receipt.stockEnteredAt && (
               <span>Estocado: {format(parseISO(receipt.stockEnteredAt), 'dd/MM/yyyy', { locale: ptBR })}</span>
             )}
           </div>

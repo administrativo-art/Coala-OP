@@ -35,6 +35,7 @@ function OrderRow({ order }: { order: PurchaseOrder }) {
   const supplier = entities.find((e) => e.id === order.supplierId);
   const status = STATUS_LABELS[order.status];
   const isReceived = !!order.receivedAt;
+  const receivedByOtherMeans = Boolean((order as PurchaseOrder & { receivedByOtherMeans?: boolean }).receivedByOtherMeans);
 
   return (
     <Link
@@ -51,7 +52,16 @@ function OrderRow({ order }: { order: PurchaseOrder }) {
               {supplier?.fantasyName ?? supplier?.name ?? '—'}
             </span>
             {isReceived ? (
-              <Badge variant="outline" className="text-xs border-green-400 text-green-700 bg-green-50">✓ Recebida</Badge>
+              <Badge
+                variant="outline"
+                className={
+                  receivedByOtherMeans
+                    ? 'text-xs border-sky-300 bg-sky-50 text-sky-700'
+                    : 'text-xs border-green-400 text-green-700 bg-green-50'
+                }
+              >
+                {receivedByOtherMeans ? 'Baixada por outro meio' : '✓ Recebida'}
+              </Badge>
             ) : (
               <Badge variant={status.variant} className="text-xs">{status.label}</Badge>
             )}
