@@ -6,8 +6,15 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { syncDayAdmin } from './pdv-sync';
+import { syncDayAdmin } from './pdv-sync.js';
 import { randomUUID } from 'node:crypto';
+
+// ─── Módulo RH (Coala RH v1.3) ───────────────────────────────────────────────
+export { syncRhAccessCache, syncFromBizneo, manualSyncFromBizneo } from './rh/sync.js';
+export { onFieldUpdate } from './rh/field-update.js';
+export { scheduledDateAlerts, scheduledProfileCompletion } from './rh/automations.js';
+export { onTermination, lgpdScheduledCleanup } from './rh/termination.js';
+export { checkFieldMapConsistency } from './rh/propagation.js';
 
 initializeApp();
 setGlobalOptions({ maxInstances: 10 });

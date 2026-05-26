@@ -39,10 +39,12 @@ export async function GET(request: NextRequest) {
     const snapshot = await dbAdmin
       .collection("securityIncidents")
       .where("workspace_id", "==", context.workspace_id)
-      .orderBy("createdAt", "desc")
       .limit(100)
       .get();
-    return NextResponse.json({ incidents: snapshot.docs.map(serializeIncident) });
+    const incidents = snapshot.docs
+      .map(serializeIncident)
+      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+    return NextResponse.json({ incidents });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Falha ao listar incidentes." }, { status: 403 });
   }
@@ -108,4 +110,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Falha ao criar incidente." }, { status: 400 });
   }
 }
-

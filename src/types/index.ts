@@ -555,6 +555,11 @@ export type PermissionSet = {
     collaborators: { view: boolean; add: boolean; edit: boolean; terminate: boolean; };
     checklists: { view: boolean; operate: boolean; create: boolean; manageTemplates: boolean; viewAnalytics: boolean; };
     settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageChecklistTypes: boolean; };
+    rh_role?: 'employee' | 'manager' | 'admin';
+    rh?: {
+      collaborators: { view: boolean; edit: boolean; };
+      can_view_salary: boolean;
+    };
   };
   financial: {
     view: boolean;
@@ -1505,6 +1510,8 @@ export const defaultGuestPermissions: PermissionSet = {
       collaborators: { view: false, add: false, edit: false, terminate: false },
       checklists: { view: false, operate: false, create: false, manageTemplates: false, viewAnalytics: false },
       settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageChecklistTypes: false },
+      rh_role: undefined,
+      rh: { collaborators: { view: false, edit: false }, can_view_salary: false },
     },
     financial: {
       view: false,
@@ -1576,6 +1583,8 @@ export const defaultAdminPermissions: PermissionSet = {
       collaborators: { view: true, add: true, edit: true, terminate: true },
       checklists: { view: true, operate: true, create: true, manageTemplates: true, viewAnalytics: true },
       settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageChecklistTypes: true },
+      rh_role: 'admin' as const,
+      rh: { collaborators: { view: true, edit: true }, can_view_salary: true },
     },
     financial: {
       view: true,

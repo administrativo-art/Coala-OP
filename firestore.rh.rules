@@ -2,18 +2,142 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ─── Helpers ────────────────────────────────────────────────────────────
+
     function isAuth() {
       return request.auth != null;
     }
 
-    function isAdmin() {
+    function isDefaultAdmin() {
       return isAuth() && request.auth.token.isDefaultAdmin == true;
     }
 
-    // O banco de RH nasce em modo server-first para não depender da árvore de
-    // permissões do banco principal enquanto a camada de bootstrap ainda não existe.
-    match /{document=**} {
-      allow read, write: if isAdmin();
+    // Busca o cache de acesso RH do usuário logado.
+    // rh_access_cache é mantido pela CF syncRhAccessCache — nunca escrito pelo cliente.
+    function rhCache() {
+      return get(/databases/$(database)/documents/rh_access_cache/$(request.auth.uid)).data;
     }
+
+    function rhRole() {
+      let cache = rhCache();
+      return cache.get('rh_role', null);
+    }
+
+    function isAdmin()   { return isDefaultAdmin() || rhRole() == 'admin'; }
+    function isManager() { return isAdmin() || rhRole() == 'manager'; }
+    function isEmployee() { return isManager() || rhRole() == 'employee'; }
+
+    // Retorna true se o usuário logado é o próprio colaborador (via rh_access_cache)
+    function isOwner(bizneoId) {
+      return isAuth() && rhCache().get('bizneo_employee_id', null) == bizneoId;
+    }
+
+    // Manager vê colaboradores da mesma unit_id
+    function isSameUnit(employeeUnitId) {
+      return isAuth() && rhCache().get('unit_id', null) == employeeUnitId;
+    }
+
+    function canReadEmployee(bizneoId, employeeUnitId) {
+      return isAdmin()
+          || isOwner(bizneoId)
+          || (isManager() && isSameUnit(employeeUnitId));
+    }
+
+    // Verifica visibilidade de um campo pelo field_map (coala-rh/schema/field_map)
+    function fieldVisibility(fieldKey) {
+      let fm = get(/databases/$(database)/documents/schema/field_map).data;
+      return fm.fields.get(fieldKey, {}).get('visibility', 'internal');
+    }
+
+    function canReadField(fieldKey) {
+      let vis = fieldVisibility(fieldKey);
+      return (vis == 'public'    && isEmployee())
+          || (vis == 'sensitive' && isManager())
+          || (vis == 'internal'  && isAdmin());
+    }
+
+    // ─── rh_access_cache ────────────────────────────────────────────────────
+    // Cada usuário lê o próprio cache; admins leem qualquer um.
+    // Somente a CF syncRhAccessCache escreve nesta coleção.
+    match /rh_access_cache/{uid} {
+      allow read:   if isAuth() && (request.auth.uid == uid || isAdmin());
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─── employees ──────────────────────────────────────────────────────────
+    match /employees/{bizneoId} {
+      allow read:   if isAuth() && canReadEmployee(bizneoId, resource.data.get('unit_id', ''));
+      allow create: if false;  // somente CF syncFromBizneo
+      allow update: if false;  // somente CF syncFromBizneo / onFieldUpdate
+      allow delete: if false;
+
+      // field_values: visibilidade por campo via field_map
+      match /field_values/{fieldKey} {
+        allow read:   if isAuth()
+                      && canReadEmployee(bizneoId, get(/databases/$(database)/documents/employees/$(bizneoId)).data.get('unit_id', ''))
+                      && canReadField(fieldKey);
+        allow create: if false;  // somente CF onFieldUpdate
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
+    // ─── schema (field_map) ──────────────────────────────────────────────────
+    // Qualquer usuário autenticado pode ler o schema (necessário para o frontend montar formulários).
+    // Somente admins escrevem (via painel /rh/config/fields ou seed script).
+    match /schema/{docId} {
+      allow read:   if isAuth();
+      allow write:  if isAdmin();
+    }
+
+    // ─── jobRoles ────────────────────────────────────────────────────────────
+    // Coleção existente — qualquer autenticado lê; admins escrevem.
+    match /jobRoles/{roleId} {
+      allow read:   if isAuth();
+      allow write:  if isAdmin();
+    }
+
+    // ─── jobDepartments ──────────────────────────────────────────────────────
+    match /jobDepartments/{deptId} {
+      allow read:   if isAuth();
+      allow write:  if isAdmin();
+    }
+
+    // ─── jobFunctions ────────────────────────────────────────────────────────
+    match /jobFunctions/{funcId} {
+      allow read:   if isAuth();
+      allow write:  if isAdmin();
+    }
+
+    // ─── audit_log ──────────────────────────────────────────────────────────
+    // Imutável: managers leem (filtrado por equipe no app), admins leem tudo.
+    // Criação somente via CF onFieldUpdate.
+    match /audit_log/{logId} {
+      allow read:   if isManager();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─── automation_tasks ───────────────────────────────────────────────────
+    match /automation_tasks/{taskId} {
+      allow read:   if isAdmin();
+      allow write:  if false;  // somente CFs
+    }
+
+    // ─── sync_log ────────────────────────────────────────────────────────────
+    match /sync_log/{logId} {
+      allow read:   if isAdmin();
+      allow write:  if false;  // somente CF syncFromBizneo
+    }
+
+    // ─── candidates / applications / jobOpenings (coleções de recrutamento) ──
+    // Mantidas pelo sistema existente de recrutamento.
+    match /candidates/{id}        { allow read, write: if isAuth() && (isManager() || isDefaultAdmin()); }
+    match /applications/{id}      { allow read, write: if isAuth() && (isManager() || isDefaultAdmin()); }
+    match /jobOpenings/{id}       { allow read: if true; allow write: if isAdmin(); }
   }
 }

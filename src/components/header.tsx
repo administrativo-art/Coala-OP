@@ -269,6 +269,7 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Cargos & Funções", href: "/dashboard/settings?department=pessoal&tab=roles", section: "Departamento Pessoal" },
   { label: "Organograma", href: "/dashboard/settings?department=pessoal&tab=organogram", section: "Departamento Pessoal" },
   { label: "Acesso por Escala", href: "/dashboard/settings?department=pessoal&tab=login-access", section: "Departamento Pessoal" },
+  { label: "Campos do Perfil", href: "/dashboard/settings?department=pessoal&tab=profile-fields", section: "Departamento Pessoal" },
   { label: "Turnos do DP", href: "/dashboard/settings?department=pessoal&tab=shifts", section: "Departamento Pessoal" },
   { label: "Calendários do DP", href: "/dashboard/settings?department=pessoal&tab=calendars", section: "Departamento Pessoal" },
   { label: "Coala Signage", href: "/dashboard/signage", section: "Departamento de Marketing" },

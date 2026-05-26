@@ -39,10 +39,12 @@ export async function GET(request: NextRequest) {
     const snapshot = await dbAdmin
       .collection("privacyRequests")
       .where("workspace_id", "==", context.workspace_id)
-      .orderBy("createdAt", "desc")
       .limit(100)
       .get();
-    return NextResponse.json({ requests: snapshot.docs.map(serializeRequest) });
+    const requests = snapshot.docs
+      .map(serializeRequest)
+      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+    return NextResponse.json({ requests });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Falha ao listar pedidos." }, { status: 403 });
   }
@@ -107,4 +109,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Falha ao criar pedido." }, { status: 400 });
   }
 }
-

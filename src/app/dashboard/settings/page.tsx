@@ -133,6 +133,10 @@ const InternalAuditPanel = dynamic(
   () => import("@/components/privacy/internal-audit-panel").then((m) => m.InternalAuditPanel),
   { ssr: false }
 );
+const FieldConfigPage = dynamic(
+  () => import("@/features/rh/components/FieldConfigPage").then((m) => m.FieldConfigPage),
+  { ssr: false }
+);
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -553,6 +557,13 @@ export default function SettingsPage() {
       content: <InternalPrivacySettings />,
     },
     {
+      value: "profile-fields",
+      label: "Campos do Perfil",
+      title: "Campos do Perfil",
+      description: "Crie, nomeie e organize as seções e campos exibidos no perfil dos colaboradores.",
+      content: <FieldConfigPage />,
+    },
+    {
       value: "audit",
       label: "Auditoria",
       title: "Auditoria",
@@ -601,6 +612,12 @@ export default function SettingsPage() {
         permissions.settings.manageProfiles ||
         permissions.dp?.collaborators?.edit ||
         permissions.dp?.collaborators?.terminate
+      );
+    }
+    if (tab.value === "profile-fields") {
+      return !!(
+        permissions.settings.manageUsers ||
+        permissions.dp?.collaborators?.edit
       );
     }
     if (tab.value === "audit") {
