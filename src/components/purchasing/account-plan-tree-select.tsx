@@ -5,7 +5,6 @@ import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { buildAccountPlanTree, type AccountPlanOption, type AccountPlanTreeNode } from '@/lib/purchasing-financial-options';
 import { cn } from '@/lib/utils';
 
@@ -156,35 +155,33 @@ export function AccountPlanTreeSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
-        <ScrollArea className="max-h-80">
-          <div className="space-y-0.5">
-            {allowNone && (
-              <button
-                type="button"
-                className={cn(
-                  'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted',
-                  value === '__none__' && 'bg-primary text-primary-foreground hover:bg-primary/90',
-                )}
-                onClick={() => handleSelect('__none__')}
-              >
-                <span>{noneLabel}</span>
-                {value === '__none__' && <Check className="h-4 w-4" />}
-              </button>
-            )}
+        <div className="max-h-72 overflow-y-auto space-y-0.5">
+          {allowNone && (
+            <button
+              type="button"
+              className={cn(
+                'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted',
+                value === '__none__' && 'bg-primary text-primary-foreground hover:bg-primary/90',
+              )}
+              onClick={() => handleSelect('__none__')}
+            >
+              <span>{noneLabel}</span>
+              {value === '__none__' && <Check className="h-4 w-4" />}
+            </button>
+          )}
 
-            {tree.map((node) => (
-              <TreeNodeRow
-                key={node.id}
-                node={node}
-                depth={0}
-                expanded={expanded}
-                selectedId={value}
-                onToggle={toggle}
-                onSelect={handleSelect}
-              />
-            ))}
-          </div>
-        </ScrollArea>
+          {tree.map((node) => (
+            <TreeNodeRow
+              key={node.id}
+              node={node}
+              depth={0}
+              expanded={expanded}
+              selectedId={value}
+              onToggle={toggle}
+              onSelect={handleSelect}
+            />
+          ))}
+        </div>
       </PopoverContent>
     </Popover>
   );

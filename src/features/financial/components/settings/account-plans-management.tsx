@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addDoc, deleteDoc, doc, updateDoc, writeBatch } from "firebase/firestore";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,9 +17,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebase";
-import { financialDb } from "@/lib/firebase-financial";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
-import { financialCollection } from "@/features/financial/lib/repositories";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -37,6 +34,7 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -97,6 +95,7 @@ const accountFormSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres."),
   description: z.string().optional(),
   parentId: z.string().nullable().optional(),
+  includeInDre: z.boolean(),
   dre_position: z.string().nullable().optional(),
 });
 type AccountFormValues = z.infer<typeof accountFormSchema>;
@@ -110,12 +109,38 @@ function buildTree(items: Account[], parentId: string | null = null): Account[] 
     .map((item) => ({ ...item, children: buildTree(items, item.id) }));
 }
 
-async function persistOrder(ids: string[]) {
-  const batch = writeBatch(financialDb);
-  ids.forEach((id, index) => {
-    batch.update(doc(financialDb, "accounts", id), { order: index });
+async function apiRequest(
+  method: "POST" | "PATCH" | "DELETE",
+  body?: unknown,
+  queryId?: string
+) {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Não autenticado.");
+  const url = queryId
+    ? `/api/financial/accounts?id=${queryId}`
+    : "/api/financial/accounts";
+  const res = await fetchWithTimeout(url, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
   });
-  await batch.commit();
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload?.error || "Erro na operação.");
+  return payload;
+}
+
+async function persistOrder(ids: string[]) {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) return;
+  await Promise.all(
+    ids.map((id, index) =>
+      fetchWithTimeout("/api/financial/accounts", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ id, order: index }),
+      })
+    )
+  );
 }
 
 function DreBadge({ position }: { position?: string | null }) {
@@ -349,7 +374,6 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [defaultParentId, setDefaultParentId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
 
@@ -382,7 +406,6 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
 
   const tree = useMemo(() => buildTree(accounts), [accounts]);
 
-  // root-level items for DnD
   const [rootItems, setRootItems] = useState<Account[]>([]);
   useEffect(() => { setRootItems(tree); }, [tree]);
 
@@ -404,20 +427,17 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
     });
   }
 
-  function expandAll() {
-    setExpanded(new Set(accounts.map((a) => a.id)));
-  }
-
-  function collapseAll() {
-    setExpanded(new Set());
-  }
+  function expandAll() { setExpanded(new Set(accounts.map((a) => a.id))); }
+  function collapseAll() { setExpanded(new Set()); }
 
   // ── form ────────────────────────────────────────────────────────────────────
 
   const form = useForm<AccountFormValues>({
     resolver: zodResolver(accountFormSchema),
-    defaultValues: { name: "", description: "", parentId: null, dre_position: null },
+    defaultValues: { name: "", description: "", parentId: null, includeInDre: false, dre_position: null },
   });
+
+  const includeInDre = form.watch("includeInDre");
 
   const parentOptions = useMemo(
     () => accounts.filter((a) => !editingAccount || a.id !== editingAccount.id),
@@ -426,8 +446,7 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
 
   function openAdd(parentId: string | null = null) {
     setEditingAccount(null);
-    setDefaultParentId(parentId);
-    form.reset({ name: "", description: "", parentId, dre_position: null });
+    form.reset({ name: "", description: "", parentId, includeInDre: false, dre_position: null });
     setDialogOpen(true);
   }
 
@@ -437,48 +456,50 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
       name: account.name,
       description: account.description ?? "",
       parentId: account.parentId ?? null,
+      includeInDre: !!account.dre_position,
       dre_position: account.dre_position ?? null,
     });
     setDialogOpen(true);
   }
 
   async function onSubmit(values: AccountFormValues) {
+    const dre_position = values.includeInDre ? (values.dre_position ?? null) : null;
     try {
       if (editingAccount) {
-        await updateDoc(doc(financialDb, "accounts", editingAccount.id), {
+        await apiRequest("PATCH", {
+          id: editingAccount.id,
           name: values.name,
           description: values.description ?? null,
           parentId: values.parentId ?? null,
-          dre_position: values.dre_position ?? null,
+          dre_position,
         });
         setAccounts((prev) =>
           prev.map((a) =>
             a.id === editingAccount.id
-              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position: values.dre_position ?? null }
+              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position }
               : a
           )
         );
         toast({ title: "Conta atualizada." });
       } else {
         const siblings = accounts.filter((a) => (a.parentId ?? null) === (values.parentId ?? null));
-        const ref = await addDoc(financialCollection("accounts"), {
+        const { id } = await apiRequest("POST", {
           name: values.name,
           description: values.description ?? null,
           parentId: values.parentId ?? null,
-          dre_position: values.dre_position ?? null,
+          dre_position,
           order: siblings.length,
-          active: true,
         });
         setAccounts((prev) => [
           ...prev,
-          { id: ref.id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position: values.dre_position ?? null, order: siblings.length, active: true },
+          { id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, order: siblings.length, active: true },
         ]);
         if (values.parentId) setExpanded((prev) => new Set([...prev, values.parentId!]));
         toast({ title: "Conta criada." });
       }
       setDialogOpen(false);
-    } catch {
-      toast({ variant: "destructive", title: "Erro ao salvar." });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Erro ao salvar." });
     }
   }
 
@@ -491,11 +512,11 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
       return;
     }
     try {
-      await deleteDoc(doc(financialDb, "accounts", deleteTarget.id));
+      await apiRequest("DELETE", undefined, deleteTarget.id);
       setAccounts((prev) => prev.filter((a) => a.id !== deleteTarget.id));
       toast({ title: "Conta removida." });
-    } catch {
-      toast({ variant: "destructive", title: "Erro ao remover." });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Erro ao remover." });
     } finally {
       setDeleteTarget(null);
     }
@@ -630,25 +651,53 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
 
               <FormField
                 control={form.control}
-                name="dre_position"
+                name="includeInDre"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Posição na DRE <span className="text-muted-foreground">(opcional para grupos)</span></FormLabel>
-                    <Select value={field.value ?? "none"} onValueChange={(v) => field.onChange(v === "none" ? null : v)}>
+                    <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+                      <div>
+                        <FormLabel className="text-sm font-medium">Entra na DRE</FormLabel>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Vincule esta conta a uma posição do demonstrativo de resultados.
+                        </p>
+                      </div>
                       <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Sem posição" /></SelectTrigger>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={(checked) => {
+                            field.onChange(checked);
+                            if (!checked) form.setValue("dre_position", null);
+                          }}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none"><span className="text-muted-foreground">Sem posição</span></SelectItem>
-                        {DRE_POSITIONS.map((p) => (
-                          <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
+                    </div>
                   </FormItem>
                 )}
               />
+
+              {includeInDre && (
+                <FormField
+                  control={form.control}
+                  name="dre_position"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Posição na DRE</FormLabel>
+                      <Select value={field.value ?? "none"} onValueChange={(v) => field.onChange(v === "none" ? null : v)}>
+                        <FormControl>
+                          <SelectTrigger><SelectValue placeholder="Selecione a posição" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none"><span className="text-muted-foreground">Sem posição</span></SelectItem>
+                          {DRE_POSITIONS.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
