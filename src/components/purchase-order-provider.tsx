@@ -107,6 +107,7 @@ export interface PurchaseOrderContextType {
   createPurchase: (payload: CreatePurchasePayload) => Promise<string | null>;
   updateOrder: (orderId: string, edits: OrderEdits) => Promise<void>;
   confirmOrder: (orderId: string) => Promise<void>;
+  markReceivedElsewhere: (orderId: string, notes?: string) => Promise<void>;
   cancelOrder: (orderId: string, reason: string) => Promise<void>;
   fetchOrderItems: (orderId: string) => Promise<PurchaseOrderItem[]>;
 }
@@ -259,6 +260,44 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
     [firebaseUser],
   );
 
+  const markReceivedElsewhere = useCallback(
+    async (orderId: string, notes?: string) => {
+      if (!firebaseUser) throw new Error('Usuário não autenticado.');
+
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/purchasing/orders/${orderId}/mark-received-elsewhere`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ notes }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao baixar a compra por outro meio.');
+      }
+
+      const { receiptId, status } = await response.json().catch(() => ({}));
+      const order = orders.find((o) => o.id === orderId);
+      if (order && receiptId) {
+        await syncPurchaseReceiptTask(firebaseUser, {
+          receiptId,
+          purchaseOrderId: orderId,
+          supplierId: order.supplierId,
+          status: status ?? 'stocked',
+          receiptMode: order.receiptMode,
+          expectedDate: order.estimatedReceiptDate,
+          notes: notes ?? order.notes,
+        }).catch((error) => {
+          console.error('Error syncing purchase receipt task:', error);
+        });
+      }
+    },
+    [firebaseUser, orders],
+  );
+
   const fetchOrderItems = useCallback(async (orderId: string): Promise<PurchaseOrderItem[]> => {
     if (!firebaseUser) throw new Error('Usuário não autenticado.');
     const token = await firebaseUser.getIdToken();
@@ -270,8 +309,17 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
   }, [firebaseUser]);
 
   const value: PurchaseOrderContextType = useMemo(
-    () => ({ orders, loading, createPurchase, updateOrder, confirmOrder, cancelOrder, fetchOrderItems }),
-    [orders, loading, createPurchase, updateOrder, confirmOrder, cancelOrder, fetchOrderItems],
+    () => ({
+      orders,
+      loading,
+      createPurchase,
+      updateOrder,
+      confirmOrder,
+      markReceivedElsewhere,
+      cancelOrder,
+      fetchOrderItems,
+    }),
+    [orders, loading, createPurchase, updateOrder, confirmOrder, markReceivedElsewhere, cancelOrder, fetchOrderItems],
   );
 
   return <PurchaseOrderContext.Provider value={value}>{children}</PurchaseOrderContext.Provider>;

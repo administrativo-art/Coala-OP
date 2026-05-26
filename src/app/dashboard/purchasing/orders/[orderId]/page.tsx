@@ -137,7 +137,7 @@ export default function PurchaseOrderPage() {
   const searchParams = useSearchParams();
   const returnTo = searchParams.get('returnTo');
   const { permissions, firebaseUser } = useAuth();
-  const { orders, loading, cancelOrder, updateOrder, confirmOrder, fetchOrderItems } = usePurchaseOrders();
+  const { orders, loading, cancelOrder, updateOrder, confirmOrder, markReceivedElsewhere, fetchOrderItems } = usePurchaseOrders();
   const { financials, markAsPaid } = usePurchaseFinancials();
   const { entities } = useEntities();
   const { baseProducts } = useBaseProducts();
@@ -154,6 +154,8 @@ export default function PurchaseOrderPage() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [markingReceivedElsewhere, setMarkingReceivedElsewhere] = useState(false);
+  const [receivedElsewhereNotes, setReceivedElsewhereNotes] = useState('');
   const [markingPaid, setMarkingPaid] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [itemsEditOpen, setItemsEditOpen] = useState(false);
@@ -276,6 +278,7 @@ export default function PurchaseOrderPage() {
     ((order?.deliveryFee ?? 0) <= 0 || (!!order?.freightAccountPlanId && !!order?.freightPaymentMode));
   const canEditOrder = !!order && canEdit && !isCancelled && !isReceived;
   const canConfirmOrder = !!order && isCreated && canEdit && !isCancelled;
+  const canMarkReceivedElsewhere = !!order && order.status === 'confirmed' && !isReceived && canReceive;
   const canRegisterPayment =
     !!financial &&
     canManageFinancials &&
@@ -357,6 +360,17 @@ export default function PurchaseOrderPage() {
       await markAsPaid(financial.id);
     } finally {
       setMarkingPaid(false);
+    }
+  };
+
+  const handleMarkReceivedElsewhere = async () => {
+    if (!order) return;
+    setMarkingReceivedElsewhere(true);
+    try {
+      await markReceivedElsewhere(order.id, receivedElsewhereNotes.trim() || undefined);
+      setReceivedElsewhereNotes('');
+    } finally {
+      setMarkingReceivedElsewhere(false);
     }
   };
 
@@ -489,6 +503,36 @@ export default function PurchaseOrderPage() {
                   {!markingPaid && <CreditCard className="mr-2 h-4 w-4" />}
                   Registrar pagamento
                 </Button>
+              )}
+              {canMarkReceivedElsewhere && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline">
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Baixar por outro meio
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Baixar compra por outro meio?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Use quando a entrada já foi registrada fora deste recebimento. A compra será marcada como recebida sem gerar lote, patrimônio ou movimentação de estoque por aqui.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <Textarea
+                      placeholder="Observação opcional sobre onde a entrada foi registrada..."
+                      value={receivedElsewhereNotes}
+                      onChange={(event) => setReceivedElsewhereNotes(event.target.value)}
+                    />
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Voltar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleMarkReceivedElsewhere} disabled={markingReceivedElsewhere}>
+                        {markingReceivedElsewhere && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Confirmar baixa
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
               {!isCancelled && !isReceived && canCancel && (
                 <AlertDialog>

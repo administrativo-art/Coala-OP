@@ -614,6 +614,86 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     return NextResponse.json({ ok: true });
   }
 
+  if (resource === 'orders' && id && child === 'mark-received-elsewhere') {
+    const orderRef = dbAdmin.collection('purchase_orders').doc(id);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+
+    const order = orderSnap.data()!;
+    if (order.status !== 'confirmed') return jsonError('Apenas compras confirmadas podem ser baixadas.', 400);
+    if (order.receivedAt) return jsonError('Compra já baixada como recebida.', 400);
+
+    const receiptSnap = await dbAdmin
+      .collection('purchase_receipts')
+      .where('purchaseOrderId', '==', id)
+      .limit(1)
+      .get();
+    if (receiptSnap.empty) return jsonError('Recebimento vinculado não encontrado.', 404);
+
+    const receiptDoc = receiptSnap.docs[0];
+    const receiptRef = receiptDoc.ref;
+    const receiptItemsSnap = await receiptRef.collection('items').get();
+    const notes = body.notes?.trim() || null;
+    const auditNote = notes
+      ? `Recebida por outro meio do sistema. ${notes}`
+      : 'Recebida por outro meio do sistema.';
+
+    const batch = dbAdmin.batch();
+    let totalConfirmed = 0;
+
+    for (const itemDoc of receiptItemsSnap.docs) {
+      const item = itemDoc.data();
+      const quantityReceived = Number(item.quantityOrdered ?? 0);
+      const unitPriceConfirmed = Number(item.unitPriceOrdered ?? 0);
+      const totalItemConfirmed = quantityReceived * unitPriceConfirmed;
+      totalConfirmed += totalItemConfirmed;
+
+      batch.update(itemDoc.ref, {
+        quantityReceived,
+        unitPriceConfirmed,
+        totalConfirmed: totalItemConfirmed,
+        status: 'received',
+        receiptDisposition: 'received_elsewhere',
+        divergenceReason: auditNote,
+        updatedAt: now,
+      });
+    }
+
+    batch.update(receiptRef, {
+      status: 'stocked',
+      receivedByOtherMeans: true,
+      receivedByOtherMeansAt: now,
+      receivedAt: now,
+      totalConfirmed,
+      updatedAt: now,
+      notes: receiptDoc.data().notes ? `${receiptDoc.data().notes}\n\n${auditNote}` : auditNote,
+    });
+
+    batch.update(orderRef, {
+      receivedAt: now,
+      receivedByOtherMeans: true,
+      receivedByOtherMeansAt: now,
+      receivedByOtherMeansNotes: notes,
+      totalConfirmed,
+      updatedAt: now,
+    });
+
+    const finSnap = await dbAdmin
+      .collection('purchase_financials')
+      .where('purchaseOrderId', '==', id)
+      .get();
+    finSnap.forEach((d) => {
+      batch.update(d.ref, {
+        status: 'confirmed',
+        amountConfirmed: totalConfirmed,
+        updatedAt: now,
+      });
+    });
+
+    await batch.commit();
+    return NextResponse.json({ ok: true, receiptId: receiptDoc.id, status: 'stocked' });
+  }
+
   if (resource === 'receipts' && id && child === 'start-conference') {
     await dbAdmin.collection('purchase_receipts').doc(id).update({
       status: 'in_conference',
