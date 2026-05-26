@@ -178,7 +178,7 @@ export default function QuotationComparePage() {
                     </TableCell>
                     <TableCell className="text-right">{item.quantity} {item.unit}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {item.validUntil ? format(parseISO(item.validUntil), 'dd/MM/yyyy', { locale: ptBR }) : 'Sem validade'}
+                      {item.validUntil ? format(parseISO(item.validUntil), 'dd/MM/yyyy', { locale: ptBR }) : 'Sem data'}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {item.mode === 'in_loco' ? 'In loco' : 'Remota'}

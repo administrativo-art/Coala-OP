@@ -61,7 +61,7 @@ function QuotationRow({ quotation }: { quotation: Quotation }) {
           <div className="flex gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
             <span>{format(parseISO(quotation.createdAt), "dd 'de' MMM 'de' yyyy", { locale: ptBR })}</span>
             {quotation.validUntil && (
-              <span>Válida até {format(parseISO(quotation.validUntil), 'dd/MM/yyyy')}</span>
+              <span>Cotada em {format(parseISO(quotation.validUntil), 'dd/MM/yyyy')}</span>
             )}
           </div>
         </div>

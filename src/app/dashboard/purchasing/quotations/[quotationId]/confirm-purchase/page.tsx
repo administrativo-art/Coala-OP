@@ -307,7 +307,7 @@ export default function ConfirmPurchasePage() {
                   </span>
                 )}
                 {quotation.validUntil && (
-                  <span>Válida até {format(parseISO(quotation.validUntil), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                  <span>Cotada em {format(parseISO(quotation.validUntil), 'dd/MM/yyyy', { locale: ptBR })}</span>
                 )}
               </div>
             </div>

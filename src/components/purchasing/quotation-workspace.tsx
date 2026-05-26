@@ -181,7 +181,7 @@ export function QuotationWorkspace({ quotation }: Props) {
           <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
             <span>Criada em {format(parseISO(quotation.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
             {quotation.validUntil && (
-              <span>Válida até {format(parseISO(quotation.validUntil), 'dd/MM/yyyy', { locale: ptBR })}</span>
+              <span>Cotada em {format(parseISO(quotation.validUntil), 'dd/MM/yyyy', { locale: ptBR })}</span>
             )}
             {quotation.finalizedAt && (
               <span>Finalizada em {format(parseISO(quotation.finalizedAt), 'dd/MM/yyyy', { locale: ptBR })}</span>

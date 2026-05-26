@@ -142,7 +142,7 @@ export function CreateQuotationModal({ open, onOpenChange }: Props) {
               name="validUntil"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Válida até (opcional)</FormLabel>
+                  <FormLabel>Data da cotação</FormLabel>
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>
@@ -158,7 +158,7 @@ export function CreateQuotationModal({ open, onOpenChange }: Props) {
                 <FormItem>
                   <FormLabel>Observações (opcional)</FormLabel>
                   <FormControl>
-                    <Textarea rows={2} placeholder="Ex: Preços válidos conforme WhatsApp de hoje" {...field} />
+                    <Textarea rows={2} placeholder="Ex: Preços consultados por WhatsApp, Mercado Livre ou fornecedor local" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
