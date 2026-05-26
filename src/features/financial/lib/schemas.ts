@@ -240,12 +240,19 @@ export const resultCenterFormSchema = z.object({
 });
 export type ResultCenterFormValues = z.infer<typeof resultCenterFormSchema>;
 
+const optionalDayOfMonthSchema = z.preprocess(
+  (value) => (value === "" || value == null ? undefined : value),
+  z.coerce.number().int().min(1).max(31).optional(),
+);
+
 export const paymentMethodSchema = z.object({
   id: z.string(),
   type: z.enum(["debit_card", "credit_card", "pix", "transfer", "cash"]),
   label: z.string().min(1, "Rótulo é obrigatório."),
   lastDigits: z.string().max(4).optional(),
   cardNumber: z.string().optional(),
+  closingDay: optionalDayOfMonthSchema,
+  dueDay: optionalDayOfMonthSchema,
   limit: z.coerce.number().optional(),
   pixKey: z.string().optional(),
 });

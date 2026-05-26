@@ -404,6 +404,13 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
                     <span key={method.id} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs">
                       <PaymentMethodIcon type={method.type} />
                       {method.label}
+                      {method.type === "credit_card" && (method.closingDay || method.dueDay) && (
+                        <span className="text-muted-foreground">
+                          {method.closingDay ? `Fecha dia ${method.closingDay}` : ""}
+                          {method.closingDay && method.dueDay ? " · " : ""}
+                          {method.dueDay ? `Vence dia ${method.dueDay}` : ""}
+                        </span>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -626,6 +633,53 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
                         )}
                       />
                     </div>
+
+                    {form.watch(`paymentMethods.${index}.type`) === "credit_card" && (
+                      <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name={`paymentMethods.${index}.closingDay`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Dia de fechamento</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max="31"
+                                  placeholder="Ex: 20"
+                                  {...field}
+                                  value={field.value ?? ""}
+                                />
+                              </FormControl>
+                              <FormDescription>Compras até este dia entram na fatura do mês.</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`paymentMethods.${index}.dueDay`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Dia de vencimento</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max="31"
+                                  placeholder="Ex: 10"
+                                  {...field}
+                                  value={field.value ?? ""}
+                                />
+                              </FormControl>
+                              <FormDescription>Dia usado para prever o pagamento da fatura.</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
 
                     <div className="mt-3 flex justify-end">
                       <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)}>
