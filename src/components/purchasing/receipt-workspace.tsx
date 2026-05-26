@@ -86,7 +86,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
   const { orders } = usePurchaseOrders();
   const { financials } = usePurchaseFinancials();
   const { baseProducts } = useBaseProducts();
-  const { products } = useProducts();
+  const { products, getProductFullName } = useProducts();
   const { activeCategories } = useOperationalItemCategories();
   const { kiosks } = useKiosks();
 
@@ -486,6 +486,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
                     (p) => p.baseProductId === draft.baseItemId && !p.isArchived,
                   );
                   const selectedStockProduct = products.find((p) => p.id === draft.productId);
+                  const displayName =
+                    (selectedStockProduct ? getProductFullName(selectedStockProduct) : '') ||
+                    draft.itemName ||
+                    base?.name ||
+                    draft.baseItemId;
                   const isAssetEntry = draft.entryType === 'asset';
                   const lotSum = draft.lots.reduce((s, l) => s + (l.quantity || 0), 0);
                   const lotValid = isAssetEntry || Math.abs(lotSum - draft.quantityReceived) < 0.001;
@@ -504,7 +509,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                     )}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <p className="font-semibold text-lg">{base?.name ?? draft.itemName ?? draft.baseItemId}</p>
+                          <p className="font-semibold text-lg">{displayName}</p>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <span>Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmt(draft.unitPriceConfirmed)}</span>
                             {base && (

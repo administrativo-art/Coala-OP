@@ -60,6 +60,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useEntities } from '@/hooks/use-entities';
+import { useProducts } from '@/hooks/use-products';
 import { usePurchaseFinancials } from '@/hooks/use-purchase-financials';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useQuotationItems } from '@/hooks/use-quotation-items';
@@ -141,6 +142,7 @@ export default function PurchaseOrderPage() {
   const { financials, markAsPaid } = usePurchaseFinancials();
   const { entities } = useEntities();
   const { baseProducts } = useBaseProducts();
+  const { products, getProductFullName } = useProducts();
   const { purchasingDefaults } = useCompanySettings();
   const { accountPlans, flattenedAccountPlans, resultCenters, loading: classificationLoading } = usePurchasingFinancialOptions();
   const canView = canViewPurchasing(permissions);
@@ -622,14 +624,23 @@ export default function PurchaseOrderPage() {
                 <div className="divide-y">
                   {displayItems.map((item) => {
                     const base = baseProducts.find((bp) => bp.id === item.baseItemId);
+                    const product = products.find((p) => p.id === item.productId);
+                    const displayName =
+                      (product ? getProductFullName(product) : '') ||
+                      item.itemName ||
+                      base?.name ||
+                      item.baseItemId;
                     return (
                       <div key={item.id} className="px-5 py-4 space-y-2">
                         <div className="flex items-start justify-between gap-4">
                           <div className="min-w-0">
-                            <p className="font-semibold truncate">{base?.name ?? item.baseItemId}</p>
+                            <p className="font-semibold truncate">{displayName}</p>
                             <p className="text-sm text-muted-foreground">
                               {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} x {fmt(item.unitPriceOrdered)}
                             </p>
+                            {base && base.name !== displayName && (
+                              <p className="text-xs text-muted-foreground">Insumo base: {base.name}</p>
+                            )}
                             {(item.discountOrdered ?? 0) > 0 && (
                               <p className="text-sm text-muted-foreground">
                                 Desconto: {fmt(item.discountOrdered ?? 0)}
