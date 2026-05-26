@@ -256,12 +256,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
 
   if (resource === 'classification-options') {
     const [accountPlansSnap, resultCentersSnap] = await Promise.all([
-      financialDbAdmin.collection('accountPlans').get(),
+      financialDbAdmin.collection('accounts').get(),
       financialDbAdmin.collection('resultCenters').get(),
     ]);
 
     return NextResponse.json({
-      accountPlans: accountPlansSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      accountPlans: accountPlansSnap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((plan: any) => plan.active !== false),
       resultCenters: resultCentersSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
     });
   }

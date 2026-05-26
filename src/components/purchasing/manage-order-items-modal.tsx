@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 type DraftItem = {
   key: string;
   id?: string;
+  isRegistered: boolean;
   productId: string;
   baseItemId: string;
   itemName: string;
@@ -64,6 +65,7 @@ type PurchasableProductOption = {
 function newDraftItem(): DraftItem {
   return {
     key: Math.random().toString(36).slice(2),
+    isRegistered: true,
     productId: '',
     baseItemId: '',
     itemName: '',
@@ -183,6 +185,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           return {
             key: item.id,
             id: item.id,
+            isRegistered: !!(item.productId || item.baseItemId),
             productId: item.productId ?? '',
             baseItemId: item.baseItemId,
             itemName: item.itemName ?? '',
@@ -213,7 +216,15 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           next.productId = '';
           next.baseItemId = '';
           next.itemName = '';
+          next.isRegistered = category?.destination !== 'asset';
           next.unit = category?.destination === 'asset' ? 'un' : '';
+          next.purchaseUnitType = 'content';
+        }
+        if (patch.isRegistered != null) {
+          next.productId = '';
+          next.baseItemId = '';
+          next.itemName = '';
+          next.unit = patch.isRegistered ? '' : 'un';
           next.purchaseUnitType = 'content';
         }
         if (patch.productId) {
@@ -265,7 +276,12 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
 
   const validItems = items.filter((item) => {
     const category = activeCategories.find((entry) => entry.id === item.operationalCategoryId);
-    const hasItem = category?.destination === 'asset' ? item.itemName.trim().length > 0 : !!item.baseItemId;
+    const hasItem =
+      category?.destination === 'asset'
+        ? item.itemName.trim().length > 0
+        : item.isRegistered
+          ? !!item.baseItemId
+          : item.itemName.trim().length > 0 && item.unit.trim().length > 0;
     return !!category && hasItem && item.quantityOrdered > 0 && item.unitPriceOrdered > 0;
   });
 
@@ -361,11 +377,41 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                       onChange={(event) => updateItem(item.key, { itemName: event.target.value })}
                     />
                   ) : (
-                    <ProductCombobox
-                      value={item.productId}
-                      onChange={(value) => updateItem(item.key, { productId: value })}
-                      options={availableProducts}
-                    />
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 rounded-md border bg-background p-0.5">
+                        <Button
+                          type="button"
+                          variant={item.isRegistered ? 'default' : 'ghost'}
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => updateItem(item.key, { isRegistered: true })}
+                        >
+                          Cadastrado
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={!item.isRegistered ? 'default' : 'ghost'}
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => updateItem(item.key, { isRegistered: false })}
+                        >
+                          Não cadastrado
+                        </Button>
+                      </div>
+                      {item.isRegistered ? (
+                        <ProductCombobox
+                          value={item.productId}
+                          onChange={(value) => updateItem(item.key, { productId: value })}
+                          options={availableProducts}
+                        />
+                      ) : (
+                        <Input
+                          placeholder="Digite o nome do item"
+                          value={item.itemName}
+                          onChange={(event) => updateItem(item.key, { itemName: event.target.value })}
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="space-y-1">
@@ -374,6 +420,15 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                     const selectedProduct = purchasableProducts.find((option) => option.id === item.productId);
                     if (categoryDestination === 'asset') {
                       return <Input value="un" readOnly className="bg-muted" />;
+                    }
+                    if (!item.isRegistered) {
+                      return (
+                        <Input
+                          placeholder="un"
+                          value={item.unit}
+                          onChange={(event) => updateItem(item.key, { unit: event.target.value, purchaseUnitType: 'content' })}
+                        />
+                      );
                     }
                     if (selectedProduct && selectedProduct.purchaseUnitOptions.length > 1) {
                       return (

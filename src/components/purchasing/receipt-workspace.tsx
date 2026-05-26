@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, Info, ShoppingCart, ReceiptText, Scale, Truck, Building2 } from 'lucide-react';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { format, parseISO } from 'date-fns';
@@ -508,18 +509,29 @@ export function ReceiptWorkspace({ receipt }: Props) {
                       hasDivergence && 'bg-amber-50/30 dark:bg-amber-950/10'
                     )}>
                       <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-lg">{displayName}</p>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <span>Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmt(draft.unitPriceConfirmed)}</span>
-                            {base && (
-                              <>
-                                <span>•</span>
-                                <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">
-                                  Insumo base: {base.name}
-                                </span>
-                              </>
-                            )}
+                        <div className="flex min-w-0 items-start gap-3">
+                          {selectedStockProduct?.imageUrl && (
+                            <Image
+                              src={selectedStockProduct.imageUrl}
+                              alt={displayName}
+                              width={48}
+                              height={48}
+                              className="h-12 w-12 shrink-0 rounded-md border object-cover"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-semibold text-lg">{displayName}</p>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <span>Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmt(draft.unitPriceConfirmed)}</span>
+                              {base && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">
+                                    Insumo base: {base.name}
+                                  </span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                         {hasDivergence && (

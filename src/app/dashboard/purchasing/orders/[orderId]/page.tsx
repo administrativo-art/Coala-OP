@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import Image from 'next/image';
 import { BackButton } from '@/components/navigation/back-button';
 import {
   AlertTriangle,
@@ -268,6 +269,15 @@ export default function PurchaseOrderPage() {
     () => goodsSubtotal + Number(order?.deliveryFee ?? 0),
     [goodsSubtotal, order?.deliveryFee],
   );
+  const unregisteredStockItems = useMemo(
+    () =>
+      displayItems.filter(
+        (item) =>
+          item.entryType !== 'asset' &&
+          (!item.productId || !item.baseItemId),
+      ),
+    [displayItems],
+  );
 
   const isCancelled = order?.status === 'cancelled';
   const isCreated = order?.status === 'created';
@@ -277,6 +287,7 @@ export default function PurchaseOrderPage() {
     !!order?.paymentMethod &&
     !!order?.accountPlanId &&
     !!order?.resultCenterId &&
+    unregisteredStockItems.length === 0 &&
     ((order?.deliveryFee ?? 0) <= 0 || (!!order?.freightAccountPlanId && !!order?.freightPaymentMode));
   const canEditOrder = !!order && canEdit && !isCancelled && !isReceived;
   const canConfirmOrder = !!order && isCreated && canEdit && !isCancelled;
@@ -470,7 +481,9 @@ export default function PurchaseOrderPage() {
                       </p>
                       {!isReadyForConfirmation && (
                         <p className="font-medium">
-                          Ainda faltam classificações financeiras obrigatórias para confirmar o pedido.
+                          {unregisteredStockItems.length > 0
+                            ? 'Ainda há itens de estoque sem cadastro vinculado para confirmar o pedido.'
+                            : 'Ainda faltam classificações financeiras obrigatórias para confirmar o pedido.'}
                         </p>
                       )}
                     </div>
@@ -633,19 +646,30 @@ export default function PurchaseOrderPage() {
                     return (
                       <div key={item.id} className="px-5 py-4 space-y-2">
                         <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <p className="font-semibold truncate">{displayName}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} x {fmt(item.unitPriceOrdered)}
-                            </p>
-                            {base && base.name !== displayName && (
-                              <p className="text-xs text-muted-foreground">Insumo base: {base.name}</p>
+                          <div className="flex min-w-0 items-start gap-3">
+                            {product?.imageUrl && (
+                              <Image
+                                src={product.imageUrl}
+                                alt={displayName}
+                                width={44}
+                                height={44}
+                                className="h-11 w-11 shrink-0 rounded-md border object-cover"
+                              />
                             )}
-                            {(item.discountOrdered ?? 0) > 0 && (
+                            <div className="min-w-0">
+                              <p className="font-semibold truncate">{displayName}</p>
                               <p className="text-sm text-muted-foreground">
-                                Desconto: {fmt(item.discountOrdered ?? 0)}
+                                {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} x {fmt(item.unitPriceOrdered)}
                               </p>
-                            )}
+                              {base && base.name !== displayName && (
+                                <p className="text-xs text-muted-foreground">Insumo base: {base.name}</p>
+                              )}
+                              {(item.discountOrdered ?? 0) > 0 && (
+                                <p className="text-sm text-muted-foreground">
+                                  Desconto: {fmt(item.discountOrdered ?? 0)}
+                                </p>
+                              )}
+                            </div>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-sm text-muted-foreground">Subtotal</p>
