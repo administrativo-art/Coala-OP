@@ -690,9 +690,6 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                           </Select>
                         </FormItem>
                       )} />
-                      <FormField control={form.control} name="assetTag" render={({ field }) => (
-                        <FormItem><FormLabel>Etiqueta física</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
-                      )} />
                       <FormField control={form.control} name="possessionStatus" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Situação de posse</FormLabel>
