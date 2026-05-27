@@ -56,7 +56,7 @@ const schema = z.object({
   paymentMethod: z.enum(['pix', 'card_credit', 'card_debit', 'cash', 'boleto', 'term'] as const),
   paymentCondition: z.enum(['cash', 'installments'] as const),
   installmentsCount: z.coerce.number().min(2).optional(),
-  paymentDueDate: z.string().min(1, 'Informe o vencimento.'),
+  paymentDueDate: z.string().min(1, 'Informe a data.'),
   estimatedReceiptDate: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -102,6 +102,10 @@ const PAYMENT_CONDITION_LABELS: Record<PurchasePaymentCondition, string> = {
   cash: 'À vista',
   installments: 'Parcelado',
 };
+
+function getPaymentDateLabel(paymentMethod?: PaymentMethod) {
+  return paymentMethod === 'card_credit' || paymentMethod === 'card_debit' ? 'Data da compra' : 'Vencimento';
+}
 
 function newDraftItem(): DraftItem {
   return {
@@ -227,6 +231,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
   });
 
   const receiptMode = form.watch('receiptMode');
+  const paymentMethod = form.watch('paymentMethod');
   const total = useMemo(
     () => items.reduce((sum, item) => sum + item.quantityOrdered * item.unitPriceOrdered, 0),
     [items],
@@ -287,6 +292,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
             purchaseUnitOptions: getPurchaseUnitOptions(product),
             searchText: normalizeSearchText(
               [product.baseName, product.brand, `${product.packageSize}${product.unit}`, product.packageType, label]
+                .concat(product.aliases ?? [])
                 .filter(Boolean)
                 .join(' '),
             ),
@@ -423,7 +429,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                 name="paymentDueDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Vencimento</FormLabel>
+                    <FormLabel>{getPaymentDateLabel(paymentMethod)}</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>

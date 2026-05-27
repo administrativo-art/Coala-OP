@@ -175,6 +175,7 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
                 product.packageType,
                 label,
               ]
+                .concat(product.aliases ?? [])
                 .filter(Boolean)
                 .join(' '),
             ),

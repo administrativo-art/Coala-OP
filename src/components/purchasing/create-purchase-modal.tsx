@@ -39,13 +39,13 @@ import {
 } from '@/components/ui/select';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
-import { type PurchaseStockEntryType, type Quotation, type QuotationItem } from '@/types';
+import { type PaymentMethod, type PurchaseStockEntryType, type Quotation, type QuotationItem } from '@/types';
 import { cn } from '@/lib/utils';
 
 const schema = z.object({
   receiptMode: z.enum(['future_delivery', 'immediate_pickup'] as const),
   paymentMethod: z.enum(['pix', 'card_credit', 'card_debit', 'cash', 'boleto', 'term'] as const),
-  paymentDueDate: z.string().min(1, 'Informe o vencimento.'),
+  paymentDueDate: z.string().min(1, 'Informe a data.'),
   estimatedReceiptDate: z.string().optional(),
   deliveryFee: z.coerce.number().min(0).optional(),
   notes: z.string().optional(),
@@ -61,6 +61,10 @@ const PAYMENT_LABELS: Record<string, string> = {
   boleto: 'Boleto',
   term: 'A prazo',
 };
+
+function getPaymentDateLabel(paymentMethod?: PaymentMethod) {
+  return paymentMethod === 'card_credit' || paymentMethod === 'card_debit' ? 'Data da compra' : 'Vencimento';
+}
 
 interface Props {
   open: boolean;
@@ -111,6 +115,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
   });
 
   const receiptMode = form.watch('receiptMode');
+  const paymentMethod = form.watch('paymentMethod') as PaymentMethod;
   const deliveryFee = form.watch('deliveryFee') ?? 0;
 
   const toggleItem = (id: string) => {
@@ -332,7 +337,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
                   name="paymentDueDate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Vencimento</FormLabel>
+                      <FormLabel>{getPaymentDateLabel(paymentMethod)}</FormLabel>
                       <FormControl>
                         <Input type="date" {...field} />
                       </FormControl>

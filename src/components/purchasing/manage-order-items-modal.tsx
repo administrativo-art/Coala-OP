@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -25,7 +26,7 @@ import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useProducts } from '@/hooks/use-products';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
-import { type PurchaseOrderItem, type PurchaseStockEntryType, type PurchaseUnitType } from '@/types';
+import { type Product, type PurchaseOrderItem, type PurchaseStockEntryType, type PurchaseUnitType } from '@/types';
 import { cn } from '@/lib/utils';
 
 type DraftItem = {
@@ -44,6 +45,8 @@ type DraftItem = {
   discountOrdered: number;
   entryType: PurchaseStockEntryType;
   notes: string;
+  aliasCandidate: string;
+  linkAlias: boolean;
 };
 
 interface Props {
@@ -78,6 +81,8 @@ function newDraftItem(): DraftItem {
     discountOrdered: 0,
     entryType: 'stock',
     notes: '',
+    aliasCandidate: '',
+    linkAlias: false,
   };
 }
 
@@ -87,6 +92,22 @@ function normalizeSearchText(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+}
+
+function shouldLinkAlias(candidate: string, product: Product | undefined, productLabel: string) {
+  if (!product) return false;
+  const normalizedCandidate = normalizeSearchText(candidate);
+  if (!normalizedCandidate) return false;
+  const existingNames = [
+    product.baseName,
+    product.brand,
+    `${product.packageSize}${product.unit}`,
+    product.packageType,
+    productLabel,
+    ...(product.aliases ?? []),
+  ].map((value) => normalizeSearchText(String(value ?? '')));
+
+  return !existingNames.includes(normalizedCandidate);
 }
 
 function ProductCombobox({
@@ -165,7 +186,7 @@ function ProductCombobox({
 }
 
 export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChange, onSuccess }: Props) {
-  const { products, getProductFullName } = useProducts();
+  const { products, getProductFullName, updateProduct } = useProducts();
   const { activeCategories } = useOperationalItemCategories();
   const { updateOrder } = usePurchaseOrders();
   const [items, setItems] = useState<DraftItem[]>([]);
@@ -176,6 +197,8 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
       setItems(
         initialItems.map((item) => {
           const product = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
+          const productLabel = product ? getProductFullName(product) : '';
+          const aliasCandidate = item.itemName?.trim() ?? '';
           const entryType = item.entryType === 'asset' || item.entryType === 'uniform' ? item.entryType : 'stock';
           const inferredCategory =
             activeCategories.find((category) => category.id === item.operationalCategoryId) ??
@@ -198,6 +221,8 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             discountOrdered: item.discountOrdered ?? 0,
             entryType,
             notes: item.notes ?? '',
+            aliasCandidate,
+            linkAlias: !!aliasCandidate && shouldLinkAlias(aliasCandidate, product, productLabel),
           };
         }),
       );
@@ -240,6 +265,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             next.itemName = getProductFullName(product);
             next.purchaseUnitType = purchaseUnitType;
             next.unit = purchaseUnitLabel;
+            next.linkAlias = shouldLinkAlias(next.aliasCandidate, product, next.itemName);
           }
         }
         return next;
@@ -261,6 +287,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             purchaseUnitOptions: getPurchaseUnitOptions(product),
             searchText: normalizeSearchText(
               [product.baseName, product.brand, `${product.packageSize}${product.unit}`, product.packageType, label]
+                .concat(product.aliases ?? [])
                 .filter(Boolean)
                 .join(' '),
             ),
@@ -289,6 +316,20 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
     if (validItems.length === 0) return;
     setSubmitting(true);
     try {
+      const aliasUpdates = new Map<string, { product: Product; aliases: string[] }>();
+      validItems
+        .filter((item) => item.linkAlias && item.productId && item.aliasCandidate.trim())
+        .forEach((item) => {
+          const product = products.find((entry) => entry.id === item.productId);
+          if (!product || !shouldLinkAlias(item.aliasCandidate, product, getProductFullName(product))) return;
+          const current = aliasUpdates.get(product.id) ?? { product, aliases: [] };
+          const alias = item.aliasCandidate.trim();
+          if (!current.aliases.some((existing) => normalizeSearchText(existing) === normalizeSearchText(alias))) {
+            current.aliases.push(alias);
+          }
+          aliasUpdates.set(product.id, current);
+        });
+
       await updateOrder(orderId, {
         items: validItems.map((item) => ({
           baseItemId: item.baseItemId,
@@ -307,6 +348,14 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           notes: item.notes || undefined,
         })),
       });
+      await Promise.all(
+        [...aliasUpdates.values()].map(({ product, aliases }) =>
+          updateProduct({
+            ...product,
+            aliases: [...(product.aliases ?? []), ...aliases],
+          }),
+        ),
+      );
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
@@ -410,6 +459,17 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                           value={item.itemName}
                           onChange={(event) => updateItem(item.key, { itemName: event.target.value })}
                         />
+                      )}
+                      {item.isRegistered && item.productId && item.aliasCandidate.trim() && (
+                        <label className="flex items-start gap-2 rounded-md border bg-background/70 p-2 text-xs text-muted-foreground">
+                          <Checkbox
+                            checked={item.linkAlias}
+                            onCheckedChange={(checked) => updateItem(item.key, { linkAlias: checked === true })}
+                          />
+                          <span>
+                            Salvar <span className="font-medium text-foreground">{item.aliasCandidate}</span> como alias deste cadastro.
+                          </span>
+                        </label>
                       )}
                     </div>
                   )}

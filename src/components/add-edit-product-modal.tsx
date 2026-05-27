@@ -22,7 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, Trash2, Upload, Info, Settings, Search, Loader2, FlaskConical, ImageIcon, ZoomIn } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Camera, Trash2, Upload, Info, Settings, Search, Loader2, FlaskConical, ImageIcon, ZoomIn, Tags, Plus } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from './ui/separator';
@@ -90,6 +91,14 @@ const productFormSchema = z.object({
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
 
+function normalizeAlias(value: string) {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+}
+
 interface AddEditProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -110,6 +119,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const [isCompositionPhotoModalOpen, setIsCompositionPhotoModalOpen] = useState(false);
     const [zoomedImage, setZoomedImage] = useState<string | null>(null);
     const [isFetchingProduct, setIsFetchingProduct] = useState(false);
+    const [aliases, setAliases] = useState<string[]>([]);
+    const [aliasInput, setAliasInput] = useState('');
+    const [aliasesOpen, setAliasesOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const instructionFileInputRef = useRef<HTMLInputElement>(null);
     const nutritionalTableFileInputRef = useRef<HTMLInputElement>(null);
@@ -180,6 +192,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     nutritionalTableImageUrl: productToEdit.nutritionalTableImageUrl || '',
                     compositionImageUrl: productToEdit.compositionImageUrl || '',
                 });
+                setAliases(productToEdit.aliases ?? []);
             } else {
                 form.reset({
                     baseName: '', brand: '', barcode: '', imageUrl: '',
@@ -193,7 +206,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
                     nutritionalTableImageUrl: '', compositionImageUrl: '',
                 });
+                setAliases([]);
             }
+            setAliasInput('');
+            setAliasesOpen(false);
         }
     }, [open, productToEdit, form]);
     
@@ -290,6 +306,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             nutritionalData: productToEdit?.nutritionalData,
             compositionText: productToEdit?.compositionText,
             detectedAllergens: productToEdit?.detectedAllergens,
+            aliases: aliases.length > 0 ? aliases : undefined,
         };
 
         if (productToEdit) {
@@ -307,6 +324,24 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         
         return baseProduct.category !== categoryWatch;
     }, [baseProductIdWatch, categoryWatch, baseProducts]);
+
+    const handleAddAlias = () => {
+        const nextAlias = aliasInput.trim();
+        if (!nextAlias) return;
+        const normalized = normalizeAlias(nextAlias);
+        const conflictsWithName = normalizeAlias(form.getValues('baseName')) === normalized;
+        const alreadyExists = aliases.some((alias) => normalizeAlias(alias) === normalized);
+        if (conflictsWithName || alreadyExists) {
+            setAliasInput('');
+            return;
+        }
+        setAliases((current) => [...current, nextAlias]);
+        setAliasInput('');
+    };
+
+    const handleRemoveAlias = (aliasToRemove: string) => {
+        setAliases((current) => current.filter((alias) => normalizeAlias(alias) !== normalizeAlias(aliasToRemove)));
+    };
 
 
     return (
@@ -346,6 +381,70 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                         <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                    </div>
+                                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background/70 p-3">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium">Aliases de compra</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {aliases.length > 0
+                                                    ? `${aliases.length} alias${aliases.length === 1 ? '' : 'es'} vinculado${aliases.length === 1 ? '' : 's'} a este insumo.`
+                                                    : 'Nenhum alias cadastrado.'}
+                                            </p>
+                                        </div>
+                                        <Popover open={aliasesOpen} onOpenChange={setAliasesOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button type="button" variant="outline" size="sm">
+                                                    <Tags className="mr-2 h-4 w-4" />
+                                                    Gerenciar aliases
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent align="end" className="w-80 space-y-3">
+                                                <div>
+                                                    <p className="text-sm font-medium">Aliases deste insumo</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Nomes vindos de pedidos que devem apontar para este cadastro.
+                                                    </p>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        placeholder="Ex: TUBITOS 750G POTE C/50UN"
+                                                        value={aliasInput}
+                                                        onChange={(event) => setAliasInput(event.target.value)}
+                                                        onKeyDown={(event) => {
+                                                            if (event.key === 'Enter') {
+                                                                event.preventDefault();
+                                                                handleAddAlias();
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Button type="button" size="icon" onClick={handleAddAlias}>
+                                                        <Plus className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                                <div className="max-h-48 space-y-2 overflow-y-auto">
+                                                    {aliases.length === 0 ? (
+                                                        <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                                                            Nenhum alias salvo.
+                                                        </p>
+                                                    ) : (
+                                                        aliases.map((alias) => (
+                                                            <div key={alias} className="flex items-center gap-2 rounded-md border px-2 py-1.5">
+                                                                <span className="min-w-0 flex-1 truncate text-sm">{alias}</span>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                                                    onClick={() => handleRemoveAlias(alias)}
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
                                     </div>
                                     
                                     <FormField control={form.control} name="barcode" render={({ field }) => (

@@ -430,7 +430,10 @@ export function ReceiptWorkspace({ receipt }: Props) {
                 <span>Criado em {format(parseISO(receipt.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
               )}
               {order?.paymentDueDate && (
-                <span>Vencimento: {format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}</span>
+                <span>
+                  {order.paymentMethod === 'card_credit' || order.paymentMethod === 'card_debit' ? 'Data da compra' : 'Vencimento'}:{' '}
+                  {format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}
+                </span>
               )}
               {receipt.expectedDate && (
                 <span>Previsão: {format(parseISO(receipt.expectedDate), 'dd/MM/yyyy')}</span>

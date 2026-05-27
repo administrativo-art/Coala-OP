@@ -101,6 +101,10 @@ const PAYMENT_CONDITION_LABELS: Record<PurchasePaymentCondition, string> = {
   installments: 'Parcelado',
 };
 
+function getPaymentDateLabel(paymentMethod?: PaymentMethod) {
+  return paymentMethod === 'card_credit' || paymentMethod === 'card_debit' ? 'Data da compra' : 'Vencimento';
+}
+
 const FREIGHT_PAYMENT_MODE_LABELS: Record<PurchaseFreightPaymentMode, string> = {
   included_with_goods: 'Pago junto com a mercadoria',
   separate: 'Pago em separado',
@@ -444,7 +448,7 @@ export default function PurchaseOrderPage() {
                 )}
                 <span>Pagamento: {PAYMENT_LABELS[order.paymentMethod]}</span>
                 <span>Condição: {PAYMENT_CONDITION_LABELS[order.paymentCondition ?? 'cash']}</span>
-                <span>Data do pagamento: {format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}</span>
+                <span>{getPaymentDateLabel(order.paymentMethod)}: {format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}</span>
                 {order.receiptMode === 'future_delivery' && (
                   <span>Entrega prevista: {format(parseISO(order.estimatedReceiptDate), 'dd/MM/yyyy')}</span>
                 )}
@@ -726,7 +730,7 @@ export default function PurchaseOrderPage() {
                   <span>{PAYMENT_LABELS[order.paymentMethod]}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Data do pagamento</span>
+                  <span className="text-muted-foreground">{getPaymentDateLabel(order.paymentMethod)}</span>
                   <span>{format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}</span>
                 </div>
                 <div className="flex justify-between">
@@ -872,7 +876,7 @@ export default function PurchaseOrderPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label>Data do pagamento</Label>
+                    <Label>{getPaymentDateLabel(editForm.paymentMethod)}</Label>
                     <Input
                       type="date"
                       value={editForm.paymentDueDate}

@@ -62,6 +62,10 @@ const PAYMENT_CONDITION_OPTIONS: { value: PurchasePaymentCondition; label: strin
   { value: 'installments', label: 'Parcelado' },
 ];
 
+function getPaymentDateLabel(paymentMethod: PaymentMethod) {
+  return paymentMethod === 'card_credit' || paymentMethod === 'card_debit' ? 'Data da compra' : 'Vencimento';
+}
+
 const FREIGHT_PAYMENT_MODE_OPTIONS: { value: PurchaseFreightPaymentMode; label: string }[] = [
   { value: 'included_with_goods', label: 'Frete pago junto com a mercadoria' },
   { value: 'separate', label: 'Frete pago em separado' },
@@ -504,7 +508,7 @@ export default function ConfirmPurchasePage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Data do pagamento</Label>
+                <Label className="text-xs text-muted-foreground">{getPaymentDateLabel(paymentMethod)}</Label>
                 <Input type="date" value={paymentDueDate}
                   onChange={(e) => setPaymentDueDate(e.target.value)} />
               </div>

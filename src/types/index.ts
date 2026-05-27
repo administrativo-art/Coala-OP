@@ -909,6 +909,7 @@ export type Product = {
   id: string;
   baseName: string;
   brand?: string;
+  aliases?: string[];
   barcode?: string;
   imageUrl?: string;
   packageType?: PackageType;
