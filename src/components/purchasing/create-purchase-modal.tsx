@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -48,6 +49,7 @@ const schema = z.object({
   paymentDueDate: z.string().min(1, 'Informe a data.'),
   estimatedReceiptDate: z.string().optional(),
   deliveryFee: z.coerce.number().min(0).optional(),
+  trackingInfo: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -110,6 +112,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
       paymentDueDate: today,
       estimatedReceiptDate: today,
       deliveryFee: 0,
+      trackingInfo: '',
       notes: '',
     },
   });
@@ -182,6 +185,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
             ? new Date().toISOString()
             : values.estimatedReceiptDate!,
         deliveryFee: values.deliveryFee ?? 0,
+        trackingInfo: values.trackingInfo || undefined,
         notes: values.notes || undefined,
         items: orderItems,
       });
@@ -381,6 +385,23 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
                         <CurrencyInput value={field.value ?? 0} onChange={field.onChange} />
                       </FormControl>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="trackingInfo"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Informações de rastreio (opcional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          rows={2}
+                          placeholder="Código, transportadora, prazo ou link de acompanhamento..."
+                          {...field}
+                        />
+                      </FormControl>
                     </FormItem>
                   )}
                 />

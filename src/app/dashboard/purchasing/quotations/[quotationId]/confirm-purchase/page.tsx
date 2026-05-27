@@ -146,6 +146,7 @@ export default function ConfirmPurchasePage() {
   const [resultCenterId, setResultCenterId] = useState('');
   const [freightAccountPlanId, setFreightAccountPlanId] = useState('');
   const [freightPaymentMode, setFreightPaymentMode] = useState<PurchaseFreightPaymentMode>('separate');
+  const [trackingInfo, setTrackingInfo] = useState('');
   const [generalNotes, setGeneralNotes] = useState('');
   const [itemNotes, setItemNotes] = useState<Record<string, string>>({});
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
@@ -222,6 +223,7 @@ export default function ConfirmPurchasePage() {
         resultCenterId,
         resultCenterName: selectedResultCenter?.name,
         deliveryFee,
+        trackingInfo: trackingInfo.trim() || undefined,
         notes: generalNotes.trim() || undefined,
         items: normalItems.map((item) => ({
           baseItemId: item.baseItemId!,
@@ -605,6 +607,9 @@ export default function ConfirmPurchasePage() {
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 Observações gerais
               </h3>
+              <Textarea placeholder="Código, transportadora, prazo ou link de acompanhamento..."
+                className="resize-none h-20 text-sm" value={trackingInfo}
+                onChange={(e) => setTrackingInfo(e.target.value)} />
               <Textarea placeholder="Informações adicionais sobre o pedido..."
                 className="resize-none h-20 text-sm" value={generalNotes}
                 onChange={(e) => setGeneralNotes(e.target.value)} />

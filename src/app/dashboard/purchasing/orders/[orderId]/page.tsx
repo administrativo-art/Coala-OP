@@ -129,6 +129,7 @@ type EditForm = {
   freightAccountPlanId: string;
   freightPaymentMode: PurchaseFreightPaymentMode;
   resultCenterId: string;
+  trackingInfo: string;
   notes: string;
 };
 
@@ -324,6 +325,7 @@ export default function PurchaseOrderPage() {
       freightAccountPlanId: order.freightAccountPlanId ?? purchasingDefaults.freightAccountPlanId ?? '',
       freightPaymentMode: order.freightPaymentMode ?? 'separate',
       resultCenterId: order.resultCenterId ?? '',
+      trackingInfo: order.trackingInfo ?? '',
       notes: order.notes ?? '',
     });
     setEditOpen(true);
@@ -352,6 +354,7 @@ export default function PurchaseOrderPage() {
         freightPaymentMode: editForm.deliveryFee > 0 ? editForm.freightPaymentMode : undefined,
         resultCenterId: editForm.resultCenterId,
         resultCenterName: selectedResultCenter?.name,
+        trackingInfo: editForm.trackingInfo,
         notes: editForm.notes,
       });
       setEditOpen(false);
@@ -805,6 +808,12 @@ export default function PurchaseOrderPage() {
                   <span className="text-muted-foreground">Entrega prevista</span>
                   <span>{format(parseISO(order.estimatedReceiptDate), 'dd/MM/yyyy')}</span>
                 </div>
+                {order.trackingInfo && (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Rastreio</span>
+                    <p className="text-right whitespace-pre-wrap">{order.trackingInfo}</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -996,6 +1005,16 @@ export default function PurchaseOrderPage() {
                     <p className="text-xs text-muted-foreground">
                       Use "junto" quando o pagamento cobrir mercadoria e frete no mesmo lançamento bancário.
                     </p>
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label>Informações de rastreio</Label>
+                    <Textarea
+                      rows={3}
+                      placeholder="Código, transportadora, prazo ou link de acompanhamento..."
+                      value={editForm.trackingInfo}
+                      onChange={(event) => setEditForm((current) => current && { ...current, trackingInfo: event.target.value })}
+                    />
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2">

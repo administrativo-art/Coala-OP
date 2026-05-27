@@ -47,6 +47,7 @@ export interface CreatePurchasePayload {
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
+  trackingInfo?: string;
   notes?: string;
   items: Array<{
     baseItemId: string;
@@ -81,6 +82,7 @@ export type OrderEdits = {
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
+  trackingInfo?: string;
   notes?: string;
   items?: Array<{
     baseItemId: string;

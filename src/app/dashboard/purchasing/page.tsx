@@ -16,7 +16,6 @@ import { PermissionGuard } from '@/components/permission-guard';
 import { useQuotations } from '@/hooks/use-quotations';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
-import { usePurchaseFinancials } from '@/hooks/use-purchase-financials';
 import { useAuth } from '@/hooks/use-auth';
 import { canCreateQuotation, canViewPurchasing } from '@/lib/purchasing-permissions';
 
@@ -70,7 +69,6 @@ export default function PurchasingHubPage() {
   const { quotations } = useQuotations();
   const { orders } = usePurchaseOrders();
   const { receipts } = usePurchaseReceipts();
-  const { financials } = usePurchaseFinancials();
   const canView = canViewPurchasing(permissions);
   const canOpenQuotations = canCreateQuotation(permissions);
 
@@ -121,12 +119,6 @@ export default function PurchasingHubPage() {
     [receipts, cancelledOrderIds],
   );
 
-  // Financials awaiting payment
-  const financialsAwaitingPayment = useMemo(
-    () => financials.filter((f) => f.status === 'confirmed' || f.status === 'divergent'),
-    [financials],
-  );
-
   const hasOrderActivity = ordersInReview.length > 0 || ordersConfirmed.length > 0;
   const hasReceiptActivity = receiptsAwaiting.length > 0 || receiptsConference.length > 0 || receiptsStock.length > 0;
 
@@ -166,9 +158,6 @@ export default function PurchasingHubPage() {
               <>
                 <PhasePill label="em revisão" count={ordersInReview.length} color="border-amber-300 bg-amber-50 text-amber-700" />
                 <PhasePill label="confirmadas" count={ordersConfirmed.length} color="border-blue-300 bg-blue-50 text-blue-700" />
-                {financialsAwaitingPayment.length > 0 && (
-                  <PhasePill label="ag. pagamento" count={financialsAwaitingPayment.length} color="border-orange-300 bg-orange-50 text-orange-700" />
-                )}
               </>
             ) : undefined}
           />

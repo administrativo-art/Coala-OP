@@ -58,6 +58,7 @@ const schema = z.object({
   installmentsCount: z.coerce.number().min(2).optional(),
   paymentDueDate: z.string().min(1, 'Informe a data.'),
   estimatedReceiptDate: z.string().optional(),
+  trackingInfo: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -226,6 +227,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
       installmentsCount: 2,
       paymentDueDate: today,
       estimatedReceiptDate: today,
+      trackingInfo: '',
       notes: '',
     },
   });
@@ -323,6 +325,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
             : values.estimatedReceiptDate || values.paymentDueDate,
         accountPlanId: purchasingDefaults.goodsAccountPlanId ?? undefined,
         freightAccountPlanId: purchasingDefaults.freightAccountPlanId ?? undefined,
+        trackingInfo: values.trackingInfo || undefined,
         notes: values.notes || undefined,
         items: validItems.map(({ productId, baseItemId, itemName, operationalCategoryId, unit, purchaseUnitType, quantityOrdered, unitPriceOrdered, entryType }) => {
           const category = activeCategories.find((entry) => entry.id === operationalCategoryId);
@@ -650,6 +653,23 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                 })}
               </div>
             </div>
+
+            <FormField
+              control={form.control}
+              name="trackingInfo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Informações de rastreio</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      rows={2}
+                      placeholder="Código, transportadora, prazo ou link de acompanhamento..."
+                      {...field}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}

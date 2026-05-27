@@ -452,6 +452,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       freightPaymentMode,
       resultCenterId: body.resultCenterId ?? null,
       resultCenterName: body.resultCenterName ?? null,
+      trackingInfo: body.trackingInfo ?? null,
       notes: body.notes ?? null,
       quotationId: body.quotationId ?? null,
       createdAt: now,

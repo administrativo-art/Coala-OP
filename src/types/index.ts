@@ -1212,6 +1212,7 @@ export type PurchaseOrder = {
   deliveryFee?: number;
   totalEstimated: number;
   totalConfirmed?: number; // filled after receipt
+  trackingInfo?: string;
   notes?: string;
   linkedExpenseId?: string;
   createdAt: string;
