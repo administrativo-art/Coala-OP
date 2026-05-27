@@ -924,16 +924,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
         const confirmedUnitPrice = existingReceiptItem?.unitPriceConfirmed ?? orderItem?.unitPriceOrdered ?? 0;
         const previousReceived = Number(existingReceiptItem?.quantityReceived ?? 0);
-        const payloadReceivedQuantity =
-          typeof item.quantityReceived === 'number'
-            ? Number(item.quantityReceived)
-            : Array.isArray(item.lots)
-            ? item.lots.reduce((sum: number, lot: any) => sum + Number(lot.quantity ?? 0), 0)
-            : previousReceived;
-        const cumulativeReceived =
-          receipt.status === 'partially_stocked'
-            ? previousReceived + payloadReceivedQuantity
-            : payloadReceivedQuantity;
+        const payloadReceivedQuantity = previousReceived;
+        const cumulativeReceived = previousReceived;
         const quantityOrdered = Number(orderItem?.quantityOrdered ?? cumulativeReceived);
 
         if (entryType === 'asset') {

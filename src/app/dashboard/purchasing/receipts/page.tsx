@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PackageCheck, ChevronRight, Clock, Package, CheckCircle2, Boxes } from 'lucide-react';
@@ -11,12 +11,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PermissionGuard } from '@/components/permission-guard';
 import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
 import { useEntities } from '@/hooks/use-entities';
 import { useAuth } from '@/hooks/use-auth';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
-import { type PurchaseReceipt } from '@/types';
+import { type PurchaseReceipt, type PurchaseReceiptItem } from '@/types';
 
 type PhaseConfig = {
   label: string;
@@ -37,57 +38,117 @@ const PHASE_CONFIG: Record<PurchaseReceipt['status'], PhaseConfig> = {
 
 function ReceiptRow({ receipt }: { receipt: PurchaseReceipt }) {
   const { entities } = useEntities();
+  const { fetchReceiptItems } = usePurchaseReceipts();
+  const [open, setOpen] = useState('');
+  const [items, setItems] = useState<PurchaseReceiptItem[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
   const supplier = entities.find((e) => e.id === receipt.supplierId);
   const phase = PHASE_CONFIG[receipt.status];
   const PhaseIcon = phase.icon;
   const receivedByOtherMeans = Boolean((receipt as PurchaseReceipt & { receivedByOtherMeans?: boolean }).receivedByOtherMeans);
 
+  useEffect(() => {
+    if (!open || items.length > 0 || itemsLoading) return;
+    let cancelled = false;
+    setItemsLoading(true);
+    fetchReceiptItems(receipt.id)
+      .then((data) => {
+        if (!cancelled) setItems(data);
+      })
+      .finally(() => {
+        if (!cancelled) setItemsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchReceiptItems, items.length, itemsLoading, open, receipt.id]);
+
   return (
-    <Link
-      href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`}
-      className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors group"
-    >
-      <div className="flex items-center gap-4 min-w-0">
-        <div className="flex-shrink-0 p-2 rounded-md bg-muted">
-          <PhaseIcon className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium truncate">
-              {supplier?.fantasyName ?? supplier?.name ?? '—'}
-            </span>
-            <Badge variant="outline" className={`text-xs ${phase.className}`}>
-              {phase.label}
-            </Badge>
-            {receivedByOtherMeans && (
-              <Badge variant="outline" className="text-xs border-sky-300 bg-sky-50 text-sky-700">
-                Baixado por outro meio
-              </Badge>
-            )}
-            <Badge variant="outline" className="text-xs">
-              {receipt.receiptMode === 'immediate_pickup' ? '⚡ Retirada' : '🚚 Entrega futura'}
-            </Badge>
+    <Accordion type="single" collapsible value={open} onValueChange={setOpen}>
+      <AccordionItem value={receipt.id} className="rounded-lg border bg-card px-0">
+        <AccordionTrigger className="px-4 py-4 hover:no-underline">
+          <div className="flex items-center gap-4 min-w-0 text-left">
+            <div className="flex-shrink-0 p-2 rounded-md bg-muted">
+              <PhaseIcon className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium truncate">
+                  {supplier?.fantasyName ?? supplier?.name ?? '—'}
+                </span>
+                <Badge variant="outline" className={`text-xs ${phase.className}`}>
+                  {phase.label}
+                </Badge>
+                {receivedByOtherMeans && (
+                  <Badge variant="outline" className="text-xs border-sky-300 bg-sky-50 text-sky-700">
+                    Baixado por outro meio
+                  </Badge>
+                )}
+                <Badge variant="outline" className="text-xs">
+                  {receipt.receiptMode === 'immediate_pickup' ? 'Retirada' : 'Entrega futura'}
+                </Badge>
+              </div>
+              <div className="flex gap-3 text-xs text-muted-foreground flex-wrap">
+                {receipt.totalEstimated != null && (
+                  <span className="font-medium text-foreground">
+                    {receipt.totalEstimated.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                )}
+                {receipt.expectedDate && (
+                  <span>Previsto: {format(parseISO(receipt.expectedDate), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                )}
+                {receivedByOtherMeans && receipt.receivedAt && (
+                  <span>Baixado: {format(parseISO(receipt.receivedAt), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                )}
+                {!receivedByOtherMeans && receipt.stockEnteredAt && (
+                  <span>Estocado: {format(parseISO(receipt.stockEnteredAt), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="flex gap-3 text-xs text-muted-foreground flex-wrap">
-            {receipt.totalEstimated != null && (
-              <span className="font-medium text-foreground">
-                {receipt.totalEstimated.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </span>
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pb-4">
+          <div className="space-y-3 border-t pt-3">
+            {itemsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : items.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum item encontrado.</p>
+            ) : (
+              <div className="space-y-2">
+                {items.map((item) => (
+                  <div key={item.id} className="grid grid-cols-[1fr_auto] gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{item.itemName || item.baseItemId || 'Item sem nome'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Pedido: {Number(item.quantityOrdered ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} {item.purchaseUnitLabel || item.unit}
+                        {item.quantityReceived ? ` · Recebido: ${Number(item.quantityReceived).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-right font-medium">
+                      {Number(
+                        item.totalConfirmed ??
+                          Number(item.quantityOrdered ?? 0) * Number(item.unitPriceOrdered ?? 0),
+                      ).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
-            {receipt.expectedDate && (
-              <span>Previsto: {format(parseISO(receipt.expectedDate), 'dd/MM/yyyy', { locale: ptBR })}</span>
-            )}
-            {receivedByOtherMeans && receipt.receivedAt && (
-              <span>Baixado: {format(parseISO(receipt.receivedAt), 'dd/MM/yyyy', { locale: ptBR })}</span>
-            )}
-            {!receivedByOtherMeans && receipt.stockEnteredAt && (
-              <span>Estocado: {format(parseISO(receipt.stockEnteredAt), 'dd/MM/yyyy', { locale: ptBR })}</span>
-            )}
+            <div className="flex justify-end">
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`}>
+                  Abrir recebimento
+                  <ChevronRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
-      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
-    </Link>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }
 

@@ -80,6 +80,15 @@ function lotKey() {
   return Math.random().toString(36).slice(2);
 }
 
+function fmtQty(value?: number | null) {
+  const number = Number(value ?? 0);
+  if (!Number.isFinite(number)) return '0';
+  return number.toLocaleString('pt-BR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  });
+}
+
 interface Props {
   receipt: PurchaseReceipt;
 }
@@ -157,13 +166,20 @@ export function ReceiptWorkspace({ receipt }: Props) {
       setProofDescription(receipt.receiptProofDescription ?? '');
       setDrafts(
         items
-          .filter((item) => receipt.status !== 'partially_stocked' || item.status === 'pending' || item.status === 'partial')
+          .filter((item) => {
+            if (receipt.status === 'partially_stocked') return item.status === 'pending' || item.status === 'partial';
+            if (isInStockEntry) return Number(item.quantityReceived ?? 0) > 0 && item.status !== 'pending';
+            return true;
+          })
           .map((item) => {
             const base = baseProducts.find((bp) => bp.id === item.baseItemId);
             const remainingQuantity =
-              receipt.status === 'partially_stocked'
+              isInStockEntry
+                ? Number(item.quantityReceived ?? 0)
+                : receipt.status === 'partially_stocked'
                 ? Math.max(item.quantityOrdered - (item.quantityReceived ?? 0), 0)
                 : (item.quantityReceived && item.quantityReceived > 0 ? item.quantityReceived : item.quantityOrdered);
+            const shouldPreseedLot = isInStockEntry && Number(item.quantityReceived ?? 0) > 0;
             return {
               receiptItemId: item.id,
               purchaseOrderItemId: item.purchaseOrderItemId,
@@ -184,20 +200,22 @@ export function ReceiptWorkspace({ receipt }: Props) {
               entryType: item.itemDestination === 'asset' || item.entryType === 'asset' ? 'asset' : item.itemDestination === 'uniform' || item.entryType === 'uniform' ? 'uniform' : 'stock',
               receiptDisposition: item.receiptDisposition ?? 'receive',
               selectedForReceipt: item.receiptDisposition !== 'pending',
-              lots: [
-                {
-                  _key: lotKey(),
-                  lotCode: generateLotCode(base?.name ?? 'INS'),
-                  expiryDate: '',
-                  quantity: remainingQuantity,
-                },
-              ],
+              lots: shouldPreseedLot
+                ? [
+                    {
+                      _key: lotKey(),
+                      lotCode: '',
+                      expiryDate: '',
+                      quantity: remainingQuantity,
+                    },
+                  ]
+                : [],
             };
           }),
       );
       setLoadingItems(false);
     });
-  }, [baseProducts, fetchReceiptItems, receipt.id, receipt.notes, receipt.receiptProofDescription, receipt.status]);
+  }, [baseProducts, fetchReceiptItems, isInStockEntry, receipt.id, receipt.notes, receipt.receiptProofDescription, receipt.status]);
 
   const updateDraft = (idx: number, patch: Partial<ItemDraft>) => {
     setDrafts((prev) => {
@@ -672,7 +690,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             type="number"
                             step="0.001"
                             value={draft.quantityReceived}
-                            disabled={isReadonly || !draft.selectedForReceipt || isNonStockDisposition || (!isImmediate && isInStockEntry)}
+                            disabled={isReadonly || !draft.selectedForReceipt || isNonStockDisposition || isInStockEntry}
                             onChange={(e) => updateDraft(idx, { quantityReceived: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
@@ -682,7 +700,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             type="number"
                             step="0.01"
                             value={draft.unitPriceConfirmed}
-                            disabled={isReadonly || !draft.selectedForReceipt || isNonStockDisposition || (!isImmediate && isInStockEntry)}
+                            disabled={isReadonly || !draft.selectedForReceipt || isNonStockDisposition || isInStockEntry}
                             onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
@@ -751,7 +769,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                       {isInStockEntry && !isAssetEntry && (
                         <div className="space-y-3 pt-2">
                            <div className="flex items-center justify-between">
-                            <Label className="text-xs font-medium">Lotes ({lotSum.toFixed(3)} / {draft.quantityReceived.toFixed(3)})</Label>
+                            <Label className="text-xs font-medium">Lotes ({fmtQty(lotSum)} / {fmtQty(draft.quantityReceived)})</Label>
                             {!isReadonly && (
                               <Button type="button" variant="ghost" size="sm" onClick={() => addLot(idx)} className="h-7 text-xs">
                                 <Plus className="mr-1 h-3 w-3" /> Lote
@@ -763,7 +781,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                               <div key={lot._key} className="grid grid-cols-[1fr_1fr_120px_auto] gap-2 items-end">
                                 <div className="space-y-1">
                                   <Label className="text-[10px] text-muted-foreground uppercase">Cód. Lote</Label>
-                                  <Input value={lot.lotCode} disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { lotCode: e.target.value })} className="h-8 text-sm" />
+                                  <Input value={lot.lotCode} placeholder="Informe" disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { lotCode: e.target.value })} className="h-8 text-sm" />
                                 </div>
                                 <div className="space-y-1">
                                   <Label className="text-[10px] text-muted-foreground uppercase">Qtd.</Label>
