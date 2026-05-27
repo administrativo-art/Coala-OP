@@ -146,7 +146,7 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const { toast } = useToast();
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetSchema),
-    defaultValues: { name: '', category: '', brand: '', model: '', serialNumber: '', imageUrl: '', currentKioskId: '', purchaseDate: '', notes: '' },
+    defaultValues: { name: '', category: 'Patrimônio', subcategory: '', brand: '', model: '', serialNumber: '', imageUrl: '', currentKioskId: '', purchaseDate: '', notes: '' },
   });
   const imageUrl = form.watch('imageUrl');
 
@@ -201,20 +201,13 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                   <FormItem><FormLabel>Nome</FormLabel><FormControl><Input placeholder="Máquina de sorvete" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <FormField control={form.control} name="category" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Categoria</FormLabel>
-                      <Select value={field.value || ''} onValueChange={field.onChange}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
+                  {/* Categoria: sempre "Patrimônio", congelada */}
+                  <FormItem>
+                    <FormLabel>Categoria</FormLabel>
+                    <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                      Patrimônio
+                    </div>
+                  </FormItem>
                   <FormField control={form.control} name="currentKioskId" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Unidade atual</FormLabel>
@@ -226,6 +219,22 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     </FormItem>
                   )} />
                 </div>
+                <FormField control={form.control} name="subcategory" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Subcategoria</FormLabel>
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="none"><span className="text-muted-foreground">Sem subcategoria</span></SelectItem>
+                        {categories
+                          .filter((c) => c.name !== 'Patrimônio')
+                          .map((c) => (
+                            <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <FormField control={form.control} name="brand" render={({ field }) => (
                     <FormItem><FormLabel>Marca</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
@@ -367,7 +376,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     if (!asset) return;
     form.reset({
       name: asset.name ?? '',
-      category: asset.category ?? '',
+      category: 'Patrimônio',
       subcategory: asset.subcategory ?? '',
       brand: asset.brand ?? '',
       model: asset.model ?? '',
@@ -647,23 +656,13 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                         <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} disabled={!permissions.assets?.edit} /></FormControl><FormMessage /></FormItem>
                       )} />
                       <div className="grid grid-cols-1 gap-3">
-                        <FormField control={form.control} name="category" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Categoria</FormLabel>
-                            <Select value={field.value || ''} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
-                              <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                {categories.map((category) => (
-                                  <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
-                                ))}
-                                {asset.category && !categories.some((category) => category.name === asset.category) ? (
-                                  <SelectItem value={asset.category}>{asset.category}</SelectItem>
-                                ) : null}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
+                        {/* Categoria: sempre "Patrimônio", congelada */}
+                        <FormItem>
+                          <FormLabel>Categoria</FormLabel>
+                          <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">
+                            Patrimônio
+                          </div>
+                        </FormItem>
                       </div>
                     </div>
                   </div>
@@ -672,7 +671,24 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                     <p className="mb-3 text-sm font-semibold">Identificação</p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <FormField control={form.control} name="subcategory" render={({ field }) => (
-                        <FormItem><FormLabel>Subcategoria</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                        <FormItem>
+                          <FormLabel>Subcategoria</FormLabel>
+                          <Select value={field.value || ''} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="none"><span className="text-muted-foreground">Sem subcategoria</span></SelectItem>
+                              {categories
+                                .filter((c) => c.name !== 'Patrimônio')
+                                .map((c) => (
+                                  <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                ))}
+                              {/* Manter valor legado caso não esteja mais na lista */}
+                              {field.value && field.value !== 'none' && !categories.some((c) => c.name === field.value) && (
+                                <SelectItem value={field.value}>{field.value}</SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
                       )} />
                       <FormField control={form.control} name="assetTag" render={({ field }) => (
                         <FormItem><FormLabel>Etiqueta física</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
@@ -989,13 +1005,13 @@ export function AssetManagement() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q));
       const matchesStatus = statusFilter === 'todos' || asset.status === statusFilter;
-      const matchesCategory = categoryFilter === 'todas' || (asset.category || 'Sem categoria') === categoryFilter;
+      const matchesCategory = categoryFilter === 'todas' || (asset.subcategory || 'Sem subcategoria') === categoryFilter;
       const matchesUnit = unitFilter === 'todas' || asset.currentKioskId === unitFilter;
       return matchesSearch && matchesStatus && matchesCategory && matchesUnit;
     });
   }, [assets, search, statusFilter, categoryFilter, unitFilter]);
 
-  const categories = useMemo(() => Array.from(new Set(assets.map((asset) => asset.category || 'Sem categoria'))).sort(), [assets]);
+  const categories = useMemo(() => Array.from(new Set(assets.map((asset) => asset.subcategory || 'Sem subcategoria'))).sort(), [assets]);
   const units = useMemo(() => {
     const map = new Map<string, string>();
     assets.forEach((asset) => map.set(asset.currentKioskId, asset.currentKioskName || asset.currentKioskId));
@@ -1046,7 +1062,7 @@ export function AssetManagement() {
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger className="w-full lg:w-48"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="todas">Todas categorias</SelectItem>
+            <SelectItem value="todas">Todas subcategorias</SelectItem>
             {categories.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
           </SelectContent>
         </Select>

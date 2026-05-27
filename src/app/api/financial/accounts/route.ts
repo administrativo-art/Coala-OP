@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
 
     const body = await request.json();
-    const { name, description, parentId, dre_position, order } = body;
+    const { name, description, parentId, dre_position, order, is_dre_account } = body;
     if (!name || typeof name !== "string")
       return NextResponse.json({ error: "Nome obrigatório." }, { status: 400 });
 
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
       dre_position: dre_position ?? null,
       order: typeof order === "number" ? order : 0,
       active: true,
+      is_dre_account: typeof is_dre_account === "boolean" ? is_dre_account : true,
       createdAt: FieldValue.serverTimestamp(),
     });
 
@@ -81,10 +82,13 @@ export async function PATCH(request: NextRequest) {
     if (!id || typeof id !== "string")
       return NextResponse.json({ error: "ID obrigatório." }, { status: 400 });
 
-    const allowed = ["name", "description", "parentId", "dre_position", "order", "active"];
+    const allowed = ["name", "description", "parentId", "dre_position", "order", "active", "is_dre_account"];
     const update: Record<string, unknown> = {};
     for (const key of allowed) {
-      if (key in fields) update[key] = fields[key] ?? null;
+      if (key in fields) {
+        // is_dre_account is boolean — preserve false explicitly
+        update[key] = key === "is_dre_account" ? (typeof fields[key] === "boolean" ? fields[key] : true) : (fields[key] ?? null);
+      }
     }
     if ("parentId" in update && await wouldCreateParentCycle(id, update.parentId as string | null)) {
       return NextResponse.json(

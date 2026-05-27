@@ -96,6 +96,13 @@ export function DrePage() {
     return m;
   }, [accounts]);
 
+  // accountId → is_dre_account (false = patrimonial: never appears in DRE, not even as "Não classificado")
+  const accountIsDreMap = useMemo(() => {
+    const m: Record<string, boolean> = {};
+    (accounts || []).forEach((a: any) => { m[a.id] = a.is_dre_account !== false; });
+    return m;
+  }, [accounts]);
+
   const selectedUnitName = unitFilter === "all" ? null : (kioskNameById[unitFilter] ?? null);
   const selectedKioskId = unitFilter === "all" ? null : unitFilter;
 
@@ -132,7 +139,10 @@ export function DrePage() {
       const d = toDate(exp.paidAt);
       if (!d || format(d, "yyyy-MM") !== monthKey) return sum;
       if (!matchesUnit(exp)) return sum;
-      const p = accountDrePosMap[exp.accountId ?? exp.accountPlan] ?? null;
+      const accountKey = exp.accountId ?? exp.accountPlan;
+      // Contas patrimoniais (is_dre_account: false) nunca entram na DRE, nem em "Não classificado"
+      if (accountIsDreMap[accountKey] === false) return sum;
+      const p = accountDrePosMap[accountKey] ?? null;
       if (p !== pos) return sum;
       return sum + (exp.totalValue || 0);
     }, 0);
@@ -193,12 +203,12 @@ export function DrePage() {
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartMonthKeys, transactions, expenses, salesReports, simulationCmvMap, selectedUnitName, selectedKioskId, accountDrePosMap]);
+  }, [chartMonthKeys, transactions, expenses, salesReports, simulationCmvMap, selectedUnitName, selectedKioskId, accountDrePosMap, accountIsDreMap]);
 
   const metrics = useMemo(
     () => getDreMetrics(selectedMonth),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedMonth, transactions, expenses, salesReports, simulationCmvMap, selectedUnitName, selectedKioskId, accountDrePosMap]
+    [selectedMonth, transactions, expenses, salesReports, simulationCmvMap, selectedUnitName, selectedKioskId, accountDrePosMap, accountIsDreMap]
   );
 
   const accountNameById = useMemo(() => {

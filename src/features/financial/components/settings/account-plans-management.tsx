@@ -85,6 +85,7 @@ type Account = {
   description?: string;
   parentId?: string | null;
   dre_position?: string | null;
+  is_dre_account?: boolean;
   order?: number;
   active?: boolean;
   isGroup?: boolean;
@@ -97,6 +98,7 @@ const accountFormSchema = z.object({
   parentId: z.string().nullable().optional(),
   includeInDre: z.boolean(),
   dre_position: z.string().nullable().optional(),
+  isPatrimonial: z.boolean().default(false),
 });
 type AccountFormValues = z.infer<typeof accountFormSchema>;
 
@@ -158,7 +160,14 @@ async function persistOrder(ids: string[]) {
   );
 }
 
-function DreBadge({ position }: { position?: string | null }) {
+function DreBadge({ position, isPatrimonial }: { position?: string | null; isPatrimonial?: boolean }) {
+  if (isPatrimonial) {
+    return (
+      <span className="ml-1.5 shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+        Patrimonial
+      </span>
+    );
+  }
   if (!position) return null;
   const pos = DRE_POSITIONS.find((p) => p.value === position);
   if (!pos) return null;
@@ -258,7 +267,7 @@ function SortableRow({
         </span>
 
         {/* dre badge */}
-        <DreBadge position={node.dre_position} />
+        <DreBadge position={node.dre_position} isPatrimonial={node.is_dre_account === false} />
 
         {/* actions */}
         {canManage && (
@@ -449,10 +458,11 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
 
   const form = useForm<AccountFormValues>({
     resolver: zodResolver(accountFormSchema),
-    defaultValues: { name: "", description: "", parentId: null, includeInDre: false, dre_position: null },
+    defaultValues: { name: "", description: "", parentId: null, includeInDre: false, dre_position: null, isPatrimonial: false },
   });
 
   const includeInDre = form.watch("includeInDre");
+  const isPatrimonial = form.watch("isPatrimonial");
 
   const parentOptions = useMemo(() => {
     if (!editingAccount) return accounts;
@@ -463,7 +473,7 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
 
   function openAdd(parentId: string | null = null) {
     setEditingAccount(null);
-    form.reset({ name: "", description: "", parentId, includeInDre: false, dre_position: null });
+    form.reset({ name: "", description: "", parentId, includeInDre: false, dre_position: null, isPatrimonial: false });
     setDialogOpen(true);
   }
 
@@ -475,12 +485,15 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
       parentId: account.parentId ?? null,
       includeInDre: !!account.dre_position,
       dre_position: account.dre_position ?? null,
+      isPatrimonial: account.is_dre_account === false,
     });
     setDialogOpen(true);
   }
 
   async function onSubmit(values: AccountFormValues) {
     const dre_position = values.includeInDre ? (values.dre_position ?? null) : null;
+    // Regra: patrimonial → false, caso contrário → true (sempre explícito)
+    const is_dre_account = values.isPatrimonial ? false : true;
     try {
       if (editingAccount) {
         await apiRequest("PATCH", {
@@ -489,11 +502,12 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
           description: values.description ?? null,
           parentId: values.parentId ?? null,
           dre_position,
+          is_dre_account,
         });
         setAccounts((prev) =>
           prev.map((a) =>
             a.id === editingAccount.id
-              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position }
+              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account }
               : a
           )
         );
@@ -505,11 +519,12 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
           description: values.description ?? null,
           parentId: values.parentId ?? null,
           dre_position,
+          is_dre_account,
           order: siblings.length,
         });
         setAccounts((prev) => [
           ...prev,
-          { id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, order: siblings.length, active: true },
+          { id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, order: siblings.length, active: true },
         ]);
         if (values.parentId) setExpanded((prev) => new Set([...prev, values.parentId!]));
         toast({ title: "Conta criada." });
@@ -684,6 +699,7 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
                           onCheckedChange={(checked) => {
                             field.onChange(checked);
                             if (!checked) form.setValue("dre_position", null);
+                            if (checked) form.setValue("isPatrimonial", false);
                           }}
                         />
                       </FormControl>
@@ -691,6 +707,28 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
                   </FormItem>
                 )}
               />
+
+              {!includeInDre && (
+                <FormField
+                  control={form.control}
+                  name="isPatrimonial"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3">
+                        <div>
+                          <FormLabel className="text-sm font-medium">Conta patrimonial</FormLabel>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Estoque, ativo imobilizado, aplicações financeiras. Não aparece na DRE nem em &ldquo;Não classificado&rdquo;.
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {includeInDre && (
                 <FormField

@@ -95,7 +95,8 @@ function buildRecurringOccurrences(
 const ACCOUNT_GROUP_LABELS: Record<string, string> = {
   receita: "Receita",
   fiscal: "Impostos e Deduções",
-  insumos: "Custos Variáveis",
+  insumos: "Custos Variáveis Complementares",
+  estoque: "Estoque / Compras de Insumos",
   rh: "Recursos Humanos",
   administrativo: "Administrativo",
   marketing: "Marketing",
@@ -106,7 +107,7 @@ const ACCOUNT_GROUP_LABELS: Record<string, string> = {
   ir_csll: "IR / CSLL",
 };
 
-const ACCOUNT_GROUP_ORDER = ["fiscal", "insumos", "rh", "administrativo", "marketing", "tecnologia", "ocupacao", "financeiro", "nao_operacional", "ir_csll", "receita"];
+const ACCOUNT_GROUP_ORDER = ["fiscal", "insumos", "estoque", "rh", "administrativo", "marketing", "tecnologia", "ocupacao", "financeiro", "nao_operacional", "ir_csll", "receita"];
 
 function SectionHeading({
   icon,
