@@ -761,6 +761,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const receipt = receiptSnap.data()!;
 
     const orderRef = dbAdmin.collection('purchase_orders').doc(receipt.purchaseOrderId);
+    const orderSnap = await orderRef.get();
+    const order = orderSnap.data() ?? {};
     const orderItemsSnap = await orderRef.collection('items').get();
     const orderItemsById = new Map(orderItemsSnap.docs.map((d) => [d.id, d.data()]));
 
@@ -885,6 +887,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const receipt = receiptSnap.data()!;
 
     const orderRef = dbAdmin.collection('purchase_orders').doc(receipt.purchaseOrderId);
+    const orderSnap = await orderRef.get();
+    const order = orderSnap.data() ?? {};
     const orderItemsSnap = await orderRef.collection('items').get();
     const orderItemsById = new Map(orderItemsSnap.docs.map((d) => [d.id, d.data()]));
 
@@ -957,9 +961,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               currentKioskId: body.destinationKioskId,
               currentKioskName: body.destinationKioskName,
               status: 'ativo',
+              purchaseDate: order.purchaseDate ?? order.fiscal?.issuedAt?.slice?.(0, 10) ?? order.createdAt?.slice?.(0, 10) ?? null,
               purchaseValue: confirmedUnitPrice,
               supplierId: receipt.supplierId,
-              supplierName: receipt.supplierName ?? null,
+              supplierName: order.fiscal?.issuerName ?? receipt.supplierName ?? order.supplierName ?? null,
+              invoiceNumber: order.invoiceNumber ?? order.fiscal?.number ?? null,
+              paymentMethod: order.paymentMethodLabel ?? order.paymentMethod ?? null,
+              costCenter: order.resultCenterName ?? order.resultCenterId ?? null,
+              accountingAccount: order.accountPlanId ?? null,
+              documentUrl: order.documentUrl ?? order.fiscal?.documentUrl ?? null,
               sourceType: 'purchase_receipt',
               purchaseOrderId: receipt.purchaseOrderId,
               purchaseReceiptId: id,

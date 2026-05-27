@@ -1253,6 +1253,28 @@ export type PurchaseOrder = {
   paymentMethodLabel?: string | null;
   paymentCondition?: PurchasePaymentCondition;
   installmentsCount?: number;
+  purchaseDate?: string;
+  invoiceNumber?: string;
+  invoiceAccessKey?: string;
+  fiscal?: {
+    operationNature?: string;
+    operationType?: string;
+    model?: string;
+    series?: string;
+    number?: string;
+    issuedAt?: string;
+    protocol?: string;
+    authorizedAt?: string;
+    issuerCnpj?: string;
+    issuerIe?: string;
+    issuerName?: string;
+    issuerCity?: string;
+    issuerUf?: string;
+    recipientName?: string;
+    recipientCity?: string;
+    recipientUf?: string;
+    digestValue?: string;
+  };
   accountPlanId?: string;
   accountPlanName?: string;
   freightAccountPlanId?: string;
