@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format, getDaysInMonth, isToday, parseISO, differenceInCalendarDays, parse } from 'date-fns';
+import { format, getDaysInMonth, isToday, parseISO, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
@@ -545,14 +545,35 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   }
 
   // Load previous month's schedule shifts for carry-over consecutive count + preview
-  const prevSchedule = useMemo(() => {
+  const prevPeriod = useMemo(() => {
     let prevMonth = schedule.month - 1;
     let prevYear = schedule.year;
     if (prevMonth < 1) { prevMonth = 12; prevYear--; }
-    return schedules.find(s => s.month === prevMonth && s.year === prevYear) ?? null;
-  }, [schedules, schedule.month, schedule.year]);
+    return { month: prevMonth, year: prevYear };
+  }, [schedule.month, schedule.year]);
+
+  const prevSchedule = useMemo(() => {
+    const candidates = schedules.filter(s => s.month === prevPeriod.month && s.year === prevPeriod.year);
+    if (schedule.unitId) {
+      return candidates.find(s => s.unitId === schedule.unitId) ?? null;
+    }
+    return candidates.find(s => !s.unitId) ?? candidates[0] ?? null;
+  }, [prevPeriod.month, prevPeriod.year, schedule.unitId, schedules]);
   const prevScheduleId = prevSchedule?.id ?? null;
   const { shifts: prevShifts } = useDPShifts(prevScheduleId);
+
+  const prevSiblingIds = useMemo(() => {
+    if (!schedule.unitId) return [];
+    return schedules
+      .filter(s =>
+        s.id !== prevScheduleId &&
+        s.month === prevPeriod.month &&
+        s.year === prevPeriod.year &&
+        !!s.unitId
+      )
+      .map(s => s.id);
+  }, [prevPeriod.month, prevPeriod.year, prevScheduleId, schedule.unitId, schedules]);
+  const { shifts: prevSiblingShifts } = useDPSiblingShifts(prevSiblingIds);
 
   // Last 7 days of previous month for preview
   const prevMonthDays = useMemo(() => {
@@ -574,17 +595,6 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       };
     });
   }, [schedule.month, schedule.year]);
-
-  // Index prev shifts for quick lookup
-  const prevShiftIndex = useMemo(() => {
-    const idx: Record<string, Record<string, DPShift[]>> = {};
-    for (const shift of prevShifts) {
-      if (!idx[shift.date]) idx[shift.date] = {};
-      if (!idx[shift.date][shift.unitId]) idx[shift.date][shift.unitId] = [];
-      idx[shift.date][shift.unitId].push(shift);
-    }
-    return idx;
-  }, [prevShifts]);
 
   const canEdit = (permissions.dp?.schedules?.edit ?? false) && !schedule.locked;
 
@@ -772,6 +782,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const workShifts = useMemo(() => shifts.filter(isWorkShift), [shifts]);
   const dayOffShifts = useMemo(() => shifts.filter(isDayOffShift), [shifts]);
   const prevWorkShifts = useMemo(() => prevShifts.filter(isWorkShift), [prevShifts]);
+  const prevSiblingWorkShifts = useMemo(() => prevSiblingShifts.filter(isWorkShift), [prevSiblingShifts]);
   const siblingWorkShifts = useMemo(() => siblingShifts.filter(isWorkShift), [siblingShifts]);
   const siblingDayOffShifts = useMemo(() => siblingShifts.filter(isDayOffShift), [siblingShifts]);
 
@@ -784,10 +795,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const streakState = useMemo(
     () => buildShiftStreakState(
       isPerUnit
-        ? [...prevWorkShifts, ...workShifts, ...siblingWorkShifts]
+        ? [...prevWorkShifts, ...prevSiblingWorkShifts, ...workShifts, ...siblingWorkShifts]
         : [...prevWorkShifts, ...workShifts]
     ),
-    [isPerUnit, prevWorkShifts, siblingWorkShifts, workShifts]
+    [isPerUnit, prevSiblingWorkShifts, prevWorkShifts, siblingWorkShifts, workShifts]
   );
   const consecutiveCountMap = streakState.countByShiftId;
 
@@ -1541,7 +1552,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         }}
         selectedShifts={selectedBulkShifts}
         allCurrentShifts={shifts}
-        previousShifts={prevShifts}
+        previousShifts={isPerUnit ? [...prevShifts, ...prevSiblingShifts] : prevShifts}
         siblingShifts={siblingShifts}
         shiftDefinitions={shiftDefinitions}
         addShiftsBatch={addShiftsBatch}

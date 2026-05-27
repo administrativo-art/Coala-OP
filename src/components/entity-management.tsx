@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEntities } from '@/hooks/use-entities';
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { PlusCircle, Trash2, Edit, Building, User, Phone, Mail, MapPin, Search, Eraser } from 'lucide-react';
 import { type Entity } from '@/types';
@@ -24,6 +25,7 @@ const entitySchema = z.object({
   type: z.enum(['pessoa_fisica', 'pessoa_juridica']),
   name: z.string().min(1, 'O nome é obrigatório.'),
   fantasyName: z.string().optional(),
+  nickname: z.string().optional(),
   document: z.string().min(1, 'O documento é obrigatório.'),
   address: z.object({
     zipCode: z.string().optional(),
@@ -67,6 +69,7 @@ const emptyEntityFormValues: EntityFormValues = {
     type: 'pessoa_fisica',
     name: '',
     fantasyName: '',
+    nickname: '',
     document: '',
     address: { zipCode: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '' },
     contact: { phone: '', email: '' },
@@ -94,6 +97,7 @@ function getEntityFormValues(entity: Entity | null): EntityFormValues {
         type: entity.type ?? 'pessoa_fisica',
         name: entity.name ?? '',
         fantasyName: entity.fantasyName ?? '',
+        nickname: entity.nickname ?? '',
         document: entity.document ?? legacyEntity.cnpj ?? legacyEntity.cpf ?? '',
         address: {
             zipCode: entity.address?.zipCode ?? legacyEntity.zipCode ?? '',
@@ -152,6 +156,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
             type: values.type,
             name: values.name,
             fantasyName: values.fantasyName,
+            nickname: values.nickname,
             document: values.document,
             address: {
                 street: values.address?.street ?? '',
@@ -204,6 +209,13 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                         <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CPF</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                     )}
                                 </div>
+                                <FormField control={form.control} name="nickname" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Apelido (opcional)</FormLabel>
+                                        <FormControl><Input {...field} value={field.value ?? ''} placeholder="Nome usado internamente ou para busca" /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}/>
                                 {entityType === 'pessoa_juridica' && (
                                     <div className="grid grid-cols-2 gap-4">
                                         <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CNPJ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
@@ -261,6 +273,7 @@ export function EntityManagement() {
       const typeMatch = typeFilter === 'all' || entity.type === typeFilter;
       const searchMatch = entity.name.toLowerCase().includes(search) ||
                           (entity.fantasyName && entity.fantasyName.toLowerCase().includes(search)) ||
+                          (entity.nickname && entity.nickname.toLowerCase().includes(search)) ||
                           (entity.document ?? '').includes(search);
       
       return typeMatch && searchMatch;
@@ -356,6 +369,11 @@ export function EntityManagement() {
                                             <div>
                                                 <p className="font-semibold">{entity.fantasyName || entity.name}</p>
                                                 {entity.fantasyName ? <p className="text-xs text-muted-foreground">{entity.name}</p> : null}
+                                                {entity.nickname ? (
+                                                    <Badge variant="secondary" className="mt-1 rounded-md px-1.5 py-0 text-[10px] font-medium">
+                                                        {entity.nickname}
+                                                    </Badge>
+                                                ) : null}
                                             </div>
                                         </div>
                                     </TableCell>

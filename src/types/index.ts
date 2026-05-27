@@ -1081,6 +1081,7 @@ export type Entity = {
   type: 'pessoa_fisica' | 'pessoa_juridica';
   name: string;
   fantasyName?: string;
+  nickname?: string;
   document: string; // CPF ou CNPJ
   address: {
     street: string;
