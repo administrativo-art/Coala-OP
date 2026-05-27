@@ -15,6 +15,9 @@ const STATUS_LABEL: Record<AssetStatus, string> = {
   ativo: 'Ativo',
   em_manutencao: 'Em manutenção',
   fora_de_uso: 'Fora de uso',
+  extraviado: 'Extraviado',
+  vendido: 'Vendido',
+  descartado: 'Descartado',
   baixado: 'Baixado',
 };
 
@@ -22,6 +25,9 @@ const STATUS_STYLE: Record<AssetStatus, string> = {
   ativo: 'bg-emerald-500 text-white hover:bg-emerald-500',
   em_manutencao: 'bg-amber-500 text-white hover:bg-amber-500',
   fora_de_uso: 'bg-rose-500 text-white hover:bg-rose-500',
+  extraviado: 'bg-red-600 text-white hover:bg-red-600',
+  vendido: 'bg-blue-600 text-white hover:bg-blue-600',
+  descartado: 'bg-zinc-600 text-white hover:bg-zinc-600',
   baixado: 'bg-slate-500 text-white hover:bg-slate-500',
 };
 
@@ -30,11 +36,19 @@ type PublicAsset = Pick<
   | 'code'
   | 'name'
   | 'category'
+  | 'subcategory'
   | 'brand'
   | 'model'
   | 'serialNumber'
+  | 'assetTag'
+  | 'description'
   | 'currentKioskId'
   | 'currentKioskName'
+  | 'department'
+  | 'exactLocation'
+  | 'responsibleName'
+  | 'inUse'
+  | 'possessionStatus'
   | 'status'
   | 'imageUrl'
   | 'notes'
@@ -72,11 +86,19 @@ async function getAssetByCode(code: string): Promise<PublicAsset | null> {
     code: data.code,
     name: data.name,
     category: data.category,
+    subcategory: data.subcategory,
     brand: data.brand,
     model: data.model,
     serialNumber: data.serialNumber,
+    assetTag: data.assetTag,
+    description: data.description,
     currentKioskId: data.currentKioskId,
     currentKioskName: data.currentKioskName,
+    department: data.department,
+    exactLocation: data.exactLocation,
+    responsibleName: data.responsibleName,
+    inUse: data.inUse,
+    possessionStatus: data.possessionStatus,
     status: data.status,
     imageUrl: data.imageUrl,
     notes: data.notes,
@@ -120,6 +142,9 @@ export default async function PublicAssetPage({ params }: { params: Promise<{ co
               <div className="rounded-md border p-3">
                 <div className="flex items-center gap-2 text-sm text-slate-500"><MapPin className="h-4 w-4" />Unidade atual</div>
                 <p className="mt-1 font-semibold">{asset.currentKioskName || asset.currentKioskId || '-'}</p>
+                {asset.department || asset.exactLocation ? (
+                  <p className="mt-1 text-xs text-slate-500">{[asset.department, asset.exactLocation].filter(Boolean).join(' · ')}</p>
+                ) : null}
               </div>
               <div className="rounded-md border p-3">
                 <div className="flex items-center gap-2 text-sm text-slate-500"><Tag className="h-4 w-4" />Categoria</div>
@@ -139,17 +164,21 @@ export default async function PublicAssetPage({ params }: { params: Promise<{ co
             <Info label="Marca" value={asset.brand || '-'} />
             <Info label="Modelo" value={asset.model || '-'} />
             <Info label="Número de série" value={asset.serialNumber || '-'} mono />
+            <Info label="Etiqueta física" value={asset.assetTag || '-'} mono />
+            <Info label="Responsável" value={asset.responsibleName || '-'} />
+            <Info label="Em uso" value={asset.inUse === false ? 'Não' : 'Sim'} />
             <Info label="Última atualização" value={formatDateTime(asset.updatedAt)} icon={<CalendarClock className="h-4 w-4" />} />
           </CardContent>
         </Card>
 
-        {asset.notes ? (
+        {asset.description || asset.notes ? (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Observações</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{asset.notes}</p>
+              {asset.description ? <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{asset.description}</p> : null}
+              {asset.notes ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{asset.notes}</p> : null}
             </CardContent>
           </Card>
         ) : null}

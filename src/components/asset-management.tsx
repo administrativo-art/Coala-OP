@@ -32,28 +32,72 @@ import { cn } from '@/lib/utils';
 const assetSchema = z.object({
   name: z.string().min(2, 'Informe o nome.'),
   category: z.string().optional(),
+  subcategory: z.string().optional(),
   brand: z.string().optional(),
   model: z.string().optional(),
   serialNumber: z.string().optional(),
+  assetTag: z.string().optional(),
+  description: z.string().optional(),
   imageUrl: z.string().optional(),
   currentKioskId: z.string().min(1, 'Selecione a unidade.'),
+  department: z.string().optional(),
+  exactLocation: z.string().optional(),
+  responsibleName: z.string().optional(),
+  inUse: z.boolean().optional(),
+  possessionStatus: z.string().optional(),
   purchaseDate: z.string().optional(),
   purchaseValue: z.coerce.number().optional(),
+  supplierName: z.string().optional(),
+  invoiceNumber: z.string().optional(),
+  paymentMethod: z.string().optional(),
+  costCenter: z.string().optional(),
+  accountingAccount: z.string().optional(),
+  documentUrl: z.string().optional(),
+  usefulLifeYears: z.coerce.number().optional(),
+  residualValue: z.coerce.number().optional(),
+  depreciationMethod: z.string().optional(),
+  accumulatedDepreciation: z.coerce.number().optional(),
+  bookValue: z.coerce.number().optional(),
+  marketValue: z.coerce.number().optional(),
+  conservationState: z.string().optional(),
+  operationalCondition: z.string().optional(),
+  conditionNotes: z.string().optional(),
+  lastInspectionDate: z.string().optional(),
+  inspectedBy: z.string().optional(),
+  nextInspectionDate: z.string().optional(),
+  hasWarranty: z.boolean().optional(),
+  warrantyEndsAt: z.string().optional(),
+  serviceCompany: z.string().optional(),
+  serviceContact: z.string().optional(),
+  maintenanceFrequency: z.string().optional(),
+  lastMaintenanceDate: z.string().optional(),
+  nextMaintenanceDate: z.string().optional(),
+  maintenanceCostTotal: z.coerce.number().optional(),
+  retiredAt: z.string().optional(),
+  retirementReason: z.string().optional(),
+  saleValue: z.coerce.number().optional(),
+  buyerOrDestination: z.string().optional(),
+  retirementAuthorizedBy: z.string().optional(),
+  retirementDocumentUrl: z.string().optional(),
   notes: z.string().optional(),
 });
 
 type AssetFormValues = z.infer<typeof assetSchema>;
 
 const assetEditSchema = assetSchema.extend({
-  status: z.enum(['ativo', 'em_manutencao', 'fora_de_uso', 'baixado']),
+  status: z.enum(['ativo', 'em_manutencao', 'fora_de_uso', 'extraviado', 'vendido', 'descartado', 'baixado']),
 });
 
 type AssetEditFormValues = z.infer<typeof assetEditSchema>;
+type AssetStep = 'identification' | 'location' | 'acquisition' | 'condition' | 'history';
 
 const STATUS_LABEL: Record<AssetStatus, string> = {
   ativo: 'Ativo',
   em_manutencao: 'Em manutenção',
   fora_de_uso: 'Fora de uso',
+  extraviado: 'Extraviado',
+  vendido: 'Vendido',
+  descartado: 'Descartado',
   baixado: 'Baixado',
 };
 
@@ -61,6 +105,9 @@ const STATUS_STYLE: Record<AssetStatus, string> = {
   ativo: 'bg-emerald-500 text-white hover:bg-emerald-500',
   em_manutencao: 'bg-amber-500 text-white hover:bg-amber-500',
   fora_de_uso: 'bg-rose-500 text-white hover:bg-rose-500',
+  extraviado: 'bg-red-600 text-white hover:bg-red-600',
+  vendido: 'bg-blue-600 text-white hover:bg-blue-600',
+  descartado: 'bg-zinc-600 text-white hover:bg-zinc-600',
   baixado: 'bg-slate-500 text-white hover:bg-slate-500',
 };
 
@@ -72,6 +119,14 @@ const MOVEMENT_LABEL: Record<AssetMovement['type'], string> = {
   BAIXA: 'Baixa',
   ETIQUETA_REIMPRESSA: 'Etiqueta reimpressa',
 };
+
+const ASSET_STEPS: { id: AssetStep; label: string }[] = [
+  { id: 'identification', label: '1. Identificação' },
+  { id: 'location', label: '2. Localização' },
+  { id: 'acquisition', label: '3. Aquisição' },
+  { id: 'condition', label: '4. Estado' },
+  { id: 'history', label: '5. Histórico' },
+];
 
 function assetQrPayload(asset: Asset) {
   if (typeof window === 'undefined') return asset.code;
@@ -261,18 +316,47 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loadingMovements, setLoadingMovements] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [assetStep, setAssetStep] = useState<AssetStep>('identification');
   const form = useForm<AssetEditFormValues>({
     resolver: zodResolver(assetEditSchema),
     defaultValues: {
       name: '',
       category: '',
+      subcategory: '',
       brand: '',
       model: '',
       serialNumber: '',
+      assetTag: '',
+      description: '',
       imageUrl: '',
       currentKioskId: '',
+      department: '',
+      exactLocation: '',
+      responsibleName: '',
+      inUse: true,
+      possessionStatus: '',
       purchaseDate: '',
       purchaseValue: undefined,
+      supplierName: '',
+      invoiceNumber: '',
+      paymentMethod: '',
+      costCenter: '',
+      accountingAccount: '',
+      documentUrl: '',
+      conservationState: '',
+      operationalCondition: '',
+      conditionNotes: '',
+      lastInspectionDate: '',
+      inspectedBy: '',
+      nextInspectionDate: '',
+      hasWarranty: false,
+      warrantyEndsAt: '',
+      serviceCompany: '',
+      serviceContact: '',
+      maintenanceFrequency: '',
+      lastMaintenanceDate: '',
+      nextMaintenanceDate: '',
+      maintenanceCostTotal: undefined,
       notes: '',
       status: 'ativo',
     },
@@ -284,13 +368,41 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     form.reset({
       name: asset.name ?? '',
       category: asset.category ?? '',
+      subcategory: asset.subcategory ?? '',
       brand: asset.brand ?? '',
       model: asset.model ?? '',
       serialNumber: asset.serialNumber ?? '',
+      assetTag: asset.assetTag ?? '',
+      description: asset.description ?? '',
       imageUrl: asset.imageUrl ?? '',
       currentKioskId: asset.currentKioskId ?? '',
+      department: asset.department ?? '',
+      exactLocation: asset.exactLocation ?? '',
+      responsibleName: asset.responsibleName ?? '',
+      inUse: asset.inUse ?? true,
+      possessionStatus: asset.possessionStatus ?? '',
       purchaseDate: asset.purchaseDate ?? '',
       purchaseValue: asset.purchaseValue,
+      supplierName: asset.supplierName ?? '',
+      invoiceNumber: asset.invoiceNumber ?? '',
+      paymentMethod: asset.paymentMethod ?? '',
+      costCenter: asset.costCenter ?? '',
+      accountingAccount: asset.accountingAccount ?? '',
+      documentUrl: asset.documentUrl ?? '',
+      conservationState: asset.conservationState ?? '',
+      operationalCondition: asset.operationalCondition ?? '',
+      conditionNotes: asset.conditionNotes ?? '',
+      lastInspectionDate: asset.lastInspectionDate ?? '',
+      inspectedBy: asset.inspectedBy ?? '',
+      nextInspectionDate: asset.nextInspectionDate ?? '',
+      hasWarranty: asset.hasWarranty ?? false,
+      warrantyEndsAt: asset.warrantyEndsAt ?? '',
+      serviceCompany: asset.serviceCompany ?? '',
+      serviceContact: asset.serviceContact ?? '',
+      maintenanceFrequency: asset.maintenanceFrequency ?? '',
+      lastMaintenanceDate: asset.lastMaintenanceDate ?? '',
+      nextMaintenanceDate: asset.nextMaintenanceDate ?? '',
+      maintenanceCostTotal: asset.maintenanceCostTotal,
       notes: asset.notes ?? '',
       status: asset.status,
     });
@@ -299,6 +411,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
       .catch(() => setQrUrl(''));
     setMovements([]);
     setTargetKioskId('');
+    setAssetStep('identification');
   }, [asset, form]);
 
   useEffect(() => {
@@ -383,13 +496,41 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
       await updateAsset(asset.id, {
         name: values.name,
         category: values.category || undefined,
+        subcategory: values.subcategory || undefined,
         brand: values.brand || undefined,
         model: values.model || undefined,
         serialNumber: values.serialNumber || undefined,
+        assetTag: values.assetTag || undefined,
+        description: values.description || undefined,
         currentKioskId: asset.currentKioskId,
         currentKioskName: asset.currentKioskName || kiosk?.name,
+        department: values.department || undefined,
+        exactLocation: values.exactLocation || undefined,
+        responsibleName: values.responsibleName || undefined,
+        inUse: values.inUse,
+        possessionStatus: values.possessionStatus || undefined,
         purchaseDate: values.purchaseDate || undefined,
         purchaseValue: Number.isFinite(Number(values.purchaseValue)) ? Number(values.purchaseValue) : undefined,
+        supplierName: values.supplierName || undefined,
+        invoiceNumber: values.invoiceNumber || undefined,
+        paymentMethod: values.paymentMethod || undefined,
+        costCenter: values.costCenter || undefined,
+        accountingAccount: values.accountingAccount || undefined,
+        documentUrl: values.documentUrl || undefined,
+        conservationState: values.conservationState || undefined,
+        operationalCondition: values.operationalCondition || undefined,
+        conditionNotes: values.conditionNotes || undefined,
+        lastInspectionDate: values.lastInspectionDate || undefined,
+        inspectedBy: values.inspectedBy || undefined,
+        nextInspectionDate: values.nextInspectionDate || undefined,
+        hasWarranty: values.hasWarranty,
+        warrantyEndsAt: values.warrantyEndsAt || undefined,
+        serviceCompany: values.serviceCompany || undefined,
+        serviceContact: values.serviceContact || undefined,
+        maintenanceFrequency: values.maintenanceFrequency || undefined,
+        lastMaintenanceDate: values.lastMaintenanceDate || undefined,
+        nextMaintenanceDate: values.nextMaintenanceDate || undefined,
+        maintenanceCostTotal: Number.isFinite(Number(values.maintenanceCostTotal)) ? Number(values.maintenanceCostTotal) : undefined,
         imageUrl: values.imageUrl || undefined,
         notes: values.notes || undefined,
       });
@@ -411,17 +552,54 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
   return (
     <Dialog open={!!asset} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-6xl overflow-hidden p-0">
         {asset && (
           <>
-            <DialogHeader>
+            <DialogHeader className="border-b px-6 py-5">
               <DialogTitle>{asset.code} · {asset.name}</DialogTitle>
               <DialogDescription>{asset.currentKioskName || asset.currentKioskId} · {STATUS_LABEL[asset.status]}</DialogDescription>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleSave)} className="grid gap-5 md:grid-cols-[1fr_260px]">
-                <div className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
-                  <div className="grid gap-4 sm:grid-cols-[220px_1fr]">
+              <form onSubmit={form.handleSubmit(handleSave)} className="grid min-h-0 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="max-h-[calc(92vh-112px)] min-w-0 space-y-4 overflow-y-auto px-6 py-5">
+                  <div className="flex flex-wrap gap-2 rounded-md border bg-card p-2">
+                    {ASSET_STEPS.map((step) => (
+                      <Button
+                        key={step.id}
+                        type="button"
+                        variant={assetStep === step.id ? 'default' : 'ghost'}
+                        size="sm"
+                        className="h-8"
+                        onClick={() => setAssetStep(step.id)}
+                      >
+                        {step.label}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {assetStep !== 'history' ? (
+                    <>
+                    <FormField control={form.control} name="status" render={({ field }) => (
+                    <FormItem className={cn('rounded-md border bg-muted/30 p-3', assetStep !== 'identification' && 'hidden')}>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <FormLabel>Status do patrimônio</FormLabel>
+                          <p className="mt-1 text-xs text-muted-foreground">Altere aqui a situação operacional exibida no QR e na listagem.</p>
+                        </div>
+                        <Select value={field.value} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
+                          <FormControl><SelectTrigger className="w-full sm:w-56"><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {(Object.keys(STATUS_LABEL) as AssetStatus[]).map((status) => (
+                              <SelectItem key={status} value={status}>{STATUS_LABEL[status]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                    )} />
+
+                  <div className={cn('grid gap-4 sm:grid-cols-[220px_1fr]', assetStep !== 'identification' && 'hidden')}>
                     <div className="space-y-3">
                       <div className="flex h-44 items-center justify-center overflow-hidden rounded-md border bg-muted">
                         {imageUrl ? (
@@ -468,21 +646,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                       <FormField control={form.control} name="name" render={({ field }) => (
                         <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} disabled={!permissions.assets?.edit} /></FormControl><FormMessage /></FormItem>
                       )} />
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <FormField control={form.control} name="status" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Status</FormLabel>
-                            <Select value={field.value} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
-                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                {(Object.keys(STATUS_LABEL) as AssetStatus[]).map((status) => (
-                                  <SelectItem key={status} value={status}>{STATUS_LABEL[status]}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
+                      <div className="grid grid-cols-1 gap-3">
                         <FormField control={form.control} name="category" render={({ field }) => (
                           <FormItem>
                             <FormLabel>Categoria</FormLabel>
@@ -504,7 +668,37 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className={cn('rounded-md border bg-card p-4', assetStep !== 'identification' && 'hidden')}>
+                    <p className="mb-3 text-sm font-semibold">Identificação</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <FormField control={form.control} name="subcategory" render={({ field }) => (
+                        <FormItem><FormLabel>Subcategoria</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="assetTag" render={({ field }) => (
+                        <FormItem><FormLabel>Etiqueta física</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="possessionStatus" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Situação de posse</FormLabel>
+                          <Select value={field.value || ''} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="Próprio">Próprio</SelectItem>
+                              <SelectItem value="Alugado">Alugado</SelectItem>
+                              <SelectItem value="Comodato">Comodato</SelectItem>
+                              <SelectItem value="Emprestado">Emprestado</SelectItem>
+                              <SelectItem value="Consignado">Consignado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )} />
+                    </div>
+                    <FormField control={form.control} name="description" render={({ field }) => (
+                      <FormItem className="mt-3"><FormLabel>Descrição detalhada</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                    )} />
+                  </div>
+
+                  <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-3', assetStep !== 'identification' && 'hidden')}>
                     <FormField control={form.control} name="brand" render={({ field }) => (
                       <FormItem><FormLabel>Marca</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
                     )} />
@@ -516,7 +710,58 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                     )} />
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className={cn('rounded-md border bg-card p-4', assetStep !== 'location' && 'hidden')}>
+                    <p className="mb-3 text-sm font-semibold">Localização e responsável</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <FormField control={form.control} name="department" render={({ field }) => (
+                        <FormItem><FormLabel>Setor / área</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="exactLocation" render={({ field }) => (
+                        <FormItem><FormLabel>Local exato</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="responsibleName" render={({ field }) => (
+                        <FormItem><FormLabel>Responsável</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="inUse" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Está em uso?</FormLabel>
+                          <Select value={field.value ? 'true' : 'false'} onValueChange={(value) => field.onChange(value === 'true')} disabled={!permissions.assets?.edit}>
+                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="true">Sim</SelectItem>
+                              <SelectItem value="false">Não</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )} />
+                    </div>
+                  </div>
+
+                  <div className={cn('rounded-md border bg-card p-4', assetStep !== 'acquisition' && 'hidden')}>
+                    <p className="mb-3 text-sm font-semibold">Aquisição</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <FormField control={form.control} name="supplierName" render={({ field }) => (
+                        <FormItem><FormLabel>Fornecedor</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="invoiceNumber" render={({ field }) => (
+                        <FormItem><FormLabel>Nota fiscal</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="paymentMethod" render={({ field }) => (
+                        <FormItem><FormLabel>Forma de pagamento</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="costCenter" render={({ field }) => (
+                        <FormItem><FormLabel>Centro de custo</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="accountingAccount" render={({ field }) => (
+                        <FormItem><FormLabel>Conta contábil</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="documentUrl" render={({ field }) => (
+                        <FormItem><FormLabel>Documento anexado</FormLabel><FormControl><Input placeholder="https://..." {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                    </div>
+                  </div>
+
+                  <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2', assetStep !== 'acquisition' && 'hidden')}>
                     <FormField control={form.control} name="purchaseDate" render={({ field }) => (
                       <FormItem><FormLabel>Data da compra</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
                     )} />
@@ -525,8 +770,44 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                     )} />
                   </div>
 
+                  <div className={cn('rounded-md border bg-card p-4', assetStep !== 'condition' && 'hidden')}>
+                    <p className="mb-3 text-sm font-semibold">Estado, garantia e manutenção</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <FormField control={form.control} name="conservationState" render={({ field }) => (
+                        <FormItem><FormLabel>Estado atual</FormLabel><FormControl><Input placeholder="Novo, bom, regular..." {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="operationalCondition" render={({ field }) => (
+                        <FormItem><FormLabel>Condição operacional</FormLabel><FormControl><Input placeholder="Funcionando..." {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="nextInspectionDate" render={({ field }) => (
+                        <FormItem><FormLabel>Próxima conferência</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="lastInspectionDate" render={({ field }) => (
+                        <FormItem><FormLabel>Última conferência</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="inspectedBy" render={({ field }) => (
+                        <FormItem><FormLabel>Conferido por</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="warrantyEndsAt" render={({ field }) => (
+                        <FormItem><FormLabel>Fim da garantia</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="serviceCompany" render={({ field }) => (
+                        <FormItem><FormLabel>Assistência técnica</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="serviceContact" render={({ field }) => (
+                        <FormItem><FormLabel>Contato assistência</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                      <FormField control={form.control} name="nextMaintenanceDate" render={({ field }) => (
+                        <FormItem><FormLabel>Próxima manutenção</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      )} />
+                    </div>
+                    <FormField control={form.control} name="conditionNotes" render={({ field }) => (
+                      <FormItem className="mt-3"><FormLabel>Observações sobre o estado</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                    )} />
+                  </div>
+
                   <FormField control={form.control} name="imageUrl" render={({ field }) => (
-                    <FormItem>
+                    <FormItem className={cn(assetStep !== 'identification' && 'hidden')}>
                       <FormLabel>URL da foto</FormLabel>
                       <FormControl><Input placeholder="https://..." {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl>
                       <FormMessage />
@@ -534,8 +815,10 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   )} />
 
                   <FormField control={form.control} name="notes" render={({ field }) => (
-                    <FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                    <FormItem className={cn(assetStep !== 'condition' && 'hidden')}><FormLabel>Observações gerais</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
                   )} />
+                  </>
+                  ) : null}
 
                   <div className="flex flex-wrap gap-2 border-t pt-4">
                     <Button type="submit" disabled={!permissions.assets?.edit || saving || uploadingImage}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
@@ -543,9 +826,11 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                     <Button type="button" variant="ghost" size="sm" onClick={() => void loadMovements()} disabled={!permissions.assets?.viewHistory}><History className="mr-2 h-4 w-4" />Histórico</Button>
                   </div>
 
+                  {assetStep === 'location' ? (
+                    <>
                   <div className="rounded-md border p-3">
                     <p className="mb-2 text-sm font-medium">Transferência de unidade</p>
-                    <div className="flex gap-2">
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                       <Select value={targetKioskId} onValueChange={setTargetKioskId}>
                         <SelectTrigger><SelectValue placeholder="Transferir para..." /></SelectTrigger>
                         <SelectContent>{kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
@@ -553,7 +838,11 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                       <Button type="button" onClick={handleTransfer} disabled={!targetKioskId || !permissions.assets?.transfer}><Truck className="mr-2 h-4 w-4" />Transferir</Button>
                     </div>
                   </div>
+                    </>
+                  ) : null}
 
+                  {assetStep === 'history' && permissions.assets?.viewHistory ? (
+                    <>
                   {permissions.assets?.viewHistory ? (
                     <div className="rounded-md border">
                       <div className="flex items-center justify-between border-b px-3 py-2">
@@ -593,8 +882,10 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                       </ScrollArea>
                     </div>
                   ) : null}
+                    </>
+                  ) : null}
                 </div>
-                <div className="rounded-lg border p-4 text-center">
+                <div className="max-h-[calc(92vh-112px)] overflow-y-auto border-t p-5 text-center lg:border-l lg:border-t-0">
                   {qrUrl ? <img src={qrUrl} alt={`QR ${asset.code}`} className="mx-auto" /> : <QrCode className="mx-auto h-24 w-24 text-muted-foreground" />}
                   <p className="mt-2 font-mono text-lg font-semibold">{asset.code}</p>
                   <p className="text-xs text-muted-foreground">{form.watch('name')}</p>

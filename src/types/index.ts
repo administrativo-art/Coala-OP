@@ -155,7 +155,14 @@ export type MovementRecord = {
   deliveredAt?: string;
 };
 
-export type AssetStatus = 'ativo' | 'em_manutencao' | 'fora_de_uso' | 'baixado';
+export type AssetStatus =
+  | 'ativo'
+  | 'em_manutencao'
+  | 'fora_de_uso'
+  | 'extraviado'
+  | 'vendido'
+  | 'descartado'
+  | 'baixado';
 
 export type AssetMovementType =
   | 'CRIACAO'
@@ -170,16 +177,55 @@ export type Asset = {
   code: string;
   name: string;
   category?: string;
+  subcategory?: string;
   brand?: string;
   model?: string;
   serialNumber?: string;
+  assetTag?: string;
+  description?: string;
   currentKioskId: string;
   currentKioskName?: string;
+  department?: string;
+  exactLocation?: string;
+  responsibleName?: string;
+  inUse?: boolean;
+  possessionStatus?: string;
   status: AssetStatus;
   purchaseDate?: string;
   purchaseValue?: number;
   supplierId?: string;
   supplierName?: string;
+  invoiceNumber?: string;
+  paymentMethod?: string;
+  costCenter?: string;
+  accountingAccount?: string;
+  documentUrl?: string;
+  usefulLifeYears?: number;
+  residualValue?: number;
+  depreciationMethod?: string;
+  accumulatedDepreciation?: number;
+  bookValue?: number;
+  marketValue?: number;
+  conservationState?: string;
+  operationalCondition?: string;
+  conditionNotes?: string;
+  lastInspectionDate?: string;
+  inspectedBy?: string;
+  nextInspectionDate?: string;
+  hasWarranty?: boolean;
+  warrantyEndsAt?: string;
+  serviceCompany?: string;
+  serviceContact?: string;
+  maintenanceFrequency?: string;
+  lastMaintenanceDate?: string;
+  nextMaintenanceDate?: string;
+  maintenanceCostTotal?: number;
+  retiredAt?: string;
+  retirementReason?: string;
+  saleValue?: number;
+  buyerOrDestination?: string;
+  retirementAuthorizedBy?: string;
+  retirementDocumentUrl?: string;
   imageUrl?: string;
   notes?: string;
   sourceType?: 'manual' | 'purchase_receipt';
