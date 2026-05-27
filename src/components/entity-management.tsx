@@ -2,7 +2,7 @@
 
 "use client"
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -63,27 +63,67 @@ const entitySchema = z.object({
 
 type EntityFormValues = z.infer<typeof entitySchema>;
 
+const emptyEntityFormValues: EntityFormValues = {
+    type: 'pessoa_fisica',
+    name: '',
+    fantasyName: '',
+    document: '',
+    address: { zipCode: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '' },
+    contact: { phone: '', email: '' },
+    responsible: '',
+};
+
+function getEntityFormValues(entity: Entity | null): EntityFormValues {
+    if (!entity) return emptyEntityFormValues;
+
+    const legacyEntity = entity as Entity & {
+        cpf?: string;
+        cnpj?: string;
+        zipCode?: string;
+        street?: string;
+        number?: string;
+        complement?: string;
+        neighborhood?: string;
+        city?: string;
+        state?: string;
+        phone?: string;
+        email?: string;
+    };
+
+    return {
+        type: entity.type ?? 'pessoa_fisica',
+        name: entity.name ?? '',
+        fantasyName: entity.fantasyName ?? '',
+        document: entity.document ?? legacyEntity.cnpj ?? legacyEntity.cpf ?? '',
+        address: {
+            zipCode: entity.address?.zipCode ?? legacyEntity.zipCode ?? '',
+            street: entity.address?.street ?? legacyEntity.street ?? '',
+            number: entity.address?.number ?? legacyEntity.number ?? '',
+            complement: entity.address?.complement ?? legacyEntity.complement ?? '',
+            neighborhood: entity.address?.neighborhood ?? legacyEntity.neighborhood ?? '',
+            city: entity.address?.city ?? legacyEntity.city ?? '',
+            state: entity.address?.state ?? legacyEntity.state ?? '',
+        },
+        contact: {
+            phone: entity.contact?.phone ?? legacyEntity.phone ?? '',
+            email: entity.contact?.email ?? legacyEntity.email ?? '',
+        },
+        responsible: entity.responsible ?? '',
+    };
+}
+
 function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolean, onOpenChange: (open: boolean) => void, entityToEdit: Entity | null }) {
     const { addEntity, updateEntity } = useEntities();
 
     const form = useForm<EntityFormValues>({
         resolver: zodResolver(entitySchema),
-        defaultValues: entityToEdit ? {
-            ...entityToEdit,
-            contact: {
-                phone: entityToEdit.contact?.phone || '',
-                email: entityToEdit.contact?.email || '',
-            },
-        } : {
-            type: 'pessoa_fisica',
-            name: '',
-            fantasyName: '',
-            document: '',
-            address: { zipCode: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '' },
-            contact: { phone: '', email: '' },
-            responsible: '',
-        }
+        defaultValues: emptyEntityFormValues,
     });
+
+    useEffect(() => {
+        if (!open) return;
+        form.reset(getEntityFormValues(entityToEdit));
+    }, [entityToEdit, form, open]);
     
     const entityType = form.watch('type');
 
@@ -221,7 +261,7 @@ export function EntityManagement() {
       const typeMatch = typeFilter === 'all' || entity.type === typeFilter;
       const searchMatch = entity.name.toLowerCase().includes(search) ||
                           (entity.fantasyName && entity.fantasyName.toLowerCase().includes(search)) ||
-                          entity.document.includes(search);
+                          (entity.document ?? '').includes(search);
       
       return typeMatch && searchMatch;
     });

@@ -154,8 +154,12 @@ export function AccountPlanTreeSelect({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
-        <div className="max-h-72 overflow-y-auto space-y-0.5">
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] max-h-[var(--radix-popover-content-available-height)] overflow-hidden p-2"
+        align="start"
+        sideOffset={4}
+      >
+        <div className="max-h-[min(18rem,var(--radix-popover-content-available-height))] space-y-0.5 overflow-y-auto overscroll-contain pr-1">
           {allowNone && (
             <button
               type="button"
