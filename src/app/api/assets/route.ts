@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
   if (!name || !currentKioskId) return jsonError('Nome e unidade atual são obrigatórios.');
 
   const now = new Date().toISOString();
-  const code = body.code ? String(body.code).trim() : await nextAssetCode();
+  const code = await nextAssetCode();
   const assetRef = dbAdmin.collection('assets').doc();
   const asset: Asset & { workspaceId: string } = {
     id: assetRef.id,

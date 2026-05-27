@@ -1,16 +1,19 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Archive, Camera, Grid2X2, History, ImageIcon, List, PackageCheck, Plus, QrCode, Search, Tags, Truck, Upload, Wrench } from 'lucide-react';
+import { Camera, Grid2X2, History, ImageIcon, List, PackageCheck, Plus, QrCode, Search, Tags, Truck, Upload } from 'lucide-react';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { useSearchParams } from 'next/navigation';
 
 import { useAssets } from '@/hooks/use-assets';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { storage } from '@/lib/firebase';
 import type { Asset, AssetMovement, AssetStatus } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +44,12 @@ const assetSchema = z.object({
 
 type AssetFormValues = z.infer<typeof assetSchema>;
 
+const assetEditSchema = assetSchema.extend({
+  status: z.enum(['ativo', 'em_manutencao', 'fora_de_uso', 'baixado']),
+});
+
+type AssetEditFormValues = z.infer<typeof assetEditSchema>;
+
 const STATUS_LABEL: Record<AssetStatus, string> = {
   ativo: 'Ativo',
   em_manutencao: 'Em manutenção',
@@ -55,9 +64,25 @@ const STATUS_STYLE: Record<AssetStatus, string> = {
   baixado: 'bg-slate-500 text-white hover:bg-slate-500',
 };
 
+const MOVEMENT_LABEL: Record<AssetMovement['type'], string> = {
+  CRIACAO: 'Criação',
+  EDICAO: 'Edição',
+  TRANSFERENCIA: 'Transferência',
+  ALTERACAO_STATUS: 'Alteração de status',
+  BAIXA: 'Baixa',
+  ETIQUETA_REIMPRESSA: 'Etiqueta reimpressa',
+};
+
 function assetQrPayload(asset: Asset) {
   if (typeof window === 'undefined') return asset.code;
-  return `${window.location.origin}/dashboard/assets?search=${encodeURIComponent(asset.code)}`;
+  return `${window.location.origin}/patrimonio/${encodeURIComponent(asset.code)}`;
+}
+
+async function uploadAssetImage(file: File, assetId: string) {
+  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const storageRef = ref(storage, `assets/${assetId}/${Date.now()}.${extension}`);
+  const snapshot = await uploadBytes(storageRef, file);
+  return getDownloadURL(snapshot.ref);
 }
 
 function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -227,11 +252,73 @@ function AssetCategoryDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpenChange: (open: boolean) => void }) {
   const { kiosks } = useKiosks();
   const { permissions } = useAuth();
-  const { transferAsset, updateAssetStatus, recordLabelPrint, fetchMovements } = useAssets();
+  const { categories, transferAsset, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements } = useAssets();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [qrUrl, setQrUrl] = useState('');
   const [movements, setMovements] = useState<AssetMovement[]>([]);
   const [targetKioskId, setTargetKioskId] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [loadingMovements, setLoadingMovements] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const form = useForm<AssetEditFormValues>({
+    resolver: zodResolver(assetEditSchema),
+    defaultValues: {
+      name: '',
+      category: '',
+      brand: '',
+      model: '',
+      serialNumber: '',
+      imageUrl: '',
+      currentKioskId: '',
+      purchaseDate: '',
+      purchaseValue: undefined,
+      notes: '',
+      status: 'ativo',
+    },
+  });
+  const imageUrl = form.watch('imageUrl');
+
+  useEffect(() => {
+    if (!asset) return;
+    form.reset({
+      name: asset.name ?? '',
+      category: asset.category ?? '',
+      brand: asset.brand ?? '',
+      model: asset.model ?? '',
+      serialNumber: asset.serialNumber ?? '',
+      imageUrl: asset.imageUrl ?? '',
+      currentKioskId: asset.currentKioskId ?? '',
+      purchaseDate: asset.purchaseDate ?? '',
+      purchaseValue: asset.purchaseValue,
+      notes: asset.notes ?? '',
+      status: asset.status,
+    });
+    QRCode.toDataURL(assetQrPayload(asset), { width: 220, margin: 1 })
+      .then(setQrUrl)
+      .catch(() => setQrUrl(''));
+    setMovements([]);
+    setTargetKioskId('');
+  }, [asset, form]);
+
+  useEffect(() => {
+    if (!asset || !permissions.assets?.viewHistory) return;
+    let cancelled = false;
+    setLoadingMovements(true);
+    fetchMovements(asset.id)
+      .then((data) => {
+        if (!cancelled) setMovements(data);
+      })
+      .catch((error) => {
+        console.error('Error fetching asset movements:', error);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMovements(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [asset, fetchMovements, permissions.assets?.viewHistory]);
 
   async function loadQr() {
     if (!asset) return;
@@ -240,7 +327,12 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
   async function loadMovements() {
     if (!asset || !permissions.assets?.viewHistory) return;
-    setMovements(await fetchMovements(asset.id));
+    setLoadingMovements(true);
+    try {
+      setMovements(await fetchMovements(asset.id));
+    } finally {
+      setLoadingMovements(false);
+    }
   }
 
   async function handlePrintLabel() {
@@ -264,55 +356,257 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     toast({ title: 'Status atualizado.' });
   }
 
+  async function handleImageFile(file: File | null) {
+    if (!asset || !file) return;
+    setUploadingImage(true);
+    try {
+      const url = await uploadAssetImage(file, asset.id);
+      form.setValue('imageUrl', url, { shouldDirty: true, shouldValidate: true });
+      toast({ title: 'Foto adicionada.' });
+    } catch (error) {
+      toast({
+        title: 'Falha ao enviar foto',
+        description: error instanceof Error ? error.message : 'Erro inesperado.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function handleSave(values: AssetEditFormValues) {
+    if (!asset) return;
+    setSaving(true);
+    try {
+      const kiosk = kiosks.find((k) => k.id === asset.currentKioskId);
+      await updateAsset(asset.id, {
+        name: values.name,
+        category: values.category || undefined,
+        brand: values.brand || undefined,
+        model: values.model || undefined,
+        serialNumber: values.serialNumber || undefined,
+        currentKioskId: asset.currentKioskId,
+        currentKioskName: asset.currentKioskName || kiosk?.name,
+        purchaseDate: values.purchaseDate || undefined,
+        purchaseValue: Number.isFinite(Number(values.purchaseValue)) ? Number(values.purchaseValue) : undefined,
+        imageUrl: values.imageUrl || undefined,
+        notes: values.notes || undefined,
+      });
+      if (values.status !== asset.status) {
+        await updateAssetStatus(asset.id, values.status);
+      }
+      toast({ title: 'Patrimônio atualizado.' });
+      onOpenChange(false);
+    } catch (error) {
+      toast({
+        title: 'Falha ao salvar patrimônio',
+        description: error instanceof Error ? error.message : 'Erro inesperado.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <Dialog open={!!asset} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-5xl">
         {asset && (
           <>
             <DialogHeader>
               <DialogTitle>{asset.code} · {asset.name}</DialogTitle>
               <DialogDescription>{asset.currentKioskName || asset.currentKioskId} · {STATUS_LABEL[asset.status]}</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-5 md:grid-cols-[1fr_240px]">
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><span className="text-muted-foreground">Categoria</span><p className="font-medium">{asset.category || '-'}</p></div>
-                  <div><span className="text-muted-foreground">Série</span><p className="font-mono text-xs">{asset.serialNumber || '-'}</p></div>
-                  <div><span className="text-muted-foreground">Marca</span><p className="font-medium">{asset.brand || '-'}</p></div>
-                  <div><span className="text-muted-foreground">Modelo</span><p className="font-medium">{asset.model || '-'}</p></div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={handlePrintLabel} disabled={!permissions.assets?.printLabels}><QrCode className="mr-2 h-4 w-4" />Etiqueta</Button>
-                  <Button variant="outline" size="sm" onClick={() => handleStatus('em_manutencao')} disabled={!permissions.assets?.edit}><Wrench className="mr-2 h-4 w-4" />Manutenção</Button>
-                  <Button variant="outline" size="sm" onClick={() => handleStatus('baixado')} disabled={!permissions.assets?.retire}><Archive className="mr-2 h-4 w-4" />Baixar</Button>
-                  <Button variant="ghost" size="sm" onClick={() => void loadMovements()} disabled={!permissions.assets?.viewHistory}><History className="mr-2 h-4 w-4" />Histórico</Button>
-                </div>
-                <div className="flex gap-2">
-                  <Select value={targetKioskId} onValueChange={setTargetKioskId}>
-                    <SelectTrigger><SelectValue placeholder="Transferir para..." /></SelectTrigger>
-                    <SelectContent>{kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                  <Button onClick={handleTransfer} disabled={!targetKioskId || !permissions.assets?.transfer}><Truck className="mr-2 h-4 w-4" />Transferir</Button>
-                </div>
-                {movements.length > 0 && (
-                  <ScrollArea className="h-44 rounded-md border p-3">
-                    <div className="space-y-3 text-sm">
-                      {movements.map((m) => (
-                        <div key={m.id} className="border-b pb-2 last:border-b-0">
-                          <p className="font-medium">{m.type} · {new Date(m.occurredAt).toLocaleString('pt-BR')}</p>
-                          <p className="text-xs text-muted-foreground">{m.username}{m.notes ? ` · ${m.notes}` : ''}</p>
-                        </div>
-                      ))}
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleSave)} className="grid gap-5 md:grid-cols-[1fr_260px]">
+                <div className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
+                  <div className="grid gap-4 sm:grid-cols-[220px_1fr]">
+                    <div className="space-y-3">
+                      <div className="flex h-44 items-center justify-center overflow-hidden rounded-md border bg-muted">
+                        {imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={imageUrl} alt="Foto do patrimônio" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                            <ImageIcon className="h-8 w-8" />
+                            <span className="text-xs">Sem foto</span>
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => void handleImageFile(event.target.files?.[0] ?? null)}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="flex-1"
+                          disabled={!permissions.assets?.edit || uploadingImage}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          {uploadingImage ? 'Enviando...' : 'Foto'}
+                        </Button>
+                        {imageUrl ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={!permissions.assets?.edit}
+                            onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}
+                          >
+                            Remover
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
-                  </ScrollArea>
-                )}
-              </div>
-              <div className="rounded-lg border p-4 text-center">
-                {qrUrl ? <img src={qrUrl} alt={`QR ${asset.code}`} className="mx-auto" /> : <QrCode className="mx-auto h-24 w-24 text-muted-foreground" />}
-                <p className="mt-2 font-mono text-lg font-semibold">{asset.code}</p>
-                <p className="text-xs text-muted-foreground">{asset.name}</p>
-              </div>
-            </div>
+                    <div className="grid gap-3">
+                      <FormField control={form.control} name="name" render={({ field }) => (
+                        <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} disabled={!permissions.assets?.edit} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <FormField control={form.control} name="status" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Status</FormLabel>
+                            <Select value={field.value} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
+                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                {(Object.keys(STATUS_LABEL) as AssetStatus[]).map((status) => (
+                                  <SelectItem key={status} value={status}>{STATUS_LABEL[status]}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="category" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Categoria</FormLabel>
+                            <Select value={field.value || ''} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
+                              <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                {categories.map((category) => (
+                                  <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
+                                ))}
+                                {asset.category && !categories.some((category) => category.name === asset.category) ? (
+                                  <SelectItem value={asset.category}>{asset.category}</SelectItem>
+                                ) : null}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <FormField control={form.control} name="brand" render={({ field }) => (
+                      <FormItem><FormLabel>Marca</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="model" render={({ field }) => (
+                      <FormItem><FormLabel>Modelo</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="serialNumber" render={({ field }) => (
+                      <FormItem><FormLabel>Série</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                    )} />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <FormField control={form.control} name="purchaseDate" render={({ field }) => (
+                      <FormItem><FormLabel>Data da compra</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="purchaseValue" render={({ field }) => (
+                      <FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                    )} />
+                  </div>
+
+                  <FormField control={form.control} name="imageUrl" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>URL da foto</FormLabel>
+                      <FormControl><Input placeholder="https://..." {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="notes" render={({ field }) => (
+                    <FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                  )} />
+
+                  <div className="flex flex-wrap gap-2 border-t pt-4">
+                    <Button type="submit" disabled={!permissions.assets?.edit || saving || uploadingImage}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={handlePrintLabel} disabled={!permissions.assets?.printLabels}><QrCode className="mr-2 h-4 w-4" />Etiqueta</Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => void loadMovements()} disabled={!permissions.assets?.viewHistory}><History className="mr-2 h-4 w-4" />Histórico</Button>
+                  </div>
+
+                  <div className="rounded-md border p-3">
+                    <p className="mb-2 text-sm font-medium">Transferência de unidade</p>
+                    <div className="flex gap-2">
+                      <Select value={targetKioskId} onValueChange={setTargetKioskId}>
+                        <SelectTrigger><SelectValue placeholder="Transferir para..." /></SelectTrigger>
+                        <SelectContent>{kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Button type="button" onClick={handleTransfer} disabled={!targetKioskId || !permissions.assets?.transfer}><Truck className="mr-2 h-4 w-4" />Transferir</Button>
+                    </div>
+                  </div>
+
+                  {permissions.assets?.viewHistory ? (
+                    <div className="rounded-md border">
+                      <div className="flex items-center justify-between border-b px-3 py-2">
+                        <p className="text-sm font-medium">Histórico completo</p>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => void loadMovements()} disabled={loadingMovements}>
+                          <History className="mr-2 h-4 w-4" />
+                          Atualizar
+                        </Button>
+                      </div>
+                      <ScrollArea className="h-60 p-3">
+                        {loadingMovements ? (
+                          <p className="text-sm text-muted-foreground">Carregando histórico...</p>
+                        ) : movements.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Nenhuma movimentação registrada.</p>
+                        ) : (
+                          <div className="space-y-3 text-sm">
+                            {movements.map((m) => (
+                              <div key={m.id} className="border-b pb-3 last:border-b-0">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="font-medium">{MOVEMENT_LABEL[m.type] ?? m.type}</p>
+                                  <span className="text-xs text-muted-foreground">{new Date(m.occurredAt).toLocaleString('pt-BR')}</span>
+                                </div>
+                                <div className="mt-1 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                                  <p>Usuário: {m.username || '-'}</p>
+                                  {m.fromStatus || m.toStatus ? (
+                                    <p>Status: {m.fromStatus ? STATUS_LABEL[m.fromStatus] : '-'} → {m.toStatus ? STATUS_LABEL[m.toStatus] : '-'}</p>
+                                  ) : null}
+                                  {m.fromKioskName || m.toKioskName ? (
+                                    <p className="sm:col-span-2">Unidade: {m.fromKioskName || m.fromKioskId || '-'} → {m.toKioskName || m.toKioskId || '-'}</p>
+                                  ) : null}
+                                  {m.notes ? <p className="sm:col-span-2">Observação: {m.notes}</p> : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="rounded-lg border p-4 text-center">
+                  {qrUrl ? <img src={qrUrl} alt={`QR ${asset.code}`} className="mx-auto" /> : <QrCode className="mx-auto h-24 w-24 text-muted-foreground" />}
+                  <p className="mt-2 font-mono text-lg font-semibold">{asset.code}</p>
+                  <p className="text-xs text-muted-foreground">{form.watch('name')}</p>
+                  <Badge className={cn('mt-3', STATUS_STYLE[form.watch('status')])}>{STATUS_LABEL[form.watch('status')]}</Badge>
+                  <div className="mt-5 space-y-2 text-left text-xs text-muted-foreground">
+                    <p><span className="font-medium text-foreground">Unidade:</span> {asset.currentKioskName || asset.currentKioskId}</p>
+                    <p><span className="font-medium text-foreground">Origem:</span> {asset.sourceType === 'purchase_receipt' ? 'Recebimento de compra' : 'Cadastro manual'}</p>
+                    {asset.supplierName ? <p><span className="font-medium text-foreground">Fornecedor:</span> {asset.supplierName}</p> : null}
+                  </div>
+                </div>
+              </form>
+            </Form>
           </>
         )}
       </DialogContent>
@@ -383,7 +677,8 @@ function AssetCard({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset) => 
 export function AssetManagement() {
   const { assets, loading } = useAssets();
   const { permissions } = useAuth();
-  const [search, setSearch] = useState('');
+  const searchParams = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
   const [showNew, setShowNew] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
@@ -391,6 +686,10 @@ export function AssetManagement() {
   const [categoryFilter, setCategoryFilter] = useState('todas');
   const [unitFilter, setUnitFilter] = useState('todas');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
+
+  useEffect(() => {
+    setSearch(searchParams.get('search') ?? '');
+  }, [searchParams]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
