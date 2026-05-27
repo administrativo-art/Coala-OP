@@ -14,6 +14,8 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { storage } from '@/lib/firebase';
+import { useFinancialCollection } from '@/features/financial/hooks/use-financial-collection';
+import { financialCollection } from '@/features/financial/lib/repositories';
 import type { Asset, AssetMovement, AssetStatus } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -315,7 +317,12 @@ function AssetCategoryDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
 function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpenChange: (open: boolean) => void }) {
   const { kiosks } = useKiosks();
-  const { permissions } = useAuth();
+  const { permissions, activeUsers } = useAuth();
+  const { data: financialAccounts } = useFinancialCollection<any>(financialCollection('accounts'));
+  const dreAccounts = useMemo(
+    () => (financialAccounts || []).filter((a: any) => a.active !== false && a.is_dre_account !== false && !a.isGroup),
+    [financialAccounts]
+  );
   const { categories, transferAsset, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements } = useAssets();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -513,9 +520,8 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
         description: values.description || undefined,
         currentKioskId: asset.currentKioskId,
         currentKioskName: asset.currentKioskName || kiosk?.name,
-        department: values.department || undefined,
-        exactLocation: values.exactLocation || undefined,
-        responsibleName: values.responsibleName || undefined,
+        exactLocation: (values.exactLocation === 'none' ? undefined : values.exactLocation) || undefined,
+        responsibleName: (values.responsibleName === 'none' ? undefined : values.responsibleName) || undefined,
         inUse: values.inUse,
         possessionStatus: values.possessionStatus || undefined,
         purchaseDate: values.purchaseDate || undefined,
@@ -524,8 +530,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
         invoiceNumber: values.invoiceNumber || undefined,
         paymentMethod: values.paymentMethod || undefined,
         costCenter: values.costCenter || undefined,
-        accountingAccount: values.accountingAccount || undefined,
-        documentUrl: values.documentUrl || undefined,
+        accountingAccount: (values.accountingAccount === 'none' ? undefined : values.accountingAccount) || undefined,
         conservationState: values.conservationState || undefined,
         operationalCondition: values.operationalCondition || undefined,
         conditionNotes: values.conditionNotes || undefined,
@@ -726,14 +731,29 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   <div className={cn('rounded-md border bg-card p-4', assetStep !== 'location' && 'hidden')}>
                     <p className="mb-3 text-sm font-semibold">Localização e responsável</p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <FormField control={form.control} name="department" render={({ field }) => (
-                        <FormItem><FormLabel>Setor / área</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
-                      )} />
                       <FormField control={form.control} name="exactLocation" render={({ field }) => (
-                        <FormItem><FormLabel>Local exato</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                        <FormItem>
+                          <FormLabel>Local / Unidade</FormLabel>
+                          <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="none"><span className="text-muted-foreground">Sem local definido</span></SelectItem>
+                              {kiosks.map((k) => <SelectItem key={k.id} value={k.name}>{k.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
                       )} />
                       <FormField control={form.control} name="responsibleName" render={({ field }) => (
-                        <FormItem><FormLabel>Responsável</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                        <FormItem>
+                          <FormLabel>Responsável</FormLabel>
+                          <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="none"><span className="text-muted-foreground">Sem responsável</span></SelectItem>
+                              {activeUsers.map((u) => <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
                       )} />
                       <FormField control={form.control} name="inUse" render={({ field }) => (
                         <FormItem>
@@ -751,35 +771,52 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   </div>
 
                   <div className={cn('rounded-md border bg-card p-4', assetStep !== 'acquisition' && 'hidden')}>
-                    <p className="mb-3 text-sm font-semibold">Aquisição</p>
+                    <div className="mb-3 flex items-center gap-2">
+                      <p className="text-sm font-semibold">Aquisição</p>
+                      {asset?.sourceType === 'purchase_receipt' && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Vinculado à compra · somente leitura</span>
+                      )}
+                    </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <FormField control={form.control} name="supplierName" render={({ field }) => (
-                        <FormItem><FormLabel>Fornecedor</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                        <FormItem><FormLabel>Fornecedor</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'} /></FormControl></FormItem>
                       )} />
                       <FormField control={form.control} name="invoiceNumber" render={({ field }) => (
-                        <FormItem><FormLabel>Nota fiscal</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                        <FormItem><FormLabel>Nota fiscal</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'} /></FormControl></FormItem>
                       )} />
                       <FormField control={form.control} name="paymentMethod" render={({ field }) => (
-                        <FormItem><FormLabel>Forma de pagamento</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                        <FormItem><FormLabel>Forma de pagamento</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'} /></FormControl></FormItem>
                       )} />
                       <FormField control={form.control} name="costCenter" render={({ field }) => (
-                        <FormItem><FormLabel>Centro de custo</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                        <FormItem><FormLabel>Centro de custo</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'} /></FormControl></FormItem>
                       )} />
                       <FormField control={form.control} name="accountingAccount" render={({ field }) => (
-                        <FormItem><FormLabel>Conta contábil</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
-                      )} />
-                      <FormField control={form.control} name="documentUrl" render={({ field }) => (
-                        <FormItem><FormLabel>Documento anexado</FormLabel><FormControl><Input placeholder="https://..." {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                        <FormItem className="sm:col-span-2">
+                          <FormLabel>Conta contábil</FormLabel>
+                          <Select
+                            value={field.value ?? ''}
+                            onValueChange={field.onChange}
+                            disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'}
+                          >
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="none"><span className="text-muted-foreground">Sem conta vinculada</span></SelectItem>
+                              {dreAccounts.map((a: any) => (
+                                <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
                       )} />
                     </div>
                   </div>
 
                   <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2', assetStep !== 'acquisition' && 'hidden')}>
                     <FormField control={form.control} name="purchaseDate" render={({ field }) => (
-                      <FormItem><FormLabel>Data da compra</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Data da compra</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="purchaseValue" render={({ field }) => (
-                      <FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'} /></FormControl></FormItem>
                     )} />
                   </div>
 
