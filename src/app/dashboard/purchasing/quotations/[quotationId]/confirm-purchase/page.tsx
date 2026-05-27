@@ -66,6 +66,14 @@ function getPaymentDateLabel(paymentMethod: PaymentMethod) {
   return paymentMethod === 'card_credit' || paymentMethod === 'card_debit' ? 'Data da compra' : 'Vencimento';
 }
 
+function isCardPayment(paymentMethod: PaymentMethod) {
+  return paymentMethod === 'card_credit' || paymentMethod === 'card_debit';
+}
+
+function getPaymentCardKey(accountId: string, methodId: string) {
+  return `${accountId}::${methodId}`;
+}
+
 const FREIGHT_PAYMENT_MODE_OPTIONS: { value: PurchaseFreightPaymentMode; label: string }[] = [
   { value: 'included_with_goods', label: 'Frete pago junto com a mercadoria' },
   { value: 'separate', label: 'Frete pago em separado' },
@@ -85,7 +93,7 @@ export default function ConfirmPurchasePage() {
   const { baseProducts } = useBaseProducts();
   const { createPurchase } = usePurchaseOrders();
   const { purchasingDefaults } = useCompanySettings();
-  const { accountPlans, flattenedAccountPlans, resultCenters, loading: classificationLoading } = usePurchasingFinancialOptions();
+  const { accountPlans, flattenedAccountPlans, resultCenters, paymentCards, loading: classificationLoading } = usePurchasingFinancialOptions();
   const canView = canViewPurchasing(permissions);
   const canCreate = canCreatePurchase(permissions);
 
@@ -137,6 +145,7 @@ export default function ConfirmPurchasePage() {
 
   const [receiptMode, setReceiptMode] = useState<'immediate_pickup' | 'future_delivery'>('immediate_pickup');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [paymentCardKey, setPaymentCardKey] = useState('');
   const [paymentCondition, setPaymentCondition] = useState<PurchasePaymentCondition>('cash');
   const [installmentsCount, setInstallmentsCount] = useState(2);
   const [paymentDueDate, setPaymentDueDate] = useState(today);
@@ -185,6 +194,10 @@ export default function ConfirmPurchasePage() {
     () => (resultCenters ?? []).find((center) => center.id === resultCenterId) ?? null,
     [resultCenters, resultCenterId],
   );
+  const selectedPaymentCard = useMemo(
+    () => paymentCards.find((card) => getPaymentCardKey(card.accountId, card.methodId) === paymentCardKey) ?? null,
+    [paymentCards, paymentCardKey],
+  );
 
   const itemsSubtotal = useMemo(
     () => eligibleItems.filter((i) => !!i.baseItemId).reduce((s, i) => s + i.totalPrice, 0),
@@ -196,6 +209,7 @@ export default function ConfirmPurchasePage() {
   const canSubmit =
     normalItems.length > 0 &&
     !!paymentDueDate &&
+    (!isCardPayment(paymentMethod) || !!selectedPaymentCard) &&
     !!accountPlanId &&
     !!resultCenterId &&
     (deliveryFee <= 0 || !!freightAccountPlanId);
@@ -210,6 +224,10 @@ export default function ConfirmPurchasePage() {
         quotationId: quotation.id,
         receiptMode,
         paymentMethod,
+        paymentAccountId: isCardPayment(paymentMethod) ? selectedPaymentCard?.accountId ?? null : null,
+        paymentAccountName: isCardPayment(paymentMethod) ? selectedPaymentCard?.accountName ?? null : null,
+        paymentMethodId: isCardPayment(paymentMethod) ? selectedPaymentCard?.methodId ?? null : null,
+        paymentMethodLabel: isCardPayment(paymentMethod) ? selectedPaymentCard?.methodLabel ?? null : null,
         paymentDueDate,
         paymentCondition,
         installmentsCount: paymentCondition === 'installments' ? installmentsCount : undefined,
@@ -487,7 +505,14 @@ export default function ConfirmPurchasePage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Forma de pagamento</Label>
-                <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(v) => {
+                    const next = v as PaymentMethod;
+                    setPaymentMethod(next);
+                    if (!isCardPayment(next)) setPaymentCardKey('');
+                  }}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {PAYMENT_OPTIONS.map((o) => (
@@ -496,6 +521,25 @@ export default function ConfirmPurchasePage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {isCardPayment(paymentMethod) && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Cartão da compra</Label>
+                  <Select value={paymentCardKey} onValueChange={setPaymentCardKey}>
+                    <SelectTrigger className={!paymentCardKey ? 'border-amber-400' : ''}>
+                      <SelectValue placeholder="Selecione o cartão" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {paymentCards.map((card) => (
+                        <SelectItem key={getPaymentCardKey(card.accountId, card.methodId)} value={getPaymentCardKey(card.accountId, card.methodId)}>
+                          {card.methodLabel}{card.lastDigits ? ` final ${card.lastDigits}` : ''} · {card.accountName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!paymentCardKey && <p className="text-xs text-amber-600">Obrigatório para compra no cartão.</p>}
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Condição de pagamento</Label>

@@ -35,6 +35,10 @@ export interface CreatePurchasePayload {
   quotationId?: string;
   receiptMode: PurchaseOrder['receiptMode'];
   paymentMethod: PurchaseOrder['paymentMethod'];
+  paymentAccountId?: string | null;
+  paymentAccountName?: string | null;
+  paymentMethodId?: string | null;
+  paymentMethodLabel?: string | null;
   paymentDueDate: string;
   paymentCondition?: PurchaseOrder['paymentCondition'];
   installmentsCount?: number;
@@ -70,6 +74,10 @@ export interface CreatePurchasePayload {
 
 export type OrderEdits = {
   paymentMethod?: PurchaseOrder['paymentMethod'];
+  paymentAccountId?: string | null;
+  paymentAccountName?: string | null;
+  paymentMethodId?: string | null;
+  paymentMethodLabel?: string | null;
   paymentDueDate?: string;
   paymentCondition?: PurchaseOrder['paymentCondition'];
   installmentsCount?: number;

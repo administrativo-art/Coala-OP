@@ -9,6 +9,7 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -21,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
@@ -57,10 +59,12 @@ interface ItemDraft {
   quantityReceived: number;
   unitPriceConfirmed: number;
   divergenceReason: string;
+  resolutionNotes: string;
   lots: LotDraft[];
   expiryDate?: string;
   entryType: 'stock' | 'uniform' | 'asset';
-  receiptDisposition: 'receive' | 'exchange_pending' | 'returned';
+  receiptDisposition: 'pending' | 'receive' | 'receive_less' | 'receive_more' | 'exchange_pending' | 'returned';
+  selectedForReceipt: boolean;
 }
 
 function generateLotCode(baseItemName: string) {
@@ -175,9 +179,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
               quantityReceived: remainingQuantity,
               unitPriceConfirmed: item.unitPriceConfirmed || item.unitPriceOrdered,
               divergenceReason: '',
+              resolutionNotes: item.resolutionNotes ?? '',
               expiryDate: '',
               entryType: item.itemDestination === 'asset' || item.entryType === 'asset' ? 'asset' : item.itemDestination === 'uniform' || item.entryType === 'uniform' ? 'uniform' : 'stock',
-              receiptDisposition: 'receive',
+              receiptDisposition: item.receiptDisposition ?? 'receive',
+              selectedForReceipt: item.receiptDisposition !== 'pending',
               lots: [
                 {
                   _key: lotKey(),
@@ -241,6 +247,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
   const lotsValid = useMemo(
     () =>
       drafts.every((d) => {
+        if (!d.selectedForReceipt) return true;
         if (d.entryType === 'asset') return true;
         const lotSum = d.lots.reduce((s, l) => s + (l.quantity || 0), 0);
         return Math.abs(lotSum - d.quantityReceived) < 0.001;
@@ -253,6 +260,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
       !isImmediate ||
       drafts.every(
         (d) =>
+          !d.selectedForReceipt ||
           d.quantityReceived >= 0 &&
           d.unitPriceConfirmed > 0,
       ),
@@ -260,14 +268,29 @@ export function ReceiptWorkspace({ receipt }: Props) {
   );
 
   const hasAnyReceived = useMemo(
-    () => drafts.some((d) => d.receiptDisposition === 'receive' && d.quantityReceived > 0),
+    () => drafts.some((d) => d.selectedForReceipt && d.receiptDisposition !== 'pending' && d.quantityReceived > 0),
+    [drafts],
+  );
+
+  const selectedDraftsValid = useMemo(
+    () =>
+      drafts.every((d) => {
+        if (!d.selectedForReceipt) return true;
+        if (d.unitPriceConfirmed <= 0 || d.quantityReceived < 0) return false;
+        if (d.receiptDisposition === 'receive_less') {
+          return d.quantityReceived < d.quantityOrdered && !!d.resolutionNotes.trim();
+        }
+        if (d.receiptDisposition === 'receive_more') return d.quantityReceived > d.quantityOrdered;
+        return true;
+      }),
     [drafts],
   );
 
   const canSaveConference =
     canReceive &&
     isInConference &&
-    drafts.every((d) => d.quantityReceived >= 0 && d.unitPriceConfirmed > 0);
+    hasAnyReceived &&
+    selectedDraftsValid;
 
   const canConfirmStock =
     canReceive &&
@@ -278,6 +301,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
     immediateValid &&
     drafts.every((d) => {
       if (d.quantityReceived <= 0) return true;
+      if (!d.selectedForReceipt) return true;
       if (d.entryType === 'asset') return d.quantityReceived > 0;
       if (!d.productId) return false;
       const base = baseProducts.find((bp) => bp.id === d.baseItemId);
@@ -330,7 +354,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
           quantityReceived: d.quantityReceived,
           unitPriceConfirmed: d.unitPriceConfirmed,
           divergenceReason: d.divergenceReason || undefined,
-          receiptDisposition: d.receiptDisposition,
+          resolutionNotes: d.resolutionNotes || undefined,
+          receiptDisposition: d.selectedForReceipt ? d.receiptDisposition : 'pending',
         })),
       });
     } finally {
@@ -368,7 +393,9 @@ export function ReceiptWorkspace({ receipt }: Props) {
         notes,
         receiptProofUrl,
         receiptProofDescription: proofDescription || undefined,
-        items: drafts.map((d) => ({
+        items: drafts
+          .filter((d) => d.selectedForReceipt && d.quantityReceived > 0)
+          .map((d) => ({
           ...(() => {
             const product = products.find((p) => p.id === d.productId);
             return { productName: product?.baseName ?? d.itemName ?? d.baseItemId };
@@ -498,21 +525,50 @@ export function ReceiptWorkspace({ receipt }: Props) {
                   const isAssetEntry = draft.entryType === 'asset';
                   const lotSum = draft.lots.reduce((s, l) => s + (l.quantity || 0), 0);
                   const lotValid = isAssetEntry || Math.abs(lotSum - draft.quantityReceived) < 0.001;
-                  const isNonStockDisposition = draft.receiptDisposition !== 'receive';
+                  const receivesQuantity =
+                    draft.selectedForReceipt &&
+                    (draft.receiptDisposition === 'receive' ||
+                      draft.receiptDisposition === 'receive_less' ||
+                      draft.receiptDisposition === 'receive_more');
+                  const isNonStockDisposition = !receivesQuantity;
                   const hasDivergence =
-                    isNonStockDisposition ||
-                    Math.abs(draft.quantityReceived - draft.quantityOrdered) > 0.001 ||
-                    !!draft.divergenceReason;
+                    draft.selectedForReceipt &&
+                    (draft.receiptDisposition !== 'receive' ||
+                      Math.abs(draft.quantityReceived - draft.quantityOrdered) > 0.001 ||
+                      !!draft.divergenceReason ||
+                      !!draft.resolutionNotes);
                   
                   const isReadonly = isAwaitingDelivery || isDone;
 
                   return (
                     <div key={draft.receiptItemId} className={cn(
                       "px-5 py-5 space-y-4",
+                      !draft.selectedForReceipt && 'bg-muted/20',
                       hasDivergence && 'bg-amber-50/30 dark:bg-amber-950/10'
                     )}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 items-start gap-3">
+                          {isInConference && (
+                            <Checkbox
+                              checked={draft.selectedForReceipt}
+                              disabled={isReadonly}
+                              onCheckedChange={(checked) => {
+                                const selected = checked === true;
+                                updateDraft(idx, {
+                                  selectedForReceipt: selected,
+                                  receiptDisposition: selected ? 'receive' : 'pending',
+                                  quantityReceived: selected ? draft.quantityOrdered : 0,
+                                  resolutionNotes: selected ? draft.resolutionNotes : '',
+                                  divergenceReason: selected ? draft.divergenceReason : '',
+                                  lots: draft.lots.map((lot) => ({
+                                    ...lot,
+                                    quantity: selected ? draft.quantityOrdered : 0,
+                                  })),
+                                });
+                              }}
+                              className="mt-3"
+                            />
+                          )}
                           {selectedStockProduct?.imageUrl && (
                             <Image
                               src={selectedStockProduct.imageUrl}
@@ -537,7 +593,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             </div>
                           </div>
                         </div>
-                        {hasDivergence && (
+                        {!draft.selectedForReceipt && isInConference ? (
+                          <Badge variant="outline" className="text-muted-foreground shrink-0">
+                            Pendente
+                          </Badge>
+                        ) : hasDivergence && (
                           <Badge variant="outline" className="text-amber-600 border-amber-400 shrink-0">
                             <AlertTriangle className="mr-1 h-3 w-3" />
                             Divergência
@@ -577,19 +637,29 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             <Select
                               value={draft.receiptDisposition}
                               onValueChange={(value: ItemDraft['receiptDisposition']) => {
-                                const nextQuantity = value === 'receive' ? draft.quantityReceived : 0;
+                                const nextQuantity =
+                                  value === 'receive'
+                                    ? draft.quantityOrdered
+                                    : value === 'receive_less'
+                                    ? Math.min(draft.quantityReceived, draft.quantityOrdered)
+                                    : value === 'receive_more'
+                                    ? Math.max(draft.quantityReceived, draft.quantityOrdered)
+                                    : 0;
                                 updateDraft(idx, {
                                   receiptDisposition: value,
+                                  selectedForReceipt: value !== 'pending',
                                   quantityReceived: nextQuantity,
                                   lots: draft.lots.map((lot) => ({ ...lot, quantity: nextQuantity > 0 ? lot.quantity : 0 })),
                                 });
                               }}
                             >
-                              <SelectTrigger disabled={isReadonly}>
+                              <SelectTrigger disabled={isReadonly || !draft.selectedForReceipt}>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="receive">Receber</SelectItem>
+                                <SelectItem value="receive_less">Recebimento a menos</SelectItem>
+                                <SelectItem value="receive_more">Recebimento a mais</SelectItem>
                                 <SelectItem value="exchange_pending">Troca pendente</SelectItem>
                                 <SelectItem value="returned">Devolvido</SelectItem>
                               </SelectContent>
@@ -602,7 +672,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             type="number"
                             step="0.001"
                             value={draft.quantityReceived}
-                            disabled={isReadonly || isNonStockDisposition || (!isImmediate && isInStockEntry)}
+                            disabled={isReadonly || !draft.selectedForReceipt || isNonStockDisposition || (!isImmediate && isInStockEntry)}
                             onChange={(e) => updateDraft(idx, { quantityReceived: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
@@ -612,7 +682,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             type="number"
                             step="0.01"
                             value={draft.unitPriceConfirmed}
-                            disabled={isReadonly || isNonStockDisposition || (!isImmediate && isInStockEntry)}
+                            disabled={isReadonly || !draft.selectedForReceipt || isNonStockDisposition || (!isImmediate && isInStockEntry)}
                             onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
@@ -644,7 +714,23 @@ export function ReceiptWorkspace({ receipt }: Props) {
                         )}
                       </div>
 
-                      {hasDivergence && (
+                      {isInConference && draft.receiptDisposition === 'receive_less' && draft.selectedForReceipt && (
+                        <div className="space-y-1">
+                          <Label className="text-xs">Acompanhamento / resolução</Label>
+                          <Textarea
+                            rows={3}
+                            placeholder="Informe como a falta será resolvida..."
+                            value={draft.resolutionNotes}
+                            disabled={isReadonly}
+                            onChange={(e) => updateDraft(idx, { resolutionNotes: e.target.value })}
+                          />
+                          {!draft.resolutionNotes.trim() && (
+                            <p className="text-xs text-amber-600">Obrigatório para recebimento a menos.</p>
+                          )}
+                        </div>
+                      )}
+
+                      {hasDivergence && draft.receiptDisposition !== 'receive_less' && (
                         <div className="space-y-1">
                           <Label className="text-xs">Motivo da divergência</Label>
                           <Input

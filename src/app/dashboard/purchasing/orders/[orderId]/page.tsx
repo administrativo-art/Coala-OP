@@ -129,6 +129,7 @@ type EditForm = {
   freightAccountPlanId: string;
   freightPaymentMode: PurchaseFreightPaymentMode;
   resultCenterId: string;
+  paymentCardKey: string;
   trackingInfo: string;
   notes: string;
 };
@@ -136,6 +137,14 @@ type EditForm = {
 function fmt(value?: number | null) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function isCardPayment(paymentMethod?: PaymentMethod) {
+  return paymentMethod === 'card_credit' || paymentMethod === 'card_debit';
+}
+
+function getPaymentCardKey(accountId?: string | null, methodId?: string | null) {
+  return accountId && methodId ? `${accountId}::${methodId}` : '';
 }
 
 export default function PurchaseOrderPage() {
@@ -150,7 +159,7 @@ export default function PurchaseOrderPage() {
   const { baseProducts } = useBaseProducts();
   const { products, getProductFullName } = useProducts();
   const { purchasingDefaults } = useCompanySettings();
-  const { accountPlans, flattenedAccountPlans, resultCenters, loading: classificationLoading } = usePurchasingFinancialOptions();
+  const { accountPlans, flattenedAccountPlans, resultCenters, paymentCards, loading: classificationLoading } = usePurchasingFinancialOptions();
   const canView = canViewPurchasing(permissions);
   const canCancel = canCancelPurchase(permissions);
   const canEdit = canCreatePurchase(permissions);
@@ -325,6 +334,7 @@ export default function PurchaseOrderPage() {
       freightAccountPlanId: order.freightAccountPlanId ?? purchasingDefaults.freightAccountPlanId ?? '',
       freightPaymentMode: order.freightPaymentMode ?? 'separate',
       resultCenterId: order.resultCenterId ?? '',
+      paymentCardKey: getPaymentCardKey(order.paymentAccountId, order.paymentMethodId),
       trackingInfo: order.trackingInfo ?? '',
       notes: order.notes ?? '',
     });
@@ -337,11 +347,16 @@ export default function PurchaseOrderPage() {
     const selectedFreightAccountPlan =
       flattenedAccountPlans.find((plan) => plan.id === editForm.freightAccountPlanId);
     const selectedResultCenter = (resultCenters ?? []).find((center) => center.id === editForm.resultCenterId);
+    const selectedPaymentCard = paymentCards.find((card) => getPaymentCardKey(card.accountId, card.methodId) === editForm.paymentCardKey);
 
     setSaving(true);
     try {
       await updateOrder(order.id, {
         paymentMethod: editForm.paymentMethod,
+        paymentAccountId: isCardPayment(editForm.paymentMethod) ? selectedPaymentCard?.accountId ?? null : null,
+        paymentAccountName: isCardPayment(editForm.paymentMethod) ? selectedPaymentCard?.accountName ?? null : null,
+        paymentMethodId: isCardPayment(editForm.paymentMethod) ? selectedPaymentCard?.methodId ?? null : null,
+        paymentMethodLabel: isCardPayment(editForm.paymentMethod) ? selectedPaymentCard?.methodLabel ?? null : null,
         paymentCondition: editForm.paymentCondition,
         installmentsCount: editForm.paymentCondition === 'installments' ? editForm.installmentsCount : undefined,
         paymentDueDate: editForm.paymentDueDate,
@@ -728,10 +743,16 @@ export default function PurchaseOrderPage() {
                       : ''}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Forma de pagamento</span>
-                  <span>{PAYMENT_LABELS[order.paymentMethod]}</span>
-                </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Forma de pagamento</span>
+                    <span>{PAYMENT_LABELS[order.paymentMethod]}</span>
+                  </div>
+                  {isCardPayment(order.paymentMethod) && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Cartão da compra</span>
+                      <span>{order.paymentMethodLabel || order.paymentAccountName || 'Não vinculado'}</span>
+                    </div>
+                  )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{getPaymentDateLabel(order.paymentMethod)}</span>
                   <span>{format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}</span>
@@ -893,6 +914,28 @@ export default function PurchaseOrderPage() {
                     />
                   </div>
 
+                  {isCardPayment(editForm.paymentMethod) && (
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label>Cartão da compra</Label>
+                      <Select
+                        value={editForm.paymentCardKey || '__none__'}
+                        onValueChange={(value) => setEditForm((current) => current && { ...current, paymentCardKey: value === '__none__' ? '' : value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o cartão" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sem cartão vinculado</SelectItem>
+                          {paymentCards.map((card) => (
+                            <SelectItem key={getPaymentCardKey(card.accountId, card.methodId)} value={getPaymentCardKey(card.accountId, card.methodId)}>
+                              {card.methodLabel}{card.lastDigits ? ` final ${card.lastDigits}` : ''} · {card.accountName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   {editForm.paymentCondition === 'installments' && (
                     <div className="space-y-1.5">
                       <Label>Parcelas para análise</Label>
@@ -1038,6 +1081,7 @@ export default function PurchaseOrderPage() {
                   disabled={
                     saving ||
                     !editForm.paymentDueDate ||
+                    (isCardPayment(editForm.paymentMethod) && !editForm.paymentCardKey) ||
                     !editForm.accountPlanId ||
                     !editForm.resultCenterId ||
                     (editForm.deliveryFee > 0 && !editForm.freightAccountPlanId)

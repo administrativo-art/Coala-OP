@@ -40,6 +40,7 @@ import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useProducts } from '@/hooks/use-products';
+import { usePurchasingFinancialOptions } from '@/hooks/use-purchasing-financial-options';
 import { getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
 import {
   type PaymentMethod,
@@ -55,6 +56,7 @@ const schema = z.object({
   receiptMode: z.enum(['future_delivery', 'immediate_pickup'] as const),
   paymentMethod: z.enum(['pix', 'card_credit', 'card_debit', 'cash', 'boleto', 'term'] as const),
   paymentCondition: z.enum(['cash', 'installments'] as const),
+  paymentCardKey: z.string().optional(),
   installmentsCount: z.coerce.number().min(2).optional(),
   paymentDueDate: z.string().min(1, 'Informe a data.'),
   estimatedReceiptDate: z.string().optional(),
@@ -106,6 +108,14 @@ const PAYMENT_CONDITION_LABELS: Record<PurchasePaymentCondition, string> = {
 
 function getPaymentDateLabel(paymentMethod?: PaymentMethod) {
   return paymentMethod === 'card_credit' || paymentMethod === 'card_debit' ? 'Data da compra' : 'Vencimento';
+}
+
+function isCardPayment(paymentMethod?: PaymentMethod) {
+  return paymentMethod === 'card_credit' || paymentMethod === 'card_debit';
+}
+
+function getPaymentCardKey(accountId: string, methodId: string) {
+  return `${accountId}::${methodId}`;
 }
 
 function newDraftItem(): DraftItem {
@@ -213,6 +223,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
   const { activeCategories } = useOperationalItemCategories();
   const { products, getProductFullName } = useProducts();
   const { createPurchase } = usePurchaseOrders();
+  const { paymentCards } = usePurchasingFinancialOptions();
   const [items, setItems] = useState<DraftItem[]>([newDraftItem()]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -224,6 +235,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
       receiptMode: 'immediate_pickup',
       paymentMethod: 'pix',
       paymentCondition: 'cash',
+      paymentCardKey: '',
       installmentsCount: 2,
       paymentDueDate: today,
       estimatedReceiptDate: today,
@@ -234,6 +246,11 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
 
   const receiptMode = form.watch('receiptMode');
   const paymentMethod = form.watch('paymentMethod');
+  const paymentCardKey = form.watch('paymentCardKey') ?? '';
+  const selectedPaymentCard = useMemo(
+    () => paymentCards.find((card) => getPaymentCardKey(card.accountId, card.methodId) === paymentCardKey) ?? null,
+    [paymentCards, paymentCardKey],
+  );
   const total = useMemo(
     () => items.reduce((sum, item) => sum + item.quantityOrdered * item.unitPriceOrdered, 0),
     [items],
@@ -316,6 +333,10 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
         origin: 'direct',
         receiptMode: values.receiptMode as PurchaseReceiptMode,
         paymentMethod: values.paymentMethod,
+        paymentAccountId: isCardPayment(values.paymentMethod) ? selectedPaymentCard?.accountId ?? null : null,
+        paymentAccountName: isCardPayment(values.paymentMethod) ? selectedPaymentCard?.accountName ?? null : null,
+        paymentMethodId: isCardPayment(values.paymentMethod) ? selectedPaymentCard?.methodId ?? null : null,
+        paymentMethodLabel: isCardPayment(values.paymentMethod) ? selectedPaymentCard?.methodLabel ?? null : null,
         paymentCondition: values.paymentCondition,
         installmentsCount: values.paymentCondition === 'installments' ? values.installmentsCount : undefined,
         paymentDueDate: values.paymentDueDate,
@@ -372,7 +393,13 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                 render={({ field }) => (
                   <FormItem className="sm:col-span-2">
                     <FormLabel>Fornecedor</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        if (!isCardPayment(value as PaymentMethod)) form.setValue('paymentCardKey', '');
+                      }}
+                      value={field.value}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione um fornecedor" />
@@ -390,6 +417,33 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                   </FormItem>
                 )}
               />
+
+              {isCardPayment(paymentMethod) && (
+                <FormField
+                  control={form.control}
+                  name="paymentCardKey"
+                  render={({ field }) => (
+                    <FormItem className="sm:col-span-2">
+                      <FormLabel>Cartão da compra</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className={!field.value ? 'border-amber-400' : ''}>
+                            <SelectValue placeholder="Selecione o cartão" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {paymentCards.map((card) => (
+                            <SelectItem key={getPaymentCardKey(card.accountId, card.methodId)} value={getPaymentCardKey(card.accountId, card.methodId)}>
+                              {card.methodLabel}{card.lastDigits ? ` final ${card.lastDigits}` : ''} · {card.accountName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!field.value && <p className="text-xs text-amber-600">Obrigatório para compra no cartão.</p>}
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <FormField
                 control={form.control}
@@ -692,7 +746,11 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
           </p>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" form="direct-purchase-form" disabled={submitting || validItems.length !== items.length}>
+            <Button
+              type="submit"
+              form="direct-purchase-form"
+              disabled={submitting || validItems.length !== items.length || (isCardPayment(paymentMethod as PaymentMethod) && !selectedPaymentCard)}
+            >
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Criar compra
             </Button>

@@ -46,7 +46,8 @@ export interface ReceiptItemInput {
   quantityReceived: number;
   unitPriceConfirmed: number;
   divergenceReason?: string;
-  receiptDisposition?: 'receive' | 'exchange_pending' | 'returned';
+  resolutionNotes?: string;
+  receiptDisposition?: 'pending' | 'receive' | 'receive_less' | 'receive_more' | 'exchange_pending' | 'returned';
 }
 
 export interface StockEntryItemInput {

@@ -189,6 +189,10 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     supplier: supplier?.fantasyName || supplier?.name || '',
     accountPlan: orderData.accountPlanId ?? '',
     accountPlanName: orderData.accountPlanName ?? '',
+    paymentAccountId: orderData.paymentAccountId ?? null,
+    paymentAccountName: orderData.paymentAccountName ?? null,
+    paymentMethodId: orderData.paymentMethodId ?? null,
+    paymentMethodLabel: orderData.paymentMethodLabel ?? null,
     totalValue,
     dueDate: Timestamp.fromDate(new Date(orderData.paymentDueDate)),
     competenceDate: Timestamp.fromDate(new Date(orderData.createdAt ?? orderData.paymentDueDate)),
@@ -255,16 +259,34 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
   }
 
   if (resource === 'classification-options') {
-    const [accountPlansSnap, resultCentersSnap] = await Promise.all([
+    const [accountPlansSnap, resultCentersSnap, bankAccountsSnap] = await Promise.all([
       financialDbAdmin.collection('accounts').get(),
       financialDbAdmin.collection('resultCenters').get(),
+      financialDbAdmin.collection('bankAccounts').get(),
     ]);
+
+    const paymentCards = bankAccountsSnap.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() } as any))
+      .filter((account) => account.active !== false)
+      .flatMap((account) =>
+        (Array.isArray(account.paymentMethods) ? account.paymentMethods : [])
+          .filter((method: any) => method.type === 'credit_card' || method.type === 'debit_card')
+          .map((method: any) => ({
+            accountId: account.id,
+            accountName: account.name ?? '',
+            methodId: method.id,
+            methodLabel: method.label ?? '',
+            type: method.type,
+            lastDigits: method.lastDigits ?? '',
+          })),
+      );
 
     return NextResponse.json({
       accountPlans: accountPlansSnap.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter((plan: any) => plan.active !== false),
       resultCenters: resultCentersSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      paymentCards,
     });
   }
 
@@ -444,6 +466,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       paymentCondition: body.paymentCondition ?? 'cash',
       paymentDueDate,
       paymentMethod: body.paymentMethod || 'pix',
+      paymentAccountId: body.paymentAccountId ?? null,
+      paymentAccountName: body.paymentAccountName ?? null,
+      paymentMethodId: body.paymentMethodId ?? null,
+      paymentMethodLabel: body.paymentMethodLabel ?? null,
       installmentsCount: Number(body.installmentsCount ?? 1),
       accountPlanId: body.accountPlanId ?? null,
       accountPlanName: body.accountPlanName ?? null,
@@ -581,6 +607,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       goodsAmountEstimated,
       freightAmountEstimated,
       freightPaymentMode,
+      paymentMethod: order.paymentMethod ?? null,
+      paymentAccountId: order.paymentAccountId ?? null,
+      paymentAccountName: order.paymentAccountName ?? null,
+      paymentMethodId: order.paymentMethodId ?? null,
+      paymentMethodLabel: order.paymentMethodLabel ?? null,
       dueDate: order.paymentDueDate,
       status: 'confirmed',
       createdAt: now,
@@ -744,10 +775,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const quantityOrdered = Number(orderItem?.quantityOrdered ?? item.quantityReceived);
         const unitPriceOrdered = Number(orderItem?.unitPriceOrdered ?? item.unitPriceConfirmed);
         const disposition = item.receiptDisposition ?? 'receive';
-        const quantityReceived = disposition === 'receive' ? Number(item.quantityReceived ?? 0) : 0;
+        const quantityReceived =
+          disposition === 'receive' || disposition === 'receive_less' || disposition === 'receive_more'
+            ? Number(item.quantityReceived ?? 0)
+            : 0;
         const itemStatus =
-          disposition === 'returned'
+          disposition === 'pending'
+            ? 'pending'
+            : disposition === 'receive_less'
+            ? 'partial'
+            : disposition === 'receive_more'
+            ? 'divergent'
+            : disposition === 'returned'
             ? 'cancelled'
+            : disposition === 'exchange_pending'
+            ? 'partial'
             : getReceiptItemStatus(
                 quantityReceived,
                 quantityOrdered,
@@ -770,7 +812,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           totalConfirmed: quantityReceived * item.unitPriceConfirmed,
           status: itemStatus,
           receiptDisposition: disposition,
+          resolutionNotes: item.resolutionNotes?.trim() || null,
           divergenceReason:
+            item.resolutionNotes?.trim() ||
             item.divergenceReason?.trim() ||
             (disposition === 'exchange_pending' ? 'Troca pendente com fornecedor.' : null),
         });
@@ -1095,7 +1139,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     batch.update(receiptRef, {
       status: finalStatus,
       stockEnteredAt: now,
-      receivedAt: now,
+      ...(finalStatus !== 'partially_stocked' ? { receivedAt: now } : {}),
       totalConfirmed,
       updatedAt: now,
       notes: body.notes ?? receipt.notes ?? null,
@@ -1345,6 +1389,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
               resultCenterId: rest.resultCenterId ?? currentOrder.resultCenterId ?? null,
               resultCenterName: rest.resultCenterName ?? currentOrder.resultCenterName ?? null,
               paymentMethod: rest.paymentMethod ?? currentOrder.paymentMethod ?? null,
+              paymentAccountId: rest.paymentAccountId ?? currentOrder.paymentAccountId ?? null,
+              paymentAccountName: rest.paymentAccountName ?? currentOrder.paymentAccountName ?? null,
+              paymentMethodId: rest.paymentMethodId ?? currentOrder.paymentMethodId ?? null,
+              paymentMethodLabel: rest.paymentMethodLabel ?? currentOrder.paymentMethodLabel ?? null,
               paymentCondition: rest.paymentCondition ?? currentOrder.paymentCondition ?? null,
               installmentsCount: rest.installmentsCount ?? currentOrder.installmentsCount ?? null,
               paymentDueDate: rest.paymentDueDate ?? currentOrder.paymentDueDate ?? null,

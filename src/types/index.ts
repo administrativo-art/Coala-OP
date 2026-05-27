@@ -1200,6 +1200,10 @@ export type PurchaseOrder = {
   estimatedReceiptDate: string; // ISO date; equals createdAt for immediate_pickup
   paymentDueDate: string;
   paymentMethod: PaymentMethod;
+  paymentAccountId?: string | null;
+  paymentAccountName?: string | null;
+  paymentMethodId?: string | null;
+  paymentMethodLabel?: string | null;
   paymentCondition?: PurchasePaymentCondition;
   installmentsCount?: number;
   accountPlanId?: string;
@@ -1307,7 +1311,9 @@ export type PurchaseReceiptItem = {
   unitPriceConfirmed: number;
   totalConfirmed: number;
   status: PurchaseReceiptItemStatus;
+  receiptDisposition?: 'pending' | 'receive' | 'receive_less' | 'receive_more' | 'exchange_pending' | 'returned';
   divergenceReason?: string;
+  resolutionNotes?: string;
   entryType?: PurchaseStockEntryType;
   // subcollection lots are fetched separately; this array is used in-memory only
   lots?: PurchaseReceiptLot[];
