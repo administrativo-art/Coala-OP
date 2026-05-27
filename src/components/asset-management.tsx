@@ -1141,6 +1141,7 @@ export function AssetManagement() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10" />
                 <TableHead>Código</TableHead>
                 <TableHead>Patrimônio</TableHead>
                 <TableHead>Unidade</TableHead>
@@ -1150,11 +1151,21 @@ export function AssetManagement() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={5}>Carregando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6}>Carregando...</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={5}>Nenhum patrimônio encontrado.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6}>Nenhum patrimônio encontrado.</TableCell></TableRow>
               ) : filtered.map((asset) => (
                 <TableRow key={asset.id}>
+                  <TableCell className="w-10 p-2">
+                    <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted flex items-center justify-center">
+                      {asset.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={asset.imageUrl} alt={asset.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">Sem foto</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-mono text-xs">{asset.code}</TableCell>
                   <TableCell>
                     <p className="font-medium">{asset.name}</p>
