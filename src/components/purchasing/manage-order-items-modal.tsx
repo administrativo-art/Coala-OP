@@ -25,7 +25,7 @@ import {
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useProducts } from '@/hooks/use-products';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
-import { getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
+import { getContentPurchaseUnitLabel, getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
 import { type Product, type PurchaseOrderItem, type PurchaseStockEntryType, type PurchaseUnitType } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -92,6 +92,16 @@ function normalizeSearchText(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+}
+
+function fmtCurrency(value: number) {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function fmtQuantity(value: number) {
+  return value.toLocaleString('pt-BR', {
+    maximumFractionDigits: 3,
+  });
 }
 
 function shouldLinkAlias(candidate: string, product: Product | undefined, productLabel: string) {
@@ -387,6 +397,18 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             {items.map((item) => {
               const selectedCategory = activeCategories.find((category) => category.id === item.operationalCategoryId);
               const categoryDestination = selectedCategory?.destination;
+              const selectedRawProduct = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
+              const logisticSummary =
+                selectedRawProduct &&
+                item.purchaseUnitType === 'logistic' &&
+                selectedRawProduct.multiplo_caixa &&
+                selectedRawProduct.multiplo_caixa > 0
+                  ? {
+                      contentUnitLabel: getContentPurchaseUnitLabel(selectedRawProduct),
+                      totalContentUnits: item.quantityOrdered * selectedRawProduct.multiplo_caixa,
+                      pricePerContentUnit: item.unitPriceOrdered / selectedRawProduct.multiplo_caixa,
+                    }
+                  : null;
               const availableProducts = categoryDestination
                 ? purchasableProducts.filter((option) => {
                     const product = products.find((entry) => entry.id === option.id);
@@ -559,6 +581,15 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                   <Trash2 className="h-4 w-4" />
                 </Button>
                 <div className="md:col-span-6 md:col-start-2 space-y-1">
+                   {logisticSummary && (
+                     <p className="rounded-md bg-background px-3 py-2 text-xs text-muted-foreground">
+                       {fmtQuantity(item.quantityOrdered)} {item.unit} ={' '}
+                       <span className="font-medium text-foreground">
+                         {fmtQuantity(logisticSummary.totalContentUnits)} {logisticSummary.contentUnitLabel}
+                       </span>
+                       {' '}· {fmtCurrency(logisticSummary.pricePerContentUnit)} por {logisticSummary.contentUnitLabel}
+                     </p>
+                   )}
                    <Input 
                      placeholder="Observações do item..." 
                      className="text-xs h-8"
