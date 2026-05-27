@@ -941,7 +941,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           if (receiptItemStatus === 'partial' || receiptItemStatus === 'pending') hasRemaining = true;
 
           const assetCount = Math.max(0, Math.floor(Number(payloadReceivedQuantity || 0)));
-          for (let index = 0; index < assetCount; index += 1) {
+          const existingAssetsSnap = item.receiptItemId
+            ? await dbAdmin.collection('assets').where('purchaseReceiptItemId', '==', item.receiptItemId).get()
+            : null;
+          const assetsToCreate = Math.max(0, assetCount - (existingAssetsSnap?.size ?? 0));
+          for (let index = 0; index < assetsToCreate; index += 1) {
             const code = await nextAssetCode();
             const assetRef = dbAdmin.collection('assets').doc();
             const assetName = item.itemName || existingReceiptItem?.itemName || orderItem?.itemName || baseProduct?.name || item.baseItemId || 'Patrimônio';
