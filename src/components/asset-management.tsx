@@ -552,7 +552,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
   return (
     <Dialog open={!!asset} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-6xl overflow-hidden p-0">
+      <DialogContent className="max-h-[94vh] w-[calc(100vw-2rem)] !max-w-[1440px] overflow-hidden p-0">
         {asset && (
           <>
             <DialogHeader className="border-b px-6 py-5">
@@ -560,8 +560,8 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
               <DialogDescription>{asset.currentKioskName || asset.currentKioskId} · {STATUS_LABEL[asset.status]}</DialogDescription>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleSave)} className="grid min-h-0 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
-                <div className="max-h-[calc(92vh-112px)] min-w-0 space-y-4 overflow-y-auto px-6 py-5">
+              <form onSubmit={form.handleSubmit(handleSave)} className="grid min-h-0 gap-0 xl:grid-cols-[minmax(760px,1fr)_380px]">
+                <div className="max-h-[calc(94vh-112px)] min-w-0 space-y-4 overflow-y-auto px-6 py-5">
                   <div className="flex flex-wrap gap-2 rounded-md border bg-card p-2">
                     {ASSET_STEPS.map((step) => (
                       <Button
@@ -885,7 +885,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                     </>
                   ) : null}
                 </div>
-                <div className="max-h-[calc(92vh-112px)] overflow-y-auto border-t p-5 text-center lg:border-l lg:border-t-0">
+                <div className="max-h-[calc(94vh-112px)] overflow-y-auto border-t p-5 text-center xl:border-l xl:border-t-0">
                   {qrUrl ? <img src={qrUrl} alt={`QR ${asset.code}`} className="mx-auto" /> : <QrCode className="mx-auto h-24 w-24 text-muted-foreground" />}
                   <p className="mt-2 font-mono text-lg font-semibold">{asset.code}</p>
                   <p className="text-xs text-muted-foreground">{form.watch('name')}</p>

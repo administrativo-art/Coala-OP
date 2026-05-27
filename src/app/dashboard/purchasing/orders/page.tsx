@@ -98,15 +98,32 @@ export default function PurchaseOrdersPage() {
   const canView = canViewPurchasing(permissions);
   const canOpenDirectPurchase = canCreatePurchase(permissions);
 
-  const active = useMemo(
-    () => orders.filter((o) => (o.status === 'created' || o.status === 'confirmed') && !o.receivedAt),
+  const inReview = useMemo(
+    () => orders.filter((o) => o.status === 'created' && !o.receivedAt),
     [orders],
   );
 
-  const history = useMemo(
-    () => orders.filter((o) => o.receivedAt || o.status === 'cancelled'),
+  const confirmed = useMemo(
+    () => orders.filter((o) => o.status === 'confirmed' && !o.receivedAt),
     [orders],
   );
+
+  const received = useMemo(
+    () => orders.filter((o) => !!o.receivedAt),
+    [orders],
+  );
+
+  const cancelled = useMemo(
+    () => orders.filter((o) => o.status === 'cancelled'),
+    [orders],
+  );
+
+  const sections = [
+    { value: 'review', label: 'Em revisão', orders: inReview },
+    { value: 'confirmed', label: 'Confirmadas', orders: confirmed },
+    { value: 'received', label: 'Recebidas', orders: received },
+    { value: 'cancelled', label: 'Canceladas', orders: cancelled },
+  ];
 
   return (
     <PermissionGuard allowed={canView}>
@@ -118,7 +135,7 @@ export default function PurchaseOrdersPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Compras</h1>
-          <p className="text-sm text-muted-foreground">Pedidos em revisão, confirmados e histórico.</p>
+          <p className="text-sm text-muted-foreground">Pedidos separados por situação de compra e recebimento.</p>
         </div>
         {canOpenDirectPurchase && (
           <Button onClick={() => setDirectOpen(true)}>
@@ -128,42 +145,33 @@ export default function PurchaseOrdersPage() {
         )}
       </div>
 
-      <Tabs defaultValue="active">
-        <TabsList>
-          <TabsTrigger value="active">
-            Em andamento
-            {active.length > 0 && (
-              <span className="ml-1 rounded-full bg-primary/20 px-1.5 text-xs font-medium">
-                {active.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="history">Histórico</TabsTrigger>
+      <Tabs defaultValue="review">
+        <TabsList className="h-auto flex-wrap">
+          {sections.map((section) => (
+            <TabsTrigger key={section.value} value={section.value}>
+              {section.label}
+              {section.orders.length > 0 && (
+                <span className="ml-1 rounded-full bg-primary/20 px-1.5 text-xs font-medium">
+                  {section.orders.length}
+                </span>
+              )}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="active" className="mt-4 space-y-2">
-          {loading ? (
-            Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
-          ) : active.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-16">
-              Nenhuma compra em andamento.
-            </div>
-          ) : (
-            active.map((o) => <OrderRow key={o.id} order={o} />)
-          )}
-        </TabsContent>
-
-        <TabsContent value="history" className="mt-4 space-y-2">
-          {loading ? (
-            <Skeleton className="h-16 w-full" />
-          ) : history.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-16">
-              Nenhuma compra no histórico.
-            </div>
-          ) : (
-            history.map((o) => <OrderRow key={o.id} order={o} />)
-          )}
-        </TabsContent>
+        {sections.map((section) => (
+          <TabsContent key={section.value} value={section.value} className="mt-4 space-y-2">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
+            ) : section.orders.length === 0 ? (
+              <div className="text-center text-sm text-muted-foreground py-16">
+                Nenhuma compra em {section.label.toLowerCase()}.
+              </div>
+            ) : (
+              section.orders.map((o) => <OrderRow key={o.id} order={o} />)
+            )}
+          </TabsContent>
+        ))}
       </Tabs>
 
         <CreateDirectPurchaseModal open={directOpen} onOpenChange={setDirectOpen} />
