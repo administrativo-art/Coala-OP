@@ -143,6 +143,10 @@ function isCardPayment(paymentMethod?: PaymentMethod) {
   return paymentMethod === 'card_credit' || paymentMethod === 'card_debit';
 }
 
+function getOrderSupplierName(order?: { supplierName?: string; fiscal?: { issuerName?: string } } | null, fallback?: string) {
+  return order?.fiscal?.issuerName?.trim() || order?.supplierName?.trim() || fallback || '—';
+}
+
 function getPaymentCardKey(accountId?: string | null, methodId?: string | null) {
   return accountId && methodId ? `${accountId}::${methodId}` : '';
 }
@@ -191,6 +195,7 @@ export default function PurchaseOrderPage() {
     () => entities.find((e) => e.id === order?.supplierId),
     [entities, order],
   );
+  const supplierDisplayName = getOrderSupplierName(order, supplier?.fantasyName ?? supplier?.name);
   useEffect(() => {
     if (!params.orderId) return;
     let cancelled = false;
@@ -441,7 +446,7 @@ export default function PurchaseOrderPage() {
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-3xl font-bold">
-                  {supplier?.fantasyName ?? supplier?.name ?? '—'}
+                  {supplierDisplayName}
                 </h1>
                 <Badge variant={isCancelled ? 'destructive' : isCreated ? 'secondary' : 'default'}>
                   {isCancelled ? 'Cancelada' : isReceived ? 'Recebida' : isCreated ? 'Em revisão' : 'Confirmada'}

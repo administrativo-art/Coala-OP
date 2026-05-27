@@ -1242,6 +1242,7 @@ export type PurchaseOrder = {
   origin: PurchaseOrigin;
   quotationId?: string;
   supplierId: string; // ref → entities collection
+  supplierName?: string;
   receiptMode: PurchaseReceiptMode;
   status: PurchaseOrderStatus;
   estimatedReceiptDate: string; // ISO date; equals createdAt for immediate_pickup

@@ -30,9 +30,14 @@ const RECEIPT_LABELS: Record<PurchaseOrder['receiptMode'], string> = {
   immediate_pickup: 'Retirada imediata',
 };
 
+function getOrderSupplierName(order: PurchaseOrder, fallback?: string) {
+  return order.fiscal?.issuerName?.trim() || order.supplierName?.trim() || fallback || '—';
+}
+
 function OrderRow({ order }: { order: PurchaseOrder }) {
   const { entities } = useEntities();
   const supplier = entities.find((e) => e.id === order.supplierId);
+  const supplierDisplayName = getOrderSupplierName(order, supplier?.fantasyName ?? supplier?.name);
   const status = STATUS_LABELS[order.status];
   const isReceived = !!order.receivedAt;
   const receivedByOtherMeans = Boolean((order as PurchaseOrder & { receivedByOtherMeans?: boolean }).receivedByOtherMeans);
@@ -49,7 +54,7 @@ function OrderRow({ order }: { order: PurchaseOrder }) {
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium truncate">
-              {supplier?.fantasyName ?? supplier?.name ?? '—'}
+              {supplierDisplayName}
             </span>
             {isReceived ? (
               <Badge
