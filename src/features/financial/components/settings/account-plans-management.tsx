@@ -109,6 +109,21 @@ function buildTree(items: Account[], parentId: string | null = null): Account[] 
     .map((item) => ({ ...item, children: buildTree(items, item.id) }));
 }
 
+function collectDescendantIds(items: Account[], parentId: string): Set<string> {
+  const result = new Set<string>();
+  const visit = (id: string) => {
+    items
+      .filter((item) => item.parentId === id)
+      .forEach((child) => {
+        if (result.has(child.id)) return;
+        result.add(child.id);
+        visit(child.id);
+      });
+  };
+  visit(parentId);
+  return result;
+}
+
 async function apiRequest(
   method: "POST" | "PATCH" | "DELETE",
   body?: unknown,
@@ -439,10 +454,12 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
 
   const includeInDre = form.watch("includeInDre");
 
-  const parentOptions = useMemo(
-    () => accounts.filter((a) => !editingAccount || a.id !== editingAccount.id),
-    [accounts, editingAccount]
-  );
+  const parentOptions = useMemo(() => {
+    if (!editingAccount) return accounts;
+    const blockedIds = collectDescendantIds(accounts, editingAccount.id);
+    blockedIds.add(editingAccount.id);
+    return accounts.filter((account) => !blockedIds.has(account.id));
+  }, [accounts, editingAccount]);
 
   function openAdd(parentId: string | null = null) {
     setEditingAccount(null);

@@ -13,6 +13,29 @@ async function canManage(decoded: Awaited<ReturnType<typeof verifyAuth>>) {
   );
 }
 
+async function wouldCreateParentCycle(accountId: string, parentId: string | null | undefined) {
+  if (!parentId) return false;
+  if (parentId === accountId) return true;
+
+  const snap = await financialDbAdmin.collection("accounts").get();
+  const parentById = new Map<string, string | null>();
+  snap.docs.forEach((doc) => {
+    const data = doc.data();
+    parentById.set(doc.id, (data.parentId as string | null | undefined) ?? null);
+  });
+
+  const visited = new Set<string>();
+  let current: string | null | undefined = parentId;
+  while (current) {
+    if (current === accountId) return true;
+    if (visited.has(current)) return true;
+    visited.add(current);
+    current = parentById.get(current);
+  }
+
+  return false;
+}
+
 // POST /api/financial/accounts  — create
 export async function POST(request: NextRequest) {
   try {
@@ -62,6 +85,12 @@ export async function PATCH(request: NextRequest) {
     const update: Record<string, unknown> = {};
     for (const key of allowed) {
       if (key in fields) update[key] = fields[key] ?? null;
+    }
+    if ("parentId" in update && await wouldCreateParentCycle(id, update.parentId as string | null)) {
+      return NextResponse.json(
+        { error: "Conta pai inválida: a alteração criaria um ciclo no plano de contas." },
+        { status: 400 }
+      );
     }
     if (Object.keys(update).length === 0)
       return NextResponse.json({ error: "Nenhum campo para atualizar." }, { status: 400 });
