@@ -14,13 +14,14 @@ import { useOperationalItemCategories } from '@/hooks/use-operational-item-categ
 import { getUnitsForCategory, units, type UnitCategory, unitCategories, packageTypes, type PackageType } from '@/lib/conversion';
 import { type Product, type NutritionalData } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { useClassifications } from '@/hooks/use-classifications';
 
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Camera, Trash2, Upload, Info, Settings, Search, Loader2, FlaskConical, ImageIcon, ZoomIn, Tags, Plus } from 'lucide-react';
@@ -111,6 +112,7 @@ interface AddEditProductModalProps {
 export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
     const { baseProducts } = useBaseProducts();
+    const { classifications } = useClassifications();
     const { activeCategories } = useOperationalItemCategories();
     const { toast } = useToast();
 
@@ -146,6 +148,22 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
     });
     
+    const groupedBaseProducts = useMemo(() => {
+        const classMap = new Map(classifications.map(c => [c.id, c.name]));
+        const groups: Record<string, typeof baseProducts> = {};
+        for (const bp of baseProducts) {
+            const label = bp.classification
+                ? (classMap.get(bp.classification) ?? 'Outros')
+                : 'Sem classificação';
+            if (!groups[label]) groups[label] = [];
+            groups[label].push(bp);
+        }
+        for (const key of Object.keys(groups)) {
+            groups[key].sort((a, b) => a.name.localeCompare(b.name));
+        }
+        return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+    }, [baseProducts, classifications]);
+
     const categoryWatch = form.watch('category');
     const enableLogisticsWatch = form.watch('enableLogistics');
     const enableCountingInstructionWatch = form.watch('enableCountingInstruction');
@@ -370,7 +388,14 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 <SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                                {baseProducts.map(ap => <SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>)}
+                                {groupedBaseProducts.map(([groupName, items]) => (
+                                    <SelectGroup key={groupName}>
+                                        <SelectLabel>{groupName}</SelectLabel>
+                                        {items.map(ap => (
+                                            <SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                ))}
                             </SelectContent>
                         </Select>
                         <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}>
@@ -410,7 +435,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                         </DialogDescription>
                     </DialogHeader>
                     <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)}>
+                    <form onSubmit={form.handleSubmit(onSubmit, () => {
+                        toast({ variant: 'destructive', title: 'Campos obrigatórios não preenchidos', description: 'Role o formulário para cima e verifique os campos destacados em vermelho.' });
+                    })}>
                         <ScrollArea className="h-[60vh] -mx-6 px-6 pr-8">
                             <div className="space-y-4 pt-4">
                                 <Card className="p-4 bg-blue-500/5 dark:bg-blue-900/10">
