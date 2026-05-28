@@ -262,24 +262,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     };
 
     const onSubmit = (values: ProductFormValues) => {
-        // Validation Trava 1
-        if (values.baseProductId) {
-            const baseProduct = baseProducts.find(bp => bp.id === values.baseProductId);
-            if (baseProduct) {
-                const insumoCategory = values.category;
-                const baseProductCategory = baseProduct.category;
 
-                if (insumoCategory !== baseProductCategory) {
-                    toast({
-                        variant: "destructive",
-                        title: "Vínculo Inválido",
-                        description: `A categoria do insumo (${insumoCategory}) é diferente da do produto base (${baseProductCategory}).`,
-                        duration: 8000,
-                    });
-                    return; // Stop submission
-                }
-            }
-        }
 
         const productData: Omit<Product, 'id'> = {
             operationalCategoryId: values.operationalCategoryId,
@@ -325,13 +308,16 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         onOpenChange(false);
     };
     
-    const showCategoryMismatchWarning = useMemo(() => {
-        if (!baseProductIdWatch) return false;
+    // Auto-fill category from base product when linked
+    useEffect(() => {
+        if (!baseProductIdWatch) return;
         const baseProduct = baseProducts.find(bp => bp.id === baseProductIdWatch);
-        if (!baseProduct) return false;
-        
-        return baseProduct.category !== categoryWatch;
-    }, [baseProductIdWatch, categoryWatch, baseProducts]);
+        if (!baseProduct) return;
+        if (baseProduct.category !== form.getValues('category')) {
+            handleCategoryChange(baseProduct.category);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [baseProductIdWatch, baseProducts]);
 
     const handleAddAlias = () => {
         const nextAlias = aliasInput.trim();
@@ -405,14 +391,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                 </FormItem>
             )}/>
             
-            {showCategoryMismatchWarning && (
-                 <Alert variant="destructive" className="mt-4">
-                    <AlertTitle>Vínculo de categorias diferentes</AlertTitle>
-                    <AlertDescription>
-                        A categoria deste insumo é diferente da categoria do produto base. A conversão de unidades pode não funcionar corretamente.
-                    </AlertDescription>
-                </Alert>
-            )}
         </Card>
     );
 
@@ -579,7 +557,23 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         )}
                                     />
                                     <div className="grid grid-cols-3 gap-4 mt-4">
-                                        <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={(value) => field.onChange(value as UnitCategory)} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                                        <FormField control={form.control} name="category" render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>Categoria</FormLabel>
+                                            {baseProductIdWatch ? (
+                                              <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground gap-1.5">
+                                                <span>{field.value}</span>
+                                                <span className="text-xs opacity-60">· herdado do insumo base</span>
+                                              </div>
+                                            ) : (
+                                              <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value}>
+                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
+                                              </Select>
+                                            )}
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}/>
                                         <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem>
                                             <div className="flex items-center gap-2">
                                                 <FormLabel>Qtd. embalagem</FormLabel>
