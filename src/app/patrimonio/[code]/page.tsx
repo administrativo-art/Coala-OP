@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { WORKSPACE_ID } from '@/lib/workspace';
-import type { Asset, AssetStatus } from '@/types';
+import type { Asset, AssetMovement, AssetStatus } from '@/types';
+import { MovementSection, type MovementItem } from './movement-section';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,7 @@ const STATUS_STYLE: Record<AssetStatus, string> = {
 
 type PublicAsset = Pick<
   Asset,
+  | 'id'
   | 'code'
   | 'name'
   | 'category'
@@ -83,6 +85,7 @@ async function getAssetByCode(code: string): Promise<PublicAsset | null> {
   if (data.workspaceId !== WORKSPACE_ID) return null;
 
   return {
+    id: doc.id,
     code: data.code,
     name: data.name,
     category: data.category,
@@ -106,10 +109,50 @@ async function getAssetByCode(code: string): Promise<PublicAsset | null> {
   };
 }
 
+async function getKiosks() {
+  const snap = await dbAdmin.collection('kiosks').get();
+  return snap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) || d.id }));
+}
+
+async function getUsers() {
+  const snap = await dbAdmin.collection('users').where('isActive', '!=', false).get();
+  return snap.docs.map((d) => ({ id: d.id, username: (d.data().username as string) || d.id }));
+}
+
+async function getMovements(assetId: string): Promise<MovementItem[]> {
+  const snap = await dbAdmin
+    .collection('assetMovements')
+    .where('assetId', '==', assetId)
+    .get();
+
+  return snap.docs
+    .map((d) => {
+      const data = d.data() as Partial<AssetMovement>;
+      return {
+        id: d.id,
+        type: data.type ?? '',
+        username: data.username ?? '',
+        toKioskName: data.toKioskName,
+        fromKioskName: data.fromKioskName,
+        notes: data.notes,
+        occurredAt: data.occurredAt ?? '',
+      };
+    })
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+}
+
 export default async function PublicAssetPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const asset = await getAssetByCode(code);
+
+  const [asset, kiosks, users] = await Promise.all([
+    getAssetByCode(code),
+    getKiosks(),
+    getUsers(),
+  ]);
+
   if (!asset) notFound();
+
+  const movements = await getMovements(asset.id);
 
   const meta = [asset.brand, asset.model, asset.serialNumber].filter(Boolean).join(' · ');
 
@@ -120,7 +163,7 @@ export default async function PublicAssetPage({ params }: { params: Promise<{ co
           <div className="relative flex aspect-[16/10] items-center justify-center bg-slate-100 sm:aspect-[16/7]">
             {asset.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={asset.imageUrl} alt={asset.name} className="h-full w-full object-cover" />
+              <img src={asset.imageUrl} alt={asset.name} className="h-full w-full object-contain" />
             ) : (
               <div className="flex flex-col items-center gap-3 text-slate-500">
                 <ImageIcon className="h-12 w-12" />
@@ -164,7 +207,6 @@ export default async function PublicAssetPage({ params }: { params: Promise<{ co
             <Info label="Marca" value={asset.brand || '-'} />
             <Info label="Modelo" value={asset.model || '-'} />
             <Info label="Número de série" value={asset.serialNumber || '-'} mono />
-            <Info label="Etiqueta física" value={asset.assetTag || '-'} mono />
             <Info label="Responsável" value={asset.responsibleName || '-'} />
             <Info label="Em uso" value={asset.inUse === false ? 'Não' : 'Sim'} />
             <Info label="Última atualização" value={formatDateTime(asset.updatedAt)} icon={<CalendarClock className="h-4 w-4" />} />
@@ -182,6 +224,18 @@ export default async function PublicAssetPage({ params }: { params: Promise<{ co
             </CardContent>
           </Card>
         ) : null}
+
+        <MovementSection
+          assetId={asset.id}
+          assetCode={asset.code}
+          assetName={asset.name}
+          responsibleName={asset.responsibleName}
+          currentKioskId={asset.currentKioskId}
+          currentKioskName={asset.currentKioskName}
+          kiosks={kiosks}
+          users={users}
+          movements={movements}
+        />
       </div>
     </main>
   );

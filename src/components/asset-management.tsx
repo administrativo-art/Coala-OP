@@ -120,6 +120,7 @@ const MOVEMENT_LABEL: Record<AssetMovement['type'], string> = {
   ALTERACAO_STATUS: 'Alteração de status',
   BAIXA: 'Baixa',
   ETIQUETA_REIMPRESSA: 'Etiqueta reimpressa',
+  RETIRADA: 'Retirada',
 };
 
 const ASSET_STEPS: { id: AssetStep; label: string }[] = [

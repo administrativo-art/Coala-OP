@@ -170,7 +170,8 @@ export type AssetMovementType =
   | 'TRANSFERENCIA'
   | 'ALTERACAO_STATUS'
   | 'BAIXA'
-  | 'ETIQUETA_REIMPRESSA';
+  | 'ETIQUETA_REIMPRESSA'
+  | 'RETIRADA';
 
 export type Asset = {
   id: string;
