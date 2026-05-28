@@ -178,6 +178,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
     if (!userContext.permissions.assets?.edit) return jsonError('Sem permissão.', 403);
     const withdrawerName = String(body.withdrawerName ?? '').trim();
     const destinationName = String(body.destinationName ?? '').trim();
+    const newResponsibleName = String(body.newResponsibleName ?? '').trim() || null;
     if (!withdrawerName || !destinationName) return jsonError('Quem retira e destino são obrigatórios.');
     await dbAdmin.collection('assetMovements').add({
       assetId,
@@ -193,6 +194,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
       notes: body.notes || null,
       occurredAt: now,
     });
+    if (newResponsibleName) {
+      await ref.update({ responsibleName: newResponsibleName, updatedAt: now });
+    }
     return NextResponse.json({ ok: true });
   }
 

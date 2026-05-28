@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, Camera, Grid2X2, History, ImageIcon, List, MoveRight, PackageCheck, Plus, Printer, QrCode, Search, Tags, Truck, Upload } from 'lucide-react';
+import { ArrowRight, Camera, Check, ChevronsUpDown, Grid2X2, History, ImageIcon, List, MoveRight, PackageCheck, Plus, Printer, QrCode, Search, Tags, Truck, Upload } from 'lucide-react';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useSearchParams } from 'next/navigation';
 
@@ -29,6 +29,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 
 const assetSchema = z.object({
@@ -341,6 +343,9 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const [movDestType, setMovDestType] = useState<'cadastrado' | 'externo'>('cadastrado');
   const [movDestKioskId, setMovDestKioskId] = useState('');
   const [movDestFree, setMovDestFree] = useState('');
+  const [movRespType, setMovRespType] = useState<'cadastrado' | 'externo'>('cadastrado');
+  const [movRespUserId, setMovRespUserId] = useState('');
+  const [movRespFree, setMovRespFree] = useState('');
   const [movNotes, setMovNotes] = useState('');
   const [movSaving, setMovSaving] = useState(false);
   const form = useForm<AssetEditFormValues>({
@@ -489,6 +494,9 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     const destinationName = movDestType === 'cadastrado'
       ? kiosks.find((k) => k.id === movDestKioskId)?.name ?? ''
       : movDestFree;
+    const newResponsibleName = movRespType === 'cadastrado'
+      ? activeUsers.find((u) => u.id === movRespUserId)?.username ?? ''
+      : movRespFree;
     if (!withdrawerName || !destinationName) {
       toast({ title: 'Preencha quem está retirando e o destino.', variant: 'destructive' });
       return;
@@ -500,6 +508,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
         withdrawerUserId: movWithdrawerType === 'cadastrado' ? movWithdrawerUserId : undefined,
         destinationName,
         destinationKioskId: movDestType === 'cadastrado' ? movDestKioskId : undefined,
+        newResponsibleName: newResponsibleName || undefined,
         notes: movNotes || undefined,
       });
       toast({ title: 'Movimentação registrada.' });
@@ -507,6 +516,8 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
       setMovWithdrawerFree('');
       setMovDestKioskId('');
       setMovDestFree('');
+      setMovRespUserId('');
+      setMovRespFree('');
       setMovNotes('');
       await loadMovements();
     } finally {
@@ -936,50 +947,52 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                       </div>
 
                       {/* Quem está retirando */}
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Quem está retirando</p>
-                        <div className="flex rounded-md border overflow-hidden w-fit text-sm">
-                          <button type="button" onClick={() => { setMovWithdrawerType('cadastrado'); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); }}
-                            className={cn('px-3 py-1.5 transition-colors', movWithdrawerType === 'cadastrado' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
-                            Cadastrado
-                          </button>
-                          <button type="button" onClick={() => { setMovWithdrawerType('externo'); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); }}
-                            className={cn('px-3 py-1.5 border-l transition-colors', movWithdrawerType === 'externo' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
-                            Não cadastrado
-                          </button>
-                        </div>
-                        {movWithdrawerType === 'cadastrado' ? (
-                          <Select value={movWithdrawerUserId} onValueChange={setMovWithdrawerUserId}>
-                            <SelectTrigger><SelectValue placeholder="Selecione um colaborador" /></SelectTrigger>
-                            <SelectContent>{activeUsers.map((u) => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}</SelectContent>
-                          </Select>
-                        ) : (
-                          <Input placeholder="Nome de quem está retirando" value={movWithdrawerFree} onChange={(e) => setMovWithdrawerFree(e.target.value)} />
-                        )}
-                      </div>
+                      <MovToggleField
+                        label="Quem está retirando"
+                        type={movWithdrawerType}
+                        onTypeChange={(t) => { setMovWithdrawerType(t); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); }}
+                        freeValue={movWithdrawerFree}
+                        onFreeChange={setMovWithdrawerFree}
+                        freePlaceholder="Nome de quem está retirando"
+                        registeredId={movWithdrawerUserId}
+                        onRegisteredChange={setMovWithdrawerUserId}
+                        options={activeUsers.map((u) => ({ id: u.id, label: u.username }))}
+                        searchPlaceholder="Buscar colaborador..."
+                        emptyMessage="Nenhum colaborador encontrado."
+                        selectPlaceholder="Selecione um colaborador"
+                      />
 
                       {/* Para onde vai */}
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Para onde vai</p>
-                        <div className="flex rounded-md border overflow-hidden w-fit text-sm">
-                          <button type="button" onClick={() => { setMovDestType('cadastrado'); setMovDestKioskId(''); setMovDestFree(''); }}
-                            className={cn('px-3 py-1.5 transition-colors', movDestType === 'cadastrado' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
-                            Cadastrado
-                          </button>
-                          <button type="button" onClick={() => { setMovDestType('externo'); setMovDestKioskId(''); setMovDestFree(''); }}
-                            className={cn('px-3 py-1.5 border-l transition-colors', movDestType === 'externo' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
-                            Não cadastrado
-                          </button>
-                        </div>
-                        {movDestType === 'cadastrado' ? (
-                          <Select value={movDestKioskId} onValueChange={setMovDestKioskId}>
-                            <SelectTrigger><SelectValue placeholder="Selecione uma unidade" /></SelectTrigger>
-                            <SelectContent>{kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                          </Select>
-                        ) : (
-                          <Input placeholder="Destino" value={movDestFree} onChange={(e) => setMovDestFree(e.target.value)} />
-                        )}
-                      </div>
+                      <MovToggleField
+                        label="Para onde vai"
+                        type={movDestType}
+                        onTypeChange={(t) => { setMovDestType(t); setMovDestKioskId(''); setMovDestFree(''); }}
+                        freeValue={movDestFree}
+                        onFreeChange={setMovDestFree}
+                        freePlaceholder="Destino"
+                        registeredId={movDestKioskId}
+                        onRegisteredChange={setMovDestKioskId}
+                        options={kiosks.map((k) => ({ id: k.id, label: k.name }))}
+                        searchPlaceholder="Buscar unidade..."
+                        emptyMessage="Nenhuma unidade encontrada."
+                        selectPlaceholder="Selecione uma unidade"
+                      />
+
+                      {/* Novo responsável (opcional) */}
+                      <MovToggleField
+                        label="Novo responsável (opcional)"
+                        type={movRespType}
+                        onTypeChange={(t) => { setMovRespType(t); setMovRespUserId(''); setMovRespFree(''); }}
+                        freeValue={movRespFree}
+                        onFreeChange={setMovRespFree}
+                        freePlaceholder="Nome do novo responsável"
+                        registeredId={movRespUserId}
+                        onRegisteredChange={setMovRespUserId}
+                        options={activeUsers.map((u) => ({ id: u.id, label: u.username }))}
+                        searchPlaceholder="Buscar colaborador..."
+                        emptyMessage="Nenhum colaborador encontrado."
+                        selectPlaceholder="Selecione o novo responsável"
+                      />
 
                       {/* Observações */}
                       <Textarea placeholder="Observações (opcional)" value={movNotes} onChange={(e) => setMovNotes(e.target.value)} rows={2} />
@@ -1060,6 +1073,73 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
 function formatCurrency(value?: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+}
+
+type MovToggleFieldProps = {
+  label: string;
+  type: 'cadastrado' | 'externo';
+  onTypeChange: (t: 'cadastrado' | 'externo') => void;
+  freeValue: string;
+  onFreeChange: (v: string) => void;
+  freePlaceholder: string;
+  registeredId: string;
+  onRegisteredChange: (id: string) => void;
+  options: { id: string; label: string }[];
+  searchPlaceholder: string;
+  emptyMessage: string;
+  selectPlaceholder: string;
+};
+
+function MovToggleField({
+  label, type, onTypeChange, freeValue, onFreeChange, freePlaceholder,
+  registeredId, onRegisteredChange, options, searchPlaceholder, emptyMessage, selectPlaceholder,
+}: MovToggleFieldProps) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.id === registeredId);
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">{label}</p>
+      <div className="flex rounded-md border overflow-hidden w-fit text-sm">
+        <button type="button" onClick={() => onTypeChange('cadastrado')}
+          className={cn('px-3 py-1.5 transition-colors', type === 'cadastrado' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
+          Cadastrado
+        </button>
+        <button type="button" onClick={() => onTypeChange('externo')}
+          className={cn('px-3 py-1.5 border-l transition-colors', type === 'externo' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
+          Não cadastrado
+        </button>
+      </div>
+      {type === 'cadastrado' ? (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
+              <span className={cn(!selected && 'text-muted-foreground')}>{selected ? selected.label : selectPlaceholder}</span>
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-full p-0" align="start">
+            <Command>
+              <CommandInput placeholder={searchPlaceholder} />
+              <CommandList>
+                <CommandEmpty>{emptyMessage}</CommandEmpty>
+                <CommandGroup>
+                  {options.map((o) => (
+                    <CommandItem key={o.id} value={o.label} onSelect={() => { onRegisteredChange(o.id); setOpen(false); }}>
+                      <Check className={cn('mr-2 h-4 w-4', registeredId === o.id ? 'opacity-100' : 'opacity-0')} />
+                      {o.label}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <Input placeholder={freePlaceholder} value={freeValue} onChange={(e) => onFreeChange(e.target.value)} />
+      )}
+    </div>
+  );
 }
 
 function assetMeta(asset: Asset) {
