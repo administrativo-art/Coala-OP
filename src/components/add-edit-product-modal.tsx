@@ -308,16 +308,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         onOpenChange(false);
     };
     
-    // Auto-fill category from base product when linked
-    useEffect(() => {
-        if (!baseProductIdWatch) return;
-        const baseProduct = baseProducts.find(bp => bp.id === baseProductIdWatch);
-        if (!baseProduct) return;
-        if (baseProduct.category !== form.getValues('category')) {
-            handleCategoryChange(baseProduct.category);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [baseProductIdWatch, baseProducts]);
 
     const handleAddAlias = () => {
         const nextAlias = aliasInput.trim();
@@ -560,11 +550,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         <FormField control={form.control} name="category" render={({ field }) => (
                                           <FormItem>
                                             <FormLabel>Categoria</FormLabel>
-                                            <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value} disabled={!!baseProductIdWatch}>
+                                            <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value}>
                                               <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                               <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
                                             </Select>
-                                            {baseProductIdWatch && <p className="text-xs text-muted-foreground">Herdado do insumo base</p>}
                                             <FormMessage />
                                           </FormItem>
                                         )}/>
