@@ -39,6 +39,9 @@ export type ConsumeLotParams = {
     collaboratorName: string;
     occurredAt: string;
     kioskName?: string;
+    apparelType?: string;
+    apparelSize?: string;
+    apparelColor?: string;
   };
 };
 
@@ -374,6 +377,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
                 collaboratorUserId: params.uniformDelivery!.collaboratorUserId,
                 collaboratorName: params.uniformDelivery!.collaboratorName,
                 occurredAt: params.uniformDelivery!.occurredAt,
+                apparelType: params.uniformDelivery?.apparelType,
+                apparelSize: params.uniformDelivery?.apparelSize,
+                apparelColor: params.uniformDelivery?.apparelColor,
                 registeredByUserId: user.id,
                 registeredByUserName: user.username,
                 notes: params.notes,

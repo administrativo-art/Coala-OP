@@ -60,6 +60,8 @@ const productFormSchema = z.object({
   apparelSize: z.string().optional(),
   apparelColor: z.string().optional(),
   apparelFit: z.string().optional(),
+  apparelMaterial: z.string().optional(),
+  apparelUsage: z.string().optional(),
 
   // Conditional sections
   enableLogistics: z.boolean().optional(),
@@ -136,6 +138,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             notes: '', baseProductId: '',
             operationalCategoryId: '',
             apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
+            apparelMaterial: '', apparelUsage: '',
             defaultCountingUnit: 'package',
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
             enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
@@ -180,6 +183,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     apparelSize: productToEdit.apparelSize || '',
                     apparelColor: productToEdit.apparelColor || '',
                     apparelFit: productToEdit.apparelFit || '',
+                    apparelMaterial: productToEdit.apparelMaterial || '',
+                    apparelUsage: productToEdit.apparelUsage || '',
                     defaultCountingUnit: productToEdit.defaultCountingUnit || 'package',
                     // Switches
                     enableLogistics: !!productToEdit.multiplo_caixa,
@@ -201,6 +206,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     notes: '', baseProductId: '',
                     operationalCategoryId: '',
                     apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
+                    apparelMaterial: '', apparelUsage: '',
                     defaultCountingUnit: 'package',
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
@@ -294,6 +300,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             apparelSize: values.category === 'Vestimenta' ? values.apparelSize : undefined,
             apparelColor: values.category === 'Vestimenta' ? values.apparelColor : undefined,
             apparelFit: values.category === 'Vestimenta' ? values.apparelFit : undefined,
+            apparelMaterial: values.category === 'Vestimenta' ? values.apparelMaterial : undefined,
+            apparelUsage: values.category === 'Vestimenta' ? values.apparelUsage : undefined,
 
             multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
             rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,
@@ -590,7 +598,52 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                     </div>
                                 </Card>
-                                
+
+                                {isApparel && (
+                                  <Card className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700">
+                                    <p className="text-sm font-semibold mb-3">Atributos do item</p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <FormField control={form.control} name="apparelSize" render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>Tamanho</FormLabel>
+                                          <Select value={field.value ?? ''} onValueChange={field.onChange}>
+                                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                            <SelectContent>
+                                              {['PP','P','M','G','GG','XGG','Único'].map(s => (
+                                                <SelectItem key={s} value={s}>{s}</SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </FormItem>
+                                      )} />
+                                      <FormField control={form.control} name="apparelColor" render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>Cor</FormLabel>
+                                          <FormControl><Input placeholder="Ex: Preto" {...field} value={field.value ?? ''} /></FormControl>
+                                        </FormItem>
+                                      )} />
+                                      <FormField control={form.control} name="apparelType" render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>Modelo</FormLabel>
+                                          <FormControl><Input placeholder="Ex: Camiseta, Avental" {...field} value={field.value ?? ''} /></FormControl>
+                                        </FormItem>
+                                      )} />
+                                      <FormField control={form.control} name="apparelMaterial" render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>Tecido / material</FormLabel>
+                                          <FormControl><Input placeholder="Ex: Algodão, Poliéster" {...field} value={field.value ?? ''} /></FormControl>
+                                        </FormItem>
+                                      )} />
+                                      <FormField control={form.control} name="apparelUsage" render={({ field }) => (
+                                        <FormItem className="col-span-2">
+                                          <FormLabel>Uso</FormLabel>
+                                          <FormControl><Input placeholder="Ex: Cozinha, Atendimento, EPI" {...field} value={field.value ?? ''} /></FormControl>
+                                        </FormItem>
+                                      )} />
+                                    </div>
+                                  </Card>
+                                )}
+
                                 <Card className="p-4 bg-blue-100 dark:bg-blue-900/20">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">

@@ -289,6 +289,12 @@ export function LotCard({
                         </PopoverContent>
                     </Popover>
                 </div>
+                {(product.apparelSize || product.apparelColor || product.apparelType) && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mt-0.5">
+                    {[product.apparelType, product.apparelColor, product.apparelSize && `Tam. ${product.apparelSize}`]
+                      .filter(Boolean).join(' · ')}
+                  </p>
+                )}
                 <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                     <p><strong>Unidade de medida:</strong> {product.unit}</p>
                     <p><strong>Embalagem de conteúdo:</strong> {product.packageType} com {product.packageSize}{product.unit}</p>

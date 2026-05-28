@@ -939,6 +939,11 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-xs font-black text-[#25231f]">{event.productName}</p>
+                        {(event.apparelSize || event.apparelColor || event.apparelType) && (
+                          <p className="text-[11px] font-semibold text-amber-700">
+                            {[event.apparelType, event.apparelColor, event.apparelSize && `Tam. ${event.apparelSize}`].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
                         <p className="mt-1 text-[11px] font-semibold text-[#817762]">
                           {event.eventType.replace("UNIFORME_", "").toLowerCase()} · {event.quantity} un · {fmtDate(event.occurredAt)} · {event.kioskName ?? event.kioskId}
                         </p>

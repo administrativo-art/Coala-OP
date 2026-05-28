@@ -116,6 +116,7 @@ export function StockWriteDown() {
         for (const item of values.items) {
             const lot = lots.find(l => l.id === item.lotId);
             const kiosk = kiosks.find(k => k.id === lot?.kioskId);
+            const product = products.find(p => p.id === lot?.productId);
             const collaborator = activeUsers.find(u => u.id === item.collaboratorUserId);
             await consumeFromLot({
                 lotId: item.lotId,
@@ -127,6 +128,9 @@ export function StockWriteDown() {
                   collaboratorName: collaborator.username,
                   occurredAt: item.occurredAt || new Date().toISOString().slice(0, 10),
                   kioskName: kiosk?.name,
+                  apparelType: product?.apparelType,
+                  apparelSize: product?.apparelSize,
+                  apparelColor: product?.apparelColor,
                 } : undefined,
             }, user);
         }
@@ -172,6 +176,11 @@ export function StockWriteDown() {
                         <div key={lot.id} className="flex items-center justify-between p-2 border rounded-md">
                           <div>
                             <p className="font-medium">{getProductFullName(product!)}</p>
+                            {(product?.apparelSize || product?.apparelColor || product?.apparelType) && (
+                              <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                                {[product.apparelType, product.apparelColor, product.apparelSize && `Tam. ${product.apparelSize}`].filter(Boolean).join(' · ')}
+                              </p>
+                            )}
                             <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Qtd: {lot.quantity}</p>
                           </div>
                           <Button size="icon" variant="outline" onClick={() => handleAddItem(lot.id)} disabled={fields.some(f => f.lotId === lot.id)}>

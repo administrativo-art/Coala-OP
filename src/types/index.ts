@@ -302,6 +302,9 @@ export type UniformEvent = {
   chargeAmount?: number;
   chargeReason?: string;
   chargeStatus?: UniformChargeStatus;
+  apparelType?: string;
+  apparelSize?: string;
+  apparelColor?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -982,6 +985,8 @@ export type Product = {
   apparelSize?: string;
   apparelColor?: string;
   apparelFit?: string;
+  apparelMaterial?: string;
+  apparelUsage?: string;
   nutritionalTableImageUrl?: string;
   compositionImageUrl?: string;
   nutritionalData?: NutritionalData;
