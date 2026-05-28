@@ -560,17 +560,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         <FormField control={form.control} name="category" render={({ field }) => (
                                           <FormItem>
                                             <FormLabel>Categoria</FormLabel>
-                                            {baseProductIdWatch ? (
-                                              <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground gap-1.5">
-                                                <span>{field.value}</span>
-                                                <span className="text-xs opacity-60">· herdado do insumo base</span>
-                                              </div>
-                                            ) : (
-                                              <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value}>
-                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
-                                              </Select>
-                                            )}
+                                            <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value} disabled={!!baseProductIdWatch}>
+                                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                              <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
+                                            </Select>
+                                            {baseProductIdWatch && <p className="text-xs text-muted-foreground">Herdado do insumo base</p>}
                                             <FormMessage />
                                           </FormItem>
                                         )}/>
