@@ -249,6 +249,21 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         setIsScannerOpen(false);
     };
 
+    /** Redimensiona e comprime um data URL para caber no limite do Firestore (1MB/doc). */
+    const compressImage = (dataUrl: string, maxSide = 800, quality = 0.82): Promise<string> =>
+        new Promise((resolve) => {
+            const img = new window.Image();
+            img.onload = () => {
+                const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+                const canvas = document.createElement('canvas');
+                canvas.width  = Math.round(img.width  * scale);
+                canvas.height = Math.round(img.height * scale);
+                canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.src = dataUrl;
+        });
+
     type PhotoTarget = 'main' | 'instruction' | 'nutritionalTable' | 'composition';
 
     const photoTargetField: Record<PhotoTarget, 'imageUrl' | 'countingInstructionImageUrl' | 'nutritionalTableImageUrl' | 'compositionImageUrl'> = {
@@ -259,21 +274,23 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     };
 
     const handlePhotoCaptured = async (dataUrl: string, target: PhotoTarget) => {
-        form.setValue(photoTargetField[target], dataUrl, { shouldValidate: true, shouldDirty: true });
+        const compressed = await compressImage(dataUrl);
+        form.setValue(photoTargetField[target], compressed, { shouldValidate: true, shouldDirty: true });
         toast({ title: "Foto capturada com sucesso!" });
     };
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, target: PhotoTarget) => {
         const file = event.target.files?.[0];
         if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast({ variant: 'destructive', title: 'Arquivo muito grande', description: 'Por favor, selecione um arquivo de imagem menor que 5MB.' });
+            if (file.size > 10 * 1024 * 1024) {
+                toast({ variant: 'destructive', title: 'Arquivo muito grande', description: 'Por favor, selecione um arquivo de imagem menor que 10MB.' });
                 return;
             }
             const reader = new FileReader();
             reader.onloadend = async () => {
                 const dataUrl = reader.result as string;
-                form.setValue(photoTargetField[target], dataUrl, { shouldValidate: true, shouldDirty: true });
+                const compressed = await compressImage(dataUrl);
+                form.setValue(photoTargetField[target], compressed, { shouldValidate: true, shouldDirty: true });
             };
             reader.readAsDataURL(file);
         }
