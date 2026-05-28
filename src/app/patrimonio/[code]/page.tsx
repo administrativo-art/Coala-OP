@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { Box, CalendarClock, CircleDot, ClipboardList, ImageIcon, MapPin, Tag } from 'lucide-react';
+import { ArrowRight, Box, CalendarClock, CircleDot, ClipboardList, ClockIcon, History, ImageIcon, MapPin, Tag } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { WORKSPACE_ID } from '@/lib/workspace';
 import type { Asset, AssetMovement, AssetStatus } from '@/types';
-import { MovementSection, type MovementItem } from './movement-section';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,6 +31,16 @@ const STATUS_STYLE: Record<AssetStatus, string> = {
   baixado: 'bg-slate-500 text-white hover:bg-slate-500',
 };
 
+const MOVEMENT_LABELS: Record<string, string> = {
+  CRIACAO: 'Cadastro',
+  EDICAO: 'Edição',
+  TRANSFERENCIA: 'Transferência',
+  ALTERACAO_STATUS: 'Alteração de status',
+  BAIXA: 'Baixa',
+  ETIQUETA_REIMPRESSA: 'Etiqueta reimpressa',
+  RETIRADA: 'Retirada',
+};
+
 type PublicAsset = Pick<
   Asset,
   | 'id'
@@ -42,7 +51,6 @@ type PublicAsset = Pick<
   | 'brand'
   | 'model'
   | 'serialNumber'
-  | 'assetTag'
   | 'description'
   | 'currentKioskId'
   | 'currentKioskName'
@@ -50,7 +58,6 @@ type PublicAsset = Pick<
   | 'exactLocation'
   | 'responsibleName'
   | 'inUse'
-  | 'possessionStatus'
   | 'status'
   | 'imageUrl'
   | 'notes'
@@ -93,7 +100,6 @@ async function getAssetByCode(code: string): Promise<PublicAsset | null> {
     brand: data.brand,
     model: data.model,
     serialNumber: data.serialNumber,
-    assetTag: data.assetTag,
     description: data.description,
     currentKioskId: data.currentKioskId,
     currentKioskName: data.currentKioskName,
@@ -101,7 +107,6 @@ async function getAssetByCode(code: string): Promise<PublicAsset | null> {
     exactLocation: data.exactLocation,
     responsibleName: data.responsibleName,
     inUse: data.inUse,
-    possessionStatus: data.possessionStatus,
     status: data.status,
     imageUrl: data.imageUrl,
     notes: data.notes,
@@ -109,17 +114,7 @@ async function getAssetByCode(code: string): Promise<PublicAsset | null> {
   };
 }
 
-async function getKiosks() {
-  const snap = await dbAdmin.collection('kiosks').get();
-  return snap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) || d.id }));
-}
-
-async function getUsers() {
-  const snap = await dbAdmin.collection('users').where('isActive', '!=', false).get();
-  return snap.docs.map((d) => ({ id: d.id, username: (d.data().username as string) || d.id }));
-}
-
-async function getMovements(assetId: string): Promise<MovementItem[]> {
+async function getMovements(assetId: string) {
   const snap = await dbAdmin
     .collection('assetMovements')
     .where('assetId', '==', assetId)
@@ -143,17 +138,10 @@ async function getMovements(assetId: string): Promise<MovementItem[]> {
 
 export default async function PublicAssetPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-
-  const [asset, kiosks, users] = await Promise.all([
-    getAssetByCode(code),
-    getKiosks(),
-    getUsers(),
-  ]);
-
+  const asset = await getAssetByCode(code);
   if (!asset) notFound();
 
   const movements = await getMovements(asset.id);
-
   const meta = [asset.brand, asset.model, asset.serialNumber].filter(Boolean).join(' · ');
 
   return (
@@ -225,17 +213,43 @@ export default async function PublicAssetPage({ params }: { params: Promise<{ co
           </Card>
         ) : null}
 
-        <MovementSection
-          assetId={asset.id}
-          assetCode={asset.code}
-          assetName={asset.name}
-          responsibleName={asset.responsibleName}
-          currentKioskId={asset.currentKioskId}
-          currentKioskName={asset.currentKioskName}
-          kiosks={kiosks}
-          users={users}
-          movements={movements}
-        />
+        {movements.length > 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <History className="h-5 w-5" />
+                Histórico de movimentações
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {movements.map((m) => (
+                  <div key={m.id} className="flex gap-3">
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                      <ClockIcon className="h-3.5 w-3.5 text-slate-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold">{MOVEMENT_LABELS[m.type] ?? m.type}</span>
+                        <span className="shrink-0 text-xs text-slate-400">{formatDateTime(m.occurredAt)}</span>
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+                        <span>{m.username}</span>
+                        {m.toKioskName && (
+                          <>
+                            <ArrowRight className="h-3 w-3 shrink-0" />
+                            <span>{m.toKioskName}</span>
+                          </>
+                        )}
+                      </div>
+                      {m.notes && <p className="mt-1 text-xs text-slate-400">{m.notes}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </main>
   );
