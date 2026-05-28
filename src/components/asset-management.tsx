@@ -93,7 +93,7 @@ const assetEditSchema = assetSchema.extend({
 });
 
 type AssetEditFormValues = z.infer<typeof assetEditSchema>;
-type AssetStep = 'identification' | 'location' | 'acquisition' | 'condition' | 'movement' | 'history';
+type AssetStep = 'identification' | 'location' | 'acquisition' | 'condition' | 'history';
 
 const STATUS_LABEL: Record<AssetStatus, string> = {
   ativo: 'Ativo',
@@ -130,8 +130,7 @@ const ASSET_STEPS: { id: AssetStep; label: string }[] = [
   { id: 'location', label: '2. Localização' },
   { id: 'acquisition', label: '3. Aquisição' },
   { id: 'condition', label: '4. Estado' },
-  { id: 'movement', label: '5. Movimentação' },
-  { id: 'history', label: '6. Histórico' },
+  { id: 'history', label: '5. Histórico' },
 ];
 
 function assetQrPayload(asset: Asset) {
@@ -481,9 +480,41 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
   async function handlePrintLabel() {
     if (!asset) return;
-    await loadQr();
+    const qrDataUrl = await QRCode.toDataURL(assetQrPayload(asset), { width: 280, margin: 1 });
+    const win = window.open('', '_blank', 'width=500,height=400');
+    if (!win) { toast({ title: 'Permita popups para imprimir a etiqueta.', variant: 'destructive' }); return; }
+    win.document.write(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Etiqueta ${asset.code}</title>
+  <style>
+    @page { size: 10cm 6cm; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { width: 10cm; height: 6cm; display: flex; align-items: center; padding: 0.4cm; font-family: sans-serif; background: #fff; }
+    .label { display: flex; align-items: center; gap: 0.4cm; width: 100%; }
+    img { width: 4.5cm; height: 4.5cm; flex-shrink: 0; }
+    .info { flex: 1; overflow: hidden; }
+    .code { font-family: monospace; font-size: 13pt; font-weight: 700; letter-spacing: 0.02em; }
+    .name { font-size: 8.5pt; margin-top: 5px; line-height: 1.3; word-break: break-word; }
+    .unit { font-size: 7.5pt; color: #555; margin-top: 5px; }
+    @media screen { body { border: 1px dashed #ccc; margin: 1cm auto; } }
+  </style>
+</head>
+<body>
+  <div class="label">
+    <img src="${qrDataUrl}" alt="QR Code" />
+    <div class="info">
+      <div class="code">${asset.code}</div>
+      <div class="name">${asset.name}</div>
+      ${asset.currentKioskName || asset.currentKioskId ? `<div class="unit">${asset.currentKioskName || asset.currentKioskId}</div>` : ''}
+    </div>
+  </div>
+  <script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`);
+    win.document.close();
     await recordLabelPrint(asset.id);
-    toast({ title: 'Etiqueta pronta para impressão.' });
   }
 
   async function handleRetirada() {
@@ -917,90 +948,85 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   </>
                   ) : null}
 
-                  <div className="flex flex-wrap gap-2 border-t pt-4">
-                    <Button type="submit" disabled={!permissions.assets?.edit || saving || uploadingImage}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
-                  </div>
-
-                  {assetStep === 'location' ? (
-                    <>
-                  <div className="rounded-md border p-3">
-                    <p className="mb-2 text-sm font-medium">Transferência de unidade</p>
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                      <Select value={targetKioskId} onValueChange={setTargetKioskId}>
-                        <SelectTrigger><SelectValue placeholder="Transferir para..." /></SelectTrigger>
-                        <SelectContent>{kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <Button type="button" onClick={handleTransfer} disabled={!targetKioskId || !permissions.assets?.transfer}><Truck className="mr-2 h-4 w-4" />Transferir</Button>
+                  {assetStep !== 'history' ? (
+                    <div className="flex flex-wrap gap-2 border-t pt-4">
+                      <Button type="submit" disabled={!permissions.assets?.edit || saving || uploadingImage}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
                     </div>
-                  </div>
-                    </>
                   ) : null}
 
-                  {assetStep === 'movement' ? (
-                    <div className="space-y-5 rounded-md border p-4">
-                      <p className="text-sm font-semibold">Registrar movimentação</p>
-
-                      {/* Responsável atual */}
-                      <div className="rounded-md border bg-muted/40 p-3">
-                        <p className="text-xs font-medium uppercase text-muted-foreground">Responsável atual</p>
-                        <p className="mt-1 text-sm font-semibold">{asset.responsibleName || '—'}</p>
+                  {assetStep === 'location' ? (
+                    <div className="space-y-4">
+                      <div className="rounded-md border p-3">
+                        <p className="mb-2 text-sm font-medium">Transferência de unidade</p>
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                          <Select value={targetKioskId} onValueChange={setTargetKioskId}>
+                            <SelectTrigger><SelectValue placeholder="Transferir para..." /></SelectTrigger>
+                            <SelectContent>{kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                          <Button type="button" onClick={handleTransfer} disabled={!targetKioskId || !permissions.assets?.transfer}><Truck className="mr-2 h-4 w-4" />Transferir</Button>
+                        </div>
                       </div>
 
-                      {/* Quem está retirando */}
-                      <MovToggleField
-                        label="Quem está retirando"
-                        type={movWithdrawerType}
-                        onTypeChange={(t) => { setMovWithdrawerType(t); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); }}
-                        freeValue={movWithdrawerFree}
-                        onFreeChange={setMovWithdrawerFree}
-                        freePlaceholder="Nome de quem está retirando"
-                        registeredId={movWithdrawerUserId}
-                        onRegisteredChange={setMovWithdrawerUserId}
-                        options={activeUsers.map((u) => ({ id: u.id, label: u.username }))}
-                        searchPlaceholder="Buscar colaborador..."
-                        emptyMessage="Nenhum colaborador encontrado."
-                        selectPlaceholder="Selecione um colaborador"
-                      />
+                      <div className="space-y-5 rounded-md border p-4">
+                        <p className="text-sm font-semibold">Registrar movimentação</p>
 
-                      {/* Para onde vai */}
-                      <MovToggleField
-                        label="Para onde vai"
-                        type={movDestType}
-                        onTypeChange={(t) => { setMovDestType(t); setMovDestKioskId(''); setMovDestFree(''); }}
-                        freeValue={movDestFree}
-                        onFreeChange={setMovDestFree}
-                        freePlaceholder="Destino"
-                        registeredId={movDestKioskId}
-                        onRegisteredChange={setMovDestKioskId}
-                        options={kiosks.map((k) => ({ id: k.id, label: k.name }))}
-                        searchPlaceholder="Buscar unidade..."
-                        emptyMessage="Nenhuma unidade encontrada."
-                        selectPlaceholder="Selecione uma unidade"
-                      />
+                        <div className="rounded-md border bg-muted/40 p-3">
+                          <p className="text-xs font-medium uppercase text-muted-foreground">Responsável atual</p>
+                          <p className="mt-1 text-sm font-semibold">{asset.responsibleName || '—'}</p>
+                        </div>
 
-                      {/* Novo responsável (opcional) */}
-                      <MovToggleField
-                        label="Novo responsável (opcional)"
-                        type={movRespType}
-                        onTypeChange={(t) => { setMovRespType(t); setMovRespUserId(''); setMovRespFree(''); }}
-                        freeValue={movRespFree}
-                        onFreeChange={setMovRespFree}
-                        freePlaceholder="Nome do novo responsável"
-                        registeredId={movRespUserId}
-                        onRegisteredChange={setMovRespUserId}
-                        options={activeUsers.map((u) => ({ id: u.id, label: u.username }))}
-                        searchPlaceholder="Buscar colaborador..."
-                        emptyMessage="Nenhum colaborador encontrado."
-                        selectPlaceholder="Selecione o novo responsável"
-                      />
+                        <MovToggleField
+                          label="Quem está retirando"
+                          type={movWithdrawerType}
+                          onTypeChange={(t) => { setMovWithdrawerType(t); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); }}
+                          freeValue={movWithdrawerFree}
+                          onFreeChange={setMovWithdrawerFree}
+                          freePlaceholder="Nome de quem está retirando"
+                          registeredId={movWithdrawerUserId}
+                          onRegisteredChange={setMovWithdrawerUserId}
+                          options={activeUsers.map((u) => ({ id: u.id, label: u.username }))}
+                          searchPlaceholder="Buscar colaborador..."
+                          emptyMessage="Nenhum colaborador encontrado."
+                          selectPlaceholder="Selecione um colaborador"
+                        />
 
-                      {/* Observações */}
-                      <Textarea placeholder="Observações (opcional)" value={movNotes} onChange={(e) => setMovNotes(e.target.value)} rows={2} />
+                        <MovToggleField
+                          label="Para onde vai"
+                          type={movDestType}
+                          onTypeChange={(t) => { setMovDestType(t); setMovDestKioskId(''); setMovDestFree(''); }}
+                          freeValue={movDestFree}
+                          onFreeChange={setMovDestFree}
+                          freePlaceholder="Destino"
+                          registeredId={movDestKioskId}
+                          onRegisteredChange={setMovDestKioskId}
+                          options={kiosks.map((k) => ({ id: k.id, label: k.name }))}
+                          searchPlaceholder="Buscar unidade..."
+                          emptyMessage="Nenhuma unidade encontrada."
+                          selectPlaceholder="Selecione uma unidade"
+                        />
 
-                      <Button type="button" onClick={() => void handleRetirada()} disabled={movSaving || !permissions.assets?.edit}>
-                        <MoveRight className="mr-2 h-4 w-4" />
-                        {movSaving ? 'Registrando...' : 'Registrar'}
-                      </Button>
+                        <MovToggleField
+                          label="Novo responsável (opcional)"
+                          type={movRespType}
+                          onTypeChange={(t) => { setMovRespType(t); setMovRespUserId(''); setMovRespFree(''); }}
+                          freeValue={movRespFree}
+                          onFreeChange={setMovRespFree}
+                          freePlaceholder="Nome do novo responsável"
+                          registeredId={movRespUserId}
+                          onRegisteredChange={setMovRespUserId}
+                          options={activeUsers.map((u) => ({ id: u.id, label: u.username }))}
+                          searchPlaceholder="Buscar colaborador..."
+                          emptyMessage="Nenhum colaborador encontrado."
+                          selectPlaceholder="Selecione o novo responsável"
+                        />
+
+                        <Textarea placeholder="Observações (opcional)" value={movNotes} onChange={(e) => setMovNotes(e.target.value)} rows={2} />
+
+                        <Button type="button" onClick={() => void handleRetirada()} disabled={movSaving || !permissions.assets?.edit}>
+                          <MoveRight className="mr-2 h-4 w-4" />
+                          {movSaving ? 'Registrando...' : 'Registrar'}
+                        </Button>
+                      </div>
                     </div>
                   ) : null}
 
