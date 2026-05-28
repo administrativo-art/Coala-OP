@@ -96,12 +96,32 @@ export function BaseProductManagement() {
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClassificationFilter, setSelectedClassificationFilter] = useState('all');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   
   const classificationMap = useMemo(() => {
     return new Map(classifications.map(c => [c.id, c.name]));
   }, [classifications]);
+
+  const classificationFilters = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const product of baseProducts) {
+      if (product.isArchived) continue;
+      const key = product.classification || 'none';
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+
+    return [
+      { id: 'all', name: 'Todas', count: baseProducts.filter(p => !p.isArchived).length },
+      ...classifications.map(classification => ({
+        id: classification.id,
+        name: classification.name,
+        count: counts.get(classification.id) || 0,
+      })),
+      { id: 'none', name: 'Sem classificação', count: counts.get('none') || 0 },
+    ];
+  }, [baseProducts, classifications]);
 
   const handleDeleteClick = (product: BaseProduct) => {
     const isUsed = products.some(p => p.baseProductId === product.id);
@@ -176,15 +196,23 @@ export function BaseProductManagement() {
 
   const { activeFiltered, archivedFiltered } = useMemo(() => {
     const searchLower = searchTerm.toLowerCase();
-    const all = baseProducts.filter(p =>
+    const all = baseProducts.filter(p => {
+      const matchesClassification =
+        selectedClassificationFilter === 'all' ||
+        (selectedClassificationFilter === 'none' ? !p.classification : p.classification === selectedClassificationFilter);
+
+      if (!matchesClassification) return false;
+
+      return (
         p.name.toLowerCase().includes(searchLower) ||
         (classificationMap.get(p.classification || '') || '').toLowerCase().includes(searchLower)
-    );
+      );
+    });
     return {
       activeFiltered: all.filter(p => !p.isArchived),
       archivedFiltered: all.filter(p => p.isArchived),
     };
-  }, [baseProducts, searchTerm, classificationMap]);
+  }, [baseProducts, searchTerm, classificationMap, selectedClassificationFilter]);
 
   const handleProductSelectionChange = (id: string, isSelected: boolean) => {
     setSelectedProducts(prev => {
@@ -225,6 +253,35 @@ export function BaseProductManagement() {
                   className="pl-10"
                 />
               </div>
+           </div>
+           <div className="flex flex-wrap gap-2">
+              {classificationFilters.map(filter => {
+                const isSelected = selectedClassificationFilter === filter.id;
+                return (
+                  <Button
+                    key={filter.id}
+                    type="button"
+                    variant={isSelected ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-8 rounded-full px-3"
+                    onClick={() => {
+                      setSelectedClassificationFilter(filter.id);
+                      setSelectedProducts(new Set());
+                    }}
+                  >
+                    {filter.name}
+                    <span
+                      className={
+                        isSelected
+                          ? 'ml-2 rounded-full bg-primary-foreground/20 px-1.5 text-xs'
+                          : 'ml-2 rounded-full bg-muted px-1.5 text-xs text-muted-foreground'
+                      }
+                    >
+                      {filter.count}
+                    </span>
+                  </Button>
+                );
+              })}
            </div>
            
             {/* Tabela de Ativos */}
@@ -420,4 +477,3 @@ export function BaseProductManagement() {
     </>
   );
 }
-

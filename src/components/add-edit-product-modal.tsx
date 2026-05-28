@@ -343,6 +343,85 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         setAliases((current) => current.filter((alias) => normalizeAlias(alias) !== normalizeAlias(aliasToRemove)));
     };
 
+    const renderLinkageCard = () => (
+        <Card className="p-4 bg-violet-100 dark:bg-violet-900/20">
+            <h3 className="font-medium mb-4">Vínculo</h3>
+            <FormField control={form.control} name="operationalCategoryId" render={({ field }) => (
+                <FormItem className="mb-4">
+                    <FormLabel>Categoria do item</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Selecione a categoria do item..."/></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {activeCategories
+                                .filter((category) => category.destination !== 'asset')
+                                .map((category) => (
+                                    <SelectItem key={category.id} value={category.id}>
+                                        {category.name}
+                                    </SelectItem>
+                                ))}
+                        </SelectContent>
+                    </Select>
+                    <FormDescription>
+                        Esta categoria define como o item será tratado nas compras e no recebimento.
+                    </FormDescription>
+                    <FormMessage />
+                </FormItem>
+            )}/>
+            {activeCategories.length === 0 && (
+                <Alert className="mb-4">
+                    <AlertTitle>Cadastre categorias operacionais</AlertTitle>
+                    <AlertDescription>
+                        As categorias padrão são Insumo, Material de limpeza, Vestimenta e Patrimônio.
+                    </AlertDescription>
+                </Alert>
+            )}
+            <FormField control={form.control} name="baseProductId" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Insumo base</FormLabel>
+                    <div className="flex gap-2 items-center">
+                        <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
+                            <FormControl>
+                                <SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {baseProducts.map(ap => <SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}>
+                            <Settings className="h-4 w-4"/>
+                        </Button>
+                    </div>
+                    <FormMessage />
+                </FormItem>
+            )}/>
+            
+            {showCategoryMismatchWarning && (
+                 <Alert variant="destructive" className="mt-4">
+                    <AlertTitle>Vínculo de categorias diferentes</AlertTitle>
+                    <AlertDescription>
+                        A categoria deste insumo é diferente da categoria do produto base. A conversão de unidades pode não funcionar corretamente.
+                    </AlertDescription>
+                </Alert>
+            )}
+        </Card>
+    );
+
+    const renderNotesCard = () => (
+        <Card className="p-4 bg-muted/40">
+            <FormField control={form.control} name="notes" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Observações</FormLabel>
+                    <FormControl>
+                        <Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormMessage />
+                </FormItem>
+            )}/>
+        </Card>
+    );
+
 
     return (
         <>
@@ -457,6 +536,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         </FormItem>
                                     )}/>
                                 </Card>
+
+                                {renderLinkageCard()}
                                 
                                 <Card className="p-4 bg-amber-100 dark:bg-amber-900/20">
                                     <div className="space-y-0.5 mb-4">
@@ -611,71 +692,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     )}
                                 </Card>
                                 
-                                <Card className="p-4 bg-violet-100 dark:bg-violet-900/20">
-                                    <h3 className="font-medium mb-4">Vínculo e observações</h3>
-                                    <FormField control={form.control} name="operationalCategoryId" render={({ field }) => (
-                                        <FormItem className="mb-4">
-                                            <FormLabel>Categoria do item</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                <FormControl>
-                                                    <SelectTrigger><SelectValue placeholder="Selecione a categoria do item..."/></SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    {activeCategories
-                                                        .filter((category) => category.destination !== 'asset')
-                                                        .map((category) => (
-                                                            <SelectItem key={category.id} value={category.id}>
-                                                                {category.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <FormDescription>
-                                                Esta categoria define como o item será tratado nas compras e no recebimento.
-                                            </FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                    {activeCategories.length === 0 && (
-                                        <Alert className="mb-4">
-                                            <AlertTitle>Cadastre categorias operacionais</AlertTitle>
-                                            <AlertDescription>
-                                                As categorias padrão são Insumo, Material de limpeza, Vestimenta e Patrimônio.
-                                            </AlertDescription>
-                                        </Alert>
-                                    )}
-                                    <FormField control={form.control} name="baseProductId" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Insumo base</FormLabel>
-                                            <div className="flex gap-2 items-center">
-                                                <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
-                                                    <FormControl>
-                                                        <SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        {baseProducts.map(ap => <SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>)}
-                                                    </SelectContent>
-                                                </Select>
-                                                <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}>
-                                                    <Settings className="h-4 w-4"/>
-                                                </Button>
-                                            </div>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                    
-                                    {showCategoryMismatchWarning && (
-                                         <Alert variant="destructive">
-                                            <AlertTitle>Vínculo de categorias diferentes</AlertTitle>
-                                            <AlertDescription>
-                                                A categoria deste insumo é diferente da categoria do produto base. A conversão de unidades pode não funcionar corretamente.
-                                            </AlertDescription>
-                                        </Alert>
-                                    )}
-
-                                    <FormField control={form.control} name="notes" render={({ field }) => (<FormItem className='mt-4'><FormLabel>Observações</FormLabel><FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                </Card>
-
                                 <Card className="p-4 bg-emerald-50 dark:bg-emerald-900/20">
                                     <div className="flex items-center gap-2 mb-1">
                                         <FlaskConical className="h-4 w-4 text-emerald-600" />
@@ -790,6 +806,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         </div>
                                     )}
                                 </Card>
+
+                                {renderNotesCard()}
                             </div>
                         </ScrollArea>
                         <DialogFooter className="pt-4 border-t">
