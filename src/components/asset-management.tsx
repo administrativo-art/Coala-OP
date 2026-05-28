@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, Camera, Check, ChevronsUpDown, Grid2X2, History, ImageIcon, List, MoveRight, PackageCheck, Plus, Printer, QrCode, Search, Tags, Truck, Upload } from 'lucide-react';
+import { ArrowRight, Camera, Check, ChevronsUpDown, Grid2X2, History, ImageIcon, List, MoveRight, PackageCheck, Plus, Printer, QrCode, Search, Tags, Upload } from 'lucide-react';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useSearchParams } from 'next/navigation';
 
@@ -256,7 +256,7 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     <FormItem><FormLabel>Data da compra</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
                   )} />
                   <FormField control={form.control} name="purchaseValue" render={({ field }) => (
-                    <FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                    <FormItem><FormLabel>Valor</FormLabel><FormControl><CurrencyInput value={field.value} onChange={field.onChange} onBlur={field.onBlur} /></FormControl></FormItem>
                   )} />
                 </div>
                 <FormField control={form.control} name="notes" render={({ field }) => (
@@ -326,12 +326,11 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     () => (financialAccounts || []).filter((a: any) => a.active !== false && a.is_dre_account !== false && !a.isGroup),
     [financialAccounts]
   );
-  const { categories, transferAsset, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements, recordRetirada } = useAssets();
+  const { categories, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements, recordRetirada } = useAssets();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [qrUrl, setQrUrl] = useState('');
   const [movements, setMovements] = useState<AssetMovement[]>([]);
-  const [targetKioskId, setTargetKioskId] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loadingMovements, setLoadingMovements] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -440,7 +439,6 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
       .then(setQrUrl)
       .catch(() => setQrUrl(''));
     setMovements([]);
-    setTargetKioskId('');
     setAssetStep('identification');
   }, [asset, form]);
 
@@ -554,14 +552,6 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     } finally {
       setMovSaving(false);
     }
-  }
-
-  async function handleTransfer() {
-    if (!asset || !targetKioskId) return;
-    const kiosk = kiosks.find((k) => k.id === targetKioskId);
-    await transferAsset(asset.id, targetKioskId, kiosk?.name);
-    toast({ title: 'Patrimônio transferido.' });
-    setTargetKioskId('');
   }
 
   async function handleStatus(status: AssetStatus) {
@@ -901,7 +891,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                       <FormItem><FormLabel>Data da compra</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="purchaseValue" render={({ field }) => (
-                      <FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Valor</FormLabel><FormControl><CurrencyInput value={field.value} onChange={field.onChange} onBlur={field.onBlur} disabled={!permissions.assets?.edit || asset?.sourceType === 'purchase_receipt'} /></FormControl></FormItem>
                     )} />
                   </div>
 
@@ -956,17 +946,6 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
                   {assetStep === 'location' ? (
                     <div className="space-y-4">
-                      <div className="rounded-md border p-3">
-                        <p className="mb-2 text-sm font-medium">Transferência de unidade</p>
-                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                          <Select value={targetKioskId} onValueChange={setTargetKioskId}>
-                            <SelectTrigger><SelectValue placeholder="Transferir para..." /></SelectTrigger>
-                            <SelectContent>{kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                          </Select>
-                          <Button type="button" onClick={handleTransfer} disabled={!targetKioskId || !permissions.assets?.transfer}><Truck className="mr-2 h-4 w-4" />Transferir</Button>
-                        </div>
-                      </div>
-
                       <div className="space-y-5 rounded-md border p-4">
                         <p className="text-sm font-semibold">Registrar movimentação</p>
 
@@ -1099,6 +1078,52 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
 function formatCurrency(value?: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+}
+
+function CurrencyInput({ value, onChange, onBlur, disabled }: {
+  value?: number | string;
+  onChange: (v: number | undefined) => void;
+  onBlur?: () => void;
+  disabled?: boolean;
+}) {
+  const [focused, setFocused] = useState(false);
+  const [text, setText] = useState('');
+  const numericValue = value == null || value === '' ? undefined : Number(value);
+  const isValid = numericValue != null && !isNaN(numericValue);
+
+  function handleFocus() {
+    setFocused(true);
+    setText(isValid ? String(numericValue).replace('.', ',') : '');
+  }
+
+  function handleBlur() {
+    setFocused(false);
+    onBlur?.();
+    const parsed = parseFloat(text.replace(',', '.'));
+    onChange(isNaN(parsed) ? undefined : parsed);
+  }
+
+  function handleChange(e: { target: { value: string } }) {
+    const raw = e.target.value.replace(/[^0-9,]/g, '');
+    const parts = raw.split(',');
+    const normalized = parts.length > 2 ? parts[0] + ',' + parts.slice(1).join('') : raw;
+    setText(normalized);
+    const parsed = parseFloat(normalized.replace(',', '.'));
+    onChange(isNaN(parsed) ? undefined : parsed);
+  }
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      value={focused ? text : isValid ? formatCurrency(numericValue) : ''}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      disabled={disabled}
+      placeholder="R$ 0,00"
+    />
+  );
 }
 
 type MovToggleFieldProps = {

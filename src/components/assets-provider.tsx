@@ -20,7 +20,6 @@ export interface AssetsContextType {
   addAsset: (asset: AssetInput) => Promise<void>;
   addCategory: (name: string, description?: string) => Promise<void>;
   updateAsset: (assetId: string, patch: Partial<Asset>) => Promise<void>;
-  transferAsset: (assetId: string, toKioskId: string, toKioskName?: string, notes?: string) => Promise<void>;
   updateAssetStatus: (assetId: string, status: AssetStatus, notes?: string) => Promise<void>;
   recordLabelPrint: (assetId: string) => Promise<void>;
   fetchMovements: (assetId: string) => Promise<AssetMovement[]>;
@@ -167,14 +166,6 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
     await refreshAssets();
   }, [authedFetch, refreshAssets]);
 
-  const transferAsset = useCallback(async (assetId: string, toKioskId: string, toKioskName?: string, notes?: string) => {
-    await authedFetch(`/api/assets/${assetId}`, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'transfer', toKioskId, toKioskName, notes }),
-    });
-    await refreshAssets();
-  }, [authedFetch, refreshAssets]);
-
   const updateAssetStatus = useCallback(async (assetId: string, status: AssetStatus, notes?: string) => {
     await authedFetch(`/api/assets/${assetId}`, {
       method: 'POST',
@@ -217,12 +208,11 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
     addAsset,
     addCategory,
     updateAsset,
-    transferAsset,
     updateAssetStatus,
     recordLabelPrint,
     fetchMovements,
     recordRetirada,
-  }), [assets, categories, loading, addAsset, addCategory, updateAsset, transferAsset, updateAssetStatus, recordLabelPrint, fetchMovements, recordRetirada]);
+  }), [assets, categories, loading, addAsset, addCategory, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements, recordRetirada]);
 
   return <AssetsContext.Provider value={value}>{children}</AssetsContext.Provider>;
 }

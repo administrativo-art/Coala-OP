@@ -194,8 +194,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
       notes: body.notes || null,
       occurredAt: now,
     });
+    const assetUpdates: Record<string, unknown> = {};
+    if (body.destinationKioskId) {
+      assetUpdates.currentKioskId = body.destinationKioskId;
+      assetUpdates.currentKioskName = destinationName;
+    }
     if (newResponsibleName) {
-      await ref.update({ responsibleName: newResponsibleName, updatedAt: now });
+      assetUpdates.responsibleName = newResponsibleName;
+    }
+    if (Object.keys(assetUpdates).length > 0) {
+      await ref.update({ ...assetUpdates, updatedAt: now });
     }
     return NextResponse.json({ ok: true });
   }
