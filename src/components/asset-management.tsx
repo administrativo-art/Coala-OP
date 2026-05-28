@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Camera, Grid2X2, History, ImageIcon, List, PackageCheck, Plus, QrCode, Search, Tags, Truck, Upload } from 'lucide-react';
+import { ArrowRight, Camera, Grid2X2, History, ImageIcon, List, MoveRight, PackageCheck, Plus, Printer, QrCode, Search, Tags, Truck, Upload } from 'lucide-react';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useSearchParams } from 'next/navigation';
 
@@ -91,7 +91,7 @@ const assetEditSchema = assetSchema.extend({
 });
 
 type AssetEditFormValues = z.infer<typeof assetEditSchema>;
-type AssetStep = 'identification' | 'location' | 'acquisition' | 'condition' | 'history';
+type AssetStep = 'identification' | 'location' | 'acquisition' | 'condition' | 'movement' | 'history';
 
 const STATUS_LABEL: Record<AssetStatus, string> = {
   ativo: 'Ativo',
@@ -128,7 +128,8 @@ const ASSET_STEPS: { id: AssetStep; label: string }[] = [
   { id: 'location', label: '2. Localização' },
   { id: 'acquisition', label: '3. Aquisição' },
   { id: 'condition', label: '4. Estado' },
-  { id: 'history', label: '5. Histórico' },
+  { id: 'movement', label: '5. Movimentação' },
+  { id: 'history', label: '6. Histórico' },
 ];
 
 function assetQrPayload(asset: Asset) {
@@ -324,7 +325,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     () => (financialAccounts || []).filter((a: any) => a.active !== false && a.is_dre_account !== false && !a.isGroup),
     [financialAccounts]
   );
-  const { categories, transferAsset, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements } = useAssets();
+  const { categories, transferAsset, updateAsset, updateAssetStatus, recordLabelPrint, fetchMovements, recordRetirada } = useAssets();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [qrUrl, setQrUrl] = useState('');
@@ -334,6 +335,14 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const [loadingMovements, setLoadingMovements] = useState(false);
   const [saving, setSaving] = useState(false);
   const [assetStep, setAssetStep] = useState<AssetStep>('identification');
+  const [movWithdrawerType, setMovWithdrawerType] = useState<'cadastrado' | 'externo'>('cadastrado');
+  const [movWithdrawerUserId, setMovWithdrawerUserId] = useState('');
+  const [movWithdrawerFree, setMovWithdrawerFree] = useState('');
+  const [movDestType, setMovDestType] = useState<'cadastrado' | 'externo'>('cadastrado');
+  const [movDestKioskId, setMovDestKioskId] = useState('');
+  const [movDestFree, setMovDestFree] = useState('');
+  const [movNotes, setMovNotes] = useState('');
+  const [movSaving, setMovSaving] = useState(false);
   const form = useForm<AssetEditFormValues>({
     resolver: zodResolver(assetEditSchema),
     defaultValues: {
@@ -470,6 +479,39 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     await loadQr();
     await recordLabelPrint(asset.id);
     toast({ title: 'Etiqueta pronta para impressão.' });
+  }
+
+  async function handleRetirada() {
+    if (!asset) return;
+    const withdrawerName = movWithdrawerType === 'cadastrado'
+      ? activeUsers.find((u) => u.id === movWithdrawerUserId)?.username ?? ''
+      : movWithdrawerFree;
+    const destinationName = movDestType === 'cadastrado'
+      ? kiosks.find((k) => k.id === movDestKioskId)?.name ?? ''
+      : movDestFree;
+    if (!withdrawerName || !destinationName) {
+      toast({ title: 'Preencha quem está retirando e o destino.', variant: 'destructive' });
+      return;
+    }
+    setMovSaving(true);
+    try {
+      await recordRetirada(asset.id, {
+        withdrawerName,
+        withdrawerUserId: movWithdrawerType === 'cadastrado' ? movWithdrawerUserId : undefined,
+        destinationName,
+        destinationKioskId: movDestType === 'cadastrado' ? movDestKioskId : undefined,
+        notes: movNotes || undefined,
+      });
+      toast({ title: 'Movimentação registrada.' });
+      setMovWithdrawerUserId('');
+      setMovWithdrawerFree('');
+      setMovDestKioskId('');
+      setMovDestFree('');
+      setMovNotes('');
+      await loadMovements();
+    } finally {
+      setMovSaving(false);
+    }
   }
 
   async function handleTransfer() {
@@ -619,7 +661,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                       <div className="flex h-44 items-center justify-center overflow-hidden rounded-md border bg-muted">
                         {imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={imageUrl} alt="Foto do patrimônio" className="h-full w-full object-cover" />
+                          <img src={imageUrl} alt="Foto do patrimônio" className="h-full w-full object-contain" />
                         ) : (
                           <div className="flex flex-col items-center gap-2 text-muted-foreground">
                             <ImageIcon className="h-8 w-8" />
@@ -857,13 +899,6 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                     )} />
                   </div>
 
-                  <FormField control={form.control} name="imageUrl" render={({ field }) => (
-                    <FormItem className={cn(assetStep !== 'identification' && 'hidden')}>
-                      <FormLabel>URL da foto</FormLabel>
-                      <FormControl><Input placeholder="https://..." {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
 
                   <FormField control={form.control} name="notes" render={({ field }) => (
                     <FormItem className={cn(assetStep !== 'condition' && 'hidden')}><FormLabel>Observações gerais</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
@@ -873,8 +908,6 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
 
                   <div className="flex flex-wrap gap-2 border-t pt-4">
                     <Button type="submit" disabled={!permissions.assets?.edit || saving || uploadingImage}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
-                    <Button type="button" variant="outline" size="sm" onClick={handlePrintLabel} disabled={!permissions.assets?.printLabels}><QrCode className="mr-2 h-4 w-4" />Etiqueta</Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => void loadMovements()} disabled={!permissions.assets?.viewHistory}><History className="mr-2 h-4 w-4" />Histórico</Button>
                   </div>
 
                   {assetStep === 'location' ? (
@@ -890,6 +923,72 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                     </div>
                   </div>
                     </>
+                  ) : null}
+
+                  {assetStep === 'movement' ? (
+                    <div className="space-y-5 rounded-md border p-4">
+                      <p className="text-sm font-semibold">Registrar movimentação</p>
+
+                      {/* Responsável atual */}
+                      <div className="rounded-md border bg-muted/40 p-3">
+                        <p className="text-xs font-medium uppercase text-muted-foreground">Responsável atual</p>
+                        <p className="mt-1 text-sm font-semibold">{asset.responsibleName || '—'}</p>
+                      </div>
+
+                      {/* Quem está retirando */}
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Quem está retirando</p>
+                        <div className="flex rounded-md border overflow-hidden w-fit text-sm">
+                          <button type="button" onClick={() => { setMovWithdrawerType('cadastrado'); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); }}
+                            className={cn('px-3 py-1.5 transition-colors', movWithdrawerType === 'cadastrado' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                            Cadastrado
+                          </button>
+                          <button type="button" onClick={() => { setMovWithdrawerType('externo'); setMovWithdrawerUserId(''); setMovWithdrawerFree(''); }}
+                            className={cn('px-3 py-1.5 border-l transition-colors', movWithdrawerType === 'externo' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                            Não cadastrado
+                          </button>
+                        </div>
+                        {movWithdrawerType === 'cadastrado' ? (
+                          <Select value={movWithdrawerUserId} onValueChange={setMovWithdrawerUserId}>
+                            <SelectTrigger><SelectValue placeholder="Selecione um colaborador" /></SelectTrigger>
+                            <SelectContent>{activeUsers.map((u) => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}</SelectContent>
+                          </Select>
+                        ) : (
+                          <Input placeholder="Nome de quem está retirando" value={movWithdrawerFree} onChange={(e) => setMovWithdrawerFree(e.target.value)} />
+                        )}
+                      </div>
+
+                      {/* Para onde vai */}
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Para onde vai</p>
+                        <div className="flex rounded-md border overflow-hidden w-fit text-sm">
+                          <button type="button" onClick={() => { setMovDestType('cadastrado'); setMovDestKioskId(''); setMovDestFree(''); }}
+                            className={cn('px-3 py-1.5 transition-colors', movDestType === 'cadastrado' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                            Cadastrado
+                          </button>
+                          <button type="button" onClick={() => { setMovDestType('externo'); setMovDestKioskId(''); setMovDestFree(''); }}
+                            className={cn('px-3 py-1.5 border-l transition-colors', movDestType === 'externo' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}>
+                            Não cadastrado
+                          </button>
+                        </div>
+                        {movDestType === 'cadastrado' ? (
+                          <Select value={movDestKioskId} onValueChange={setMovDestKioskId}>
+                            <SelectTrigger><SelectValue placeholder="Selecione uma unidade" /></SelectTrigger>
+                            <SelectContent>{kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                        ) : (
+                          <Input placeholder="Destino" value={movDestFree} onChange={(e) => setMovDestFree(e.target.value)} />
+                        )}
+                      </div>
+
+                      {/* Observações */}
+                      <Textarea placeholder="Observações (opcional)" value={movNotes} onChange={(e) => setMovNotes(e.target.value)} rows={2} />
+
+                      <Button type="button" onClick={() => void handleRetirada()} disabled={movSaving || !permissions.assets?.edit}>
+                        <MoveRight className="mr-2 h-4 w-4" />
+                        {movSaving ? 'Registrando...' : 'Registrar'}
+                      </Button>
+                    </div>
                   ) : null}
 
                   {assetStep === 'history' && permissions.assets?.viewHistory ? (
@@ -941,6 +1040,9 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   <p className="mt-2 font-mono text-lg font-semibold">{asset.code}</p>
                   <p className="text-xs text-muted-foreground">{form.watch('name')}</p>
                   <Badge className={cn('mt-3', STATUS_STYLE[form.watch('status')])}>{STATUS_LABEL[form.watch('status')]}</Badge>
+                  <Button type="button" variant="outline" size="sm" className="mt-4 w-full" onClick={handlePrintLabel} disabled={!permissions.assets?.printLabels}>
+                    <Printer className="mr-2 h-4 w-4" />Imprimir etiqueta
+                  </Button>
                   <div className="mt-5 space-y-2 text-left text-xs text-muted-foreground">
                     <p><span className="font-medium text-foreground">Unidade:</span> {asset.currentKioskName || asset.currentKioskId}</p>
                     <p><span className="font-medium text-foreground">Origem:</span> {asset.sourceType === 'purchase_receipt' ? 'Recebimento de compra' : 'Cadastro manual'}</p>

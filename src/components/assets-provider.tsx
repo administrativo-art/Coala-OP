@@ -24,6 +24,13 @@ export interface AssetsContextType {
   updateAssetStatus: (assetId: string, status: AssetStatus, notes?: string) => Promise<void>;
   recordLabelPrint: (assetId: string) => Promise<void>;
   fetchMovements: (assetId: string) => Promise<AssetMovement[]>;
+  recordRetirada: (assetId: string, data: {
+    withdrawerName: string;
+    withdrawerUserId?: string;
+    destinationName: string;
+    destinationKioskId?: string;
+    notes?: string;
+  }) => Promise<void>;
 }
 
 export const AssetsContext = createContext<AssetsContextType | undefined>(undefined);
@@ -188,6 +195,19 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
     return response.json() as Promise<AssetMovement[]>;
   }, [authedFetch]);
 
+  const recordRetirada = useCallback(async (assetId: string, data: {
+    withdrawerName: string;
+    withdrawerUserId?: string;
+    destinationName: string;
+    destinationKioskId?: string;
+    notes?: string;
+  }) => {
+    await authedFetch(`/api/assets/${assetId}`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'retirada', ...data }),
+    });
+  }, [authedFetch]);
+
   const value = useMemo(() => ({
     assets,
     categories,
@@ -199,7 +219,8 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
     updateAssetStatus,
     recordLabelPrint,
     fetchMovements,
-  }), [assets, categories, loading, addAsset, addCategory, updateAsset, transferAsset, updateAssetStatus, recordLabelPrint, fetchMovements]);
+    recordRetirada,
+  }), [assets, categories, loading, addAsset, addCategory, updateAsset, transferAsset, updateAssetStatus, recordLabelPrint, fetchMovements, recordRetirada]);
 
   return <AssetsContext.Provider value={value}>{children}</AssetsContext.Provider>;
 }

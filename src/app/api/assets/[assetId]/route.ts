@@ -174,5 +174,27 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
     return NextResponse.json({ ok: true });
   }
 
+  if (action === 'retirada') {
+    if (!userContext.permissions.assets?.edit) return jsonError('Sem permissão.', 403);
+    const withdrawerName = String(body.withdrawerName ?? '').trim();
+    const destinationName = String(body.destinationName ?? '').trim();
+    if (!withdrawerName || !destinationName) return jsonError('Quem retira e destino são obrigatórios.');
+    await dbAdmin.collection('assetMovements').add({
+      assetId,
+      assetCode: current.code,
+      assetName: current.name,
+      type: 'RETIRADA',
+      userId: body.withdrawerUserId || 'externo',
+      username: withdrawerName,
+      fromKioskId: current.currentKioskId || null,
+      fromKioskName: current.currentKioskName || null,
+      toKioskId: body.destinationKioskId || null,
+      toKioskName: destinationName,
+      notes: body.notes || null,
+      occurredAt: now,
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   return jsonError('Ação inválida.');
 }
