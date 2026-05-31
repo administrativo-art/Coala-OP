@@ -379,14 +379,23 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Compra direta</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="!max-w-[920px] max-h-[92vh] overflow-y-auto rounded-[18px] border-zinc-200 bg-[#f6f6f7] p-0">
+        <div className="border-b border-zinc-200 bg-[#f6f6f7] px-8 pb-5 pt-7">
+          <DialogHeader>
+            <DialogTitle className="text-[1.75rem] font-black leading-none tracking-[-0.045em] text-zinc-950">
+              Nova compra direta
+            </DialogTitle>
+            <p className="mt-2 text-sm text-zinc-500">
+              Registre uma compra sem cotação e mantenha recebimento, estoque e financeiro conectados.
+            </p>
+          </DialogHeader>
+        </div>
 
         <Form {...form}>
-          <form id="direct-purchase-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <form id="direct-purchase-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-8 py-6">
+            <div className="rounded-[14px] border border-zinc-200 bg-white p-5">
+              <h3 className="text-base font-black tracking-[-0.02em] text-zinc-950">Informações gerais</h3>
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="supplierId"
@@ -563,18 +572,31 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                   )}
                 />
               )}
+              </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4 rounded-[14px] border border-zinc-200 bg-white p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Itens</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => setItems((prev) => [...prev, newDraftItem()])}>
+                <div>
+                  <p className="text-base font-black tracking-[-0.02em] text-zinc-950">Itens da compra ({items.length})</p>
+                  <p className="mt-1 text-xs text-zinc-500">Informe categoria, insumo, quantidade e custo estimado.</p>
+                </div>
+                <Button type="button" size="sm" onClick={() => setItems((prev) => [...prev, newDraftItem()])} className="h-9 rounded-[9px] bg-violet-600 px-4 font-bold text-white hover:bg-violet-700">
                   <Plus className="mr-2 h-4 w-4" />
-                  Item
+                  Adicionar item
                 </Button>
               </div>
 
-              <div className="space-y-2">
+              <div className="overflow-hidden rounded-[12px] border border-zinc-200">
+                <div className="grid grid-cols-[130px_1fr_90px_120px_150px_40px] gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-zinc-500">
+                  <span>Categoria</span>
+                  <span>Insumo</span>
+                  <span>Un.</span>
+                  <span>Qtd.</span>
+                  <span>Preço unit.</span>
+                  <span />
+                </div>
+              <div className="divide-y divide-zinc-100">
                 {items.map((item) => {
                   const selectedCategory = activeCategories.find((category) => category.id === item.operationalCategoryId);
                   const categoryDestination = selectedCategory?.destination;
@@ -586,14 +608,13 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                       })
                     : [];
                   return (
-                  <div key={item.key} className="grid grid-cols-1 sm:grid-cols-[130px_1fr_90px_120px_120px_36px] gap-2 items-end rounded-md border p-3">
+                  <div key={item.key} className="grid grid-cols-[130px_1fr_90px_120px_150px_40px] gap-3 items-end bg-white px-4 py-3">
                     <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Categoria</label>
                       <Select
                         value={item.operationalCategoryId}
                         onValueChange={(value) => updateItem(item.key, { operationalCategoryId: value })}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="h-11 rounded-[9px]">
                           <SelectValue placeholder="Selecione" />
                         </SelectTrigger>
                         <SelectContent>
@@ -606,9 +627,9 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">{categoryDestination === 'asset' ? 'Patrimônio' : 'Insumo'}</label>
                       {categoryDestination === 'asset' ? (
                         <Input
+                          className="h-11 rounded-[9px]"
                           placeholder="Ex: Máquina de sorvete"
                           value={item.itemName}
                           onChange={(event) => updateItem(item.key, { itemName: event.target.value })}
@@ -666,8 +687,8 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                       })()}
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Qtd.</label>
                       <Input
+                        className="h-11 rounded-[9px]"
                         type="number"
                         step={item.entryType === 'asset' ? '1' : '0.001'}
                         min={item.entryType === 'asset' ? 1 : undefined}
@@ -682,7 +703,6 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Preço unit.</label>
                       <CurrencyInput
                         value={item.unitPriceOrdered}
                         onChange={(value) => updateItem(item.key, { unitPriceOrdered: value })}
@@ -692,13 +712,14 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                       type="button"
                       variant="ghost"
                       size="icon"
+                      className="h-11 w-10 text-zinc-400 hover:text-rose-500"
                       disabled={items.length === 1}
                       onClick={() => setItems((prev) => prev.filter((current) => current.key !== item.key))}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                     {categoryDestination === 'asset' && (
-                      <p className="sm:col-span-5 sm:col-start-2 text-xs text-muted-foreground">
+                      <p className="col-span-5 col-start-2 text-xs text-zinc-500">
                         No recebimento, cada unidade vira um patrimônio individual com etiqueta.
                       </p>
                     )}
@@ -706,8 +727,12 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                 );
                 })}
               </div>
+              </div>
             </div>
 
+            <div className="rounded-[14px] border border-zinc-200 bg-white p-5">
+              <h3 className="text-base font-black tracking-[-0.02em] text-zinc-950">Observações e rastreio</h3>
+              <div className="mt-4 space-y-4">
             <FormField
               control={form.control}
               name="trackingInfo"
@@ -737,18 +762,24 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                 </FormItem>
               )}
             />
+              </div>
+            </div>
           </form>
         </Form>
 
-        <DialogFooter className="items-center sm:justify-between gap-3">
-          <p className="text-sm font-medium">
-            Total: {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </p>
+        <DialogFooter className="items-center gap-3 border-t border-zinc-200 bg-white px-8 py-5 sm:justify-between">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.08em] text-zinc-400">Total estimado</p>
+            <p className="mt-1 font-mono text-xl font-black tracking-[-0.04em] text-zinc-950">
+              {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </p>
+          </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 rounded-[10px] px-5">Cancelar</Button>
             <Button
               type="submit"
               form="direct-purchase-form"
+              className="h-11 rounded-[10px] bg-violet-600 px-5 font-bold text-white hover:bg-violet-700"
               disabled={submitting || validItems.length !== items.length || (isCardPayment(paymentMethod as PaymentMethod) && !selectedPaymentCard)}
             >
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

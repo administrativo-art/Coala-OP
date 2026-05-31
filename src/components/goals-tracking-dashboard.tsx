@@ -28,7 +28,7 @@ import { GoalTemplateFormModal } from '@/components/goal-template-form-modal';
 import { AddEmployeeGoalModal } from '@/components/add-employee-goal-modal';
 import { type GoalPeriodDoc, type EmployeeGoal } from '@/types';
 import { 
-  Target, Plus, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, Menu, BarChart2, Sparkles, Calendar as CalendarIcon, Pencil, CheckCircle, Trash2
+  Target, Plus, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, Menu, BarChart2, Sparkles, Calendar as CalendarIcon, Pencil, CheckCircle, Trash2, Flag
 } from 'lucide-react';
 import {
   format, startOfWeek, endOfWeek, endOfMonth, eachDayOfInterval,
@@ -369,6 +369,37 @@ function DailyStatusPill({ tone }: { tone: 'ok' | 'zero' | 'miss' | 'na' }) {
   );
 }
 
+function DailyReferenceStatus({ tone }: { tone: 'ok' | 'zero' | 'miss' | 'future' }) {
+  const config = {
+    ok: { label: '✓', cls: 'border-emerald-500 bg-emerald-500 text-white shadow-[0_7px_18px_-12px_rgba(16,185,129,0.9)]' },
+    miss: { label: '×', cls: 'border-amber-300 bg-amber-50 text-amber-500' },
+    zero: { label: '△', cls: 'border-zinc-200 bg-white text-zinc-400' },
+    future: { label: '−', cls: 'border-slate-200 bg-slate-50 text-slate-300' },
+  }[tone];
+
+  return (
+    <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full border text-[13px] font-black leading-none ${config.cls}`}>
+      {config.label}
+    </span>
+  );
+}
+
+function DailyBalanceBar({ balance, maxAbs, tone }: { balance: number; maxAbs: number; tone: 'ok' | 'zero' | 'miss' | 'future' }) {
+  const width = Math.max(Math.min((Math.abs(balance) / Math.max(maxAbs, 1)) * 49, 49), Math.abs(balance) > 0 ? 1.5 : 0);
+  const color = tone === 'ok' ? 'bg-emerald-500' : tone === 'zero' ? 'bg-rose-300' : tone === 'miss' ? 'bg-amber-400' : 'bg-slate-200';
+
+  return (
+    <div className="relative h-2 w-full rounded-full bg-zinc-100">
+      <span className="absolute left-1/2 top-1/2 h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-zinc-200" />
+      {balance >= 0 ? (
+        <span className={`absolute left-1/2 top-0 h-2 rounded-r-full ${color}`} style={{ width: `${width}%` }} />
+      ) : (
+        <span className={`absolute right-1/2 top-0 h-2 rounded-l-full ${color}`} style={{ width: `${width}%` }} />
+      )}
+    </div>
+  );
+}
+
 // ── Dialog de análise diária (Mensal) ─────────────────────────────────────────
 
 function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, activeDateKeys }: {
@@ -390,6 +421,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
 
   const rows = days.map((day, idx) => {
     const key = dateKey(day);
+    const isToday = isSameDay(day, now);
     const isPast = day <= now;
     const isActive = activeDateSet.has(key);
     const value = dp[key] ?? 0;
@@ -408,75 +440,130 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
     }
 
     const hit = isActive ? value >= currentNeed : value > 0;
+    const balance = isActive ? value - currentNeed : value;
+    const statusTone: 'ok' | 'zero' | 'miss' | 'future' = !isPast || !isActive
+      ? 'future'
+      : value >= currentNeed && value > 0
+        ? 'ok'
+        : value > 0
+          ? 'miss'
+          : 'zero';
 
-    return { day, key, currentNeed, value, hit, isPast, isActive };
+    return { day, key, currentNeed, value, hit, isPast, isToday, isActive, balance, statusTone };
   });
+
+  const activeRows = rows.filter(r => r.isActive);
+  const elapsedRows = activeRows.filter(r => r.isPast);
+  const totalRealized = period.currentValue;
+  const hitCount = elapsedRows.filter(r => r.hit && r.value > 0).length;
+  const bestRow = elapsedRows.length ? elapsedRows.reduce((best, row) => row.balance > best.balance ? row : best, elapsedRows[0]) : null;
+  const worstRow = elapsedRows.length ? elapsedRows.reduce((worst, row) => row.balance < worst.balance ? row : worst, elapsedRows[0]) : null;
+  const maxBalanceAbs = Math.max(...rows.map(r => Math.abs(r.balance)), 1);
+  const monthLabel = format(start, 'MMMM yyyy', { locale: ptBR }).toUpperCase().replace(' ', ' · ');
+  const targetPct = pct(totalRealized, totalTarget);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[980px] grid h-[min(90vh,760px)] w-[min(92vw,980px)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[30px] border border-zinc-200 bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
-        <div className="px-10 pt-9 md:px-12 md:pt-10">
-          <DialogHeader className="space-y-3 text-left shrink-0">
-            <DialogTitle className="pr-12 text-[2rem] font-bold leading-none tracking-[-0.045em] text-zinc-900 md:text-[2.35rem]">
-              {title}
-            </DialogTitle>
-            {subjectName ? (
-              <div className="text-[1.1rem] font-extrabold uppercase tracking-[-0.03em] text-zinc-700 break-words md:text-[1.25rem]">
-                {subjectName}
-              </div>
-            ) : null}
-            <DialogDescription className="max-w-[640px] text-[1rem] leading-relaxed text-zinc-500">
-              Detalhamento de metas diárias para o período
-            </DialogDescription>
-          </DialogHeader>
-        </div>
-
-        <div className="min-h-0 px-10 py-8 md:px-12">
-          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
-            <div className="grid shrink-0 grid-cols-[120px_1.2fr_1.2fr_130px] gap-6 border-b border-zinc-200 px-8 py-5 text-[0.92rem] font-bold uppercase tracking-[0.08em] text-zinc-500 md:grid-cols-[140px_1.3fr_1.3fr_140px] md:px-10">
-              <span>Dia</span>
-              <span className="text-right">Alvo Diário</span>
-              <span className="text-right">Realizado</span>
-              <span className="text-center">Status</span>
+      <DialogContent className="!max-w-[1200px] grid h-[min(92vh,1180px)] w-[min(94vw,1200px)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[30px] border border-zinc-200 bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
+        <div className="px-12 pb-7 pt-10">
+          <div className="flex items-start gap-4 pr-12">
+            <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-pink-500 text-white shadow-[0_10px_24px_-14px_rgba(236,72,153,0.8)]">
+              <Flag className="h-5 w-5" />
             </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div>
-                {rows.map(r => (
-                  <div
-                    key={r.key}
-                    className={`grid grid-cols-[120px_1.2fr_1.2fr_130px] gap-6 border-b border-zinc-100 px-8 py-5 text-[1rem] last:border-b-0 md:grid-cols-[140px_1.3fr_1.3fr_140px] md:px-10 md:py-6 md:text-[1.08rem] ${!r.isPast ? 'opacity-45' : ''}`}
-                  >
-                    <span className="font-semibold text-zinc-900">{format(r.day, 'dd/MM', { locale: ptBR })}</span>
-                    <span className="text-right font-medium text-zinc-500">R$ {fmt(r.currentNeed)}</span>
-                    <span className="text-right font-bold text-zinc-900">R$ {fmt(r.value)}</span>
-                    <span className="flex justify-center">
-                      {!r.isActive ? (
-                        <DailyStatusPill tone="na" />
-                      ) : r.value > 0 ? (
-                        r.hit ? <DailyStatusPill tone="ok" /> : <DailyStatusPill tone="miss" />
-                      ) : r.isPast ? (
-                        <DailyStatusPill tone="zero" />
-                      ) : (
-                        <DailyStatusPill tone="na" />
-                      )}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-black uppercase tracking-[0.18em] text-zinc-400">{monthLabel}</p>
+              <DialogTitle className="mt-3 text-[2.15rem] font-black leading-none tracking-[-0.06em] text-zinc-900 md:text-[2.45rem]">
+                {title}
+              </DialogTitle>
+              {subjectName ? (
+                <DialogDescription className="mt-3 text-sm font-bold text-zinc-500">
+                  {subjectName}
+                </DialogDescription>
+              ) : (
+                <DialogDescription className="sr-only">Detalhamento de metas diárias para o período</DialogDescription>
+              )}
             </div>
           </div>
         </div>
 
-        <DialogFooter className="border-t border-zinc-100 px-10 py-6 md:px-12">
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              className="h-16 rounded-[18px] border-zinc-200 bg-white px-8 text-[1rem] font-semibold text-zinc-800 shadow-[0_16px_40px_-30px_rgba(15,23,42,0.35)] hover:bg-zinc-50"
-            >
-              Fechar
-            </Button>
-          </DialogFooter>
+        <div className="mx-12 grid grid-cols-4 items-start gap-10 rounded-[20px] border border-zinc-200 px-9 py-7">
+          <div className="min-w-0">
+            <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Realizado</p>
+            <p className="mt-3 whitespace-nowrap text-[clamp(1.25rem,2vw,1.8rem)] font-black leading-none tracking-[-0.02em] text-pink-500">R$ {fmt(totalRealized)}</p>
+            <p className="mt-3 text-sm font-semibold text-zinc-400">{targetPct.toFixed(0)}% da meta</p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Meta do período</p>
+            <p className="mt-3 whitespace-nowrap text-[clamp(1.25rem,2vw,1.8rem)] font-black leading-none tracking-[-0.02em] text-zinc-900">R$ {fmt(totalTarget)}</p>
+            <p className="mt-3 text-sm font-semibold text-zinc-400">{activeRows.length} de {days.length} dias</p>
+          </div>
+          <div>
+            <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Dias batidos</p>
+            <p className="mt-3 text-[clamp(1.35rem,2.1vw,1.95rem)] font-black leading-none tracking-[0.02em] text-emerald-600">{hitCount}/{Math.max(elapsedRows.length, 0)}</p>
+            <p className="mt-3 text-sm font-semibold text-zinc-400">{elapsedRows.length > 0 ? `${((hitCount / elapsedRows.length) * 100).toFixed(0)}% de acerto` : 'Sem dias apurados'}</p>
+          </div>
+          <div>
+            <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Melhor · Pior</p>
+            <p className="mt-3 text-[clamp(1.35rem,2.1vw,1.95rem)] font-black leading-none tracking-[0.02em] text-zinc-900">
+              {bestRow ? format(bestRow.day, 'dd/MM', { locale: ptBR }) : '--/--'}
+            </p>
+            <p className="mt-3 text-sm font-semibold text-zinc-400">{worstRow ? format(worstRow.day, 'dd/MM', { locale: ptBR }) : '--/--'} foi o pior</p>
+          </div>
+        </div>
+
+        <div className="min-h-0 px-11 py-5">
+          <div className="flex h-full min-h-0 flex-col overflow-hidden">
+            <div className="grid shrink-0 grid-cols-[90px_1fr_1.1fr_2fr_100px_70px] gap-7 border-b border-zinc-200 px-4 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">
+              <span>Dia</span>
+              <span className="text-right">Alvo</span>
+              <span className="text-right">Realizado</span>
+              <span>Saldo do dia</span>
+              <span className="text-right">Status</span>
+              <span className="sr-only">Icone</span>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              {rows.map(r => {
+                const balanceText = `${r.balance >= 0 ? '+' : '-'}${fmt(Math.abs(r.balance)).split(',')[0]}`;
+                return (
+                  <div
+                    key={r.key}
+                    className={`grid grid-cols-[90px_1fr_1.1fr_2fr_100px_70px] items-center gap-7 rounded-[8px] px-4 py-2.5 text-[1.05rem] ${r.isToday ? 'bg-pink-50' : ''} ${!r.isPast ? 'opacity-50' : ''}`}
+                  >
+                    <div className="flex items-center gap-2 font-bold text-zinc-800">
+                      <span>{format(r.day, 'dd/MM', { locale: ptBR })}</span>
+                      {r.isToday ? <span className="rounded-[5px] bg-pink-500 px-1.5 py-0.5 text-[10px] font-black uppercase text-white">Hoje</span> : null}
+                    </div>
+                    <span className="text-right font-mono text-[1rem] font-medium tracking-[-0.04em] text-zinc-400">R$ {fmt(r.currentNeed)}</span>
+                    <span className="text-right font-mono text-[1.05rem] font-black tracking-[-0.04em] text-zinc-900">R$ {fmt(r.value)}</span>
+                    <DailyBalanceBar balance={r.balance} maxAbs={maxBalanceAbs} tone={r.statusTone} />
+                    <span className={`text-right font-mono text-[1rem] font-black tracking-[-0.04em] ${r.balance >= 0 ? 'text-emerald-600' : r.value <= 0 ? 'text-rose-400' : 'text-amber-600'}`}>
+                      {balanceText}
+                    </span>
+                    <span className="flex justify-end">
+                      <DailyReferenceStatus tone={r.statusTone} />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="items-center justify-between border-t border-zinc-100 px-11 py-6 sm:justify-between">
+          <div className="flex flex-wrap items-center gap-6 text-sm font-semibold text-zinc-500">
+            <span className="inline-flex items-center gap-2"><DailyReferenceStatus tone="ok" /> Bateu</span>
+            <span className="inline-flex items-center gap-2"><DailyReferenceStatus tone="miss" /> Faltou</span>
+            <span className="inline-flex items-center gap-2"><DailyReferenceStatus tone="zero" /> Sem venda</span>
+            <span className="inline-flex items-center gap-2"><DailyReferenceStatus tone="future" /> A vir</span>
+          </div>
+          <Button
+            onClick={() => onOpenChange(false)}
+            className="h-14 rounded-[14px] bg-zinc-900 px-8 text-base font-bold text-white shadow-none hover:bg-zinc-800"
+          >
+            Fechar
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

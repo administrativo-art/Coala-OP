@@ -1,203 +1,261 @@
 "use client";
 
-import { useMemo } from 'react';
-import {
-  FileText,
-  ShoppingCart,
-  PackageCheck,
-  TrendingDown,
-  ChevronRight,
-  Clock,
-} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { BarChart3, CheckCircle2, Plus, Send, ShoppingCart, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { PermissionGuard } from '@/components/permission-guard';
+import { CreateQuotationModal } from '@/components/purchasing/create-quotation-modal';
 import { useQuotations } from '@/hooks/use-quotations';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
-import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
 import { useAuth } from '@/hooks/use-auth';
 import { canCreateQuotation, canViewPurchasing } from '@/lib/purchasing-permissions';
+import { PurchasingItemsPreview } from '@/components/purchasing/purchasing-items-preview';
+import {
+  PurchasingEmptyState,
+  PurchasingFilterChip,
+  PurchasingHeader,
+  PurchasingMetricCard,
+  PurchasingPageFrame,
+  PurchasingPipelineCard,
+  PurchasingStatusBadge,
+  PurchasingToolbar,
+  purchasingAgeLabel,
+  purchasingCompactMoney,
+  type PurchasingTone,
+} from '@/components/purchasing/purchasing-ui';
 
-function PhasePill({ label, count, color }: { label: string; count: number; color: string }) {
-  if (count === 0) return null;
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border ${color}`}>
-      <span className="tabular-nums font-bold">{count}</span>
-      <span>{label}</span>
-    </span>
-  );
-}
-
-function NavCard({
-  href,
-  icon: Icon,
-  title,
-  description,
-  pills,
-}: {
-  href: string;
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  pills?: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group flex items-start gap-4 rounded-lg border bg-card p-5 hover:bg-muted/50 transition-colors"
-    >
-      <div className="flex-shrink-0 rounded-md bg-muted p-3 mt-0.5">
-        <Icon className="h-5 w-5 text-muted-foreground" />
-      </div>
-      <div className="flex-1 min-w-0 space-y-2">
-        <span className="font-semibold">{title}</span>
-        <p className="text-sm text-muted-foreground">{description}</p>
-        {pills && (
-          <div className="flex flex-wrap gap-1.5 pt-0.5">
-            {pills}
-          </div>
-        )}
-      </div>
-      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 mt-1" />
-    </Link>
-  );
+function codeFromId(id: string) {
+  return `CMP-${id.slice(-8).toUpperCase()}`;
 }
 
 export default function PurchasingHubPage() {
   const { permissions } = useAuth();
   const { quotations } = useQuotations();
   const { orders } = usePurchaseOrders();
-  const { receipts } = usePurchaseReceipts();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'progress' | 'quotation' | 'order' | 'done'>('all');
+  const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
   const canView = canViewPurchasing(permissions);
-  const canOpenQuotations = canCreateQuotation(permissions);
+  const canCreate = canCreateQuotation(permissions);
 
-  // Quotations breakdown
-  const quotationsDraft = useMemo(
-    () => quotations.filter((q) => q.status === 'draft'),
-    [quotations],
-  );
-  const quotationsQuoted = useMemo(
-    () => quotations.filter((q) => q.status === 'quoted'),
-    [quotations],
-  );
-  const quotationsPartial = useMemo(
-    () => quotations.filter((q) => q.status === 'partially_converted'),
-    [quotations],
-  );
-  const hasQuotationActivity = quotationsDraft.length > 0 || quotationsQuoted.length > 0 || quotationsPartial.length > 0;
+  const awaitingApproval = orders.filter((o) => o.status === 'created' && !o.receivedAt);
+  const quotationActive = quotations.filter((q) => q.status === 'draft' || q.status === 'partially_converted');
+  const ordersOpen = orders.filter((o) => o.status === 'confirmed' && !o.receivedAt);
+  const completed = orders.filter((o) => !!o.receivedAt);
+  const openValue = orders
+    .filter((o) => !o.receivedAt && o.status !== 'cancelled')
+    .reduce((sum, order) => sum + (order.totalEstimated ?? 0), 0);
 
-  // Orders breakdown
-  const ordersInReview = useMemo(
-    () => orders.filter((o) => o.status === 'created' && !o.receivedAt),
-    [orders],
-  );
-  const ordersConfirmed = useMemo(
-    () => orders.filter((o) => o.status === 'confirmed' && !o.receivedAt),
-    [orders],
-  );
+  const cards = useMemo(() => {
+    const quotationCards = quotationActive.map((q) => ({
+      kind: 'quotation' as const,
+      id: q.id,
+      quotationId: q.id,
+      href: `/dashboard/purchasing/quotations/${q.id}`,
+      code: codeFromId(q.id),
+      title: `Cotação ${q.mode === 'remote' ? 'remota' : 'in loco'}`,
+      tone: (q.status === 'partially_converted' ? 'purple' : 'blue') as PurchasingTone,
+      status: q.status === 'partially_converted' ? 'Cotação parcial' : 'Solicit.',
+      stageLabel: q.status === 'partially_converted' ? 'Em cotação' : 'Solicitação aberta',
+      progress: q.status === 'partially_converted' ? 3 : 1,
+      amount: undefined,
+      age: purchasingAgeLabel(q.createdAt),
+      lines: [
+        { label: q.mode === 'remote' ? 'Comparativo remoto' : 'Cotação em loja' },
+        { label: q.validUntil ? `Data: ${new Date(q.validUntil).toLocaleDateString('pt-BR')}` : 'Sem data definida' },
+      ],
+      searchText: `${q.id} cotacao ${q.mode} ${q.status}`.toLowerCase(),
+    }));
 
-  // Receipts breakdown — exclude receipts from cancelled orders
-  const cancelledOrderIds = useMemo(
-    () => new Set(orders.filter((o) => o.status === 'cancelled').map((o) => o.id)),
-    [orders],
-  );
+    const orderCards = orders
+      .filter((o) => o.status !== 'cancelled' && !o.receivedAt)
+      .map((o) => {
+        const isReview = o.status === 'created';
+        const tone: PurchasingTone = isReview ? 'amber' : 'blue';
+        return {
+          kind: isReview ? 'progress' as const : 'order' as const,
+          id: o.id,
+          orderId: o.id,
+          href: `/dashboard/purchasing/orders/${o.id}`,
+          code: codeFromId(o.id),
+          title: o.supplierName || (o.origin === 'direct' ? 'Compra direta' : 'Pedido via cotação'),
+          tone,
+          status: isReview ? 'Aprov.' : 'Pedido',
+          stageLabel: isReview ? 'Em aprovação' : 'Pedido emitido',
+          progress: isReview ? 2 : 4,
+          amount: purchasingCompactMoney(o.totalEstimated),
+          age: purchasingAgeLabel(o.createdAt),
+          lines: [
+            { label: o.origin === 'direct' ? 'Compra direta' : 'Via cotação' },
+            { label: o.receiptMode === 'immediate_pickup' ? 'Retirada imediata' : 'Entrega futura' },
+            { label: `Prev.: ${new Date(o.estimatedReceiptDate).toLocaleDateString('pt-BR')}` },
+          ],
+          searchText: `${o.id} ${o.supplierName ?? ''} ${o.origin} ${o.status}`.toLowerCase(),
+        };
+      });
 
-  const receiptsAwaiting = useMemo(
-    () => receipts.filter((r) => r.status === 'awaiting_delivery' && !cancelledOrderIds.has(r.purchaseOrderId)),
-    [receipts, cancelledOrderIds],
-  );
-  const receiptsConference = useMemo(
-    () => receipts.filter((r) => r.status === 'in_conference' && !cancelledOrderIds.has(r.purchaseOrderId)),
-    [receipts, cancelledOrderIds],
-  );
-  const receiptsStock = useMemo(
-    () => receipts.filter(
-      (r) => (r.status === 'awaiting_stock' || r.status === 'in_stock_entry' || r.status === 'partially_stocked')
-        && !cancelledOrderIds.has(r.purchaseOrderId),
-    ),
-    [receipts, cancelledOrderIds],
-  );
+    const doneCards = completed.slice(0, 6).map((o) => ({
+      kind: 'done' as const,
+      id: o.id,
+      orderId: o.id,
+      href: `/dashboard/purchasing/orders/${o.id}`,
+      code: codeFromId(o.id),
+      title: o.supplierName || 'Compra concluída',
+      tone: 'green' as PurchasingTone,
+      status: 'Concluída',
+      stageLabel: 'Concluída',
+      progress: 8,
+      amount: purchasingCompactMoney(o.totalConfirmed ?? o.totalEstimated),
+      age: purchasingAgeLabel(o.receivedAt ?? o.createdAt),
+      lines: [
+        { label: o.origin === 'direct' ? 'Compra direta' : 'Via cotação' },
+        { label: o.receivedAt ? `Recebida: ${new Date(o.receivedAt).toLocaleDateString('pt-BR')}` : 'Recebida' },
+      ],
+      searchText: `${o.id} ${o.supplierName ?? ''} concluida recebida`.toLowerCase(),
+    }));
 
-  const hasOrderActivity = ordersInReview.length > 0 || ordersConfirmed.length > 0;
-  const hasReceiptActivity = receiptsAwaiting.length > 0 || receiptsConference.length > 0 || receiptsStock.length > 0;
+    return [...quotationCards, ...orderCards, ...doneCards]
+      .filter((card) => filter === 'all' || card.kind === filter)
+      .filter((card) => !search.trim() || card.searchText.includes(search.trim().toLowerCase()));
+  }, [completed, filter, orders, quotationActive, search]);
 
   return (
     <PermissionGuard allowed={canView}>
-      <div className="container max-w-2xl py-8 space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold">Compras</h1>
-          <p className="text-sm text-muted-foreground">
-            Gerencie cotações, pedidos, recebimentos e financeiro.
-          </p>
+      <PurchasingPageFrame>
+        <PurchasingHeader
+          crumb={['Coala', 'Compras']}
+          title="Compras"
+          description="Pipeline completo, da cotação ao lançamento financeiro."
+          actions={
+            <>
+              <Button variant="outline" asChild className="h-11 rounded-[10px] border-zinc-200 bg-white shadow-none">
+                <Link href="/dashboard/purchasing/quotations/compare">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  Comparativo
+                </Link>
+              </Button>
+              {canCreate && (
+                <Button onClick={() => setCreateOpen(true)} className="h-11 rounded-[10px] bg-violet-600 px-5 font-bold text-white hover:bg-violet-700">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nova cotação
+                </Button>
+              )}
+            </>
+          }
+        />
+
+        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          <PurchasingMetricCard label="Em andamento" value={quotationActive.length + awaitingApproval.length + ordersOpen.length} detail={purchasingCompactMoney(openValue)} tone="purple" icon={<Send className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Aguardando aprov." value={awaitingApproval.length} detail="precisa decidir" tone="amber" icon={<AlertTriangle className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Em cotação" value={quotationActive.length} detail="comparativos abertos" tone="purple" icon={<BarChart3 className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Pedido emitido" value={ordersOpen.length} detail="aguarda recebimento" tone="blue" icon={<ShoppingCart className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Concluídas" value={completed.length} detail="recebidas" tone="green" icon={<CheckCircle2 className="h-5 w-5" />} />
         </div>
 
-        <div className="space-y-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Operacional</p>
+        <PurchasingToolbar search={search} onSearchChange={setSearch} resultLabel={`${cards.length} compras`} view={view} onViewChange={setView}>
+          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={quotationActive.length + awaitingApproval.length + ordersOpen.length + completed.length} onClick={() => setFilter('all')} />
+          <PurchasingFilterChip active={filter === 'progress'} label="Aprov." count={awaitingApproval.length} tone="amber" onClick={() => setFilter('progress')} />
+          <PurchasingFilterChip active={filter === 'quotation'} label="Cotação" count={quotationActive.length} tone="purple" onClick={() => setFilter('quotation')} />
+          <PurchasingFilterChip active={filter === 'order'} label="Pedido" count={ordersOpen.length} tone="blue" onClick={() => setFilter('order')} />
+          <PurchasingFilterChip active={filter === 'done'} label="Concluída" count={completed.length} tone="green" onClick={() => setFilter('done')} />
+        </PurchasingToolbar>
 
-          <NavCard
-            href="/dashboard/purchasing/quotations"
-            icon={FileText}
-            title="Cotações"
-            description="Pesquise preços por fornecedor antes de fechar uma compra."
-            pills={hasQuotationActivity ? (
-              <>
-                <PhasePill label="rascunho" count={quotationsDraft.length} color="border-amber-300 bg-amber-50 text-amber-700" />
-                <PhasePill label="ag. resposta" count={quotationsQuoted.length} color="border-blue-300 bg-blue-50 text-blue-700" />
-                <PhasePill label="conversão parcial" count={quotationsPartial.length} color="border-purple-300 bg-purple-50 text-purple-700" />
-              </>
-            ) : undefined}
-          />
-
-          <NavCard
-            href="/dashboard/purchasing/orders"
-            icon={ShoppingCart}
-            title="Pedidos de compra"
-            description="Acompanhe pedidos em aberto e seu status de recebimento."
-            pills={hasOrderActivity ? (
-              <>
-                <PhasePill label="em revisão" count={ordersInReview.length} color="border-amber-300 bg-amber-50 text-amber-700" />
-                <PhasePill label="confirmadas" count={ordersConfirmed.length} color="border-blue-300 bg-blue-50 text-blue-700" />
-              </>
-            ) : undefined}
-          />
-
-          <NavCard
-            href="/dashboard/purchasing/receipts"
-            icon={PackageCheck}
-            title="Recebimentos"
-            description="Confira mercadorias recebidas e registre entradas no estoque."
-            pills={hasReceiptActivity ? (
-              <>
-                <PhasePill label="ag. recebimento" count={receiptsAwaiting.length} color="border-orange-300 bg-orange-50 text-orange-700" />
-                <PhasePill label="em conferência" count={receiptsConference.length} color="border-blue-300 bg-blue-50 text-blue-700" />
-                <PhasePill label="entrada no estoque" count={receiptsStock.length} color="border-purple-300 bg-purple-50 text-purple-700" />
-              </>
-            ) : undefined}
-          />
-        </div>
-
-        <div className="space-y-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Histórico</p>
-          <NavCard
-            href="/dashboard/purchasing/costs"
-            icon={TrendingDown}
-            title="Histórico de custo efetivo"
-            description="Preços confirmados no recebimento com rastreabilidade completa."
-          />
-        </div>
-
-        {canOpenQuotations && (
-          <div className="pt-2">
-            <Button asChild className="w-full sm:w-auto">
-              <Link href="/dashboard/purchasing/quotations">
-                <Clock className="mr-2 h-4 w-4" />
-                Ir para cotações
-              </Link>
-            </Button>
+        {cards.length === 0 ? (
+          <PurchasingEmptyState label="Nenhuma compra encontrada para os filtros atuais." />
+        ) : view === 'table' ? (
+          <div className="overflow-hidden rounded-[14px] border border-zinc-200 bg-white">
+            <div className="grid grid-cols-[110px_1.5fr_150px_120px_1fr_130px_120px_40px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-zinc-500">
+              <span>Código</span>
+              <span>Solicitação</span>
+              <span>Etapa</span>
+              <span>Origem</span>
+              <span>Fornecedor</span>
+              <span className="text-right">Valor</span>
+              <span>Entrega prev.</span>
+              <span />
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {cards.map((card) => (
+                <Link
+                  key={`${card.kind}-${card.id}`}
+                  href={card.href}
+                  className="grid grid-cols-[110px_1.5fr_150px_120px_1fr_130px_120px_40px] items-center gap-4 px-4 py-3 text-sm hover:bg-zinc-50"
+                >
+                  <span className="font-mono text-xs font-black text-zinc-600">{card.code}</span>
+                  <span className="font-bold text-zinc-950">{card.title}</span>
+                  <span><PurchasingStatusBadge label={card.stageLabel} tone={card.tone} /></span>
+                  <span className="text-zinc-500">{card.kind === 'quotation' ? 'Solicit.' : card.kind === 'done' ? 'Finalizada' : 'Compra'}</span>
+                  <span className="truncate text-zinc-500">{card.lines?.[0]?.label ?? '-'}</span>
+                  <span className="text-right font-mono font-black text-zinc-950">{card.amount ?? '-'}</span>
+                  <span className="text-zinc-500">{card.lines?.find((line) => line.label.startsWith('Prev.'))?.label.replace('Prev.: ', '') ?? '-'}</span>
+                  <span className="text-right text-zinc-400">›</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : view === 'kanban' ? (
+          <div className="overflow-x-auto pb-3">
+            <div className="grid min-w-[980px] grid-cols-5 gap-3">
+              {[
+                { label: 'Solicitação aberta', tone: 'blue' as const },
+                { label: 'Em aprovação', tone: 'amber' as const },
+                { label: 'Em cotação', tone: 'purple' as const },
+                { label: 'Pedido emitido', tone: 'blue' as const },
+                { label: 'Concluída', tone: 'green' as const },
+              ].map((column) => {
+                const columnCards = cards.filter((card) => card.stageLabel === column.label);
+                return (
+                  <div key={column.label} className="flex h-[calc(100vh-360px)] min-h-[380px] flex-col rounded-[14px] border border-zinc-200 bg-white/70 p-3">
+                    <div className="mb-3 flex items-center justify-between">
+                      <PurchasingStatusBadge label={column.label} tone={column.tone} />
+                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-zinc-500">{columnCards.length}</span>
+                    </div>
+                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                      {columnCards.map((card) => (
+                        <Link key={`${card.kind}-${card.id}`} href={card.href} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-[11px] font-black text-zinc-500">{card.code}</span>
+                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{card.title}</p>
+                          <PurchasingItemsPreview orderId={'orderId' in card ? card.orderId : undefined} quotationId={'quotationId' in card ? card.quotationId : undefined} />
+                          <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+                            <span>{card.lines?.[0]?.label ?? '-'}</span>
+                            <span className="font-mono font-black text-zinc-900">{card.amount ?? '-'}</span>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {cards.map((card) => (
+              <PurchasingPipelineCard
+                key={`${card.kind}-${card.id}`}
+                href={card.href}
+                tone={card.tone}
+                code={card.code}
+                title={card.title}
+                badges={<PurchasingStatusBadge label={card.status} tone={card.tone} />}
+                progress={card.progress}
+                lines={card.lines}
+                footerLeft={<span>{card.kind === 'done' ? 'Finalizada' : 'Em andamento'}</span>}
+                amount={card.amount}
+                age={card.age}
+              />
+            ))}
           </div>
         )}
-      </div>
+      </PurchasingPageFrame>
+
+      <CreateQuotationModal open={createOpen} onOpenChange={setCreateOpen} />
     </PermissionGuard>
   );
 }

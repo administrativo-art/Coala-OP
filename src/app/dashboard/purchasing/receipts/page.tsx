@@ -1,255 +1,192 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { PackageCheck, ChevronRight, Clock, Package, CheckCircle2, Boxes } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle2, PackageCheck, Truck } from 'lucide-react';
 import Link from 'next/link';
 
-import { BackButton } from '@/components/navigation/back-button';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { PermissionGuard } from '@/components/permission-guard';
+import { PurchasingItemsPreview } from '@/components/purchasing/purchasing-items-preview';
 import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
-import { useEntities } from '@/hooks/use-entities';
 import { useAuth } from '@/hooks/use-auth';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
-import { type PurchaseReceipt, type PurchaseReceiptItem } from '@/types';
+import { type PurchaseReceipt } from '@/types';
+import {
+  PurchasingEmptyState,
+  PurchasingFilterChip,
+  PurchasingHeader,
+  PurchasingMetricCard,
+  PurchasingPageFrame,
+  PurchasingPipelineCard,
+  PurchasingStatusBadge,
+  PurchasingToolbar,
+  purchasingAgeLabel,
+  purchasingCompactMoney,
+  type PurchasingTone,
+} from '@/components/purchasing/purchasing-ui';
 
-type PhaseConfig = {
-  label: string;
-  icon: React.ElementType;
-  className: string;
+const statusConfig: Record<PurchaseReceipt['status'], { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'done' }> = {
+  awaiting_delivery: { label: 'A receber', tone: 'cyan', progress: 5, bucket: 'waiting' },
+  in_conference: { label: 'Em conferência', tone: 'purple', progress: 6, bucket: 'conference' },
+  awaiting_stock: { label: 'Aguardando estoque', tone: 'blue', progress: 7, bucket: 'conference' },
+  in_stock_entry: { label: 'Entrada em estoque', tone: 'green', progress: 7, bucket: 'conference' },
+  partially_stocked: { label: 'Recebimento parcial', tone: 'amber', progress: 6, bucket: 'partial' },
+  stocked: { label: 'Concluída', tone: 'green', progress: 8, bucket: 'done' },
+  stocked_with_divergence: { label: 'Em processo', tone: 'purple', progress: 7, bucket: 'conference' },
+  cancelled: { label: 'Cancelada', tone: 'zinc', progress: 1, bucket: 'done' },
 };
 
-const PHASE_CONFIG: Record<PurchaseReceipt['status'], PhaseConfig> = {
-  awaiting_delivery: { label: 'Aguardando recebimento', icon: Clock, className: 'border-orange-300 bg-orange-50 text-orange-700' },
-  in_conference: { label: 'Em conferência', icon: PackageCheck, className: 'border-blue-300 bg-blue-50 text-blue-700' },
-  awaiting_stock: { label: 'Aguardando estoque', icon: Package, className: 'border-amber-300 bg-amber-50 text-amber-700' },
-  in_stock_entry: { label: 'Entrada no estoque', icon: Boxes, className: 'border-purple-300 bg-purple-50 text-purple-700' },
-  partially_stocked: { label: 'Estoque parcial', icon: Boxes, className: 'border-amber-300 bg-amber-50 text-amber-700' },
-  stocked: { label: 'Estocado', icon: CheckCircle2, className: 'border-green-400 bg-green-50 text-green-700' },
-  stocked_with_divergence: { label: 'Estocado c/ divergência', icon: CheckCircle2, className: 'border-red-300 bg-red-50 text-red-700' },
-  cancelled: { label: 'Cancelado', icon: CheckCircle2, className: 'border-zinc-300 bg-zinc-50 text-zinc-500' },
+const fallbackStatusConfig: { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'done' } = {
+  label: 'Pendente',
+  tone: 'zinc',
+  progress: 1,
+  bucket: 'waiting',
 };
 
-function ReceiptRow({ receipt }: { receipt: PurchaseReceipt }) {
-  const { entities } = useEntities();
-  const { fetchReceiptItems } = usePurchaseReceipts();
-  const [open, setOpen] = useState('');
-  const [items, setItems] = useState<PurchaseReceiptItem[]>([]);
-  const [itemsLoading, setItemsLoading] = useState(false);
-  const supplier = entities.find((e) => e.id === receipt.supplierId);
-  const phase = PHASE_CONFIG[receipt.status];
-  const PhaseIcon = phase.icon;
-  const receivedByOtherMeans = Boolean((receipt as PurchaseReceipt & { receivedByOtherMeans?: boolean }).receivedByOtherMeans);
-
-  useEffect(() => {
-    if (!open || items.length > 0 || itemsLoading) return;
-    let cancelled = false;
-    setItemsLoading(true);
-    fetchReceiptItems(receipt.id)
-      .then((data) => {
-        if (!cancelled) setItems(data);
-      })
-      .finally(() => {
-        if (!cancelled) setItemsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchReceiptItems, items.length, itemsLoading, open, receipt.id]);
-
-  return (
-    <Accordion type="single" collapsible value={open} onValueChange={setOpen}>
-      <AccordionItem value={receipt.id} className="rounded-lg border bg-card px-0">
-        <AccordionTrigger className="px-4 py-4 hover:no-underline">
-          <div className="flex items-center gap-4 min-w-0 text-left">
-            <div className="flex-shrink-0 p-2 rounded-md bg-muted">
-              <PhaseIcon className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium truncate">
-                  {supplier?.fantasyName ?? supplier?.name ?? '—'}
-                </span>
-                <Badge variant="outline" className={`text-xs ${phase.className}`}>
-                  {phase.label}
-                </Badge>
-                {receivedByOtherMeans && (
-                  <Badge variant="outline" className="text-xs border-sky-300 bg-sky-50 text-sky-700">
-                    Baixado por outro meio
-                  </Badge>
-                )}
-                <Badge variant="outline" className="text-xs">
-                  {receipt.receiptMode === 'immediate_pickup' ? 'Retirada' : 'Entrega futura'}
-                </Badge>
-              </div>
-              <div className="flex gap-3 text-xs text-muted-foreground flex-wrap">
-                {receipt.totalEstimated != null && (
-                  <span className="font-medium text-foreground">
-                    {receipt.totalEstimated.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </span>
-                )}
-                {receipt.expectedDate && (
-                  <span>Previsto: {format(parseISO(receipt.expectedDate), 'dd/MM/yyyy', { locale: ptBR })}</span>
-                )}
-                {receivedByOtherMeans && receipt.receivedAt && (
-                  <span>Baixado: {format(parseISO(receipt.receivedAt), 'dd/MM/yyyy', { locale: ptBR })}</span>
-                )}
-                {!receivedByOtherMeans && receipt.stockEnteredAt && (
-                  <span>Estocado: {format(parseISO(receipt.stockEnteredAt), 'dd/MM/yyyy', { locale: ptBR })}</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </AccordionTrigger>
-        <AccordionContent className="px-4 pb-4">
-          <div className="space-y-3 border-t pt-3">
-            {itemsLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : items.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum item encontrado.</p>
-            ) : (
-              <div className="space-y-2">
-                {items.map((item) => (
-                  <div key={item.id} className="grid grid-cols-[1fr_auto] gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{item.itemName || item.baseItemId || 'Item sem nome'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Pedido: {Number(item.quantityOrdered ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} {item.purchaseUnitLabel || item.unit}
-                        {item.quantityReceived ? ` · Recebido: ${Number(item.quantityReceived).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}` : ''}
-                      </p>
-                    </div>
-                    <span className="text-right font-medium">
-                      {Number(
-                        item.totalConfirmed ??
-                          Number(item.quantityOrdered ?? 0) * Number(item.unitPriceOrdered ?? 0),
-                      ).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex justify-end">
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`}>
-                  Abrir recebimento
-                  <ChevronRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
-  );
+function receiptCode(id: string) {
+  return `CMP-${id.slice(-8).toUpperCase()}`;
 }
 
 export default function ReceiptsPage() {
-  const { permissions, firebaseUser } = useAuth();
+  const { permissions } = useAuth();
   const { receipts, loading } = usePurchaseReceipts();
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'waiting' | 'partial' | 'conference' | 'delayed' | 'done'>('all');
+  const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
   const canView = canViewPurchasing(permissions);
 
-  const pending = useMemo(
-    () => receipts.filter((r) => r.status === 'awaiting_delivery' || r.status === 'in_conference' || r.status === 'awaiting_stock' || r.status === 'in_stock_entry' || r.status === 'partially_stocked'),
-    [receipts],
-  );
+  const waiting = receipts.filter((r) => r.status === 'awaiting_delivery');
+  const partial = receipts.filter((r) => r.status === 'partially_stocked');
+  const conference = receipts.filter((r) => ['in_conference', 'awaiting_stock', 'in_stock_entry', 'stocked_with_divergence'].includes(r.status));
+  const done = receipts.filter((r) => r.status === 'stocked');
+  const delayed = receipts.filter((r) => ['awaiting_delivery', 'in_conference', 'awaiting_stock', 'in_stock_entry', 'partially_stocked', 'stocked_with_divergence'].includes(r.status) && r.expectedDate && new Date(r.expectedDate).getTime() < Date.now());
 
-  const done = useMemo(
-    () => receipts.filter((r) => r.status === 'stocked' || r.status === 'stocked_with_divergence' || r.status === 'cancelled'),
-    [receipts],
-  );
+  const cards = useMemo(() => {
+    return receipts
+      .map((receipt) => {
+        const cfg = statusConfig[receipt.status] ?? fallbackStatusConfig;
+        const isDelayed = ['awaiting_delivery', 'in_conference', 'awaiting_stock', 'in_stock_entry', 'partially_stocked', 'stocked_with_divergence'].includes(receipt.status) && receipt.expectedDate && new Date(receipt.expectedDate).getTime() < Date.now();
+        return {
+          receipt,
+          cfg,
+          isDelayed,
+          searchText: `${receipt.id} ${receipt.purchaseOrderId} ${receipt.supplierName ?? ''} ${receipt.status}`.toLowerCase(),
+        };
+      })
+      .filter((entry) => filter === 'all' || entry.cfg.bucket === filter || (filter === 'delayed' && entry.isDelayed))
+      .filter((entry) => !search.trim() || entry.searchText.includes(search.trim().toLowerCase()));
+  }, [filter, receipts, search]);
 
   return (
     <PermissionGuard allowed={canView}>
-      <div className="container max-w-3xl py-8 space-y-6">
-      <div className="flex items-center gap-3">
-        <BackButton fallbackHref="/dashboard/purchasing" label="Compras" variant="ghost" size="sm" className="-ml-2" />
-      </div>
+      <PurchasingPageFrame>
+        <PurchasingHeader
+          crumb={['Coala', 'Compras', 'Recebimentos']}
+          title="Recebimentos"
+          description="Conferência da mercadoria recebida, divergências, NF-e e lançamento financeiro."
+        />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Recebimentos</h1>
-          <p className="text-sm text-muted-foreground">
-            Confira mercadorias e registre a entrada no estoque.
-          </p>
+        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-5">
+          <PurchasingMetricCard label="A receber" value={waiting.length} detail="aguardando chegada" tone="cyan" icon={<Truck className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Parciais" value={partial.length} detail="com saldo aberto" tone="amber" icon={<AlertTriangle className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Em processo" value={conference.length} detail="conferência/estoque" tone="purple" icon={<PackageCheck className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Atrasados" value={delayed.length} detail="previsão vencida" tone="rose" icon={<AlertTriangle className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Concluídos" value={done.length} detail="despesa lançada" tone="green" icon={<CheckCircle2 className="h-5 w-5" />} />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            const token = await firebaseUser?.getIdToken(true);
-            if (!token) return;
-            try {
-              const res = await fetch('/api/admin/fix-receipts', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: '{}'
-              });
-              const data = await res.json();
-              if (data.ok) {
-                alert(`${data.recovered?.length || 0} recebimento(s) sincronizado(s).`);
-                window.location.reload();
-              }
-            } catch (err) {
-              console.error(err);
-            }
-          }}
-        >
-          <Boxes className="mr-2 h-4 w-4" />
-          Sincronizar
-        </Button>
-      </div>
 
-      <Tabs defaultValue="pending">
-        <TabsList>
-          <TabsTrigger value="pending" className="gap-2">
-            <Clock className="h-4 w-4" />
-            Pendentes
-            {pending.length > 0 && (
-              <span className="ml-1 rounded-full bg-primary/20 px-1.5 text-xs font-medium">
-                {pending.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="done" className="gap-2">
-            <PackageCheck className="h-4 w-4" />
-            Concluídos
-          </TabsTrigger>
-        </TabsList>
+        <PurchasingToolbar search={search} onSearchChange={setSearch} resultLabel={`${cards.length} de ${receipts.length} recebimentos`} view={view} onViewChange={setView}>
+          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={receipts.length} onClick={() => setFilter('all')} />
+          <PurchasingFilterChip active={filter === 'waiting'} label="Aguardando" count={waiting.length} tone="cyan" onClick={() => setFilter('waiting')} />
+          <PurchasingFilterChip active={filter === 'partial'} label="Parcial" count={partial.length} tone="amber" onClick={() => setFilter('partial')} />
+          <PurchasingFilterChip active={filter === 'conference'} label="Em processo" count={conference.length} tone="purple" onClick={() => setFilter('conference')} />
+          <PurchasingFilterChip active={filter === 'delayed'} label="Atrasado" count={delayed.length} tone="rose" onClick={() => setFilter('delayed')} />
+          <PurchasingFilterChip active={filter === 'done'} label="Concluída" count={done.length} tone="green" onClick={() => setFilter('done')} />
+        </PurchasingToolbar>
 
-        <TabsContent value="pending" className="mt-4 space-y-2">
-          {loading ? (
-            Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
-          ) : pending.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-16">
-              Nenhum recebimento pendente.
+        {loading ? (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-[250px] rounded-[16px]" />)}
+          </div>
+        ) : cards.length === 0 ? (
+          <PurchasingEmptyState label="Nenhum recebimento encontrado." />
+        ) : view === 'table' ? (
+          <div className="overflow-hidden rounded-[14px] border border-zinc-200 bg-white">
+            <div className="grid grid-cols-[120px_1.5fr_150px_130px_120px_40px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-zinc-500">
+              <span>Código</span><span>Recebimento</span><span>Status</span><span className="text-right">Valor</span><span>Previsão</span><span />
             </div>
-          ) : (
-            pending.map((r) => <ReceiptRow key={r.id} receipt={r} />)
-          )}
-        </TabsContent>
-
-        <TabsContent value="done" className="mt-4 space-y-2">
-          {loading ? (
-            <Skeleton className="h-16 w-full" />
-          ) : done.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-16">
-              Nenhum recebimento concluído.
+            <div className="divide-y divide-zinc-100">
+              {cards.map(({ receipt, cfg }) => (
+                <Link key={receipt.id} href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`} className="grid grid-cols-[120px_1.5fr_150px_130px_120px_40px] items-center gap-4 px-4 py-3 text-sm hover:bg-zinc-50">
+                  <span className="font-mono text-xs font-black text-zinc-600">{receiptCode(receipt.purchaseOrderId)}</span>
+                  <span className="font-bold text-zinc-950">{receipt.supplierName || 'Recebimento de compra'}</span>
+                  <span><PurchasingStatusBadge label={cfg.label} tone={cfg.tone} /></span>
+                  <span className="text-right font-mono font-black text-zinc-950">{purchasingCompactMoney(receipt.totalConfirmed ?? receipt.totalEstimated)}</span>
+                  <span className="text-zinc-500">{new Date(receipt.expectedDate).toLocaleDateString('pt-BR')}</span>
+                  <span className="text-right text-zinc-400">›</span>
+                </Link>
+              ))}
             </div>
-          ) : (
-            done.map((r) => <ReceiptRow key={r.id} receipt={r} />)
-          )}
-        </TabsContent>
-      </Tabs>
-      </div>
+          </div>
+        ) : view === 'kanban' ? (
+          <div className="overflow-x-auto pb-3">
+            <div className="grid min-w-[1280px] grid-cols-6 gap-3">
+              {[
+                { label: 'A receber', tone: 'cyan' as const },
+                { label: 'Em conferência', tone: 'purple' as const },
+                { label: 'Aguardando estoque', tone: 'blue' as const },
+                { label: 'Entrada em estoque', tone: 'green' as const },
+                { label: 'Recebimento parcial', tone: 'amber' as const },
+                { label: 'Concluída', tone: 'green' as const },
+              ].map((column) => {
+                const columnCards = cards.filter((entry) => entry.cfg.label === column.label || (column.label === 'Em conferência' && entry.receipt.status === 'stocked_with_divergence'));
+                return (
+                  <div key={column.label} className="flex h-[calc(100vh-360px)] min-h-[380px] flex-col rounded-[14px] border border-zinc-200 bg-white/70 p-3">
+                    <div className="mb-3 flex items-center justify-between">
+                      <PurchasingStatusBadge label={column.label} tone={column.tone} />
+                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-zinc-500">{columnCards.length}</span>
+                    </div>
+                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                      {columnCards.map(({ receipt }) => (
+                        <Link key={receipt.id} href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
+                          <span className="font-mono text-[11px] font-black text-zinc-500">{receiptCode(receipt.purchaseOrderId)}</span>
+                          <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{receipt.supplierName || 'Recebimento de compra'}</p>
+                          <PurchasingItemsPreview receiptId={receipt.id} />
+                          <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+                            <span>{receipt.receiptMode === 'immediate_pickup' ? 'Retirada' : 'Entrega'}</span>
+                            <span className="font-mono font-black text-zinc-900">{purchasingCompactMoney(receipt.totalConfirmed ?? receipt.totalEstimated)}</span>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {cards.map(({ receipt, cfg }) => (
+              <PurchasingPipelineCard
+                key={receipt.id}
+                href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`}
+                tone={cfg.tone}
+                code={receiptCode(receipt.purchaseOrderId)}
+                title={receipt.supplierName || 'Recebimento de compra'}
+                badges={<PurchasingStatusBadge label={cfg.label} tone={cfg.tone} />}
+                progress={cfg.progress}
+                lines={[
+                  { label: receipt.receiptMode === 'immediate_pickup' ? 'Retirada imediata' : 'Entrega futura' },
+                  { label: `Prev.: ${new Date(receipt.expectedDate).toLocaleDateString('pt-BR')}` },
+                  { label: receipt.notes || 'Sem observação' },
+                ]}
+                footerLeft={<span>{receipt.status === 'awaiting_delivery' ? 'Aguardando chegada' : 'Recebimento'}</span>}
+                amount={purchasingCompactMoney(receipt.totalConfirmed ?? receipt.totalEstimated)}
+                age={purchasingAgeLabel(receipt.stockEnteredAt ?? receipt.createdAt)}
+              />
+            ))}
+          </div>
+        )}
+      </PurchasingPageFrame>
     </PermissionGuard>
   );
 }

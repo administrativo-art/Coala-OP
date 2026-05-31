@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Send } from 'lucide-react';
 
 import {
   Dialog,
@@ -84,12 +84,29 @@ export function CreateQuotationModal({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Nova Cotação</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="!max-w-[620px] overflow-hidden rounded-[18px] border-zinc-200 bg-[#f6f6f7] p-0">
+        <div className="border-b border-zinc-200 bg-[#f6f6f7] px-8 pb-5 pt-7">
+          <DialogHeader>
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-violet-600 text-white">
+                <Send className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-[1.75rem] font-black leading-none tracking-[-0.045em] text-zinc-950">
+                  Nova cotação
+                </DialogTitle>
+                <p className="mt-2 text-sm text-zinc-500">
+                  Abra uma consulta de preço por fornecedor antes de criar o pedido.
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+        </div>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-8 py-6">
+            <div className="rounded-[14px] border border-zinc-200 bg-white p-5">
+              <h3 className="text-base font-black tracking-[-0.02em] text-zinc-950">Informações gerais</h3>
+              <div className="mt-4 space-y-4">
             <FormField
               control={form.control}
               name="supplierId"
@@ -98,7 +115,7 @@ export function CreateQuotationModal({ open, onOpenChange }: Props) {
                   <FormLabel>Fornecedor</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="h-12 rounded-[10px]">
                         <SelectValue placeholder="Selecione um fornecedor" />
                       </SelectTrigger>
                     </FormControl>
@@ -123,7 +140,7 @@ export function CreateQuotationModal({ open, onOpenChange }: Props) {
                   <FormLabel>Modo</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="h-12 rounded-[10px]">
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
@@ -144,7 +161,7 @@ export function CreateQuotationModal({ open, onOpenChange }: Props) {
                 <FormItem>
                   <FormLabel>Data da cotação</FormLabel>
                   <FormControl>
-                    <Input type="date" {...field} />
+                    <Input type="date" className="h-12 rounded-[10px]" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -158,18 +175,20 @@ export function CreateQuotationModal({ open, onOpenChange }: Props) {
                 <FormItem>
                   <FormLabel>Observações (opcional)</FormLabel>
                   <FormControl>
-                    <Textarea rows={2} placeholder="Ex: Preços consultados por WhatsApp, Mercado Livre ou fornecedor local" {...field} />
+                    <Textarea rows={3} className="rounded-[10px]" placeholder="Ex: Preços consultados por WhatsApp, Mercado Livre ou fornecedor local" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+              </div>
+            </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <DialogFooter className="items-center gap-2 border-t border-zinc-200 pt-5">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-11 rounded-[10px] px-5">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={submitting} className="h-11 rounded-[10px] bg-violet-600 px-5 font-bold text-white hover:bg-violet-700">
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Criar cotação
               </Button>
