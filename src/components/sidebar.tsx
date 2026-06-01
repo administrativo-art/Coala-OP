@@ -14,7 +14,8 @@ import {
   ChevronDown, X, LayoutDashboard, Package, ListTodo, Target,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
-  LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck
+  LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck,
+  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -24,6 +25,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   show: boolean | undefined;
   badge?: { count: number; variant: "crit" | "warn" | "info" | "ok" };
+  children?: NavItem[];
 }
 
 interface SectionColor {
@@ -54,13 +56,6 @@ interface SidebarProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const BADGE_COLORS: Record<"crit" | "warn" | "info" | "ok", { bg: string; color: string }> = {
-  crit: { bg: "#fef2f2", color: "#dc2626" },
-  warn: { bg: "#fffbeb", color: "#d97706" },
-  info: { bg: "#eef2ff", color: "#4338ca" },
-  ok:   { bg: "#f0fdf4", color: "#16a34a" },
-};
-
 export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const pathname = usePathname();
   const { user, permissions, logout } = useAuth();
@@ -80,8 +75,27 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           { label: "Tarefas gerais", href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, badge: pendingTaskCount > 0 ? { count: pendingTaskCount, variant: "warn" } : undefined },
           { label: "Formulários", href: "/dashboard/forms", icon: FileText, show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.dp?.checklists?.view || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.manageTemplates },
           { label: "Checklists", href: "/dashboard/dp/checklists", icon: ListChecks, show: permissions.dp?.checklists?.view || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.manageTemplates || permissions.dp?.view },
-          { label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package, show: permissions.stock.view },
-          { label: "Compras", href: "/dashboard/purchasing", icon: ShoppingCart, show: canAccessPurchasing },
+          {
+            label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package, show: permissions.stock.view,
+            children: [
+              { label: "Controle de estoque", href: "/dashboard/inventory-control", icon: ClipboardCheck, show: permissions.stock.inventoryControl.view },
+              { label: "Contagem de estoque", href: "/dashboard/stock/count", icon: ListOrdered, show: permissions.stock.stockCount.view },
+              { label: "Reposição", href: "/dashboard/stock/analysis", icon: Truck, show: permissions.stock.analysis.restock },
+              { label: "Análise estratégica", href: "/dashboard/reports", icon: BarChart3, show: permissions.stock.analysis.view },
+              { label: "Gestão de avarias", href: "/dashboard/stock/returns", icon: ShieldAlert, show: permissions.stock.returns.view },
+              { label: "Conversão de medidas", href: "/dashboard/conversions", icon: Repeat, show: permissions.stock.conversions.view },
+            ],
+          },
+          {
+            label: "Compras", href: "/dashboard/purchasing", icon: ShoppingCart, show: canAccessPurchasing,
+            children: [
+              { label: "Painel", href: "/dashboard/purchasing", icon: LayoutGrid, show: canAccessPurchasing },
+              { label: "Cotações", href: "/dashboard/purchasing/quotations", icon: ReceiptText, show: canAccessPurchasing },
+              { label: "Pedidos de compra", href: "/dashboard/purchasing/orders", icon: ShoppingCart, show: canAccessPurchasing },
+              { label: "Recebimentos", href: "/dashboard/purchasing/receipts", icon: PackageCheck, show: canAccessPurchasing },
+              { label: "Histórico de custo", href: "/dashboard/purchasing/costs", icon: Landmark, show: canAccessPurchasing },
+            ],
+          },
         ],
       },
       {
@@ -91,8 +105,21 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         color: SECTION_COLORS.com,
         items: [
           { label: "Ficha técnica", href: "/dashboard/commercial", icon: FileText, show: canViewTechnicalSheets(permissions) },
-          { label: "Metas de Vendas", href: "/dashboard/goals", icon: Target, show: permissions.goals?.view },
-          { label: "Gestão de Preços", href: "/dashboard/pricing", icon: DollarSign, show: permissions.pricing.view },
+          {
+            label: "Metas de Vendas", href: "/dashboard/goals", icon: Target, show: permissions.goals?.view,
+            children: [
+              { label: "Acompanhamento", href: "/dashboard/goals/tracking", icon: Target, show: permissions.goals?.view },
+              { label: "Análise", href: "/dashboard/goals/analysis", icon: BarChart3, show: permissions.goals?.view },
+              { label: "Histórico", href: "/dashboard/goals/history", icon: ListChecks, show: permissions.goals?.view },
+            ],
+          },
+          {
+            label: "Gestão de Preços", href: "/dashboard/pricing", icon: DollarSign, show: permissions.pricing.view,
+            children: [
+              { label: "Ficha de custo e margem", href: "/dashboard/pricing/cost-analysis", icon: DollarSign, show: permissions.pricing.view },
+              { label: "Estudo de preço", href: "/dashboard/pricing/price-comparison", icon: BarChart3, show: permissions.pricing.view },
+            ],
+          },
         ],
       },
       {
@@ -143,8 +170,21 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         ],
       },
     ];
-    return all.map(s => ({ ...s, items: s.items.filter(i => i.show) })).filter(s => s.items.length > 0);
+    return all
+      .map(s => ({
+        ...s,
+        items: s.items
+          .filter(i => i.show)
+          .map(i => (i.children ? { ...i, children: i.children.filter(c => c.show) } : i)),
+      }))
+      .filter(s => s.items.length > 0);
   }, [canAccessPurchasing, pendingTaskCount, permissions]);
+
+  // Flatten items + their children for active-route matching.
+  const flatItems = useMemo(
+    () => navSections.flatMap(s => s.items.flatMap(i => [i, ...(i.children ?? [])])),
+    [navSections]
+  );
 
   // Start with all accordion sections collapsed.
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set());
@@ -159,8 +199,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   }
 
   const activeHref = useMemo(() => {
-    const matches = navSections
-      .flatMap(section => section.items)
+    const matches = flatItems
       .filter((item) =>
         item.href === "/dashboard"
           ? pathname === "/dashboard"
@@ -169,15 +208,37 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       .sort((a, b) => b.href.length - a.href.length);
 
     return matches[0]?.href ?? null;
-  }, [navSections, pathname]);
+  }, [flatItems, pathname]);
 
   function isItemActive(item: NavItem) {
     return item.href === activeHref;
   }
 
+  function isItemOrChildActive(item: NavItem) {
+    return isItemActive(item) || (item.children?.some(isItemActive) ?? false);
+  }
+
+  // Track expanded nested groups (e.g. Gestão de Estoque). Starts collapsed.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
+
+  function toggleGroup(href: string) {
+    setOpenGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(href)) next.delete(href);
+      else next.add(href);
+      return next;
+    });
+  }
+
   const activeSectionKey = useMemo(
-    () => navSections.find((section) => section.items.some(isItemActive))?.key ?? null,
+    () => navSections.find((section) => section.items.some(isItemOrChildActive))?.key ?? null,
     [activeHref, navSections]
+  );
+
+  // Auto-open the parent group whose child route is active.
+  const activeGroupHref = useMemo(
+    () => flatItems.find((item) => item.children?.some(isItemActive))?.href ?? null,
+    [activeHref, flatItems]
   );
 
   useEffect(() => {
@@ -189,6 +250,16 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       return next;
     });
   }, [activeSectionKey]);
+
+  useEffect(() => {
+    if (!activeGroupHref) return;
+    setOpenGroups((prev) => {
+      if (prev.has(activeGroupHref)) return prev;
+      const next = new Set(prev);
+      next.add(activeGroupHref);
+      return next;
+    });
+  }, [activeGroupHref]);
 
   // Keyboard: close drawer on Escape
   useEffect(() => {
@@ -284,15 +355,16 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           {expanded ? (
             navSections.map(section => {
               const isOpen = openSections.has(section.key);
-              const hasActive = section.items.some(isItemActive);
+              const hasActive = section.items.some(isItemOrChildActive);
               const SectionIcon = section.icon;
+              const sectionBadgeCount = section.items.reduce((sum, item) => sum + (item.badge?.count || 0), 0);
 
               return (
                 <div
                   key={section.key}
                   className={cn(
-                    "mb-2 rounded-2xl transition-colors",
-                    hasActive && "border border-stone-200 bg-stone-50"
+                    "mb-2 rounded-2xl border border-transparent transition-colors",
+                    (isOpen || hasActive) && "border-stone-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
                   )}
                 >
                   <button
@@ -300,22 +372,95 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                     onClick={() => toggleSection(section.key)}
                     className={cn(
                       "flex h-12 w-full items-center gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 transition-colors hover:bg-stone-50",
-                      hasActive && "text-slate-950"
+                      (isOpen || hasActive) && "text-slate-950 hover:bg-transparent"
                     )}
                   >
                     <SectionIcon className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
                     <span className="flex-1 text-left">{section.label}</span>
-                    <ChevronDown
-                      className={cn("h-5 w-5 transition-transform duration-200", isOpen && "rotate-180")}
-                    />
+                    {sectionBadgeCount > 0 ? (
+                      <span className="grid min-w-[26px] place-items-center rounded-full bg-slate-900 px-2 py-0.5 text-xs font-bold text-white">
+                        {sectionBadgeCount}
+                      </span>
+                    ) : (
+                      <ChevronDown
+                        className={cn("h-5 w-5 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")}
+                      />
+                    )}
                   </button>
 
                   {isOpen && (
-                    <div className="mb-3 ml-8 mt-1 space-y-1 border-l border-stone-200 py-1 pl-6">
+                    <div className="mb-3 ml-7 mt-0.5 space-y-0.5 border-l border-stone-200 py-1 pl-5">
                       {section.items.map(item => {
-                        const Icon = item.icon;
                         const active = isItemActive(item);
-                        const badgeColors = item.badge ? BADGE_COLORS[item.badge.variant] : null;
+                        const count = item.badge?.count ?? 0;
+                        const hasChildren = !!item.children?.length;
+                        const groupOpen = openGroups.has(item.href);
+                        const childActive = item.children?.some(isItemActive) ?? false;
+
+                        const dot = (on: boolean) => (
+                          <span
+                            className="h-2 w-2 flex-shrink-0 rounded-full transition-opacity"
+                            style={{ background: section.color.text, opacity: on ? 1 : 0.6 }}
+                          />
+                        );
+
+                        if (hasChildren) {
+                          return (
+                            <div key={item.href}>
+                              <button
+                                type="button"
+                                onClick={() => toggleGroup(item.href)}
+                                className={cn(
+                                  "relative flex min-h-9 w-full items-center gap-3 rounded-xl px-3 py-1.5 text-[15px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                  childActive && "font-semibold text-slate-950 hover:text-slate-950"
+                                )}
+                              >
+                                {childActive && (
+                                  <span
+                                    className="absolute -left-[21px] top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-full"
+                                    style={{ background: section.color.text }}
+                                  />
+                                )}
+                                {dot(childActive)}
+                                <span className="flex-1 truncate text-left">{item.label}</span>
+                                <ChevronDown
+                                  className={cn("h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200", groupOpen && "rotate-180")}
+                                />
+                              </button>
+
+                              {groupOpen && (
+                                <div className="ml-[7px] mt-0.5 space-y-0.5 border-l border-stone-200 py-0.5 pl-[19px]">
+                                  {item.children!.map(child => {
+                                    const cActive = isItemActive(child);
+                                    return (
+                                      <Link
+                                        key={child.href}
+                                        href={child.href}
+                                        onClick={() => onOpenChange(false)}
+                                        className={cn(
+                                          "relative flex min-h-8 items-center gap-2.5 rounded-xl px-3 py-1.5 text-[14px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                          cActive && "font-semibold text-slate-950 hover:text-slate-950"
+                                        )}
+                                      >
+                                        {cActive && (
+                                          <span
+                                            className="absolute -left-[20px] top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full"
+                                            style={{ background: section.color.text }}
+                                          />
+                                        )}
+                                        <span
+                                          className="h-1.5 w-1.5 flex-shrink-0 rounded-full transition-opacity"
+                                          style={{ background: section.color.text, opacity: cActive ? 1 : 0.45 }}
+                                        />
+                                        <span className="flex-1 truncate">{child.label}</span>
+                                      </Link>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
 
                         return (
                           <Link
@@ -323,19 +468,21 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                             href={item.href}
                             onClick={() => onOpenChange(false)}
                             className={cn(
-                              "relative flex min-h-9 items-center gap-2.5 rounded-xl px-3 py-1.5 text-[15px] font-medium text-slate-700 transition-colors hover:bg-white",
-                              active && "font-semibold text-slate-950"
+                              "relative flex min-h-9 items-center gap-3 rounded-xl px-3 py-1.5 text-[15px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                              active && "font-semibold text-slate-950 hover:text-slate-950"
                             )}
                           >
-                            {active && <span className="absolute -left-[27px] top-1/2 h-8 w-0.5 -translate-y-1/2 rounded-full bg-slate-900" />}
-                            <Icon className="h-4 w-4 flex-shrink-0" />
-                            <span className="flex-1">{item.label}</span>
-                            {item.badge && item.badge.count > 0 && badgeColors && (
+                            {active && (
                               <span
-                                className="ml-auto rounded-full px-1.5 py-px text-[9px] font-bold"
-                                style={{ background: badgeColors.bg, color: badgeColors.color }}
-                              >
-                                {item.badge.count}
+                                className="absolute -left-[21px] top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-full"
+                                style={{ background: section.color.text }}
+                              />
+                            )}
+                            {dot(active)}
+                            <span className="flex-1 truncate">{item.label}</span>
+                            {count > 0 && (
+                              <span className={cn("ml-auto text-[13px] font-medium tabular-nums", active ? "text-slate-500" : "text-slate-400")}>
+                                {count}
                               </span>
                             )}
                           </Link>
@@ -350,7 +497,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             <div className="space-y-2">
               {navSections.map((section) => {
                 const Icon = section.icon;
-                const active = section.items.some(isItemActive);
+                const active = section.items.some(isItemOrChildActive);
                 const badgeCount = section.items.reduce((sum, item) => sum + (item.badge?.count || 0), 0);
 
                 return (
