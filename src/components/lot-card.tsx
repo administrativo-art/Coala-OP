@@ -36,6 +36,12 @@ import { useReposition } from '@/hooks/use-reposition';
 
 const DEFAULT_URGENT_THRESHOLD = 7;
 const DEFAULT_ALERT_THRESHOLD = 30;
+const ACTIVE_REPOSITION_RESERVATION_STATUSES: RepositionActivity["status"][] = [
+  "Aguardando despacho",
+  "Aguardando recebimento",
+  "Recebido com divergência",
+  "Recebido sem divergência",
+];
 
 export type GroupedProduct = {
   product: Product;
@@ -219,7 +225,7 @@ export function LotCard({
       let totalCalculated = 0;
 
       const relevantActivities = activities.filter(act => 
-        (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento') &&
+        ACTIVE_REPOSITION_RESERVATION_STATUSES.includes(act.status) &&
         act.items.some(item => 
           item.suggestedLots.some(sl => sl.lotId === lot.id)
         )
@@ -229,7 +235,7 @@ export function LotCard({
         act.items.forEach(item => {
           item.suggestedLots.forEach(sl => {
             if (sl.lotId === lot.id) {
-              const destName = act.kioskDestinationName.split(' ')[1] || act.kioskDestinationName;
+              const destName = act.kioskDestinationName;
               reservationDetails[destName] = (reservationDetails[destName] || 0) + sl.quantityToMove;
               totalCalculated += sl.quantityToMove;
             }
@@ -237,12 +243,8 @@ export function LotCard({
         });
       });
 
-      const detailText = Object.entries(reservationDetails)
-        .map(([name, qty]) => `${name}: ${qty}`)
-        .join(', ');
-
       return {
-        text: detailText || (totalCalculated > 0 ? 'em processamento' : null),
+        destinations: Object.entries(reservationDetails).map(([name, quantity]) => ({ name, quantity })),
         totalQty: totalCalculated
       };
     };
@@ -310,7 +312,7 @@ export function LotCard({
             {productGroup.lots.map(lot => {
                 const locationName = getLocationName(lot.locationId);
                 const status = getStatus(lot, product);
-                const { text: reservationInfo, totalQty: derivedReservedQty } = getReservationDetails(lot);
+                const { destinations: reservationDestinations, totalQty: derivedReservedQty } = getReservationDetails(lot);
                 const displayReservedQty = Math.max(lot.reservedQuantity || 0, derivedReservedQty);
                 
                 let totalUnits: number;
@@ -397,11 +399,21 @@ export function LotCard({
 
                          {displayReservedQty > 0 && (
                             <div className="mt-2 pt-2 border-t border-dashed">
-                               <div className="text-blue-600 font-bold flex items-center gap-1">
-                                    <Shield className="h-3 w-3"/>
-                                    Reserva Ativa: {displayReservedQty} 
-                                    {reservationInfo && (
-                                    <span className="text-xs font-normal text-muted-foreground">({reservationInfo})</span>
+                               <div className="flex flex-wrap items-center gap-2">
+                                    <span className="inline-flex items-center gap-1 text-blue-600 font-bold">
+                                        <Shield className="h-3 w-3"/>
+                                        Reserva Ativa: {displayReservedQty}
+                                    </span>
+                                    {reservationDestinations.length > 0 ? (
+                                        reservationDestinations.map((destination) => (
+                                            <Badge key={destination.name} variant="secondary" className="rounded-full px-2.5 py-1 text-xs font-medium">
+                                                {destination.name}: {destination.quantity}
+                                            </Badge>
+                                        ))
+                                    ) : (
+                                        <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-xs font-medium">
+                                            Em processamento
+                                        </Badge>
                                     )}
                                 </div>
                             </div>

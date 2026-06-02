@@ -24,7 +24,7 @@ export function StockManagement() {
     const canViewPurchasing = permissions.stock.purchasing.view || permissions.purchasing?.view;
     const canViewReturns = permissions.stock.returns.view;
     const canViewConversions = permissions.stock.conversions.view;
-    const canViewReposition = permissions.stock.analysis.restock; // Assuming this permission governs reposition
+    const canViewReposition = permissions.reposition.view || permissions.stock.analysis.restock;
 
     return (
         <div className="w-full max-w-7xl mx-auto">

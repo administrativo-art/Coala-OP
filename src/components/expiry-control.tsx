@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from 'next/link';
+import Image from 'next/image';
 
 import Papa from 'papaparse';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -16,13 +17,14 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download, Shield, AlertCircle } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download, Shield, AlertCircle, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { type LotEntry, type Product, type BaseProduct, type RepositionActivity, type UnitCategory } from '@/types';
 import { LotCard } from './lot-card';
 import { AddEditLotModal } from './add-edit-lot-modal';
@@ -30,13 +32,14 @@ import { MoveStockModal } from './move-stock-modal';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { LotMovementHistoryModal } from './lot-movement-history-modal';
 import { Badge } from '@/components/ui/badge';
-import { convertValue } from '@/lib/conversion';
+import { convertValue, formatQuantity } from '@/lib/conversion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickProjectionModal } from './quick-projection-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useReposition } from '@/hooks/use-reposition';
 import { ToastAction } from './ui/toast';
 import { useToast } from '@/hooks/use-toast';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -64,6 +67,12 @@ export type GroupedByBaseProduct = {
 
 const ExpiryControlContext = React.createContext<{ selectedKioskId: string }>({ selectedKioskId: '' });
 const useExpiryControlContext = () => React.useContext(ExpiryControlContext);
+const ACTIVE_REPOSITION_RESERVATION_STATUSES: RepositionActivity["status"][] = [
+  "Aguardando despacho",
+  "Aguardando recebimento",
+  "Recebido com divergência",
+  "Recebido sem divergência",
+];
 
 function ActiveReservationsSummary({ selectedKioskId }: { selectedKioskId: string }) {
   const { activities } = useReposition();
@@ -74,7 +83,7 @@ function ActiveReservationsSummary({ selectedKioskId }: { selectedKioskId: strin
 
     const activeOutbound = activities.filter(act => 
       act.kioskOriginId === selectedKioskId &&
-      (act.status === 'Aguardando despacho' || act.status === 'Aguardando recebimento')
+      ACTIVE_REPOSITION_RESERVATION_STATUSES.includes(act.status)
     );
 
     if (activeOutbound.length === 0) return null;
@@ -123,6 +132,8 @@ function ExpiryControlContent() {
   const { products, loading: productsLoading, getProductFullName } = useProducts();
   const { locations, loading: locationsLoading } = useLocations();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+  const { activeCategories } = useOperationalItemCategories();
+  const { activities } = useReposition();
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -136,6 +147,8 @@ function ExpiryControlContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [selectedKioskId, setSelectedKioskId] = useState<string>('');
+  const [selectedOperationalCategoryId, setSelectedOperationalCategoryId] = useState<string>('all');
+  const [inventoryViewMode, setInventoryViewMode] = useState<'cards' | 'table'>('cards');
 
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
@@ -193,7 +206,21 @@ function ExpiryControlContent() {
   }, [scannedLotId, loading]);
 
 
- const groupedData = useMemo(() => {
+  const stockOperationalCategories = useMemo(
+    () => activeCategories.filter((category) => category.destination !== 'asset'),
+    [activeCategories],
+  );
+
+  const productMatchesOperationalCategory = (product: Product, categoryId: string) => {
+    if (categoryId === 'all') return true;
+    const category = activeCategories.find((entry) => entry.id === categoryId);
+    if (!category) return false;
+    if (category.destination === 'uniform') return product.operationalDestination === 'uniform';
+    return product.operationalCategoryId === category.id ||
+      (!product.operationalCategoryId && category.destination === 'stock' && category.id === 'insumo');
+  };
+
+  const filteredLotsBeforeCategory = useMemo(() => {
     const isAllKiosks = selectedKioskId === 'all';
     
     const kioskFilteredLots = isAllKiosks
@@ -240,7 +267,88 @@ function ExpiryControlContent() {
       );
     });
 
-    const lotsByProduct = searchedLots.reduce((acc, lot) => {
+    return searchedLots;
+  }, [visibleLots, searchTerm, kiosks, statusFilters, products, selectedKioskId, user, baseProducts]);
+
+  const operationalCategoryCounts = useMemo(() => {
+    return stockOperationalCategories.reduce((acc, category) => {
+      acc[category.id] = filteredLotsBeforeCategory.filter((lot) => {
+        const product = products.find((entry) => entry.id === lot.productId);
+        return !!product && productMatchesOperationalCategory(product, category.id);
+      }).length;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [filteredLotsBeforeCategory, products, stockOperationalCategories, activeCategories]);
+
+  const stockStats = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const productIds = new Set<string>();
+    let expiringSoon = 0;
+    let expired = 0;
+    let healthy = 0;
+    let noExpiry = 0;
+    let reserved = 0;
+
+    filteredLotsBeforeCategory.forEach((lot) => {
+      productIds.add(lot.productId);
+      reserved += Number(lot.reservedQuantity ?? 0);
+
+      if (!lot.expiryDate) {
+        noExpiry += 1;
+        return;
+      }
+
+      const product = products.find((entry) => entry.id === lot.productId);
+      const urgentThreshold = product?.urgentThreshold ?? 7;
+      const days = differenceInDays(parseISO(lot.expiryDate), now);
+      if (days < 0) {
+        expired += 1;
+      } else if (days <= urgentThreshold) {
+        expiringSoon += 1;
+      } else {
+        healthy += 1;
+      }
+    });
+
+    return {
+      products: productIds.size,
+      lots: filteredLotsBeforeCategory.length,
+      expiringSoon,
+      expired,
+      healthy,
+      noExpiry,
+      reserved,
+    };
+  }, [filteredLotsBeforeCategory, products]);
+
+  const activeReservationsByLot = useMemo(() => {
+    const map = new Map<string, { total: number; destinations: Record<string, number> }>();
+    activities
+      .filter((activity) => ACTIVE_REPOSITION_RESERVATION_STATUSES.includes(activity.status))
+      .forEach((activity) => {
+        activity.items.forEach((item) => {
+          item.suggestedLots.forEach((suggestedLot) => {
+            const current = map.get(suggestedLot.lotId) ?? { total: 0, destinations: {} };
+            current.total += suggestedLot.quantityToMove;
+            current.destinations[activity.kioskDestinationName] =
+              (current.destinations[activity.kioskDestinationName] ?? 0) + suggestedLot.quantityToMove;
+            map.set(suggestedLot.lotId, current);
+          });
+        });
+      });
+    return map;
+  }, [activities]);
+
+ const groupedData = useMemo(() => {
+    const categoryFilteredLots = selectedOperationalCategoryId === 'all'
+      ? filteredLotsBeforeCategory
+      : filteredLotsBeforeCategory.filter((lot) => {
+          const product = products.find((entry) => entry.id === lot.productId);
+          return !!product && productMatchesOperationalCategory(product, selectedOperationalCategoryId);
+        });
+
+    const lotsByProduct = categoryFilteredLots.reduce((acc, lot) => {
         if (!acc[lot.productId]) {
             acc[lot.productId] = [];
         }
@@ -320,7 +428,7 @@ function ExpiryControlContent() {
     });
 
     return Array.from(groups.values()).sort((a,b) => a.name.localeCompare(b.name));
-  }, [visibleLots, searchTerm, kiosks, statusFilters, products, selectedKioskId, user, baseProducts, getProductFullName]);
+  }, [filteredLotsBeforeCategory, selectedOperationalCategoryId, products, baseProducts, getProductFullName, activeCategories]);
 
   const handleAddClick = () => {
     setLotToEdit(null);
@@ -381,6 +489,10 @@ function ExpiryControlContent() {
     });
   };
 
+  const toggleStatusFilter = (filter: string) => {
+    handleStatusFilterChange(filter, !statusFilters.includes(filter));
+  };
+
   const canManageProducts = permissions.registration.items.add || permissions.registration.items.edit || permissions.registration.items.delete;
 
   const handleExportPdf = () => {
@@ -424,6 +536,165 @@ function ExpiryControlContent() {
     document.body.removeChild(link);
   };
 
+  const renderTableContent = () => (
+    <div className="overflow-hidden rounded-lg border bg-card">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/40">
+            <TableHead className="w-[34%]">Insumo / marca</TableHead>
+            <TableHead>Lote</TableHead>
+            <TableHead>Local</TableHead>
+            <TableHead>Validade</TableHead>
+            <TableHead className="text-right">Quantidade</TableHead>
+            <TableHead>Reserva</TableHead>
+            <TableHead className="w-24 text-right">Ações</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {groupedData.map((baseGroup) => {
+            const rows = baseGroup.brands.flatMap((brandGroup) =>
+              brandGroup.products.flatMap((productGroup) =>
+                productGroup.lots.map((lot) => ({ productGroup, lot }))
+              )
+            );
+
+            return (
+              <React.Fragment key={baseGroup.baseProductId || baseGroup.name}>
+                <TableRow className="bg-muted/25 hover:bg-muted/25">
+                  <TableCell colSpan={7} className="py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold uppercase tracking-tight">{baseGroup.name}</span>
+                        {baseGroup.hasLeadTime && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-blue-500 hover:text-blue-600"
+                            onClick={() => setQuickProjectionProduct(baseGroup.baseProduct)}
+                          >
+                            <LineChart className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      <Badge variant="secondary">{rows.length} lote(s)</Badge>
+                    </div>
+                  </TableCell>
+                </TableRow>
+                {rows.map(({ productGroup, lot }) => {
+                  const product = productGroup.product;
+                  const kiosk = kiosks.find((entry) => entry.id === lot.kioskId);
+                  const location = locations.find((entry) => entry.id === lot.locationId);
+                  const reserved = activeReservationsByLot.get(lot.id);
+                  const displayReservedQty = Math.max(Number(lot.reservedQuantity ?? 0), reserved?.total ?? 0);
+                  const reservationDestinations = reserved
+                    ? Object.entries(reserved.destinations).map(([name, quantity]) => ({ name, quantity }))
+                    : [];
+                  const totalUnits = lot.quantity * product.packageSize;
+                  const quantityDetails =
+                    totalUnits === lot.quantity && ['un', 'unidade'].includes(product.unit.toLowerCase())
+                      ? `${lot.quantity.toLocaleString('pt-BR')} unidade(s)`
+                      : `${formatQuantity(totalUnits, product.unit)} · ${lot.quantity.toLocaleString('pt-BR')} ${product.packageType || 'pct'}`;
+                  const days = lot.expiryDate ? differenceInDays(parseISO(lot.expiryDate), new Date()) : null;
+                  const urgentThreshold = product.urgentThreshold ?? 7;
+                  const expiryTone =
+                    days === null ? 'secondary' :
+                    days < 0 ? 'destructive' :
+                    days <= urgentThreshold ? 'outline' :
+                    'secondary';
+                  const expiryLabel =
+                    days === null ? 'Validade indefinida' :
+                    days < 0 ? `Vencido há ${Math.abs(days)} dia(s)` :
+                    days === 0 ? 'Vence hoje' :
+                    `Vence em ${days} dia(s)`;
+
+                  return (
+                    <TableRow key={`${product.id}-${lot.id}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          {product.imageUrl ? (
+                            <Image
+                              src={product.imageUrl}
+                              alt={`Foto de ${product.baseName}`}
+                              width={32}
+                              height={32}
+                              className="h-8 w-8 rounded-md object-cover"
+                            />
+                          ) : (
+                            <div className="h-8 w-8 rounded-md bg-muted" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">{getProductFullName(product)}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {product.brand || 'Sem marca'} · {product.packageType || 'un'} com {product.packageSize}{product.unit}
+                              {product.multiplo_caixa && product.rotulo_caixa
+                                ? ` · ${product.rotulo_caixa}: ${product.multiplo_caixa}`
+                                : ''}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{lot.lotNumber}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">{kiosk?.name || 'Quiosque desconhecido'}</div>
+                        {location && <div className="text-xs text-muted-foreground">{location.name}</div>}
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Badge variant={expiryTone as any}>{expiryLabel}</Badge>
+                          {lot.expiryDate && (
+                            <div className="text-xs text-muted-foreground">
+                              {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="font-semibold">{quantityDetails}</div>
+                      </TableCell>
+                      <TableCell>
+                        {displayReservedQty > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant="secondary" className="rounded-full text-xs text-blue-700">
+                              Reserva: {displayReservedQty}
+                            </Badge>
+                            {reservationDestinations.length > 0 ? (
+                              reservationDestinations.map((destination) => (
+                                <Badge key={destination.name} variant="outline" className="rounded-full text-xs">
+                                  {destination.name}: {destination.quantity}
+                                </Badge>
+                              ))
+                            ) : (
+                              <Badge variant="outline" className="rounded-full text-xs">Em processamento</Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditClick(lot.id)} disabled={!permissions.stock.inventoryControl.editLot}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleViewHistoryClick(lot)}>
+                            <History className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteClick(lot.id)} disabled={!permissions.stock.inventoryControl.writeDown}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
 
   const renderContent = () => {
     if (loading || productsLoading || locationsLoading || baseProductsLoading) {
@@ -459,6 +730,10 @@ function ExpiryControlContent() {
         );
     }
     
+    if (inventoryViewMode === 'table') {
+      return renderTableContent();
+    }
+
     return (
       <div className="space-y-6">
          {groupedData.map(baseGroup => {
@@ -594,12 +869,12 @@ function ExpiryControlContent() {
   return (
     <>
       <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
-        <div className='p-6 space-y-4'>
+        <div className='mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 space-y-4'>
             <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                     placeholder="Buscar por insumo base, produto, lote, cód. de barras..."
-                    className="pl-10 pr-12"
+                    className="h-11 rounded-lg border-border bg-background pl-10 pr-12"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -614,13 +889,14 @@ function ExpiryControlContent() {
                     <Camera className="h-4 w-4 text-muted-foreground" />
                 </Button>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={handleAddClick} className="w-full sm:w-auto" disabled={!permissions.stock.inventoryControl.addLot}>
-                    <Plus className="mr-2" /> Adicionar lote
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button onClick={handleAddClick} className="w-full sm:w-auto rounded-lg" disabled={!permissions.stock.inventoryControl.addLot}>
+                    <Plus className="mr-2 h-4 w-4" /> Adicionar lote
                 </Button>
                  <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className='w-full sm:w-auto'>
+                        <Button variant="outline" className='w-full sm:w-auto rounded-lg'>
                             <Filter className="mr-2 h-4 w-4" />
                             Status {statusFilters.length > 0 && `(${statusFilters.length})`}
                         </Button>
@@ -654,7 +930,7 @@ function ExpiryControlContent() {
                 </DropdownMenu>
 
                  <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
-                    <SelectTrigger className="w-full sm:w-auto">
+                    <SelectTrigger className="w-full rounded-lg sm:w-56">
                         <Warehouse className="mr-2 h-4 w-4" />
                         <SelectValue placeholder="Selecione um quiosque..." />
                     </SelectTrigger>
@@ -665,7 +941,7 @@ function ExpiryControlContent() {
                 </Select>
                  <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-full sm:w-auto" disabled={groupedData.length === 0}>
+                        <Button variant="outline" className="w-full sm:w-auto rounded-lg" disabled={groupedData.length === 0}>
                             <Download className="mr-2 h-4 w-4" />
                             Exportar
                         </Button>
@@ -675,9 +951,77 @@ function ExpiryControlContent() {
                         <DropdownMenuItem onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+              </div>
+              <div className="inline-flex w-full rounded-lg bg-muted p-1 sm:w-auto">
+                <Button
+                  type="button"
+                  variant={inventoryViewMode === 'cards' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-8 flex-1 rounded-md sm:flex-none"
+                  onClick={() => setInventoryViewMode('cards')}
+                >
+                  Cards
+                </Button>
+                <Button
+                  type="button"
+                  variant={inventoryViewMode === 'table' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-8 flex-1 rounded-md sm:flex-none"
+                  onClick={() => setInventoryViewMode('table')}
+                >
+                  Tabela
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                {[
+                    { label: 'Insumos', value: stockStats.products, tone: 'text-foreground' },
+                    { label: 'Lotes ativos', value: stockStats.lots, tone: 'text-foreground' },
+                    { label: 'Vencendo', value: stockStats.expiringSoon, tone: 'text-orange-600' },
+                    { label: 'Vencidos', value: stockStats.expired, tone: 'text-rose-600' },
+                    { label: 'Reservas ativas', value: stockStats.reserved, tone: 'text-blue-600' },
+                ].map((stat) => (
+                    <div key={stat.label} className="rounded-lg border bg-card p-4 shadow-sm">
+                        <div className="text-xs font-medium text-muted-foreground">{stat.label}</div>
+                        <div className={`mt-2 text-2xl font-bold ${stat.tone}`}>{stat.value}</div>
+                    </div>
+                ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <Button
+                    type="button"
+                    variant={selectedOperationalCategoryId === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedOperationalCategoryId('all')}
+                    className="h-9 rounded-full px-4"
+                >
+                    Todas
+                    <span className="ml-2 rounded-full bg-background/20 px-1.5 text-xs font-bold">
+                        {filteredLotsBeforeCategory.length}
+                    </span>
+                </Button>
+                {stockOperationalCategories.map((category) => {
+                    const active = selectedOperationalCategoryId === category.id;
+                    const count = operationalCategoryCounts[category.id] ?? 0;
+                    return (
+                        <Button
+                            key={category.id}
+                            type="button"
+                            variant={active ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setSelectedOperationalCategoryId(category.id)}
+                            className="h-9 rounded-full px-4"
+                        >
+                            {category.name}
+                            <span className="ml-2 rounded-full bg-background/20 px-1.5 text-xs font-bold">
+                                {count}
+                            </span>
+                        </Button>
+                    );
+                })}
             </div>
         </div>
-        <div className="px-6 pb-6 pt-0 flex-1 overflow-hidden">
+        <div className="mx-auto w-full max-w-6xl flex-1 overflow-hidden px-4 pb-6 pt-0 sm:px-6">
                 <ActiveReservationsSummary selectedKioskId={selectedKioskId} />
                 {renderContent()}
         </div>

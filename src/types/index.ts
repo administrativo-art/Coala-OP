@@ -594,7 +594,13 @@ export type PermissionSet = {
   tasks: { view: boolean; manage: boolean; };
   goals: { view: boolean; manage: boolean; };
   help: { view: true };
-  reposition: { cancel: boolean; };
+  reposition: {
+    view: boolean;
+    prepareDispatch: boolean;
+    receive: boolean;
+    finalize: boolean;
+    cancel: boolean;
+  };
   // itemRequests is now managed under stock.stockCount
   itemRequests: { add: boolean; approve: boolean; };
   signage: { view: boolean; manage: boolean; };
@@ -1502,12 +1508,62 @@ export type RepositionSuggestedLot = {
   receiptNotes?: string;
 };
 
+export type RepositionPartialFulfillmentReason =
+  | "Falta de mercadoria"
+  | "Substituição por item equivalente"
+  | "Quantidade ajustada por embalagem"
+  | "Solicitação acima da necessidade"
+  | "Erro na solicitação"
+  | "Item descontinuado"
+  | "Item incluído pelo CD"
+  | "Outro";
+
 export type RepositionItem = {
   baseProductId: string;
   productName: string;
   quantityNeeded: number;
   suggestedLots: RepositionSuggestedLot[];
+  fulfillmentDivergence?: {
+    requestedQuantity: number;
+    fulfilledQuantity: number;
+    unit: string;
+    reason: RepositionPartialFulfillmentReason;
+    notes?: string;
+  };
   receivedLots?: (RepositionSuggestedLot & { receivedQuantity: number })[];
+};
+
+export type RepositionRequestStatus = "Pendente" | "Em separação" | "Atendida" | "Cancelada";
+
+export type RepositionRequestItem = {
+  baseProductId: string;
+  productName: string;
+  unit: string;
+  currentStock: number;
+  minimumStock: number;
+  requestedQuantity: number;
+  notes?: string;
+};
+
+export type RepositionRequest = {
+  id: string;
+  status: RepositionRequestStatus;
+  kioskId: string;
+  kioskName: string;
+  requestedBy: {
+    userId: string;
+    username: string;
+  };
+  reviewedBy?: {
+    userId: string;
+    username: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string;
+  activityId?: string;
+  notes?: string;
+  items: RepositionRequestItem[];
 };
 
 export type RepositionActivityStatus = 'Aguardando despacho' | 'Aguardando recebimento' | 'Recebido com divergência' | 'Recebido sem divergência' | 'Concluído' | 'Cancelada';
@@ -1522,6 +1578,7 @@ export type SignatureData = {
 export type RepositionActivity = {
   id: string;
   taskId?: string;
+  requestId?: string;
   status: RepositionActivityStatus;
   kioskOriginId: string;
   kioskOriginName: string;
@@ -1539,10 +1596,12 @@ export type RepositionActivity = {
   updatedAt: string; // ISO String
   items: RepositionItem[];
   transportDocumentUrl?: string;
+  separationSignature?: Partial<SignatureData>;
   transportSignature?: Partial<SignatureData>;
   receiptNotes?: string;
   receiptSignature?: Partial<SignatureData>;
   isSeparated?: boolean;
+  separationChecklist?: Record<string, boolean>;
 };
 
 export type ProfitRange = {
@@ -1583,7 +1642,7 @@ export const defaultGuestPermissions: PermissionSet = {
     tasks: { view: false, manage: false },
     goals: { view: false, manage: false },
     help: { view: true },
-    reposition: { cancel: false },
+    reposition: { view: false, prepareDispatch: false, receive: false, finalize: false, cancel: false },
     // itemRequests is now managed under stock.stockCount
     itemRequests: { add: false, approve: false },
     signage: { view: false, manage: false },
@@ -1656,7 +1715,7 @@ export const defaultAdminPermissions: PermissionSet = {
     settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
     tasks: { view: true, manage: true },
     goals: { view: true, manage: true },
-    reposition: { cancel: true },
+    reposition: { view: true, prepareDispatch: true, receive: true, finalize: true, cancel: true },
     help: { view: true },
     itemRequests: { add: true, approve: true },
     signage: { view: true, manage: true },
@@ -1866,6 +1925,14 @@ export interface RepositionContextType {
   cancelRepositionActivity: (activityId: string) => Promise<void>;
   finalizeRepositionActivity: (activity: RepositionActivity, resolution?: 'trust_receipt' | 'trust_dispatch') => Promise<void>;
   revertRepositionActivity: (activityId: string) => Promise<void>;
+}
+
+export interface RepositionRequestContextType {
+  requests: RepositionRequest[];
+  loading: boolean;
+  createRepositionRequest: (data: Pick<RepositionRequest, "kioskId" | "kioskName" | "items" | "notes">) => Promise<string | null>;
+  updateRepositionRequest: (requestId: string, updates: Partial<RepositionRequest>) => Promise<void>;
+  refreshRepositionRequests: () => Promise<void>;
 }
 
 // ── METAS ──────────────────────────────────────────────────────────────────

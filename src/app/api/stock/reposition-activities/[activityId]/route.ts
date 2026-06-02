@@ -13,11 +13,31 @@ type RouteContext = {
 };
 
 function canManage(context: Awaited<ReturnType<typeof requireUser>>) {
-  return context.isDefaultAdmin || !!context.permissions?.stock?.analysis?.restock;
+  return context.isDefaultAdmin || !!context.permissions?.reposition?.prepareDispatch || !!context.permissions?.stock?.analysis?.restock;
 }
 
 function canCancel(context: Awaited<ReturnType<typeof requireUser>>) {
   return context.isDefaultAdmin || !!context.permissions?.reposition?.cancel;
+}
+
+function canReceiveActivity(
+  context: Awaited<ReturnType<typeof requireUser>>,
+  activity: RepositionActivity
+) {
+  if (canManage(context)) return true;
+  if (!context.permissions?.reposition?.receive) return false;
+
+  const assignedKioskIds = context.userDoc.assignedKioskIds ?? [];
+  const unitIds = context.userDoc.unitIds ?? [];
+  return assignedKioskIds.includes(activity.kioskDestinationId) || unitIds.includes(activity.kioskDestinationId);
+}
+
+function isReceiptUpdate(body: Partial<RepositionActivity>) {
+  return (
+    body.status === "Recebido com divergência" ||
+    body.status === "Recebido sem divergência" ||
+    body.receiptSignature !== undefined
+  );
 }
 
 function mapRepositionStatusToTaskStatus(status: RepositionActivity["status"]) {
@@ -40,16 +60,38 @@ function cleanUndefined<T extends Record<string, unknown>>(value: T) {
   return next;
 }
 
+const ACTIVE_REPOSITION_RESERVATION_STATUSES: RepositionActivity["status"][] = [
+  "Aguardando despacho",
+  "Aguardando recebimento",
+  "Recebido com divergência",
+  "Recebido sem divergência",
+];
+
+function computeActiveReservationsByLot(
+  activities: RepositionActivity[],
+  lotIds: Set<string>,
+  excludeActivityId: string
+) {
+  const totals = new Map<string, number>();
+
+  for (const activity of activities) {
+    if (activity.id === excludeActivityId) continue;
+    if (!ACTIVE_REPOSITION_RESERVATION_STATUSES.includes(activity.status)) continue;
+
+    for (const item of activity.items ?? []) {
+      for (const lot of item.suggestedLots ?? []) {
+        if (!lotIds.has(lot.lotId)) continue;
+        totals.set(lot.lotId, (totals.get(lot.lotId) ?? 0) + Number(lot.quantityToMove ?? 0));
+      }
+    }
+  }
+
+  return totals;
+}
+
 export async function PATCH(request: NextRequest, routeContext: RouteContext) {
   try {
     const context = await requireUser(request);
-    if (!canManage(context)) {
-      return NextResponse.json(
-        { error: "Sem permissão para atualizar reposições." },
-        { status: 403 }
-      );
-    }
-
     const { activityId } = await routeContext.params;
     const body = (await request.json().catch(() => null)) as
       | Partial<RepositionActivity>
@@ -66,9 +108,34 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
         { status: 404 }
       );
     }
+    const currentActivity = {
+      id: snap.id,
+      ...(snap.data() as Omit<RepositionActivity, "id">),
+    } as RepositionActivity;
+
+    const hasManagePermission = canManage(context);
+    const isAllowed =
+      hasManagePermission ||
+      (isReceiptUpdate(body) && canReceiveActivity(context, currentActivity));
+
+    if (!isAllowed) {
+      return NextResponse.json(
+        { error: "Sem permissão para atualizar reposições." },
+        { status: 403 }
+      );
+    }
+
+    const allowedBody = hasManagePermission
+      ? body
+      : {
+          status: body.status,
+          items: body.items,
+          receiptNotes: body.receiptNotes,
+          receiptSignature: body.receiptSignature,
+        };
 
     const updateData = cleanUndefined({
-      ...body,
+      ...allowedBody,
       updatedAt: new Date().toISOString(),
       updatedBy: {
         userId: context.userDoc.id,
@@ -78,8 +145,7 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
 
     await ref.set(updateData, { merge: true });
     const nextActivity = {
-      id: snap.id,
-      ...(snap.data() as Omit<RepositionActivity, "id">),
+      ...currentActivity,
       ...updateData,
     } as RepositionActivity;
 
@@ -136,14 +202,7 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
 
     const cancelTimestamp = new Date().toISOString();
     await dbAdmin.runTransaction(async (tx) => {
-      const activeStatuses = [
-        "Aguardando despacho",
-        "Aguardando recebimento",
-        "Recebido com divergência",
-        "Recebido sem divergência",
-      ];
-
-      if (activeStatuses.includes(current.status)) {
+      if (ACTIVE_REPOSITION_RESERVATION_STATUSES.includes(current.status)) {
         // First gather all unique lot IDs and their references
         const lotMap = new Map<string, { ref: FirebaseFirestore.DocumentReference; quantityToReturn: number }>();
         
@@ -164,13 +223,22 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
         // Then perform all reads
         const lotEntries = Array.from(lotMap.values());
         const lotSnaps = await Promise.all(lotEntries.map(entry => tx.get(entry.ref)));
+        const activitiesSnap = await tx.get(dbAdmin.collection("repositionActivities"));
+        const recalculatedReservations = computeActiveReservationsByLot(
+          activitiesSnap.docs.map((doc) => ({
+            id: doc.id,
+            ...(doc.data() as Omit<RepositionActivity, "id">),
+          })),
+          new Set(lotMap.keys()),
+          activityId
+        );
         
         // Finally perform all writes
         lotSnaps.forEach((snap, index) => {
+          if (!snap.exists) return;
           const entry = lotEntries[index];
-          const currentReserved = Number(snap.data()?.reservedQuantity ?? 0);
           tx.update(entry.ref, {
-            reservedQuantity: Math.max(0, currentReserved - entry.quantityToReturn),
+            reservedQuantity: recalculatedReservations.get(entry.ref.id) ?? 0,
           });
         });
       }
@@ -203,6 +271,22 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
           }
         );
       }
+    }
+
+    if (current.requestId) {
+      await dbAdmin.collection("repositionRequests").doc(current.requestId).set(
+        {
+          status: "Cancelada",
+          activityId,
+          updatedAt: cancelTimestamp,
+          reviewedBy: {
+            userId: context.userDoc.id,
+            username: context.userDoc.username,
+          },
+          reviewedAt: cancelTimestamp,
+        },
+        { merge: true }
+      );
     }
 
     return NextResponse.json({

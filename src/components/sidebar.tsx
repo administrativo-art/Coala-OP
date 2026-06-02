@@ -80,7 +80,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             children: [
               { label: "Controle de estoque", href: "/dashboard/inventory-control", icon: ClipboardCheck, show: permissions.stock.inventoryControl.view },
               { label: "Contagem de estoque", href: "/dashboard/stock/count", icon: ListOrdered, show: permissions.stock.stockCount.view },
-              { label: "Reposição", href: "/dashboard/stock/analysis", icon: Truck, show: permissions.stock.analysis.restock },
+              { label: "Reposição", href: "/dashboard/stock/analysis", icon: Truck, show: permissions.reposition.view || permissions.stock.analysis.restock },
               { label: "Análise estratégica", href: "/dashboard/reports", icon: BarChart3, show: permissions.stock.analysis.view },
               { label: "Gestão de avarias", href: "/dashboard/stock/returns", icon: ShieldAlert, show: permissions.stock.returns.view },
               { label: "Conversão de medidas", href: "/dashboard/conversions", icon: Repeat, show: permissions.stock.conversions.view },

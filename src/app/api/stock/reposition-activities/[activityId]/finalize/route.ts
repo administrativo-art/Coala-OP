@@ -16,7 +16,7 @@ type RouteContext = {
 export async function POST(request: NextRequest, routeContext: RouteContext) {
   try {
     const context = await requireUser(request);
-    if (!(context.isDefaultAdmin || !!context.permissions?.stock?.analysis?.restock)) {
+    if (!(context.isDefaultAdmin || !!context.permissions?.reposition?.finalize || !!context.permissions?.stock?.analysis?.restock)) {
       return NextResponse.json(
         { error: "Sem permissão para efetivar reposições." },
         { status: 403 }
@@ -50,6 +50,22 @@ export async function POST(request: NextRequest, routeContext: RouteContext) {
         allowOriginStatusChange: true,
         updates: { status: "completed" },
       });
+    }
+
+    if (activity?.requestId) {
+      await dbAdmin.collection("repositionRequests").doc(activity.requestId).set(
+        {
+          status: "Atendida",
+          activityId,
+          updatedAt: new Date().toISOString(),
+          reviewedBy: {
+            userId: context.userDoc.id,
+            username: context.userDoc.username,
+          },
+          reviewedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
     }
 
     return NextResponse.json({ ok: true });

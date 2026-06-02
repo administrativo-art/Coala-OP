@@ -203,35 +203,36 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md overflow-hidden p-0">
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Editar lote de insumo' : 'Adicionar novo lote ao estoque'}</DialogTitle>
-            <DialogDescription>
+            <div className="px-5 pt-5">
+            <DialogTitle>{isEditing ? 'Editar lote' : 'Adicionar lote'}</DialogTitle>
+            <DialogDescription className="mt-1">
               {isEditing ? 'Atualize as informações do lote em estoque.' : 'Selecione o insumo e adicione os detalhes do lote.'}
             </DialogDescription>
+            </div>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
-                <ScrollArea className="h-[60vh] pr-4">
+                <ScrollArea className="max-h-[68vh] px-5">
                     <div className="space-y-4 py-4">
-                        <div className="space-y-3 p-4 border rounded-lg bg-muted/40">
+                        <div className="space-y-3">
                              <div className="flex items-center justify-between">
-                                <Label className="text-sm font-medium">1. Selecione o insumo</Label>
+                                <Label className="text-sm font-medium">Insumo / produto</Label>
                                 <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setIsScannerOpen(true)}>
                                     <Camera className="h-4 w-4" />
                                 </Button>
                              </div>
-                             <FormDescription>Selecione primeiro o insumo base e depois a variação.</FormDescription>
                             
                             <Select onValueChange={handleBaseProductChange} value={selectedBaseProductId || ''}>
-                                <SelectTrigger><SelectValue placeholder="Selecione o insumo base..."/></SelectTrigger>
+                                <SelectTrigger className="h-10 rounded-lg"><SelectValue placeholder="Selecione o insumo base..."/></SelectTrigger>
                                 <SelectContent>
                                     {baseProducts.filter(bp => !bp.isArchived).map(bp => <SelectItem key={bp.id} value={bp.id}>{bp.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
 
                              <Select onValueChange={handleProductChange} value={selectedProductId || ''} disabled={!selectedBaseProductId || linkedProducts.length === 0}>
-                                <SelectTrigger><SelectValue placeholder="Selecione a variação..."/></SelectTrigger>
+                                <SelectTrigger className="h-10 rounded-lg"><SelectValue placeholder="Selecione a variação..."/></SelectTrigger>
                                 <SelectContent>
                                     {linkedProducts.map(p => <SelectItem key={p.id} value={p.id}>{getProductFullName(p)}</SelectItem>)}
                                 </SelectContent>
@@ -240,15 +241,14 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
 
                         {selectedProduct ? (
                             <>
-                                <div className="p-4 border rounded-lg space-y-4">
-                                    <h4 className="text-sm font-medium text-muted-foreground">{isEditing ? 'Editar detalhes do lote' : '2. Detalhes do lote'}</h4>
+                                <div className="space-y-4">
                                     <FormField
                                         control={form.control}
                                         name="lotNumber"
                                         render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Número do lote</FormLabel>
-                                            <FormControl><Input placeholder="ex: L12345" {...field} /></FormControl>
+                                            <FormLabel>Lote</FormLabel>
+                                            <FormControl><Input className="h-10 rounded-lg" placeholder="Ex: 270226" {...field} /></FormControl>
                                             <FormMessage />
                                         </FormItem>
                                         )}
@@ -267,7 +267,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                                         <Button
                                                             variant={"outline"}
                                                             className={cn(
-                                                            "w-full pl-3 text-left font-normal",
+                                                            "h-10 w-full rounded-lg pl-3 text-left font-normal",
                                                             !field.value && "text-muted-foreground"
                                                             )}
                                                         >
@@ -307,7 +307,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                         </FormItem>
                                         )}
                                     />
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-3">
                                         <FormField
                                         control={form.control}
                                         name="quantity"
@@ -336,7 +336,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                                         </Popover>
                                                     )}
                                                 </div>
-                                            <FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl>
+                                            <FormControl><Input className="h-10 rounded-lg" type="number" {...field} value={field.value ?? ''} /></FormControl>
                                             <FormMessage />
                                             </FormItem>
                                         )}
@@ -349,7 +349,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                             <FormLabel>Quiosque</FormLabel>
                                             <Select onValueChange={field.onChange} value={field.value} disabled={kiosks.length === 0}>
                                                 <FormControl>
-                                                <SelectTrigger>
+                                                <SelectTrigger className="h-10 rounded-lg">
                                                     <SelectValue placeholder="Selecione" />
                                                 </SelectTrigger>
                                                 </FormControl>
@@ -371,7 +371,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                             <div className="flex gap-2 items-center">
                                                 <Select onValueChange={field.onChange} value={field.value || ''} disabled={!selectedKioskId}>
                                                     <FormControl>
-                                                    <SelectTrigger>
+                                                    <SelectTrigger className="h-10 rounded-lg">
                                                         <SelectValue placeholder="Selecione o local" />
                                                     </SelectTrigger>
                                                     </FormControl>
@@ -379,7 +379,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                                                     {availableLocations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name} {loc.code && `(${loc.code})`}</SelectItem>)}
                                                     </SelectContent>
                                                 </Select>
-                                                <Button type="button" variant="outline" size="icon" onClick={() => setIsLocationModalOpen(true)}>
+                                                <Button type="button" variant="outline" size="icon" className="h-10 w-10 rounded-lg" onClick={() => setIsLocationModalOpen(true)}>
                                                     <Settings className="h-4 w-4"/>
                                                 </Button>
                                             </div>
@@ -403,7 +403,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                     </div>
                 </ScrollArea>
 
-              <DialogFooter className="pt-4 border-t">
+              <DialogFooter className="border-t px-5 py-4">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                 <Button type="submit" disabled={form.formState.isSubmitting || !selectedProduct}>
                   {form.formState.isSubmitting ? "Salvando..." : (isEditing ? 'Salvar alterações' : 'Adicionar lote')}

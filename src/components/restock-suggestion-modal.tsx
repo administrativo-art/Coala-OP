@@ -62,8 +62,20 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
 
   const getUnitsPerPackage = (product: Product, baseProduct: BaseProduct): number => {
     try {
-        if (product.packageSize === 0) return 0;
-        return convertValue(product.packageSize, product.unit, baseProduct.unit, product.category);
+        const packageSize = Number(product.packageSize);
+        if (packageSize > 0) {
+            return convertValue(packageSize, product.unit, baseProduct.unit, product.category);
+        }
+
+        if (product.unit?.toLowerCase() === baseProduct.unit?.toLowerCase()) {
+            return 1;
+        }
+
+        if (["Unidade", "Embalagem", "Vestimenta"].includes(product.category)) {
+            return 1;
+        }
+
+        return 0;
     } catch (e) {
         console.error(e);
         return 0;
@@ -117,7 +129,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     const repositionItem: RepositionItem = {
       baseProductId: suggestionResult.baseProduct.id,
       productName: suggestionResult.baseProduct.name,
-      quantityNeeded: suggestionResult.restockNeeded,
+      quantityNeeded: values.items.reduce((total, item) => total + (item.quantityInBaseUnit || 0), 0),
       suggestedLots: values.items
         .filter(item => item.quantityInBaseUnit > 0)
         .map(item => {

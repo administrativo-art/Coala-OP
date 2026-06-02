@@ -36,8 +36,12 @@ const stockLevelSchema = z.object({
     override: z.boolean(),
 });
 
+function normalizeBaseProductName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLocaleUpperCase('pt-BR');
+}
+
 const baseProductSchema = z.object({
-  name: z.string().min(1, 'O nome é obrigatório.'),
+  name: z.string().trim().min(1, 'O nome é obrigatório.').transform(normalizeBaseProductName),
   classification: z.string().optional(),
   category: z.enum(unitCategories),
   unit: z.string().min(1, 'A unidade de medida é obrigatória.'),
@@ -94,7 +98,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       });
   
       form.reset({
-        name: productToEdit?.name ?? '',
+        name: productToEdit?.name ? normalizeBaseProductName(productToEdit.name) : '',
         classification: productToEdit?.classification || 'none',
         category: productToEdit?.category ?? 'Massa',
         unit: productToEdit?.unit ?? 'g',
@@ -118,7 +122,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     const finalClassification = values.classification === 'none' ? '' : values.classification;
 
     const dataPayload: Partial<BaseProduct> = {
-      name: values.name,
+      name: normalizeBaseProductName(values.name),
       classification: finalClassification,
       category: values.category,
       unit: values.unit,
@@ -152,7 +156,13 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                   <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem>
                         <FormLabel>Nome do produto base</FormLabel>
-                        <FormControl><Input placeholder="ex: Ovomaltine (Pó)" {...field} /></FormControl>
+                        <FormControl>
+                          <Input
+                            placeholder="EX: OVOMALTINE (PÓ)"
+                            {...field}
+                            onChange={(event) => field.onChange(event.target.value.toLocaleUpperCase('pt-BR'))}
+                          />
+                        </FormControl>
                         <FormMessage />
                     </FormItem>
                     )}

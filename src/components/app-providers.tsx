@@ -20,6 +20,7 @@ import { PurchaseReceiptProvider } from '@/components/purchase-receipt-provider'
 import { PurchaseFinancialProvider } from '@/components/purchase-financial-provider';
 import { ItemAdditionProvider } from '@/components/item-addition-provider';
 import { RepositionProvider } from '@/components/reposition-provider';
+import { RepositionRequestProvider } from '@/components/reposition-request-provider';
 import { ProductSimulationProvider } from '@/components/product-simulation-provider';
 import { ChannelsProvider } from '@/components/channels-provider';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -88,6 +89,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                                             <SalesReportProvider>
                                                 <ReturnsProvider>
                                                     <RepositionProvider>
+                                                        <RepositionRequestProvider>
                                                         <StockAuditProvider>
                                                             <AuthorBoardDiaryProvider>
                                                                 <QuotationProvider>
@@ -117,6 +119,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                                                                 </QuotationProvider>
                                                             </AuthorBoardDiaryProvider>
                                                         </StockAuditProvider>
+                                                        </RepositionRequestProvider>
                                                     </RepositionProvider>
                                                 </ReturnsProvider>
                                             </SalesReportProvider>

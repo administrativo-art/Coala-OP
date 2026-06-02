@@ -6,6 +6,13 @@ type Actor = {
   username: string;
 };
 
+const ACTIVE_REPOSITION_RESERVATION_STATUSES: RepositionActivity["status"][] = [
+  "Aguardando despacho",
+  "Aguardando recebimento",
+  "Recebido com divergência",
+  "Recebido sem divergência",
+];
+
 function destLotIdKey(params: {
   productId: string;
   kioskId: string;
@@ -23,6 +30,28 @@ function addMovementRecord(
 ) {
   const ref = dbAdmin.collection("movementHistory").doc();
   tx.set(ref, record);
+}
+
+function computeActiveReservationsByLot(
+  activities: Array<RepositionActivity>,
+  lotIds: Set<string>,
+  excludeActivityId: string
+) {
+  const totals = new Map<string, number>();
+
+  for (const activity of activities) {
+    if (activity.id === excludeActivityId) continue;
+    if (!ACTIVE_REPOSITION_RESERVATION_STATUSES.includes(activity.status)) continue;
+
+    for (const item of activity.items ?? []) {
+      for (const lot of item.suggestedLots ?? []) {
+        if (!lotIds.has(lot.lotId)) continue;
+        totals.set(lot.lotId, (totals.get(lot.lotId) ?? 0) + Number(lot.quantityToMove ?? 0));
+      }
+    }
+  }
+
+  return totals;
 }
 
 export async function finalizeRepositionActivityServer(params: {
@@ -85,6 +114,7 @@ export async function finalizeRepositionActivityServer(params: {
       Array.from(destRefs.values()).map((ref) => tx.get(ref))
     );
     const destMap = new Map(destDocs.map((doc) => [doc.id, doc]));
+    const activitiesSnap = await tx.get(dbAdmin.collection("repositionActivities"));
 
     const sourceUpdates = new Map<string, { quantityChange: number; reservedChange: number }>();
     const destUpdates = new Map<string, { quantityChange: number; ref: FirebaseFirestore.DocumentReference; sourceData: LotEntry }>();
@@ -156,13 +186,22 @@ export async function finalizeRepositionActivityServer(params: {
       }
     }
 
+    const recalculatedReservations = computeActiveReservationsByLot(
+      activitiesSnap.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<RepositionActivity, "id">),
+      })),
+      new Set(sourceUpdates.keys()),
+      activity.id
+    );
+
     // Apply aggregated source updates
     for (const [lotId, update] of sourceUpdates.entries()) {
       const sourceSnap = sourceMap.get(lotId)!;
       const sourceData = sourceSnap.data() as LotEntry;
       tx.update(sourceRefs.get(lotId)!, {
         quantity: Number(sourceData.quantity ?? 0) - update.quantityChange,
-        reservedQuantity: Math.max(0, Number(sourceData.reservedQuantity ?? 0) - update.reservedChange),
+        reservedQuantity: recalculatedReservations.get(lotId) ?? 0,
         updatedAt: now,
       });
     }

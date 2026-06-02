@@ -9,7 +9,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function canManage(context: Awaited<ReturnType<typeof requireUser>>) {
-  return context.isDefaultAdmin || !!context.permissions?.stock?.analysis?.restock;
+  return context.isDefaultAdmin || !!context.permissions?.reposition?.prepareDispatch || !!context.permissions?.stock?.analysis?.restock;
+}
+
+function canView(context: Awaited<ReturnType<typeof requireUser>>) {
+  return canManage(context) || !!context.permissions?.reposition?.view || !!context.permissions?.reposition?.receive;
 }
 
 function buildRepositionTaskDescription(activity: Pick<
@@ -23,7 +27,7 @@ function buildRepositionTaskDescription(activity: Pick<
 export async function GET(request: NextRequest) {
   try {
     const context = await requireUser(request);
-    if (!canManage(context)) {
+    if (!canView(context)) {
       return NextResponse.json(
         { error: "Sem permissão para visualizar reposições." },
         { status: 403 }
@@ -33,6 +37,14 @@ export async function GET(request: NextRequest) {
     const snap = await dbAdmin.collection("repositionActivities").get();
     const activities = snap.docs
       .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<RepositionActivity, "id">) }))
+      .filter((activity) => {
+        if (canManage(context)) return true;
+        if (!context.permissions?.reposition?.receive) return true;
+
+        const assignedKioskIds = context.userDoc.assignedKioskIds ?? [];
+        const unitIds = context.userDoc.unitIds ?? [];
+        return assignedKioskIds.includes(activity.kioskDestinationId) || unitIds.includes(activity.kioskDestinationId);
+      })
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
     return NextResponse.json({ activities });
@@ -84,6 +96,7 @@ export async function POST(request: NextRequest) {
       kioskDestinationId: body.kioskDestinationId,
       kioskDestinationName: body.kioskDestinationName,
       items: body.items,
+      requestId: typeof body.requestId === "string" ? body.requestId : undefined,
       status: "Aguardando despacho",
       isSeparated: false,
       requestedBy: {
@@ -166,6 +179,22 @@ export async function POST(request: NextRequest) {
           activityId: activityRef.id,
           error: taskError,
         }
+      );
+    }
+
+    if (payload.requestId) {
+      await dbAdmin.collection("repositionRequests").doc(payload.requestId).set(
+        {
+          status: "Em separação",
+          activityId: activityRef.id,
+          reviewedBy: {
+            userId: context.userDoc.id,
+            username: context.userDoc.username,
+          },
+          reviewedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
       );
     }
 

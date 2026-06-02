@@ -269,9 +269,23 @@ function RepositionManagement() {
   const handleFinalizeConfirm = async () => {
     if (!activityToFinalize) return;
     setIsFinalizing(true);
-    await finalizeRepositionActivity(activityToFinalize, 'trust_receipt');
-    setIsFinalizing(false);
-    setActivityToFinalize(null);
+    try {
+      await finalizeRepositionActivity(activityToFinalize, 'trust_receipt');
+      toast({
+        title: "Movimentação efetivada",
+        description: "O estoque foi debitado da origem e creditado no destino.",
+      });
+      setActivityToFinalize(null);
+    } catch (error) {
+      console.error("Erro ao efetivar reposição:", error);
+      toast({
+        title: "Erro ao efetivar",
+        description: error instanceof Error ? error.message : "Não foi possível efetivar a reposição.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFinalizing(false);
+    }
   };
 
   return (
@@ -305,7 +319,26 @@ function RepositionManagement() {
           />
       )}
       {activityToFinalize && <DeleteConfirmationDialog open={!!activityToFinalize} onOpenChange={() => setActivityToFinalize(null)} onConfirm={handleFinalizeConfirm} isDeleting={isFinalizing} title="Efetivar movimentação?" confirmButtonText="Sim, efetivar" />}
-      {activityToResolve && <ResolveDivergenceModal open={!!activityToResolve} onOpenChange={(open) => !open && setActivityToResolve(null)} activity={activityToResolve} onConfirm={(res) => finalizeRepositionActivity(activityToResolve, res)} isLoading={isFinalizing} />}
+      {activityToResolve && <ResolveDivergenceModal open={!!activityToResolve} onOpenChange={(open) => !open && setActivityToResolve(null)} activity={activityToResolve} onConfirm={async (res) => {
+        setIsFinalizing(true);
+        try {
+          await finalizeRepositionActivity(activityToResolve, res);
+          toast({
+            title: "Movimentação efetivada",
+            description: "A divergência foi resolvida e o estoque foi atualizado.",
+          });
+          setActivityToResolve(null);
+        } catch (error) {
+          console.error("Erro ao resolver divergência:", error);
+          toast({
+            title: "Erro ao efetivar",
+            description: error instanceof Error ? error.message : "Não foi possível efetivar a reposição.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsFinalizing(false);
+        }
+      }} isLoading={isFinalizing} />}
     </>
   );
 }

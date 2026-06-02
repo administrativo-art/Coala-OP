@@ -354,6 +354,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const analysisViewWatch = form.watch('permissions.stock.analysis.view' as any);
   const purchasingViewWatch = form.watch('permissions.stock.purchasing.view' as any);
   const returnsViewWatch = form.watch('permissions.stock.returns.view' as any);
+  const repositionViewWatch = form.watch('permissions.reposition.view' as any);
   const registrationViewWatch = form.watch('permissions.registration.view' as any);
   const pricingViewWatch = form.watch('permissions.pricing.view' as any);
   const technicalSheetsViewWatch = form.watch('permissions.commercial.technicalSheets.view' as any);
@@ -512,7 +513,13 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {/* Reposição */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Reposição</h4>
-                                        {renderPermissionSwitch("permissions.reposition.cancel" as any, "Cancelar Atividade", "Permite cancelar uma atividade de reposição em andamento.", !stockViewWatch)}
+                                        {renderPermissionSwitch("permissions.reposition.view" as any, "Visualizar Reposição", "Permite acessar a tela de solicitações e atividades de reposição.", !stockViewWatch)}
+                                        <div className="pl-6 space-y-2">
+                                            {renderPermissionSwitch("permissions.reposition.prepareDispatch" as any, "Preparar e despachar", "Permite revisar solicitações, criar separação e confirmar despacho.", !repositionViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.reposition.receive" as any, "Receber na unidade", "Permite auditar o recebimento das reposições destinadas às unidades vinculadas ao usuário.", !repositionViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.reposition.finalize" as any, "Efetivar movimentação", "Permite finalizar a reposição e aplicar a movimentação no estoque.", !repositionViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.reposition.cancel" as any, "Cancelar Atividade", "Permite cancelar uma atividade de reposição em andamento.", !repositionViewWatch, true)}
+                                        </div>
                                     </div>
 
                                 </AccordionContent>
