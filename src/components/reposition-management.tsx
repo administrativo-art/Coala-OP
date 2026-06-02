@@ -190,6 +190,10 @@ function RepositionActivityCard({
             notes: receiptRows[key]?.receiptNotes ?? "",
         };
     });
+    const productById = useMemo(() => {
+        return new Map(products.map((product) => [product.id, product]));
+    }, [products]);
+    const getLotImage = (lot: RepositionSuggestedLot) => productById.get(lot.productId)?.imageUrl;
 
     useEffect(() => {
         setSelectedStep(Math.min(currentStep, 4));
@@ -355,108 +359,130 @@ function RepositionActivityCard({
                 )}
 
                 {selectedStep === 1 && (
-                <div className="mt-6 rounded-lg border bg-muted/20 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                        <div>
-                            <h4 className="font-semibold">Itens em separação</h4>
-                            <p className="text-xs text-muted-foreground">
-                                Confira os insumos e lotes que devem ser separados antes de avançar.
-                            </p>
+                <div className="mt-6 overflow-hidden rounded-2xl border bg-background">
+                    <div className="flex flex-col gap-3 border-b px-5 py-4 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-start gap-3">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">1</span>
+                            <div>
+                                <h4 className="font-semibold">Separação dos itens</h4>
+                                <p className="text-xs text-muted-foreground">
+                                    Confira fisicamente cada item e marque o que já foi separado.
+                                </p>
+                            </div>
                         </div>
-                        <Badge variant={allRowsChecked ? "default" : "outline"}>
-                            {checkedRows}/{separationRows.length} separado{separationRows.length === 1 ? "" : "s"}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="secondary" className="bg-red-50 text-red-600">Saída: {activity.kioskOriginName}</Badge>
+                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                            <Badge variant="secondary" className="bg-green-50 text-green-700">Entrada: {activity.kioskDestinationName}</Badge>
+                            <Badge variant={allRowsChecked ? "default" : "outline"} className="ml-0 md:ml-2">
+                                {checkedRows}/{separationRows.length} separados
+                            </Badge>
+                        </div>
                     </div>
-                    <div className="rounded-md border bg-background">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-10"></TableHead>
-                                    <TableHead>Insumo</TableHead>
-                                    <TableHead>Lote</TableHead>
-                                    <TableHead className="text-right">Qtd.</TableHead>
-                                    <TableHead>Obs.</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {separationRows.map(({ key, item, lot }) => {
-                                    const checked = !!activity.separationChecklist?.[key];
+                    <div className="p-5">
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            {separationRows.map(({ key, item, lot }) => {
+                                const checked = !!activity.separationChecklist?.[key];
+                                const lotImage = getLotImage(lot);
 
-                                    return (
-                                        <TableRow key={key} className={cn(checked && "bg-green-500/5")}>
-                                            <TableCell className="w-10">
-                                                <Checkbox
-                                                    checked={checked}
-                                                    onCheckedChange={(value) => onToggleSeparationItem(activity, key, value === true)}
-                                                    disabled={!canEditStep(1)}
-                                                    aria-label={`Separar ${item.productName}`}
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className={cn("font-medium", checked && "line-through text-muted-foreground")}>{item.productName}</div>
-                                                <div className="text-xs text-muted-foreground">{lot.productName}</div>
-                                            </TableCell>
-                                            <TableCell className="font-mono text-xs">{lot.lotNumber || "-"}</TableCell>
-                                            <TableCell className="text-right font-semibold">{lot.quantityToMove}</TableCell>
-                                            <TableCell className="max-w-[240px] text-sm text-muted-foreground">
-                                                {item.fulfillmentDivergence ? (
-                                                    <span>
-                                                        {item.fulfillmentDivergence.reason}
-                                                        {item.fulfillmentDivergence.notes ? `: ${item.fulfillmentDivergence.notes}` : ""}
-                                                    </span>
-                                                ) : (
-                                                    "Sem divergência"
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
+                                return (
+                                    <div
+                                        key={key}
+                                        className={cn(
+                                            "flex items-center gap-3 rounded-xl border bg-card p-3 transition-colors",
+                                            checked && "border-green-200 bg-green-50"
+                                        )}
+                                    >
+                                        <Checkbox
+                                            checked={checked}
+                                            onCheckedChange={(value) => onToggleSeparationItem(activity, key, value === true)}
+                                            disabled={!canEditStep(1)}
+                                            aria-label={`Separar ${item.productName}`}
+                                        />
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                                            {lotImage ? (
+                                                <img src={lotImage} alt={lot.productName} className="h-full w-full object-cover" />
+                                            ) : (
+                                                <Package className="h-5 w-5 text-muted-foreground" />
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className={cn("truncate text-sm font-semibold", checked && "text-muted-foreground line-through")}>
+                                                {item.productName}
+                                            </div>
+                                            <div className="truncate text-xs text-muted-foreground">{lot.productName}</div>
+                                            <div className="mt-0.5 text-xs text-muted-foreground">Lote {lot.lotNumber || "-"}</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-base font-bold tabular-nums">{lot.quantityToMove}</div>
+                                            {item.fulfillmentDivergence ? (
+                                                <div className="mt-1 max-w-[140px] truncate text-[11px] text-amber-700" title={`${item.fulfillmentDivergence.reason}${item.fulfillmentDivergence.notes ? `: ${item.fulfillmentDivergence.notes}` : ""}`}>
+                                                    {item.fulfillmentDivergence.reason}
+                                                </div>
+                                            ) : (
+                                                <div className="mt-1 text-[11px] text-muted-foreground">sem divergência</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
                 )}
 
                 {selectedStep === 2 && (
-                    <div className="mt-6 rounded-lg border bg-background p-4">
-                        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <h4 className="font-semibold">Despacho</h4>
-                                <p className="text-xs text-muted-foreground">
-                                    O transportador confere a mercadoria separada e assina digitalmente para liberar o envio.
-                                </p>
+                    <div className="mt-6 overflow-hidden rounded-2xl border bg-background">
+                        <div className="flex flex-col gap-3 border-b px-5 py-4 md:flex-row md:items-center md:justify-between">
+                            <div className="flex items-start gap-3">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">2</span>
+                                <div>
+                                    <h4 className="font-semibold">Gerenciar despacho</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        Confira os itens transportados e registre os dados do transporte.
+                                    </p>
+                                </div>
                             </div>
-                            <Badge variant="secondary" className="w-fit">
-                                {activity.kioskOriginName} → {activity.kioskDestinationName}
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary" className="bg-red-50 text-red-600">Saída: {activity.kioskOriginName}</Badge>
+                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                                <Badge variant="secondary" className="bg-green-50 text-green-700">Entrada: {activity.kioskDestinationName}</Badge>
+                            </div>
                         </div>
 
-                        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-                            <div className="rounded-md border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Produto</TableHead>
-                                            <TableHead>Lote</TableHead>
-                                            <TableHead className="text-right">Qtd. transportada</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {separationRows.map(({ key, item, lot }) => (
-                                            <TableRow key={`dispatch-${key}`}>
-                                                <TableCell>
-                                                    <div className="font-medium">{item.productName}</div>
-                                                    <div className="text-xs text-muted-foreground">{lot.productName}</div>
-                                                </TableCell>
-                                                <TableCell className="font-mono text-xs">{lot.lotNumber || "-"}</TableCell>
-                                                <TableCell className="text-right font-semibold">{lot.quantityToMove}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                        <div className="space-y-4 p-5">
+                            <div>
+                                <div className="mb-2 text-sm font-semibold">Conferência dos itens</div>
+                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                    {separationRows.map(({ key, item, lot }) => {
+                                        const lotImage = getLotImage(lot);
+
+                                        return (
+                                            <div key={`dispatch-${key}`} className="flex items-center gap-3 rounded-xl border bg-card p-3">
+                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                                                    {lotImage ? (
+                                                        <img src={lotImage} alt={lot.productName} className="h-full w-full object-cover" />
+                                                    ) : (
+                                                        <Package className="h-5 w-5 text-muted-foreground" />
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="truncate text-sm font-semibold">{item.productName}</div>
+                                                    <div className="truncate text-xs text-muted-foreground">{lot.productName}</div>
+                                                    <div className="mt-0.5 text-xs text-muted-foreground">Lote {lot.lotNumber || "-"}</div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-base font-bold tabular-nums">{lot.quantityToMove}</div>
+                                                    <div className="text-[11px] text-muted-foreground">a mover</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
 
-                            <div className="space-y-3">
+                            <div className="space-y-3 rounded-xl border bg-muted/10 p-4">
+                                <div className="text-sm font-semibold">Dados do transporte</div>
                                 <div>
                                     <Label htmlFor={`transporter-${activity.id}`}>Transportador</Label>
                                     <Input
@@ -468,22 +494,24 @@ function RepositionActivityCard({
                                     />
                                 </div>
 
-                                <div>
-                                    <div className="mb-1 flex items-center justify-between gap-2">
-                                        <Label>Assinatura digital</Label>
-                                        {signatureDataUrl && <Badge variant="outline">Assinado</Badge>}
+                                <div className="grid gap-3 xl:grid-cols-[1fr_auto] xl:items-end">
+                                    <div>
+                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                            <Label>Assinatura do transportador</Label>
+                                            {signatureDataUrl && <Badge variant="outline">Assinado</Badge>}
+                                        </div>
+                                        <div className="overflow-hidden rounded-xl border bg-white">
+                                            {signatureDataUrl ? (
+                                                <img src={signatureDataUrl} alt="Assinatura do transportador" className="h-36 w-full object-contain" />
+                                            ) : (
+                                                <SignatureCanvas
+                                                    ref={signatureRef}
+                                                    canvasProps={{ className: cn("h-36 w-full", !canEditStep(2) && "pointer-events-none opacity-60") }}
+                                                />
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="overflow-hidden rounded-md border bg-white">
-                                        {signatureDataUrl ? (
-                                            <img src={signatureDataUrl} alt="Assinatura do transportador" className="h-32 w-full object-contain" />
-                                        ) : (
-                                            <SignatureCanvas
-                                                ref={signatureRef}
-                                                canvasProps={{ className: cn("h-32 w-full", !canEditStep(2) && "pointer-events-none opacity-60") }}
-                                            />
-                                        )}
-                                    </div>
-                                    <div className="mt-2 flex gap-2">
+                                    <div className="flex gap-2 xl:min-w-[260px] xl:justify-end">
                                         {signatureDataUrl ? (
                                             <Button type="button" variant="outline" size="sm" onClick={() => {
                                                 setSignatureDataUrl("");
@@ -535,43 +563,63 @@ function RepositionActivityCard({
                 )}
 
                 {selectedStep === 3 && (
-                    <div className="mt-6 rounded-lg border bg-background p-4">
-                        <div className="mb-4 flex items-start justify-between gap-3">
-                            <div>
-                                <h4 className="font-semibold">Recebimento</h4>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    A unidade de destino confere os itens recebidos e registra divergências, se houver.
-                                </p>
+                    <div className="mt-6 overflow-hidden rounded-2xl border bg-background">
+                        <div className="flex flex-col gap-3 border-b px-5 py-4 md:flex-row md:items-center md:justify-between">
+                            <div className="flex items-start gap-3">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">3</span>
+                                <div>
+                                    <h4 className="font-semibold">Auditar recebimento</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        Confirme a quantidade efetivamente recebida em cada lote.
+                                    </p>
+                                </div>
                             </div>
-                            {receiptHasDivergence && <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Com divergência</Badge>}
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary" className="bg-red-50 text-red-600">Saída: {activity.kioskOriginName}</Badge>
+                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                                <Badge variant="secondary" className="bg-green-50 text-green-700">Entrada: {activity.kioskDestinationName}</Badge>
+                                {receiptHasDivergence && <Badge variant="secondary" className="bg-red-50 text-red-600">Divergência</Badge>}
+                            </div>
                         </div>
-                        <div className="rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Insumo</TableHead>
-                                        <TableHead>Lote</TableHead>
-                                        <TableHead className="text-right">Enviado</TableHead>
-                                        <TableHead className="w-32 text-right">Recebido</TableHead>
-                                        <TableHead>Observação</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {receiptSummary.map(({ key, item, lot, receivedQuantity, difference, notes }) => (
-                                        <TableRow key={`receipt-${key}`}>
-                                            <TableCell>
-                                                <div className="font-medium">{item.productName}</div>
-                                                <div className="text-xs text-muted-foreground">{lot.productName}</div>
-                                            </TableCell>
-                                            <TableCell className="font-mono text-xs">{lot.lotNumber || "-"}</TableCell>
-                                            <TableCell className="text-right font-semibold">{lot.quantityToMove}</TableCell>
-                                            <TableCell>
+                        <div className="space-y-3 p-5">
+                            {receiptSummary.map(({ key, item, lot, receivedQuantity, difference, notes }) => {
+                                const lotImage = getLotImage(lot);
+
+                                return (
+                                    <div
+                                        key={`receipt-${key}`}
+                                        className={cn(
+                                            "rounded-xl border bg-card p-3",
+                                            difference !== 0 && "border-red-200 bg-red-50/50"
+                                        )}
+                                    >
+                                        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_minmax(220px,320px)] lg:items-center">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                                                    {lotImage ? (
+                                                        <img src={lotImage} alt={lot.productName} className="h-full w-full object-cover" />
+                                                    ) : (
+                                                        <Package className="h-5 w-5 text-muted-foreground" />
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-sm font-semibold">{item.productName}</div>
+                                                    <div className="truncate text-xs text-muted-foreground">{lot.productName}</div>
+                                                    <div className="mt-0.5 text-xs text-muted-foreground">Lote {lot.lotNumber || "-"}</div>
+                                                </div>
+                                            </div>
+                                            <div className="rounded-lg border bg-background px-3 py-2">
+                                                <div className="text-[11px] font-semibold uppercase text-muted-foreground">Enviado</div>
+                                                <div className="text-lg font-bold tabular-nums">{lot.quantityToMove}</div>
+                                            </div>
+                                            <div>
+                                                <Label className="text-[11px] font-semibold uppercase text-muted-foreground">Recebido</Label>
                                                 <Input
                                                     type="number"
                                                     min={0}
                                                     value={Number.isFinite(receivedQuantity) ? receivedQuantity : 0}
                                                     disabled={!canEditStep(3)}
-                                                    className="text-right"
+                                                    className="mt-1 h-10 text-right font-semibold"
                                                     onChange={(event) => {
                                                         const value = Number(event.target.value);
                                                         setReceiptRows((current) => ({
@@ -583,30 +631,32 @@ function RepositionActivityCard({
                                                         }));
                                                     }}
                                                 />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Textarea
-                                                    value={notes}
-                                                    disabled={!canEditStep(3)}
-                                                    rows={1}
-                                                    placeholder={difference === 0 ? "Sem divergência" : "Justifique a diferença"}
-                                                    onChange={(event) => {
-                                                        setReceiptRows((current) => ({
-                                                            ...current,
-                                                            [key]: {
-                                                                ...(current[key] ?? { receivedQuantity }),
-                                                                receiptNotes: event.target.value,
-                                                            },
-                                                        }));
-                                                    }}
-                                                />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                            </div>
+                                        </div>
+                                        <Textarea
+                                            value={notes}
+                                            disabled={!canEditStep(3)}
+                                            rows={1}
+                                            className="mt-3"
+                                            placeholder={difference === 0 ? "Observação opcional" : "Observação obrigatória para divergência"}
+                                            onChange={(event) => {
+                                                setReceiptRows((current) => ({
+                                                    ...current,
+                                                    [key]: {
+                                                        ...(current[key] ?? { receivedQuantity }),
+                                                        receiptNotes: event.target.value,
+                                                    },
+                                                }));
+                                            }}
+                                        />
+                                    </div>
+                                );
+                            })}
                         </div>
-                        <div className="mt-4 flex justify-end">
+                        <div className="flex items-center justify-between border-t px-5 py-4">
+                            <div className={cn("text-sm font-medium", receiptHasDivergence ? "text-red-600" : "text-muted-foreground")}>
+                                {receiptHasDivergence ? "Recebimento com divergência" : "Recebimento sem divergência"}
+                            </div>
                             <Button
                                 disabled={!canEditStep(3) || receiptHasMissingDivergenceNotes}
                                 onClick={() => {
@@ -629,86 +679,112 @@ function RepositionActivityCard({
                 )}
 
                 {selectedStep === 4 && (
-                    <div className="mt-6 rounded-lg border bg-background p-4">
-                        <h4 className="font-semibold">Efetivação</h4>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Confira o histórico antes de debitar a origem e creditar o destino.
-                        </p>
-                        <div className="mt-4 grid gap-4 lg:grid-cols-[320px_1fr]">
-                            <div className="rounded-md border bg-muted/20 p-3">
+                    <div className="mt-6 overflow-hidden rounded-2xl border bg-background">
+                        <div className="flex flex-col gap-3 border-b px-5 py-4 md:flex-row md:items-center md:justify-between">
+                            <div className="flex items-start gap-3">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">4</span>
+                                <div>
+                                    <h4 className="font-semibold">Efetivação</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        Confira o histórico antes de debitar a origem e creditar o destino.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary" className="bg-red-50 text-red-600">Saída: {activity.kioskOriginName}</Badge>
+                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                                <Badge variant="secondary" className="bg-green-50 text-green-700">Entrada: {activity.kioskDestinationName}</Badge>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 p-5 xl:grid-cols-[360px_1fr]">
+                            <div className="rounded-xl border bg-muted/10 p-4">
                                 <h5 className="text-sm font-semibold">Histórico do processo</h5>
-                                <div className="mt-3 space-y-3 text-sm">
-                                    <div>
-                                        <div className="font-medium">1. Separação</div>
-                                        <div className="text-muted-foreground">
-                                            {activity.separationSignature?.signedBy
+                                <div className="mt-4 space-y-3">
+                                    {[
+                                        {
+                                            title: "1. Separação",
+                                            detail: activity.separationSignature?.signedBy
                                                 ? `${activity.separationSignature.signedBy} em ${activity.separationSignature.signedAt ? format(parseISO(activity.separationSignature.signedAt), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-"}`
                                                 : activity.isSeparated
                                                     ? `Responsável não registrado (${checkedRows}/${separationRows.length} itens marcados)`
-                                                    : `${checkedRows}/${separationRows.length} itens marcados`}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="font-medium">2. Despacho</div>
-                                        <div className="text-muted-foreground">
-                                            {activity.transportSignature?.signedBy
+                                                    : `${checkedRows}/${separationRows.length} itens marcados`,
+                                        },
+                                        {
+                                            title: "2. Despacho",
+                                            detail: activity.transportSignature?.signedBy
                                                 ? `${activity.transportSignature.signedBy} em ${activity.transportSignature.signedAt ? format(parseISO(activity.transportSignature.signedAt), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-"}`
-                                                : "Não registrado"}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="font-medium">3. Recebimento</div>
-                                        <div className="text-muted-foreground">
-                                            {activity.receiptSignature?.signedBy
+                                                : "Não registrado",
+                                        },
+                                        {
+                                            title: "3. Recebimento",
+                                            detail: activity.receiptSignature?.signedBy
                                                 ? `${activity.receiptSignature.signedBy} em ${activity.receiptSignature.signedAt ? format(parseISO(activity.receiptSignature.signedAt), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-"}`
-                                                : "Não registrado"}
+                                                : "Não registrado",
+                                        },
+                                    ].map((entry) => (
+                                        <div key={entry.title} className="rounded-lg border bg-background p-3">
+                                            <div className="text-sm font-semibold">{entry.title}</div>
+                                            <div className="mt-1 text-sm text-muted-foreground">{entry.detail}</div>
                                         </div>
-                                    </div>
+                                    ))}
                                 </div>
                             </div>
-                            <div className="rounded-md border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Insumo</TableHead>
-                                            <TableHead>Lote</TableHead>
-                                            <TableHead className="text-right">Enviado</TableHead>
-                                            <TableHead className="text-right">Recebido</TableHead>
-                                            <TableHead className="text-right">Dif.</TableHead>
-                                            <TableHead>Obs.</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {activity.items.flatMap((item) =>
-                                            item.suggestedLots.map((lot) => {
-                                                const receivedLot = item.receivedLots?.find((received) => received.lotId === lot.lotId);
-                                                const receivedQuantity = receivedLot?.receivedQuantity ?? 0;
-                                                const difference = receivedQuantity - lot.quantityToMove;
 
-                                                return (
-                                                    <TableRow key={`final-${item.baseProductId}-${lot.lotId}`}>
-                                                        <TableCell>
-                                                            <div className="font-medium">{item.productName}</div>
-                                                            <div className="text-xs text-muted-foreground">{lot.productName}</div>
-                                                        </TableCell>
-                                                        <TableCell className="font-mono text-xs">{lot.lotNumber || "-"}</TableCell>
-                                                        <TableCell className="text-right font-semibold">{lot.quantityToMove}</TableCell>
-                                                        <TableCell className="text-right font-semibold">{receivedQuantity}</TableCell>
-                                                        <TableCell className={cn("text-right font-semibold", difference !== 0 && "text-yellow-700")}>
-                                                            {difference > 0 ? `+${difference}` : difference}
-                                                        </TableCell>
-                                                        <TableCell className="text-sm text-muted-foreground">{receivedLot?.receiptNotes || "Sem divergência"}</TableCell>
-                                                    </TableRow>
-                                                );
-                                            })
-                                        )}
-                                    </TableBody>
-                                </Table>
+                            <div className="space-y-3">
+                                {activity.items.flatMap((item) =>
+                                    item.suggestedLots.map((lot) => {
+                                        const receivedLot = item.receivedLots?.find((received) => received.lotId === lot.lotId);
+                                        const receivedQuantity = receivedLot?.receivedQuantity ?? 0;
+                                        const difference = receivedQuantity - lot.quantityToMove;
+                                        const lotImage = getLotImage(lot);
+
+                                        return (
+                                            <div
+                                                key={`final-${item.baseProductId}-${lot.lotId}`}
+                                                className={cn(
+                                                    "grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[minmax(260px,1fr)_120px_120px_120px_minmax(180px,1fr)] md:items-center",
+                                                    difference !== 0 && "border-amber-200 bg-amber-50/40"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                                                        {lotImage ? (
+                                                            <img src={lotImage} alt={lot.productName} className="h-full w-full object-cover" />
+                                                        ) : (
+                                                            <Package className="h-5 w-5 text-muted-foreground" />
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="truncate text-sm font-semibold">{item.productName}</div>
+                                                        <div className="truncate text-xs text-muted-foreground">{lot.productName}</div>
+                                                        <div className="mt-0.5 text-xs text-muted-foreground">Lote {lot.lotNumber || "-"}</div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-[11px] uppercase text-muted-foreground">Enviado</div>
+                                                    <div className="font-bold tabular-nums">{lot.quantityToMove}</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-[11px] uppercase text-muted-foreground">Recebido</div>
+                                                    <div className="font-bold tabular-nums">{receivedQuantity}</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-[11px] uppercase text-muted-foreground">Dif.</div>
+                                                    <div className={cn("font-bold tabular-nums", difference !== 0 && "text-amber-700")}>{difference > 0 ? `+${difference}` : difference}</div>
+                                                </div>
+                                                <div className="text-sm text-muted-foreground">{receivedLot?.receiptNotes || "Sem divergência"}</div>
+                                            </div>
+                                        );
+                                    })
+                                )}
                             </div>
                         </div>
-                        <Button className="mt-4" onClick={() => onFinalize(activity)} disabled={!canEditStep(4)}>
-                            Efetivar movimentação
-                        </Button>
+                        <div className="flex justify-end border-t px-5 py-4">
+                            <Button onClick={() => onFinalize(activity)} disabled={!canEditStep(4)}>
+                                Efetivar movimentação
+                            </Button>
+                        </div>
                     </div>
                 )}
             </CardContent>

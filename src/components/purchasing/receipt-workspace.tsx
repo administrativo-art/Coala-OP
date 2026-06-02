@@ -32,7 +32,21 @@ import { useAuth } from '@/hooks/use-auth';
 import { canReceivePurchase } from '@/lib/purchasing-permissions';
 import { storage } from '@/lib/firebase';
 import { calculateStockQuantityFromPurchase } from '@/lib/purchasing-units';
-import { type PurchaseReceipt, type PurchaseReceiptItem } from '@/types';
+import {
+  getPurchaseItemTreatmentLabel,
+  getTreatmentEntryType,
+  inferPurchaseItemTreatment,
+  purchaseTreatmentCreatesAsset,
+  purchaseTreatmentCreatesStock,
+  purchaseTreatmentSkipsOperationalEntry,
+} from '@/lib/purchasing-item-treatment';
+import {
+  type PurchaseAssetComponentAction,
+  type PurchaseItemTreatment,
+  type PurchaseReceipt,
+  type PurchaseReceiptItem,
+  type PurchaseStockEntryType,
+} from '@/types';
 import { cn } from '@/lib/utils';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { usePurchaseFinancials } from '@/hooks/use-purchase-financials';
@@ -62,7 +76,12 @@ interface ItemDraft {
   resolutionNotes: string;
   lots: LotDraft[];
   expiryDate?: string;
-  entryType: 'stock' | 'uniform' | 'asset';
+  entryType: PurchaseStockEntryType;
+  itemTreatment: PurchaseItemTreatment;
+  linkedAssetId?: string | null;
+  linkedAssetCode?: string | null;
+  linkedAssetName?: string | null;
+  componentAction?: PurchaseAssetComponentAction | null;
   receiptDisposition: 'pending' | 'receive' | 'receive_less' | 'receive_more' | 'exchange_pending' | 'returned';
   selectedForReceipt: boolean;
 }
@@ -173,13 +192,18 @@ export function ReceiptWorkspace({ receipt }: Props) {
           })
           .map((item) => {
             const base = baseProducts.find((bp) => bp.id === item.baseItemId);
+            const itemTreatment = inferPurchaseItemTreatment(item);
+            const entryType = getTreatmentEntryType(itemTreatment);
             const remainingQuantity =
               isInStockEntry
                 ? Number(item.quantityReceived ?? 0)
                 : receipt.status === 'partially_stocked'
                 ? Math.max(item.quantityOrdered - (item.quantityReceived ?? 0), 0)
                 : (item.quantityReceived && item.quantityReceived > 0 ? item.quantityReceived : item.quantityOrdered);
-            const shouldPreseedLot = isInStockEntry && Number(item.quantityReceived ?? 0) > 0;
+            const shouldPreseedLot =
+              isInStockEntry &&
+              Number(item.quantityReceived ?? 0) > 0 &&
+              purchaseTreatmentCreatesStock(itemTreatment);
             return {
               receiptItemId: item.id,
               purchaseOrderItemId: item.purchaseOrderItemId,
@@ -197,7 +221,12 @@ export function ReceiptWorkspace({ receipt }: Props) {
               divergenceReason: '',
               resolutionNotes: item.resolutionNotes ?? '',
               expiryDate: '',
-              entryType: item.itemDestination === 'asset' || item.entryType === 'asset' ? 'asset' : item.itemDestination === 'uniform' || item.entryType === 'uniform' ? 'uniform' : 'stock',
+              entryType,
+              itemTreatment,
+              linkedAssetId: item.linkedAssetId ?? null,
+              linkedAssetCode: item.linkedAssetCode ?? null,
+              linkedAssetName: item.linkedAssetName ?? null,
+              componentAction: item.componentAction ?? null,
               receiptDisposition: item.receiptDisposition ?? 'receive',
               selectedForReceipt: item.receiptDisposition !== 'pending',
               lots: shouldPreseedLot
@@ -266,10 +295,23 @@ export function ReceiptWorkspace({ receipt }: Props) {
     () =>
       drafts.every((d) => {
         if (!d.selectedForReceipt) return true;
-        if (d.entryType === 'asset') return true;
+        if (purchaseTreatmentCreatesAsset(d.itemTreatment) || purchaseTreatmentSkipsOperationalEntry(d.itemTreatment)) {
+          return true;
+        }
         const lotSum = d.lots.reduce((s, l) => s + (l.quantity || 0), 0);
         return Math.abs(lotSum - d.quantityReceived) < 0.001;
       }),
+    [drafts],
+  );
+
+  const requiresStockDestination = useMemo(
+    () =>
+      drafts.some(
+        (d) =>
+          d.selectedForReceipt &&
+          d.quantityReceived > 0 &&
+          !purchaseTreatmentSkipsOperationalEntry(d.itemTreatment),
+      ),
     [drafts],
   );
 
@@ -313,14 +355,16 @@ export function ReceiptWorkspace({ receipt }: Props) {
   const canConfirmStock =
     canReceive &&
     isInStockEntry &&
-    !!destinationKioskId &&
+    (!requiresStockDestination || !!destinationKioskId) &&
     hasAnyReceived &&
     lotsValid &&
     immediateValid &&
     drafts.every((d) => {
       if (d.quantityReceived <= 0) return true;
       if (!d.selectedForReceipt) return true;
-      if (d.entryType === 'asset') return d.quantityReceived > 0;
+      if (purchaseTreatmentCreatesAsset(d.itemTreatment) || purchaseTreatmentSkipsOperationalEntry(d.itemTreatment)) {
+        return d.quantityReceived > 0;
+      }
       if (!d.productId) return false;
       const base = baseProducts.find((bp) => bp.id === d.baseItemId);
       const product = products.find((p) => p.id === d.productId);
@@ -374,6 +418,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
           divergenceReason: d.divergenceReason || undefined,
           resolutionNotes: d.resolutionNotes || undefined,
           receiptDisposition: d.selectedForReceipt ? d.receiptDisposition : 'pending',
+          itemTreatment: d.itemTreatment,
+          linkedAssetId: d.linkedAssetId ?? null,
+          linkedAssetCode: d.linkedAssetCode ?? null,
+          linkedAssetName: d.linkedAssetName ?? null,
+          componentAction: d.componentAction ?? null,
         })),
       });
     } finally {
@@ -427,6 +476,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
           itemDestination: d.entryType,
           productId: d.productId,
           entryType: d.entryType,
+          itemTreatment: d.itemTreatment,
+          linkedAssetId: d.linkedAssetId ?? null,
+          linkedAssetCode: d.linkedAssetCode ?? null,
+          linkedAssetName: d.linkedAssetName ?? null,
+          componentAction: d.componentAction ?? null,
           quantityReceived: d.quantityReceived,
           purchaseUnitType: d.purchaseUnitType,
           purchaseUnitLabel: d.purchaseUnitLabel,
@@ -540,9 +594,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
                     draft.itemName ||
                     base?.name ||
                     draft.baseItemId;
-                  const isAssetEntry = draft.entryType === 'asset';
+                  const isAssetEntry = purchaseTreatmentCreatesAsset(draft.itemTreatment);
+                  const createsStockEntry = purchaseTreatmentCreatesStock(draft.itemTreatment);
+                  const skipsOperationalEntry = purchaseTreatmentSkipsOperationalEntry(draft.itemTreatment);
                   const lotSum = draft.lots.reduce((s, l) => s + (l.quantity || 0), 0);
-                  const lotValid = isAssetEntry || Math.abs(lotSum - draft.quantityReceived) < 0.001;
+                  const lotValid = isAssetEntry || skipsOperationalEntry || Math.abs(lotSum - draft.quantityReceived) < 0.001;
                   const receivesQuantity =
                     draft.selectedForReceipt &&
                     (draft.receiptDisposition === 'receive' ||
@@ -631,10 +687,12 @@ export function ReceiptWorkspace({ receipt }: Props) {
                               value={draft.operationalCategoryId}
                               onValueChange={(value) => {
                                 const category = activeCategories.find((entry) => entry.id === value);
+                                const entryType = (category?.destination ?? 'stock') as PurchaseStockEntryType;
                                 updateDraft(idx, {
                                   operationalCategoryId: category?.id,
                                   operationalCategoryName: category?.name,
-                                  entryType: category?.destination ?? 'stock',
+                                  entryType,
+                                  itemTreatment: entryType,
                                 });
                               }}
                             >
@@ -704,7 +762,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
-                        {isInStockEntry && !isAssetEntry && (
+                        {isInStockEntry && createsStockEntry && (
                           <div className="space-y-1">
                             <Label className="text-xs">Unidade estoque</Label>
                             {selectedStockProduct ? (
@@ -766,7 +824,14 @@ export function ReceiptWorkspace({ receipt }: Props) {
                         </div>
                       )}
 
-                      {isInStockEntry && !isAssetEntry && (
+                      {isInStockEntry && skipsOperationalEntry && (
+                        <div className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+                          Tratamento: <span className="font-medium text-foreground">{getPurchaseItemTreatmentLabel(draft.itemTreatment)}</span>. Este item será finalizado como custo/registro de compra, sem criar lote de estoque e sem gerar patrimônio novo.
+                          {draft.linkedAssetName ? ` Patrimônio vinculado: ${draft.linkedAssetCode ? `${draft.linkedAssetCode} - ` : ''}${draft.linkedAssetName}.` : ''}
+                        </div>
+                      )}
+
+                      {isInStockEntry && createsStockEntry && (
                         <div className="space-y-3 pt-2">
                            <div className="flex items-center justify-between">
                             <Label className="text-xs font-medium">Lotes ({fmtQty(lotSum)} / {fmtQty(draft.quantityReceived)})</Label>
@@ -909,7 +974,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
             </div>
           </div>
 
-          {isInStockEntry && (
+          {isInStockEntry && requiresStockDestination && (
             <div className="rounded-2xl border bg-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Truck className="h-4 w-4 text-muted-foreground" />

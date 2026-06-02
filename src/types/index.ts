@@ -1329,6 +1329,11 @@ export type PurchaseOrderItem = {
   totalOrdered: number;
   notes?: string;
   entryType?: PurchaseStockEntryType;
+  itemTreatment?: PurchaseItemTreatment;
+  linkedAssetId?: string | null;
+  linkedAssetCode?: string | null;
+  linkedAssetName?: string | null;
+  componentAction?: PurchaseAssetComponentAction | null;
   // filled during receipt
   quantityReceived?: number;
   unitPriceConfirmed?: number;
@@ -1373,6 +1378,14 @@ export type PurchaseReceipt = {
 
 export type PurchaseReceiptItemStatus = 'pending' | 'received' | 'partial' | 'divergent' | 'cancelled';
 export type PurchaseStockEntryType = 'stock' | 'uniform' | 'asset';
+export type PurchaseItemTreatment =
+  | 'stock'
+  | 'uniform'
+  | 'asset'
+  | 'asset_component'
+  | 'service'
+  | 'expense';
+export type PurchaseAssetComponentAction = 'replacement' | 'improvement' | 'repair' | 'installation' | 'other';
 
 export type PurchaseReceiptItem = {
   id: string;
@@ -1397,6 +1410,11 @@ export type PurchaseReceiptItem = {
   divergenceReason?: string;
   resolutionNotes?: string;
   entryType?: PurchaseStockEntryType;
+  itemTreatment?: PurchaseItemTreatment;
+  linkedAssetId?: string | null;
+  linkedAssetCode?: string | null;
+  linkedAssetName?: string | null;
+  componentAction?: PurchaseAssetComponentAction | null;
   // subcollection lots are fetched separately; this array is used in-memory only
   lots?: PurchaseReceiptLot[];
 };

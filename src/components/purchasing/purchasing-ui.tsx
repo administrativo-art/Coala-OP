@@ -1,13 +1,19 @@
 "use client";
 
 import Link from 'next/link';
-import { Columns3, LayoutGrid, Search, ShoppingCart, Table2 } from 'lucide-react';
+import { CalendarDays, Columns3, LayoutGrid, Search, ShoppingCart, Table2 } from 'lucide-react';
 import { type ReactNode } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
 export type PurchasingTone = 'blue' | 'amber' | 'purple' | 'cyan' | 'green' | 'rose' | 'zinc';
+export type PurchasingPeriodFilter = { mode: 'recent' | 'month'; month: number; year: number };
+
+const purchasingMonthLabels = [
+  'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+  'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
+];
 
 const toneClasses: Record<PurchasingTone, { text: string; bg: string; border: string; bar: string; soft: string }> = {
   blue: { text: 'text-blue-600', bg: 'bg-blue-500', border: 'border-blue-500', bar: 'bg-blue-500', soft: 'bg-blue-50 text-blue-700 border-blue-200' },
@@ -35,6 +41,84 @@ export function purchasingAgeLabel(date?: string | null) {
   if (diffDays === 0) return 'hoje';
   if (diffDays === 1) return 'ontem';
   return `há ${diffDays}d`;
+}
+
+export function createDefaultPurchasingPeriod(): PurchasingPeriodFilter {
+  const now = new Date();
+  return { mode: 'recent', month: now.getMonth(), year: now.getFullYear() };
+}
+
+export function purchasingYearOptions(dates: Array<string | null | undefined>) {
+  const currentYear = new Date().getFullYear();
+  const years = new Set<number>([currentYear, currentYear - 1, currentYear + 1]);
+  dates.forEach((date) => {
+    if (!date) return;
+    const parsed = new Date(date);
+    if (Number.isFinite(parsed.getTime())) years.add(parsed.getFullYear());
+  });
+  return Array.from(years).sort((a, b) => b - a);
+}
+
+export function isDateInPurchasingPeriod(date: string | null | undefined, period: PurchasingPeriodFilter) {
+  if (!date) return false;
+  const parsed = new Date(date);
+  const time = parsed.getTime();
+  if (!Number.isFinite(time)) return false;
+
+  if (period.mode === 'recent') {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - 180);
+    return time >= start.getTime();
+  }
+
+  return parsed.getFullYear() === period.year && parsed.getMonth() === period.month;
+}
+
+export function PurchasingPeriodControl({
+  value,
+  onChange,
+  years,
+}: {
+  value: PurchasingPeriodFilter;
+  onChange: (value: PurchasingPeriodFilter) => void;
+  years: number[];
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-zinc-200 bg-white p-1.5">
+      <button
+        type="button"
+        onClick={() => onChange({ ...value, mode: 'recent' })}
+        className={cn(
+          'inline-flex h-9 items-center rounded-[8px] px-3 text-sm font-bold transition-colors',
+          value.mode === 'recent' ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900',
+        )}
+      >
+        <CalendarDays className="mr-2 h-4 w-4" />
+        180 dias
+      </button>
+      <div className={cn('flex items-center gap-1 rounded-[8px] px-2', value.mode === 'month' ? 'bg-zinc-100' : 'bg-transparent')}>
+        <select
+          value={value.month}
+          onChange={(event) => onChange({ ...value, mode: 'month', month: Number(event.target.value) })}
+          className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+        >
+          {purchasingMonthLabels.map((label, index) => (
+            <option key={label} value={index}>{label}</option>
+          ))}
+        </select>
+        <select
+          value={value.year}
+          onChange={(event) => onChange({ ...value, mode: 'month', year: Number(event.target.value) })}
+          className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+        >
+          {years.map((year) => (
+            <option key={year} value={year}>{year}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
 }
 
 export function PurchasingPageFrame({ children }: { children: ReactNode }) {
@@ -120,6 +204,7 @@ export function PurchasingToolbar({
   resultLabel,
   view,
   onViewChange,
+  periodControl,
 }: {
   search: string;
   onSearchChange: (value: string) => void;
@@ -128,6 +213,7 @@ export function PurchasingToolbar({
   resultLabel?: string;
   view?: 'cards' | 'table' | 'kanban';
   onViewChange?: (view: 'cards' | 'table' | 'kanban') => void;
+  periodControl?: ReactNode;
 }) {
   const views = [
     { value: 'cards' as const, label: 'Cards', icon: LayoutGrid },
@@ -147,6 +233,7 @@ export function PurchasingToolbar({
             className="h-12 rounded-[10px] border-zinc-200 bg-white pl-11 text-base shadow-none"
           />
         </div>
+        {periodControl}
         <div className="flex items-center gap-1 rounded-[10px] bg-zinc-100 p-1">
           {views.map(({ value, label, icon: Icon }) => (
             <button

@@ -26,7 +26,22 @@ import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useProducts } from '@/hooks/use-products';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { getContentPurchaseUnitLabel, getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
-import { type Product, type PurchaseOrderItem, type PurchaseStockEntryType, type PurchaseUnitType } from '@/types';
+import {
+  type Product,
+  type PurchaseAssetComponentAction,
+  type PurchaseItemTreatment,
+  type PurchaseOrderItem,
+  type PurchaseStockEntryType,
+  type PurchaseUnitType,
+} from '@/types';
+import {
+  getPurchaseItemTreatmentLabel,
+  getTreatmentEntryType,
+  inferPurchaseItemTreatment,
+  purchaseTreatmentSkipsOperationalEntry,
+  PURCHASE_COMPONENT_ACTION_OPTIONS,
+  PURCHASE_ITEM_TREATMENT_OPTIONS,
+} from '@/lib/purchasing-item-treatment';
 import { cn } from '@/lib/utils';
 
 type DraftItem = {
@@ -44,6 +59,11 @@ type DraftItem = {
   unitPriceOrdered: number;
   discountOrdered: number;
   entryType: PurchaseStockEntryType;
+  itemTreatment: PurchaseItemTreatment;
+  linkedAssetId?: string | null;
+  linkedAssetCode?: string | null;
+  linkedAssetName?: string | null;
+  componentAction?: PurchaseAssetComponentAction | null;
   notes: string;
   aliasCandidate: string;
   linkAlias: boolean;
@@ -80,6 +100,11 @@ function newDraftItem(): DraftItem {
     unitPriceOrdered: 0,
     discountOrdered: 0,
     entryType: 'stock',
+    itemTreatment: 'stock',
+    linkedAssetId: null,
+    linkedAssetCode: null,
+    linkedAssetName: null,
+    componentAction: null,
     notes: '',
     aliasCandidate: '',
     linkAlias: false,
@@ -209,7 +234,8 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           const product = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
           const productLabel = product ? getProductFullName(product) : '';
           const aliasCandidate = item.itemName?.trim() ?? '';
-          const entryType = item.entryType === 'asset' || item.entryType === 'uniform' ? item.entryType : 'stock';
+          const itemTreatment = inferPurchaseItemTreatment(item);
+          const entryType = getTreatmentEntryType(itemTreatment);
           const inferredCategory =
             activeCategories.find((category) => category.id === item.operationalCategoryId) ??
             activeCategories.find((category) => product?.operationalCategoryId && category.id === product.operationalCategoryId) ??
@@ -230,6 +256,11 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             unitPriceOrdered: item.unitPriceOrdered,
             discountOrdered: item.discountOrdered ?? 0,
             entryType,
+            itemTreatment,
+            linkedAssetId: item.linkedAssetId ?? null,
+            linkedAssetCode: item.linkedAssetCode ?? null,
+            linkedAssetName: item.linkedAssetName ?? null,
+            componentAction: item.componentAction ?? null,
             notes: item.notes ?? '',
             aliasCandidate,
             linkAlias: !!aliasCandidate && shouldLinkAlias(aliasCandidate, product, productLabel),
@@ -247,6 +278,9 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
         if (patch.operationalCategoryId) {
           const category = activeCategories.find((entry) => entry.id === patch.operationalCategoryId);
           next.entryType = category?.destination === 'asset' ? 'asset' : category?.destination === 'uniform' ? 'uniform' : 'stock';
+          if (patch.itemTreatment == null) {
+            next.itemTreatment = next.entryType;
+          }
           next.operationalCategoryName = category?.name;
           next.productId = '';
           next.baseItemId = '';
@@ -254,6 +288,25 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           next.isRegistered = category?.destination !== 'asset';
           next.unit = category?.destination === 'asset' ? 'un' : '';
           next.purchaseUnitType = 'content';
+        }
+        if (patch.itemTreatment) {
+          next.entryType = getTreatmentEntryType(patch.itemTreatment);
+          if (patch.itemTreatment === 'asset') {
+            next.isRegistered = false;
+            next.productId = '';
+            next.baseItemId = '';
+            next.unit = 'un';
+            next.purchaseUnitType = 'content';
+          }
+          if (patch.itemTreatment === 'asset_component' && !next.componentAction) {
+            next.componentAction = 'replacement';
+          }
+          if (patch.itemTreatment !== 'asset_component') {
+            next.linkedAssetId = null;
+            next.linkedAssetCode = null;
+            next.linkedAssetName = null;
+            next.componentAction = null;
+          }
         }
         if (patch.isRegistered != null) {
           next.productId = '';
@@ -313,8 +366,13 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
 
   const validItems = items.filter((item) => {
     const category = activeCategories.find((entry) => entry.id === item.operationalCategoryId);
+    const canUseManualItem =
+      item.itemTreatment === 'asset' ||
+      item.itemTreatment === 'asset_component' ||
+      item.itemTreatment === 'service' ||
+      item.itemTreatment === 'expense';
     const hasItem =
-      category?.destination === 'asset'
+      category?.destination === 'asset' || canUseManualItem
         ? item.itemName.trim().length > 0
         : item.isRegistered
           ? !!item.baseItemId
@@ -355,6 +413,11 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           unitPriceOrdered: item.unitPriceOrdered,
           discountOrdered: item.discountOrdered,
           entryType: item.entryType,
+          itemTreatment: item.itemTreatment,
+          linkedAssetId: item.linkedAssetId ?? null,
+          linkedAssetCode: item.linkedAssetCode ?? null,
+          linkedAssetName: item.linkedAssetName ?? null,
+          componentAction: item.componentAction ?? null,
           notes: item.notes || undefined,
         })),
       });
@@ -377,7 +440,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[92vh] w-[min(96vw,1180px)] overflow-y-auto sm:max-w-none">
         <DialogHeader>
           <DialogTitle>Gerenciar itens do pedido</DialogTitle>
         </DialogHeader>
@@ -417,8 +480,10 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                   })
                 : [];
 
+              const skipsOperationalEntry = purchaseTreatmentSkipsOperationalEntry(item.itemTreatment);
+
               return (
-              <div key={item.key} className="grid grid-cols-1 md:grid-cols-[150px_1fr_90px_100px_110px_90px_36px] gap-2 items-end rounded-md border p-3 bg-muted/20">
+              <div key={item.key} className="grid grid-cols-1 gap-3 rounded-xl border bg-muted/20 p-3 md:grid-cols-[160px_minmax(280px,1fr)_100px_110px_130px_110px_40px] md:items-end">
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">Categoria</label>
                   <Select
@@ -441,9 +506,9 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">
                     {categoryDestination === 'asset' ? 'Patrimônio' : 'Insumo'}
                   </label>
-                  {categoryDestination === 'asset' ? (
+                  {categoryDestination === 'asset' || item.itemTreatment === 'asset' || item.itemTreatment === 'asset_component' || item.itemTreatment === 'service' || item.itemTreatment === 'expense' ? (
                     <Input
-                      placeholder="Ex: Máquina de sorvete"
+                      placeholder={item.itemTreatment === 'asset_component' ? 'Ex: Extensor inox para máquina' : 'Ex: Máquina de sorvete'}
                       value={item.itemName}
                       onChange={(event) => updateItem(item.key, { itemName: event.target.value })}
                     />
@@ -500,10 +565,10 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">Un.</label>
                   {(() => {
                     const selectedProduct = purchasableProducts.find((option) => option.id === item.productId);
-                    if (categoryDestination === 'asset') {
+                    if (categoryDestination === 'asset' || item.itemTreatment === 'asset') {
                       return <Input value="un" readOnly className="bg-muted" />;
                     }
-                    if (!item.isRegistered) {
+                    if (!item.isRegistered || item.itemTreatment === 'asset_component' || item.itemTreatment === 'service' || item.itemTreatment === 'expense') {
                       return (
                         <Input
                           placeholder="un"
@@ -580,7 +645,63 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
-                <div className="md:col-span-6 md:col-start-2 space-y-1">
+                <div className="space-y-2 md:col-span-6 md:col-start-2">
+                  <div className="grid gap-2 lg:grid-cols-[220px_minmax(220px,1fr)_220px]">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-semibold text-muted-foreground">Tratamento</label>
+                      <Select
+                        value={item.itemTreatment}
+                        onValueChange={(value) => updateItem(item.key, { itemTreatment: value as PurchaseItemTreatment })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PURCHASE_ITEM_TREATMENT_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {item.itemTreatment === 'asset_component' && (
+                      <>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-semibold text-muted-foreground">Patrimônio relacionado</label>
+                          <Input
+                            placeholder="Código ou nome do patrimônio (opcional)"
+                            value={item.linkedAssetName ?? ''}
+                            onChange={(event) => updateItem(item.key, { linkedAssetName: event.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-semibold text-muted-foreground">Tipo de componente</label>
+                          <Select
+                            value={item.componentAction ?? 'replacement'}
+                            onValueChange={(value) => updateItem(item.key, { componentAction: value as PurchaseAssetComponentAction })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PURCHASE_COMPONENT_ACTION_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {skipsOperationalEntry && (
+                    <p className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
+                      Tratamento: <span className="font-medium text-foreground">{getPurchaseItemTreatmentLabel(item.itemTreatment)}</span>. Este item não criará lote de estoque nem novo patrimônio no recebimento.
+                    </p>
+                  )}
                    {logisticSummary && (
                      <p className="rounded-md bg-background px-3 py-2 text-xs text-muted-foreground">
                        {fmtQuantity(item.quantityOrdered)} {item.unit} ={' '}

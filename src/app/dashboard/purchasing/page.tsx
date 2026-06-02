@@ -18,16 +18,24 @@ import {
   PurchasingHeader,
   PurchasingMetricCard,
   PurchasingPageFrame,
+  PurchasingPeriodControl,
   PurchasingPipelineCard,
   PurchasingStatusBadge,
   PurchasingToolbar,
+  createDefaultPurchasingPeriod,
+  isDateInPurchasingPeriod,
   purchasingAgeLabel,
   purchasingCompactMoney,
+  purchasingYearOptions,
   type PurchasingTone,
 } from '@/components/purchasing/purchasing-ui';
 
 function codeFromId(id: string) {
   return `CMP-${id.slice(-8).toUpperCase()}`;
+}
+
+function orderDisplayTotal(order: { totalConfirmed?: number | null; totalEstimated?: number | null }) {
+  return order.totalConfirmed && order.totalConfirmed > 0 ? order.totalConfirmed : order.totalEstimated;
 }
 
 export default function PurchasingHubPage() {
@@ -38,14 +46,31 @@ export default function PurchasingHubPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'progress' | 'quotation' | 'order' | 'done'>('all');
   const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
+  const [period, setPeriod] = useState(createDefaultPurchasingPeriod);
   const canView = canViewPurchasing(permissions);
   const canCreate = canCreateQuotation(permissions);
 
-  const awaitingApproval = orders.filter((o) => o.status === 'created' && !o.receivedAt);
-  const quotationActive = quotations.filter((q) => q.status === 'draft' || q.status === 'partially_converted');
-  const ordersOpen = orders.filter((o) => o.status === 'confirmed' && !o.receivedAt);
-  const completed = orders.filter((o) => !!o.receivedAt);
-  const openValue = orders
+  const periodYears = useMemo(
+    () => purchasingYearOptions([
+      ...quotations.map((quotation) => quotation.createdAt),
+      ...orders.map((order) => order.receivedAt ?? order.createdAt),
+    ]),
+    [orders, quotations],
+  );
+  const periodQuotations = useMemo(
+    () => quotations.filter((quotation) => isDateInPurchasingPeriod(quotation.createdAt, period)),
+    [period, quotations],
+  );
+  const periodOrders = useMemo(
+    () => orders.filter((order) => isDateInPurchasingPeriod(order.receivedAt ?? order.createdAt, period)),
+    [orders, period],
+  );
+
+  const awaitingApproval = periodOrders.filter((o) => o.status === 'created' && !o.receivedAt);
+  const quotationActive = periodQuotations.filter((q) => q.status === 'draft' || q.status === 'partially_converted');
+  const ordersOpen = periodOrders.filter((o) => o.status === 'confirmed' && !o.receivedAt);
+  const completed = periodOrders.filter((o) => !!o.receivedAt);
+  const openValue = periodOrders
     .filter((o) => !o.receivedAt && o.status !== 'cancelled')
     .reduce((sum, order) => sum + (order.totalEstimated ?? 0), 0);
 
@@ -70,7 +95,7 @@ export default function PurchasingHubPage() {
       searchText: `${q.id} cotacao ${q.mode} ${q.status}`.toLowerCase(),
     }));
 
-    const orderCards = orders
+    const orderCards = periodOrders
       .filter((o) => o.status !== 'cancelled' && !o.receivedAt)
       .map((o) => {
         const isReview = o.status === 'created';
@@ -108,7 +133,7 @@ export default function PurchasingHubPage() {
       status: 'Concluída',
       stageLabel: 'Concluída',
       progress: 8,
-      amount: purchasingCompactMoney(o.totalConfirmed ?? o.totalEstimated),
+      amount: purchasingCompactMoney(orderDisplayTotal(o)),
       age: purchasingAgeLabel(o.receivedAt ?? o.createdAt),
       lines: [
         { label: o.origin === 'direct' ? 'Compra direta' : 'Via cotação' },
@@ -120,7 +145,7 @@ export default function PurchasingHubPage() {
     return [...quotationCards, ...orderCards, ...doneCards]
       .filter((card) => filter === 'all' || card.kind === filter)
       .filter((card) => !search.trim() || card.searchText.includes(search.trim().toLowerCase()));
-  }, [completed, filter, orders, quotationActive, search]);
+  }, [completed, filter, periodOrders, quotationActive, search]);
 
   return (
     <PermissionGuard allowed={canView}>
@@ -155,7 +180,14 @@ export default function PurchasingHubPage() {
           <PurchasingMetricCard label="Concluídas" value={completed.length} detail="recebidas" tone="green" icon={<CheckCircle2 className="h-5 w-5" />} />
         </div>
 
-        <PurchasingToolbar search={search} onSearchChange={setSearch} resultLabel={`${cards.length} compras`} view={view} onViewChange={setView}>
+        <PurchasingToolbar
+          search={search}
+          onSearchChange={setSearch}
+          resultLabel={`${cards.length} compras`}
+          view={view}
+          onViewChange={setView}
+          periodControl={<PurchasingPeriodControl value={period} onChange={setPeriod} years={periodYears} />}
+        >
           <PurchasingFilterChip active={filter === 'all'} label="Todos" count={quotationActive.length + awaitingApproval.length + ordersOpen.length + completed.length} onClick={() => setFilter('all')} />
           <PurchasingFilterChip active={filter === 'progress'} label="Aprov." count={awaitingApproval.length} tone="amber" onClick={() => setFilter('progress')} />
           <PurchasingFilterChip active={filter === 'quotation'} label="Cotação" count={quotationActive.length} tone="purple" onClick={() => setFilter('quotation')} />

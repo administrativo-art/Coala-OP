@@ -20,11 +20,15 @@ import {
   PurchasingHeader,
   PurchasingMetricCard,
   PurchasingPageFrame,
+  PurchasingPeriodControl,
   PurchasingPipelineCard,
   PurchasingStatusBadge,
   PurchasingToolbar,
+  createDefaultPurchasingPeriod,
+  isDateInPurchasingPeriod,
   purchasingAgeLabel,
   purchasingCompactMoney,
+  purchasingYearOptions,
   type PurchasingTone,
 } from '@/components/purchasing/purchasing-ui';
 
@@ -36,6 +40,10 @@ function supplierName(order: PurchaseOrder, fallback?: string) {
   return order.fiscal?.issuerName?.trim() || order.supplierName?.trim() || fallback || 'Fornecedor a definir';
 }
 
+function orderDisplayTotal(order: PurchaseOrder) {
+  return order.totalConfirmed && order.totalConfirmed > 0 ? order.totalConfirmed : order.totalEstimated;
+}
+
 export default function PurchaseOrdersPage() {
   const { permissions } = useAuth();
   const { orders, loading } = usePurchaseOrders();
@@ -44,18 +52,28 @@ export default function PurchaseOrdersPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'review' | 'confirmed' | 'received' | 'direct' | 'quotation'>('all');
   const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
+  const [period, setPeriod] = useState(createDefaultPurchasingPeriod);
   const canView = canViewPurchasing(permissions);
   const canOpenDirectPurchase = canCreatePurchase(permissions);
 
-  const review = orders.filter((o) => o.status === 'created' && !o.receivedAt);
-  const confirmed = orders.filter((o) => o.status === 'confirmed' && !o.receivedAt);
-  const received = orders.filter((o) => !!o.receivedAt);
-  const direct = orders.filter((o) => o.origin === 'direct' && o.status !== 'cancelled');
-  const viaQuotation = orders.filter((o) => o.origin === 'quotation' && o.status !== 'cancelled');
-  const activeValue = orders.filter((o) => o.status !== 'cancelled' && !o.receivedAt).reduce((sum, order) => sum + (order.totalEstimated ?? 0), 0);
+  const periodYears = useMemo(
+    () => purchasingYearOptions(orders.map((order) => order.receivedAt ?? order.createdAt)),
+    [orders],
+  );
+  const periodOrders = useMemo(
+    () => orders.filter((order) => isDateInPurchasingPeriod(order.receivedAt ?? order.createdAt, period)),
+    [orders, period],
+  );
+
+  const review = periodOrders.filter((o) => o.status === 'created' && !o.receivedAt);
+  const confirmed = periodOrders.filter((o) => o.status === 'confirmed' && !o.receivedAt);
+  const received = periodOrders.filter((o) => !!o.receivedAt);
+  const direct = periodOrders.filter((o) => o.origin === 'direct' && o.status !== 'cancelled');
+  const viaQuotation = periodOrders.filter((o) => o.origin === 'quotation' && o.status !== 'cancelled');
+  const activeValue = periodOrders.filter((o) => o.status !== 'cancelled' && !o.receivedAt).reduce((sum, order) => sum + (order.totalEstimated ?? 0), 0);
 
   const cards = useMemo(() => {
-    return orders
+    return periodOrders
       .filter((order) => order.status !== 'cancelled')
       .map((order) => {
         const supplier = supplierName(order, entities.find((e) => e.id === order.supplierId)?.fantasyName ?? entities.find((e) => e.id === order.supplierId)?.name);
@@ -76,7 +94,7 @@ export default function PurchaseOrdersPage() {
       })
       .filter((entry) => filter === 'all' || entry.bucket === filter || entry.order.origin === filter)
       .filter((entry) => !search.trim() || entry.searchText.includes(search.trim().toLowerCase()));
-  }, [entities, filter, orders, search]);
+  }, [entities, filter, periodOrders, search]);
 
   return (
     <PermissionGuard allowed={canView}>
@@ -103,8 +121,15 @@ export default function PurchaseOrdersPage() {
           <PurchasingMetricCard label="Recebidas" value={received.length} detail="concluídas" tone="green" icon={<CheckCircle2 className="h-5 w-5" />} />
         </div>
 
-        <PurchasingToolbar search={search} onSearchChange={setSearch} resultLabel={`${cards.length} de ${orders.length} pedidos`} view={view} onViewChange={setView}>
-          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={orders.length} onClick={() => setFilter('all')} />
+        <PurchasingToolbar
+          search={search}
+          onSearchChange={setSearch}
+          resultLabel={`${cards.length} de ${periodOrders.length} pedidos`}
+          view={view}
+          onViewChange={setView}
+          periodControl={<PurchasingPeriodControl value={period} onChange={setPeriod} years={periodYears} />}
+        >
+          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={periodOrders.length} onClick={() => setFilter('all')} />
           <PurchasingFilterChip active={filter === 'review'} label="Emitido" count={review.length} tone="blue" onClick={() => setFilter('review')} />
           <PurchasingFilterChip active={filter === 'confirmed'} label="Confirmado" count={confirmed.length} tone="purple" onClick={() => setFilter('confirmed')} />
           <PurchasingFilterChip active={filter === 'direct'} label="Compra direta" count={direct.length} tone="green" onClick={() => setFilter('direct')} />
@@ -130,7 +155,7 @@ export default function PurchaseOrdersPage() {
                   <span className="font-bold text-zinc-950">{supplier}</span>
                   <span><PurchasingStatusBadge label={statusLabel} tone={tone} /></span>
                   <span className="text-zinc-500">{order.origin === 'direct' ? 'Direta' : 'Cotação'}</span>
-                  <span className="text-right font-mono font-black text-zinc-950">{purchasingCompactMoney(order.totalConfirmed ?? order.totalEstimated)}</span>
+                  <span className="text-right font-mono font-black text-zinc-950">{purchasingCompactMoney(orderDisplayTotal(order))}</span>
                   <span className="text-zinc-500">{new Date(order.estimatedReceiptDate).toLocaleDateString('pt-BR')}</span>
                   <span className="text-right text-zinc-400">›</span>
                 </Link>
@@ -160,7 +185,7 @@ export default function PurchaseOrdersPage() {
                           <PurchasingItemsPreview orderId={order.id} />
                           <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
                             <span>{order.origin === 'direct' ? 'Compra direta' : 'Via cotação'}</span>
-                            <span className="font-mono font-black text-zinc-900">{purchasingCompactMoney(order.totalConfirmed ?? order.totalEstimated)}</span>
+                            <span className="font-mono font-black text-zinc-900">{purchasingCompactMoney(orderDisplayTotal(order))}</span>
                           </div>
                         </Link>
                       ))}
@@ -192,7 +217,7 @@ export default function PurchaseOrdersPage() {
                   { label: order.trackingInfo || order.notes || 'Sem observação' },
                 ]}
                 footerLeft={<span>{order.origin === 'direct' ? 'Compra direta' : 'Via cotação'}</span>}
-                amount={purchasingCompactMoney(order.totalConfirmed ?? order.totalEstimated)}
+                amount={purchasingCompactMoney(orderDisplayTotal(order))}
                 age={purchasingAgeLabel(order.receivedAt ?? order.createdAt)}
               />
             ))}

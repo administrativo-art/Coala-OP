@@ -17,11 +17,15 @@ import {
   PurchasingHeader,
   PurchasingMetricCard,
   PurchasingPageFrame,
+  PurchasingPeriodControl,
   PurchasingPipelineCard,
   PurchasingStatusBadge,
   PurchasingToolbar,
+  createDefaultPurchasingPeriod,
+  isDateInPurchasingPeriod,
   purchasingAgeLabel,
   purchasingCompactMoney,
+  purchasingYearOptions,
   type PurchasingTone,
 } from '@/components/purchasing/purchasing-ui';
 
@@ -53,16 +57,27 @@ export default function ReceiptsPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'waiting' | 'partial' | 'conference' | 'delayed' | 'done'>('all');
   const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
+  const [period, setPeriod] = useState(createDefaultPurchasingPeriod);
   const canView = canViewPurchasing(permissions);
 
-  const waiting = receipts.filter((r) => r.status === 'awaiting_delivery');
-  const partial = receipts.filter((r) => r.status === 'partially_stocked');
-  const conference = receipts.filter((r) => ['in_conference', 'awaiting_stock', 'in_stock_entry', 'stocked_with_divergence'].includes(r.status));
-  const done = receipts.filter((r) => r.status === 'stocked');
-  const delayed = receipts.filter((r) => ['awaiting_delivery', 'in_conference', 'awaiting_stock', 'in_stock_entry', 'partially_stocked', 'stocked_with_divergence'].includes(r.status) && r.expectedDate && new Date(r.expectedDate).getTime() < Date.now());
+  const receiptPeriodDate = (receipt: PurchaseReceipt) => receipt.stockEnteredAt ?? receipt.receivedAt ?? receipt.expectedDate ?? receipt.createdAt;
+  const periodYears = useMemo(
+    () => purchasingYearOptions(receipts.map(receiptPeriodDate)),
+    [receipts],
+  );
+  const periodReceipts = useMemo(
+    () => receipts.filter((receipt) => isDateInPurchasingPeriod(receiptPeriodDate(receipt), period)),
+    [period, receipts],
+  );
+
+  const waiting = periodReceipts.filter((r) => r.status === 'awaiting_delivery');
+  const partial = periodReceipts.filter((r) => r.status === 'partially_stocked');
+  const conference = periodReceipts.filter((r) => ['in_conference', 'awaiting_stock', 'in_stock_entry', 'stocked_with_divergence'].includes(r.status));
+  const done = periodReceipts.filter((r) => r.status === 'stocked');
+  const delayed = periodReceipts.filter((r) => ['awaiting_delivery', 'in_conference', 'awaiting_stock', 'in_stock_entry', 'partially_stocked', 'stocked_with_divergence'].includes(r.status) && r.expectedDate && new Date(r.expectedDate).getTime() < Date.now());
 
   const cards = useMemo(() => {
-    return receipts
+    return periodReceipts
       .map((receipt) => {
         const cfg = statusConfig[receipt.status] ?? fallbackStatusConfig;
         const isDelayed = ['awaiting_delivery', 'in_conference', 'awaiting_stock', 'in_stock_entry', 'partially_stocked', 'stocked_with_divergence'].includes(receipt.status) && receipt.expectedDate && new Date(receipt.expectedDate).getTime() < Date.now();
@@ -75,7 +90,7 @@ export default function ReceiptsPage() {
       })
       .filter((entry) => filter === 'all' || entry.cfg.bucket === filter || (filter === 'delayed' && entry.isDelayed))
       .filter((entry) => !search.trim() || entry.searchText.includes(search.trim().toLowerCase()));
-  }, [filter, receipts, search]);
+  }, [filter, periodReceipts, search]);
 
   return (
     <PermissionGuard allowed={canView}>
@@ -94,8 +109,15 @@ export default function ReceiptsPage() {
           <PurchasingMetricCard label="Concluídos" value={done.length} detail="despesa lançada" tone="green" icon={<CheckCircle2 className="h-5 w-5" />} />
         </div>
 
-        <PurchasingToolbar search={search} onSearchChange={setSearch} resultLabel={`${cards.length} de ${receipts.length} recebimentos`} view={view} onViewChange={setView}>
-          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={receipts.length} onClick={() => setFilter('all')} />
+        <PurchasingToolbar
+          search={search}
+          onSearchChange={setSearch}
+          resultLabel={`${cards.length} de ${periodReceipts.length} recebimentos`}
+          view={view}
+          onViewChange={setView}
+          periodControl={<PurchasingPeriodControl value={period} onChange={setPeriod} years={periodYears} />}
+        >
+          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={periodReceipts.length} onClick={() => setFilter('all')} />
           <PurchasingFilterChip active={filter === 'waiting'} label="Aguardando" count={waiting.length} tone="cyan" onClick={() => setFilter('waiting')} />
           <PurchasingFilterChip active={filter === 'partial'} label="Parcial" count={partial.length} tone="amber" onClick={() => setFilter('partial')} />
           <PurchasingFilterChip active={filter === 'conference'} label="Em processo" count={conference.length} tone="purple" onClick={() => setFilter('conference')} />

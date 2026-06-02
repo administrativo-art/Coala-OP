@@ -10,7 +10,18 @@ import {
   calculatePricePerBaseUnit,
   calculateStockQuantityFromPurchase,
 } from '@/lib/purchasing-units';
-import { type Product, type BaseProduct, type PurchaseStockEntryType } from '@/types';
+import {
+  getTreatmentEntryType,
+  inferPurchaseItemTreatment,
+  purchaseTreatmentCreatesAsset,
+  purchaseTreatmentSkipsOperationalEntry,
+} from '@/lib/purchasing-item-treatment';
+import {
+  type Product,
+  type BaseProduct,
+  type PurchaseItemTreatment,
+  type PurchaseStockEntryType,
+} from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -77,8 +88,38 @@ function normalizePurchaseStockEntryType(value: unknown): PurchaseStockEntryType
   return value === 'asset' || value === 'uniform' ? value : 'stock';
 }
 
+function normalizePurchaseItemTreatment(item: Record<string, any>): PurchaseItemTreatment {
+  const raw = item.itemTreatment;
+  if (
+    raw === 'stock' ||
+    raw === 'uniform' ||
+    raw === 'asset' ||
+    raw === 'asset_component' ||
+    raw === 'service' ||
+    raw === 'expense'
+  ) {
+    return raw;
+  }
+
+  return inferPurchaseItemTreatment({
+    entryType: normalizePurchaseStockEntryType(item.entryType),
+    itemDestination: normalizePurchaseStockEntryType(item.itemDestination),
+  });
+}
+
 function normalizeItemDestination(item: Record<string, any>): PurchaseStockEntryType {
-  return normalizePurchaseStockEntryType(item.itemDestination ?? item.entryType);
+  return getTreatmentEntryType(normalizePurchaseItemTreatment(item));
+}
+
+function purchaseItemTreatmentFields(item: Record<string, any>) {
+  const itemTreatment = normalizePurchaseItemTreatment(item);
+  return {
+    itemTreatment,
+    linkedAssetId: item.linkedAssetId ?? null,
+    linkedAssetCode: item.linkedAssetCode ?? null,
+    linkedAssetName: item.linkedAssetName ?? null,
+    componentAction: item.componentAction ?? null,
+  };
 }
 
 function buildPurchaseAuditNotes(orderData: Record<string, any>) {
@@ -494,7 +535,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const q = Number(item.quantityOrdered || 0);
         const p = Number(item.unitPriceOrdered || 0);
         const d = Number(item.discountOrdered || 0);
-        const itemDestination = normalizeItemDestination(item);
+        const treatmentFields = purchaseItemTreatmentFields(item);
+        const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         batch.set(itemRef, {
           purchaseOrderId: ref.id,
           baseItemId: item.baseItemId || '',
@@ -512,6 +554,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           totalOrdered: Math.max((q * p) - d, 0),
           quotationItemId: item.quotationItemId ?? null,
           entryType: itemDestination,
+          ...treatmentFields,
           notes: item.notes ?? null,
         });
       }
@@ -570,6 +613,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     for (const itemDoc of itemsSnap.docs) {
       const item = itemDoc.data();
       const receiptItemRef = receiptRef.collection('items').doc();
+      const treatmentFields = purchaseItemTreatmentFields(item);
+      const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
       batch.set(receiptItemRef, {
         purchaseReceiptId: receiptRef.id,
         purchaseOrderItemId: itemDoc.id,
@@ -578,7 +623,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         itemName: item.itemName ?? null,
         operationalCategoryId: item.operationalCategoryId ?? null,
         operationalCategoryName: item.operationalCategoryName ?? null,
-        itemDestination: normalizeItemDestination(item),
+        itemDestination,
         unit: item.unit,
         purchaseUnitType: item.purchaseUnitType || 'content',
         purchaseUnitLabel: item.purchaseUnitLabel || item.unit,
@@ -587,7 +632,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         quantityReceived: 0,
         unitPriceConfirmed: 0,
         status: 'pending',
-        entryType: normalizeItemDestination(item),
+        entryType: itemDestination,
+        ...treatmentFields,
       });
     }
 
@@ -774,6 +820,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     if (Array.isArray(body.items)) {
       for (const item of body.items) {
         const orderItem = orderItemsById.get(item.purchaseOrderItemId);
+        const treatmentFields = purchaseItemTreatmentFields({ ...(orderItem ?? {}), ...item });
+        const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         const quantityOrdered = Number(orderItem?.quantityOrdered ?? item.quantityReceived);
         const unitPriceOrdered = Number(orderItem?.unitPriceOrdered ?? item.unitPriceConfirmed);
         const disposition = item.receiptDisposition ?? 'receive';
@@ -809,6 +857,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           unit: item.unit,
           purchaseUnitType: item.purchaseUnitType ?? orderItem?.purchaseUnitType ?? 'content',
           purchaseUnitLabel: item.purchaseUnitLabel ?? orderItem?.purchaseUnitLabel ?? item.unit,
+          itemDestination,
+          entryType: itemDestination,
+          ...treatmentFields,
           quantityReceived,
           unitPriceConfirmed: item.unitPriceConfirmed,
           totalConfirmed: quantityReceived * item.unitPriceConfirmed,
@@ -906,12 +957,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       for (const item of body.items) {
         const orderItem = orderItemsById.get(item.purchaseOrderItemId);
         const existingReceiptItem = receiptItemsById.get(item.receiptItemId);
-        const entryType = normalizeItemDestination(item);
+        const treatmentFields = purchaseItemTreatmentFields({
+          ...(orderItem ?? {}),
+          ...(existingReceiptItem ?? {}),
+          ...item,
+        });
+        const entryType = getTreatmentEntryType(treatmentFields.itemTreatment);
+        const skipsOperationalEntry = purchaseTreatmentSkipsOperationalEntry(treatmentFields.itemTreatment);
+        const createsAsset = purchaseTreatmentCreatesAsset(treatmentFields.itemTreatment);
 
         const baseProductDoc = item.baseItemId
           ? await dbAdmin.collection('baseProducts').doc(item.baseItemId).get()
           : null;
-        if (entryType !== 'asset' && !baseProductDoc?.exists) return jsonError('Insumo base não encontrado.');
+        if (!createsAsset && !skipsOperationalEntry && !baseProductDoc?.exists) {
+          return jsonError('Insumo base não encontrado.');
+        }
         const baseProduct = baseProductDoc?.exists
           ? ({ id: baseProductDoc.id, ...baseProductDoc.data() } as BaseProduct)
           : null;
@@ -932,7 +992,33 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const cumulativeReceived = previousReceived;
         const quantityOrdered = Number(orderItem?.quantityOrdered ?? cumulativeReceived);
 
-        if (entryType === 'asset') {
+        if (skipsOperationalEntry) {
+          totalConfirmed += cumulativeReceived * confirmedUnitPrice;
+          const receiptItemStatus = getReceiptItemStatus(
+            cumulativeReceived,
+            quantityOrdered,
+            confirmedUnitPrice,
+            Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
+            existingReceiptItem?.divergenceReason,
+          );
+          if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
+          if (receiptItemStatus === 'partial' || receiptItemStatus === 'pending') hasRemaining = true;
+
+          batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
+            entryType,
+            itemDestination: entryType,
+            ...treatmentFields,
+            quantityReceived: cumulativeReceived,
+            totalConfirmed: cumulativeReceived * confirmedUnitPrice,
+            status: receiptItemStatus,
+            lots: [],
+            ...(payloadReceivedQuantity > 0 ? { stockedAt: now } : {}),
+            updatedAt: now,
+          });
+          continue;
+        }
+
+        if (createsAsset) {
           totalConfirmed += cumulativeReceived * confirmedUnitPrice;
           const receiptItemStatus = getReceiptItemStatus(
             cumulativeReceived,
@@ -997,6 +1083,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
           batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
             entryType,
+            itemDestination: entryType,
+            ...treatmentFields,
             quantityReceived: cumulativeReceived,
             totalConfirmed: cumulativeReceived * confirmedUnitPrice,
             status: receiptItemStatus,
@@ -1119,6 +1207,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
         batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
           entryType,
+          itemDestination: entryType,
+          ...treatmentFields,
           quantityReceived: cumulativeReceived,
           totalConfirmed: cumulativeReceived * confirmedUnitPrice,
           status: receiptItemStatus,
@@ -1330,7 +1420,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
         const q = Number(item.quantityOrdered || 0);
         const p = Number(item.unitPriceOrdered || 0);
         const d = Number(item.discountOrdered || 0);
-        const itemDestination = normalizeItemDestination(item);
+        const treatmentFields = purchaseItemTreatmentFields(item);
+        const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         batch.set(itemRef, {
           purchaseOrderId: id,
           baseItemId: item.baseItemId || '',
@@ -1348,6 +1439,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
           totalOrdered: Math.max((q * p) - d, 0),
           quotationItemId: item.quotationItemId ?? null,
           entryType: itemDestination,
+          ...treatmentFields,
           notes: item.notes ?? null,
         });
       }

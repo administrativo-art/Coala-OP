@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash2, RotateCcw, CornerDownLeft, Box, Check, Copy, AlertTriangle } from 'lucide-react';
+import { ImageIcon, Plus, Trash2 } from 'lucide-react';
 import { convertValue, units, type UnitCategory } from '@/lib/conversion';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
@@ -152,7 +152,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     onStage(repositionItem);
   };
   
-  const handleQuickAction = (index: number, action: 'fill' | 'max') => {
+  const handleQuickAction = (index: number) => {
     const lotId = form.getValues(`items.${index}.lotId`);
     const lot = lots.find(l => l.id === lotId);
     if (!lot) return;
@@ -165,150 +165,162 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
     const availablePackages = lot.quantity - (lot.reservedQuantity || 0);
     const availableInBase = availablePackages * unitsPerPackage;
 
-    if (action === 'max') {
-        form.setValue(`items.${index}.quantityInBaseUnit`, availableInBase);
-    } else if (action === 'fill') {
-        const currentFieldValue = form.getValues(`items.${index}.quantityInBaseUnit`) || 0;
-        const currentTotalMinusThisField = totalSuggestedInBaseUnit - currentFieldValue;
-        const currentRemaining = Math.max(0, suggestionResult.restockNeeded - currentTotalMinusThisField);
-        const amountToFill = Math.min(availableInBase, currentRemaining);
-        form.setValue(`items.${index}.quantityInBaseUnit`, amountToFill);
-    }
+    const currentFieldValue = form.getValues(`items.${index}.quantityInBaseUnit`) || 0;
+    const currentTotalMinusThisField = totalSuggestedInBaseUnit - currentFieldValue;
+    const currentRemaining = Math.max(0, suggestionResult.restockNeeded - currentTotalMinusThisField);
+    const amountToFill = Math.min(availableInBase, currentRemaining);
+    form.setValue(`items.${index}.quantityInBaseUnit`, amountToFill);
   };
 
   const progress = suggestionResult.restockNeeded > 0 ? (totalSuggestedInBaseUnit / suggestionResult.restockNeeded) * 100 : 0;
   
   return (
     <Dialog open={true} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Sugestão de reposição para {targetKiosk.name}</DialogTitle>
+      <DialogContent className="flex max-h-[88vh] max-w-2xl flex-col overflow-hidden rounded-2xl p-0">
+        <DialogHeader className="border-b px-5 py-4">
+          <DialogTitle className="text-xl">Sugestão de reposição</DialogTitle>
           <DialogDescription>
-            Ajuste a sugestão para <strong>{suggestionResult.baseProduct.name}</strong> antes de adicionar à atividade de reposição.
+            {targetKiosk.name.replace(/^Quiosque\s+/i, '')} · ajuste os lotes de <strong>{suggestionResult.baseProduct.name}</strong>.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-3 gap-2 text-center text-sm py-2">
-            <div className="p-2 bg-muted rounded-md"><p className="text-muted-foreground">Necessário</p><p className="font-bold text-lg">{formatNumberDisplay(suggestionResult.restockNeeded)} {suggestionResult.baseProduct.unit}</p></div>
-            <div className="p-2 bg-muted rounded-md"><p className="text-muted-foreground">Selecionado</p><p className="font-bold text-lg">{formatNumberDisplay(totalSuggestedInBaseUnit)} {suggestionResult.baseProduct.unit}</p></div>
-            <div className={cn("p-2 rounded-md", remainingNeeded > 0 ? "bg-red-500/10" : "bg-green-500/10")}>
-                <p className={cn(remainingNeeded > 0 ? "text-red-600" : "text-green-600")}>Falta</p>
-                <p className={cn("font-bold text-lg", remainingNeeded > 0 ? "text-red-600" : "text-green-600")}>{formatNumberDisplay(remainingNeeded)} {suggestionResult.baseProduct.unit}</p>
+        <div className="grid grid-cols-3 gap-2 px-5 py-4 text-center text-sm">
+            <div className="rounded-xl border bg-muted/30 p-3">
+                <p className="text-xs uppercase text-muted-foreground">Necessário</p>
+                <p className="font-bold">{formatNumberDisplay(suggestionResult.restockNeeded)} {suggestionResult.baseProduct.unit}</p>
+            </div>
+            <div className="rounded-xl border bg-muted/30 p-3">
+                <p className="text-xs uppercase text-muted-foreground">Selecionado</p>
+                <p className="font-bold text-primary">{formatNumberDisplay(totalSuggestedInBaseUnit)} {suggestionResult.baseProduct.unit}</p>
+            </div>
+            <div className={cn("rounded-xl border p-3", remainingNeeded > 0 ? "border-destructive/20 bg-destructive/5" : "border-green-500/20 bg-green-500/10")}>
+                <p className={cn("text-xs uppercase", remainingNeeded > 0 ? "text-destructive" : "text-green-700")}>Falta</p>
+                <p className={cn("font-bold", remainingNeeded > 0 ? "text-destructive" : "text-green-700")}>{formatNumberDisplay(remainingNeeded)} {suggestionResult.baseProduct.unit}</p>
             </div>
         </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-auto pr-2">
+            <div className="min-h-0 flex-1 overflow-auto px-5 pb-4">
               <ScrollArea className="h-full">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Lote da Matriz</TableHead>
-                            <TableHead className="w-[300px]">Qtd. a Mover</TableHead>
-                            <TableHead className="w-20 text-right"></TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {fields.map((field, index) => {
-                            const lot = lots.find(l => l.id === field.lotId);
-                            if (!lot) return null;
-                            const product = products.find(p => p.id === lot.productId);
-                            if (!product) return null;
-                            
-                            const unitsPerPackage = getUnitsPerPackage(product, suggestionResult.baseProduct);
-                            const quantityInPackages = unitsPerPackage > 0 ? (watchedItems[index]?.quantityInBaseUnit || 0) / unitsPerPackage : 0;
-                            const availablePackages = lot.quantity - (lot.reservedQuantity || 0);
+                <div className="space-y-3">
+                    {fields.map((field, index) => {
+                        const lot = lots.find(l => l.id === field.lotId);
+                        if (!lot) return null;
+                        const product = products.find(p => p.id === lot.productId);
+                        if (!product) return null;
 
-                            const logisticQty = (product.multiplo_caixa && product.multiplo_caixa > 0)
-                                ? quantityInPackages / product.multiplo_caixa
-                                : null;
-                            
-                            return (
-                                <TableRow key={field.id}>
-                                    <TableCell>
-                                        <p className="font-semibold">{getProductFullName(product)} - {lot.lotNumber}</p>
-                                        <p className="text-xs text-muted-foreground">Validade: {lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
-                                        <p className="text-xs text-muted-foreground">Disponível (lote): {formatNumberDisplay(availablePackages)} {product.packageType || 'unidades'}</p>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <Input
-                                                    type="number"
-                                                    value={quantityInPackages % 1 !== 0 ? quantityInPackages.toFixed(2) : quantityInPackages}
-                                                    onChange={(e) => {
-                                                        const newPackageQty = parseFloat(e.target.value) || 0;
-                                                        const newBaseQty = newPackageQty * unitsPerPackage;
-                                                        form.setValue(`items.${index}.quantityInBaseUnit`, newBaseQty, { shouldValidate: true });
-                                                    }}
-                                                    max={availablePackages}
-                                                    min={0}
-                                                    onWheel={(e) => (e.target as HTMLElement).blur()}
-                                                    onKeyDown={(e) => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); } }}
-                                                    onFocus={(e) => e.target.select()}
-                                                    className="bg-background w-24 h-9"
-                                                />
-                                                <Label className="font-semibold text-sm">{product.packageType ? `${product.packageType}(s)` : 'unidades'}</Label>
-                                            </div>
-                                            <div className="pl-1 text-xs text-muted-foreground">
-                                                <p>= {formatNumberDisplay(watchedItems[index]?.quantityInBaseUnit || 0)} {suggestionResult.baseProduct.unit}</p>
-                                                {logisticQty !== null && product.rotulo_caixa && (
-                                                    <p>= {formatNumberDisplay(logisticQty)} {product.rotulo_caixa}(s)</p>
-                                                )}
-                                            </div>
-                                            <div className="flex gap-1 pt-1">
-                                                <Button type="button" size="sm" variant="ghost" className="h-6 text-xs" onClick={() => handleQuickAction(index, 'fill')}>Preencher</Button>
-                                                <Button type="button" size="sm" variant="ghost" className="h-6 text-xs" onClick={() => handleQuickAction(index, 'max')}>Máx</Button>
-                                                <Button type="button" size="sm" variant="ghost" className="h-6 text-xs" onClick={() => form.setValue(`items.${index}.quantityInBaseUnit`, 0)}>Limpar</Button>
-                                            </div>
+                        const unitsPerPackage = getUnitsPerPackage(product, suggestionResult.baseProduct);
+                        const quantityInPackages = unitsPerPackage > 0 ? (watchedItems[index]?.quantityInBaseUnit || 0) / unitsPerPackage : 0;
+                        const availablePackages = lot.quantity - (lot.reservedQuantity || 0);
+                        const imageUrl = lot.imageUrl || product.imageUrl;
+
+                        const logisticQty = (product.multiplo_caixa && product.multiplo_caixa > 0)
+                            ? quantityInPackages / product.multiplo_caixa
+                            : null;
+
+                        return (
+                            <div key={field.id} className="rounded-xl border bg-background p-3">
+                                <div className="grid gap-3 sm:grid-cols-[56px_1fr_auto] sm:items-center">
+                                    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl bg-muted">
+                                        {imageUrl ? (
+                                            <img src={imageUrl} alt={getProductFullName(product)} className="h-full w-full object-cover" />
+                                        ) : (
+                                            <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                                        )}
+                                    </div>
+
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-semibold">{getProductFullName(product)}</p>
+                                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                            <span>Lote <strong className="text-foreground">{lot.lotNumber || "-"}</strong></span>
+                                            <span>{lot.expiryDate ? `Vence em ${format(new Date(lot.expiryDate), 'dd/MM/yyyy')}` : "Validade indefinida"}</span>
+                                            <span>Disponível: {formatNumberDisplay(availablePackages)} {product.packageType || 'un'}</span>
                                         </div>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button type="button" variant="outline" size="sm" onClick={() => remove(index)}>Remover</Button>
-                                    </TableCell>
-                                </TableRow>
-                            )
-                        })}
-                    </TableBody>
-                </Table>
+                                    </div>
+
+                                    <div className="flex flex-col gap-2 sm:w-48">
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                type="number"
+                                                value={quantityInPackages % 1 !== 0 ? quantityInPackages.toFixed(2) : quantityInPackages}
+                                                onChange={(e) => {
+                                                    const newPackageQty = parseFloat(e.target.value) || 0;
+                                                    const newBaseQty = newPackageQty * unitsPerPackage;
+                                                    form.setValue(`items.${index}.quantityInBaseUnit`, newBaseQty, { shouldValidate: true });
+                                                }}
+                                                max={availablePackages}
+                                                min={0}
+                                                onWheel={(e) => (e.target as HTMLElement).blur()}
+                                                onKeyDown={(e) => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); } }}
+                                                onFocus={(e) => e.target.select()}
+                                                className="h-9 bg-background text-right font-semibold"
+                                            />
+                                            <Label className="w-16 text-xs font-semibold text-muted-foreground">{product.packageType || 'un'}</Label>
+                                        </div>
+                                        <div className="text-right text-xs text-muted-foreground">
+                                            <p>= {formatNumberDisplay(watchedItems[index]?.quantityInBaseUnit || 0)} {suggestionResult.baseProduct.unit}</p>
+                                            {logisticQty !== null && product.rotulo_caixa && (
+                                                <p>= {formatNumberDisplay(logisticQty)} {product.rotulo_caixa}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 flex flex-wrap justify-between gap-2 border-t pt-2">
+                                    <div className="flex gap-1">
+                                        <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => handleQuickAction(index)}>Preencher</Button>
+                                        <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => form.setValue(`items.${index}.quantityInBaseUnit`, 0)}>Limpar</Button>
+                                    </div>
+                                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => remove(index)}>
+                                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                        Remover
+                                    </Button>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
 
                 {availableLotsToAdd.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-dashed">
-                    <h4 className="font-semibold mb-2">Adicionar outro lote</h4>
-                    <Table>
-                       <TableHeader>
-                           <TableRow>
-                               <TableHead>Lote</TableHead>
-                               <TableHead>Validade</TableHead>
-                               <TableHead>Disponível (lote)</TableHead>
-                               <TableHead></TableHead>
-                           </TableRow>
-                       </TableHeader>
-                       <TableBody>
-                           {availableLotsToAdd.map(lot => {
-                             const product = products.find(p => p.id === lot.productId)!;
-                             return (
-                               <TableRow key={lot.id}>
-                                   <TableCell>{getProductFullName(product)} - {lot.lotNumber}</TableCell>
-                                   <TableCell>{lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy') : 'N/A'}</TableCell>
-                                   <TableCell>{lot.quantity - (lot.reservedQuantity || 0)} {product.packageType || 'un'}</TableCell>
-                                   <TableCell>
-                                       <Button type="button" size="sm" variant="secondary" onClick={() => append({lotId: lot.id, quantityInBaseUnit: 0})}>Adicionar</Button>
-                                   </TableCell>
-                               </TableRow>
-                             )
-                           })}
-                       </TableBody>
-                    </Table>
+                    <h4 className="mb-2 text-sm font-semibold">Outros lotes disponíveis</h4>
+                    <div className="space-y-2">
+                        {availableLotsToAdd.map(lot => {
+                            const product = products.find(p => p.id === lot.productId)!;
+                            const imageUrl = lot.imageUrl || product.imageUrl;
+                            return (
+                                <div key={lot.id} className="flex items-center gap-3 rounded-xl border bg-muted/20 p-2">
+                                    <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-background">
+                                        {imageUrl ? (
+                                            <img src={imageUrl} alt={getProductFullName(product)} className="h-full w-full object-cover" />
+                                        ) : (
+                                            <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                                        )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium">{getProductFullName(product)}</p>
+                                        <p className="truncate text-xs text-muted-foreground">
+                                            Lote {lot.lotNumber || "-"} · {lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy') : 'validade indefinida'} · {lot.quantity - (lot.reservedQuantity || 0)} {product.packageType || 'un'} disponíveis
+                                        </p>
+                                    </div>
+                                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => append({lotId: lot.id, quantityInBaseUnit: 0})}>
+                                        <Plus className="mr-1 h-3.5 w-3.5" />
+                                        Adicionar
+                                    </Button>
+                                </div>
+                            )
+                        })}
+                    </div>
                   </div>
                 )}
               </ScrollArea>
             </div>
-            <DialogFooter className="pt-4 border-t flex-col sm:flex-row sm:justify-between items-center shrink-0">
+            <DialogFooter className="shrink-0 border-t bg-muted/20 px-5 py-4">
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="w-full sm:w-1/2">
                     <Progress value={progress} indicatorClassName={progress > 100 ? 'bg-destructive' : 'bg-primary'} />
-                    <p className="text-xs text-center mt-1 text-muted-foreground">{formatNumberDisplay(totalSuggestedInBaseUnit)} de {formatNumberDisplay(suggestionResult.restockNeeded)} {suggestionResult.baseProduct.unit} selecionados.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatNumberDisplay(totalSuggestedInBaseUnit)} de {formatNumberDisplay(suggestionResult.restockNeeded)} {suggestionResult.baseProduct.unit} selecionados.</p>
                     {progress > 100 && <p className="text-xs text-center text-destructive font-semibold">A quantidade selecionada excede a necessidade.</p>}
                 </div>
                 <div className="flex gap-2">
@@ -317,6 +329,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                         {isProcessing ? "Adicionando..." : "Adicionar à reposição"}
                     </Button>
                 </div>
+              </div>
             </DialogFooter>
           </form>
         </Form>

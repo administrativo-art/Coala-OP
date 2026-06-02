@@ -9,6 +9,8 @@ import {
   type PurchaseFinancial,
   type PurchaseFreightPaymentMode,
   type OperationalItemDestination,
+  type PurchaseAssetComponentAction,
+  type PurchaseItemTreatment,
   type PurchaseStockEntryType,
   type PurchaseUnitType,
 } from '@/types';
@@ -68,6 +70,11 @@ export interface CreatePurchasePayload {
     unitPriceOrdered: number;
     discountOrdered?: number;
     entryType?: PurchaseStockEntryType;
+    itemTreatment?: PurchaseItemTreatment;
+    linkedAssetId?: string | null;
+    linkedAssetCode?: string | null;
+    linkedAssetName?: string | null;
+    componentAction?: PurchaseAssetComponentAction | null;
     notes?: string;
   }>;
 }
@@ -107,6 +114,11 @@ export type OrderEdits = {
     unitPriceOrdered: number;
     discountOrdered?: number;
     entryType?: PurchaseStockEntryType;
+    itemTreatment?: PurchaseItemTreatment;
+    linkedAssetId?: string | null;
+    linkedAssetCode?: string | null;
+    linkedAssetName?: string | null;
+    componentAction?: PurchaseAssetComponentAction | null;
     notes?: string;
   }>;
 };

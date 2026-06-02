@@ -42,6 +42,26 @@ interface NavSection {
   color: SectionColor;
 }
 
+function flattenNavItem(item: NavItem): NavItem[] {
+  return [item, ...(item.children ?? []).flatMap(flattenNavItem)];
+}
+
+function hasActiveDescendant(item: NavItem, isActive: (item: NavItem) => boolean): boolean {
+  return item.children?.some((child) => isActive(child) || hasActiveDescendant(child, isActive)) ?? false;
+}
+
+function findActiveParentHrefs(items: NavItem[], isActive: (item: NavItem) => boolean): string[] {
+  const parents: string[] = [];
+
+  for (const item of items) {
+    if (hasActiveDescendant(item, isActive)) {
+      parents.push(item.href, ...findActiveParentHrefs(item.children ?? [], isActive));
+    }
+  }
+
+  return parents;
+}
+
 const SECTION_COLORS: Record<string, SectionColor> = {
   ops:   { text: "#ea580c", bg: "#fff7ed", border: "#ea580c" }, // orange
   com:   { text: "#7c3aed", bg: "#f5f3ff", border: "#7c3aed" }, // violet
@@ -81,7 +101,16 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Controle de estoque", href: "/dashboard/inventory-control", icon: ClipboardCheck, show: permissions.stock.inventoryControl.view },
               { label: "Contagem de estoque", href: "/dashboard/stock/count", icon: ListOrdered, show: permissions.stock.stockCount.view },
               { label: "Reposição", href: "/dashboard/stock/analysis", icon: Truck, show: permissions.reposition.view || permissions.stock.analysis.restock },
-              { label: "Análise estratégica", href: "/dashboard/reports", icon: BarChart3, show: permissions.stock.analysis.view },
+              {
+                label: "Análise estratégica", href: "/dashboard/reports", icon: BarChart3, show: permissions.stock.analysis.view,
+                children: [
+                  { label: "Consumo médio", href: "/dashboard/stock/analysis/consumption", icon: BarChart3, show: permissions.stock.analysis.consumption },
+                  { label: "Análise de vendas", href: "/dashboard/stock/analysis/sales", icon: BarChart3, show: permissions.stock.analysis.consumption },
+                  { label: "Projeção", href: "/dashboard/stock/analysis/projection", icon: BarChart3, show: permissions.stock.analysis.projection },
+                  { label: "Movimentações", href: "/dashboard/stock/analysis/movement-analysis", icon: BarChart3, show: permissions.stock.inventoryControl.viewHistory },
+                  { label: "Avaliação financeira", href: "/dashboard/stock/analysis/valuation", icon: BarChart3, show: permissions.stock.analysis.valuation },
+                ],
+              },
               { label: "Gestão de avarias", href: "/dashboard/stock/returns", icon: ShieldAlert, show: permissions.stock.returns.view },
               { label: "Conversão de medidas", href: "/dashboard/conversions", icon: Repeat, show: permissions.stock.conversions.view },
             ],
@@ -182,7 +211,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
 
   // Flatten items + their children for active-route matching.
   const flatItems = useMemo(
-    () => navSections.flatMap(s => s.items.flatMap(i => [i, ...(i.children ?? [])])),
+    () => navSections.flatMap(s => s.items.flatMap(flattenNavItem)),
     [navSections]
   );
 
@@ -215,7 +244,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   }
 
   function isItemOrChildActive(item: NavItem) {
-    return isItemActive(item) || (item.children?.some(isItemActive) ?? false);
+    return isItemActive(item) || hasActiveDescendant(item, isItemActive);
   }
 
   // Track expanded nested groups (e.g. Gestão de Estoque). Starts collapsed.
@@ -236,9 +265,9 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   );
 
   // Auto-open the parent group whose child route is active.
-  const activeGroupHref = useMemo(
-    () => flatItems.find((item) => item.children?.some(isItemActive))?.href ?? null,
-    [activeHref, flatItems]
+  const activeGroupHrefs = useMemo(
+    () => navSections.flatMap((section) => findActiveParentHrefs(section.items, isItemActive)),
+    [activeHref, navSections]
   );
 
   useEffect(() => {
@@ -252,14 +281,13 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   }, [activeSectionKey]);
 
   useEffect(() => {
-    if (!activeGroupHref) return;
+    if (activeGroupHrefs.length === 0) return;
     setOpenGroups((prev) => {
-      if (prev.has(activeGroupHref)) return prev;
       const next = new Set(prev);
-      next.add(activeGroupHref);
+      activeGroupHrefs.forEach((href) => next.add(href));
       return next;
     });
-  }, [activeGroupHref]);
+  }, [activeGroupHrefs]);
 
   // Keyboard: close drawer on Escape
   useEffect(() => {
@@ -432,6 +460,71 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                                 <div className="ml-[7px] mt-0.5 space-y-0.5 border-l border-stone-200 py-0.5 pl-[19px]">
                                   {item.children!.map(child => {
                                     const cActive = isItemActive(child);
+                                    const cHasChildren = !!child.children?.length;
+                                    const cGroupOpen = openGroups.has(child.href);
+                                    const cChildActive = hasActiveDescendant(child, isItemActive);
+
+                                    if (cHasChildren) {
+                                      return (
+                                        <div key={child.href}>
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleGroup(child.href)}
+                                            className={cn(
+                                              "relative flex min-h-8 w-full items-center gap-2.5 rounded-xl px-3 py-1.5 text-[14px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                              (cActive || cChildActive) && "font-semibold text-slate-950 hover:text-slate-950"
+                                            )}
+                                          >
+                                            {(cActive || cChildActive) && (
+                                              <span
+                                                className="absolute -left-[20px] top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full"
+                                                style={{ background: section.color.text }}
+                                              />
+                                            )}
+                                            <span
+                                              className="h-1.5 w-1.5 flex-shrink-0 rounded-full transition-opacity"
+                                              style={{ background: section.color.text, opacity: (cActive || cChildActive) ? 1 : 0.45 }}
+                                            />
+                                            <span className="flex-1 truncate text-left">{child.label}</span>
+                                            <ChevronDown
+                                              className={cn("h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform duration-200", cGroupOpen && "rotate-180")}
+                                            />
+                                          </button>
+
+                                          {cGroupOpen && (
+                                            <div className="ml-[7px] mt-0.5 space-y-0.5 border-l border-stone-200 py-0.5 pl-[17px]">
+                                              {child.children!.map(grandchild => {
+                                                const gActive = isItemActive(grandchild);
+                                                return (
+                                                  <Link
+                                                    key={grandchild.href}
+                                                    href={grandchild.href}
+                                                    onClick={() => onOpenChange(false)}
+                                                    className={cn(
+                                                      "relative flex min-h-7 items-center gap-2 rounded-xl px-3 py-1 text-[13px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                                      gActive && "font-semibold text-slate-950 hover:text-slate-950"
+                                                    )}
+                                                  >
+                                                    {gActive && (
+                                                      <span
+                                                        className="absolute -left-[18px] top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full"
+                                                        style={{ background: section.color.text }}
+                                                      />
+                                                    )}
+                                                    <span
+                                                      className="h-1.5 w-1.5 flex-shrink-0 rounded-full transition-opacity"
+                                                      style={{ background: section.color.text, opacity: gActive ? 1 : 0.4 }}
+                                                    />
+                                                    <span className="flex-1 truncate">{grandchild.label}</span>
+                                                  </Link>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+
                                     return (
                                       <Link
                                         key={child.href}

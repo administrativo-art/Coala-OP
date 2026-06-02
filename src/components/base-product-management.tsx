@@ -78,7 +78,10 @@ function BulkEditClassificationModal({
 
 const formatCurrency = (value: number) => {
     if (!value || isNaN(value)) return 'R$ 0,000';
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 3 });
+    const [integerPart, fractionPart = ''] = value.toString().split('.');
+    const integer = Number(integerPart).toLocaleString('pt-BR');
+    const fraction = fractionPart.padEnd(3, '0');
+    return `R$ ${integer},${fraction}`;
 }
 
 export function BaseProductManagement() {

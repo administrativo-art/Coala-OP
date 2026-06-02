@@ -8,6 +8,9 @@ import {
   type EffectiveCostEntry,
   type Product,
   type BaseProduct,
+  type PurchaseAssetComponentAction,
+  type PurchaseItemTreatment,
+  type PurchaseStockEntryType,
 } from '@/types';
 import { calculatePricePerBaseUnit, calculateStockQuantityFromPurchase } from '@/lib/purchasing-units';
 import { db } from '@/lib/firebase';
@@ -48,13 +51,23 @@ export interface ReceiptItemInput {
   divergenceReason?: string;
   resolutionNotes?: string;
   receiptDisposition?: 'pending' | 'receive' | 'receive_less' | 'receive_more' | 'exchange_pending' | 'returned';
+  itemTreatment?: PurchaseItemTreatment;
+  linkedAssetId?: string | null;
+  linkedAssetCode?: string | null;
+  linkedAssetName?: string | null;
+  componentAction?: PurchaseAssetComponentAction | null;
 }
 
 export interface StockEntryItemInput {
   receiptItemId: string;
   purchaseOrderItemId: string;
   baseItemId: string;
-  entryType?: 'stock' | 'uniform' | 'asset';
+  entryType?: PurchaseStockEntryType;
+  itemTreatment?: PurchaseItemTreatment;
+  linkedAssetId?: string | null;
+  linkedAssetCode?: string | null;
+  linkedAssetName?: string | null;
+  componentAction?: PurchaseAssetComponentAction | null;
   productId: string;     // specific Product variant for stock entry
   productName?: string;
   quantityReceived?: number;

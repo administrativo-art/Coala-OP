@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight, PlusCircle, LayoutGrid, List } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight, PlusCircle, LayoutGrid, List, ImageIcon } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type Product, type RepositionRequest } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -103,6 +103,7 @@ export interface AnalysisResult {
 function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults, onConfirm, onCancel, onRemoveItem, kioskName, isLoading, title = "Revisão da Solicitação de Reposição", description = "Confirme os itens e quantidades para enviar ao CD.", confirmLabel = "Enviar solicitação" }: { open: boolean; onOpenChange: (open: boolean) => void; stagedItems: RepositionItem[]; analysisResults: AnalysisResult[]; onConfirm: () => void; onCancel: () => void; onRemoveItem: (id: string) => void; kioskName: string; isLoading: boolean; title?: string; description?: string; confirmLabel?: string; }) {
     const { products, getProductFullName } = useProducts();
     const { baseProducts } = useBaseProducts();
+    const { lots } = useExpiryProducts();
 
     const getUnitsPerPackage = (product: Product, baseProduct: BaseProduct): number => {
         return getUnitsPerPackageForProduct(product, baseProduct);
@@ -116,6 +117,7 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
             const detailedLots = item.suggestedLots.map(lot => {
                 const product = products.find(p => p.id === lot.productId);
                 if (!product) return null;
+                const lotEntry = lots.find(entry => entry.id === lot.lotId);
                 
                 const unitsPerPackage = getUnitsPerPackage(product, baseProduct);
                 
@@ -134,6 +136,7 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
                     ...lot,
                     productName: getProductFullName(product),
                     packageType: product.packageType || 'pct',
+                    imageUrl: lotEntry?.imageUrl || product.imageUrl || "",
                     baseUnitQty,
                     logisticUnitQty,
                     logisticUnitLabel: product.rotulo_caixa
@@ -149,92 +152,89 @@ function RestockSummaryModal({ open, onOpenChange, stagedItems, analysisResults,
                 detailedLots
             };
         }).filter((item): item is NonNullable<typeof item> => item !== null);
-    }, [stagedItems, baseProducts, products, getProductFullName]);
+    }, [stagedItems, baseProducts, products, lots, getProductFullName]);
+
+    const totalBaseQuantity = itemsWithDetails.reduce((sum, item) => sum + item.totalBaseUnitQty, 0);
+    const baseUnitLabel = itemsWithDetails[0]?.baseUnit || 'und. base';
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
-                <DialogHeader>
+            <DialogContent className="max-w-xl overflow-hidden rounded-2xl p-0">
+                <DialogHeader className="border-b px-5 py-4">
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
-                        {description} <strong>{kioskName}</strong>.
+                        {stagedItems.length} item{stagedItems.length === 1 ? '' : 's'} para {kioskName.replace(/^Quiosque\s+/i, '')}.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="flex-1 overflow-auto -mx-6 px-6">
-                    <ScrollArea className="h-full pr-4">
-                       <Accordion type="multiple" className="w-full space-y-2">
-                            {itemsWithDetails.map(item => {
-                                const analysisResult = analysisResults.find(r => r.baseProduct.id === item.baseProductId);
-                                return (
-                                <AccordionItem key={item.baseProductId} value={item.baseProductId} className="border-b-0 relative group">
-                                    <div className="absolute right-12 top-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onRemoveItem(item.baseProductId);
-                                            }}
+
+                <div className="max-h-[52vh] overflow-auto px-5 py-4">
+                    <div className="space-y-3">
+                        {itemsWithDetails.map(item => (
+                            <div key={item.baseProductId} className="rounded-xl border bg-background p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex min-w-0">
+                                        <div className="min-w-0">
+                                            <h3 className="truncate font-semibold">{item.productName}</h3>
+                                            <p className="text-xs text-muted-foreground">
+                                                {item.detailedLots.length} lote{item.detailedLots.length === 1 ? '' : 's'} · necessidade {formatNumberDisplay(item.quantityNeeded, item.baseUnit)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                        <span className="font-bold text-primary">{formatNumberDisplay(item.totalBaseUnitQty, item.baseUnit)}</span>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                            onClick={() => onRemoveItem(item.baseProductId)}
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
-                                    <Card>
-                                    <AccordionTrigger className="p-3 font-semibold hover:no-underline text-left">
-                                        <div className="flex justify-between items-center w-full pr-10">
-                                            <div>
-                                                <p className="font-semibold text-lg">{item.productName}</p>
-                                                {analysisResult && (
-                                                    <div className="text-xs text-muted-foreground font-normal">
-                                                        Estoque: {analysisResult.currentStock.toFixed(1)} {item.baseUnit} | 
-                                                        Necessidade: {analysisResult.restockNeeded.toFixed(1)} {item.baseUnit}
-                                                    </div>
-                                                )}
+                                </div>
+
+                                <div className="mt-3 border-t pt-2">
+                                    {item.detailedLots.map(lot => (
+                                        <div key={lot.lotId} className="flex items-center justify-between gap-3 py-1 text-sm">
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                                                    {lot.imageUrl ? (
+                                                        <img src={lot.imageUrl} alt={lot.productName} className="h-full w-full object-cover" />
+                                                    ) : (
+                                                        <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-xs font-semibold text-muted-foreground">Lote {lot.lotNumber || '-'}</p>
+                                                    <p className="truncate text-xs text-muted-foreground">{lot.productName}</p>
+                                                </div>
                                             </div>
-                                            <span className="font-bold text-primary">{item.totalBaseUnitQty.toFixed(1)} {item.baseUnit}</span>
+                                            <div className="shrink-0 text-right">
+                                                <p className="font-medium">{lot.quantityToMove} {lot.packageType}</p>
+                                                <p className="text-xs text-muted-foreground">= {formatNumberDisplay(lot.baseUnitQty, item.baseUnit)}</p>
+                                            </div>
                                         </div>
-                                    </AccordionTrigger>
-                                    <AccordionContent className="pt-0 px-3 pb-3">
-                                        <div className="rounded-md border">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Insumo</TableHead>
-                                                        <TableHead>Lote</TableHead>
-                                                        <TableHead className="text-right">Qtd. a Mover</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {item.detailedLots.map(lot => (
-                                                        <TableRow key={lot.lotId}>
-                                                            <TableCell>{lot.productName}</TableCell>
-                                                            <TableCell>{lot.lotNumber}</TableCell>
-                                                            <TableCell className="text-right">
-                                                                <div className="font-semibold">{lot.quantityToMove} {lot.packageType}</div>
-                                                                <div className="text-xs text-muted-foreground">
-                                                                    ({lot.baseUnitQty.toFixed(1)} {item.baseUnit}
-                                                                    {lot.logisticUnitQty && ` / ${lot.logisticUnitQty.toFixed(2)} ${lot.logisticUnitLabel}`})
-                                                                </div>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                    </AccordionContent>
-                                    </Card>
-                                </AccordionItem>
-                            )})}
-                        </Accordion>
-                    </ScrollArea>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-                <DialogFooter className="pt-4 border-t">
-                    <Button variant="outline" onClick={onCancel}>Voltar</Button>
-                    <Button onClick={onConfirm} disabled={isLoading || stagedItems.length === 0}>
-                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {confirmLabel}
-                    </Button>
+
+                <DialogFooter className="border-t bg-muted/20 px-5 py-4">
+                    <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-sm">
+                            <span className="text-muted-foreground">Total: </span>
+                            <span className="font-bold">{formatNumberDisplay(totalBaseQuantity, baseUnitLabel)}</span>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={onCancel}>Voltar</Button>
+                            <Button onClick={onConfirm} disabled={isLoading || stagedItems.length === 0}>
+                                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {confirmLabel}
+                            </Button>
+                        </div>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -996,7 +996,7 @@ export function RestockAnalysis() {
       : analysisResults;
 
     return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,300px))] justify-center gap-4">
         {orderedResults.map(result => {
            const statusStyle = getCardStatus(result);
            const reviewEntry = reviewLineMap.get(result.baseProduct.id);
@@ -1440,20 +1440,28 @@ export function RestockAnalysis() {
       )}
 
        {stagedItems.length > 0 && !isMatriz && (
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-sm border-t z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom duration-300">
-                <div className="max-w-7xl mx-auto flex justify-between items-center px-4">
-                    <div>
-                        <h3 className="font-semibold">{stagedItems.length} {stagedItems.length === 1 ? 'item' : 'itens'} para reposição</h3>
-                        <p className="text-sm text-muted-foreground">Revise e envie a solicitação para o CD.</p>
+            <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 animate-in slide-in-from-bottom duration-300">
+                <div className="flex w-full max-w-3xl items-center justify-between gap-4 rounded-2xl bg-[#1d1d20] p-3 text-white shadow-2xl">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                            <Package className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="truncate text-sm font-semibold">
+                                {stagedItems.length} item{stagedItems.length === 1 ? '' : 's'} na solicitação
+                            </h3>
+                            <p className="truncate text-xs text-white/55">
+                                {stagedItems[0]?.productName}
+                                {stagedItems.length > 1 ? ` +${stagedItems.length - 1}` : ''} · revise antes de enviar
+                            </p>
+                        </div>
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => setStagedItems([])}>
-                            <Trash2 className="mr-2 h-4 w-4" />
+                    <div className="flex shrink-0 gap-2">
+                        <Button variant="ghost" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={() => setStagedItems([])}>
                             Limpar
                         </Button>
-                        <Button onClick={() => setIsSummaryModalOpen(true)}>
-                            Revisar solicitação
-                            <ArrowRight className="ml-2 h-4 w-4" />
+                        <Button className="bg-[#5147e8] hover:bg-[#4338ca]" onClick={() => setIsSummaryModalOpen(true)}>
+                            Revisar e enviar
                         </Button>
                     </div>
                 </div>

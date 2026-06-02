@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from 'react';
-import { BarChart3, FileText, Plus, Send, AlertTriangle } from 'lucide-react';
+import { BarChart3, CheckCircle2, FileText, Plus, Send } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -20,10 +20,14 @@ import {
   PurchasingHeader,
   PurchasingMetricCard,
   PurchasingPageFrame,
+  PurchasingPeriodControl,
   PurchasingPipelineCard,
   PurchasingStatusBadge,
   PurchasingToolbar,
+  createDefaultPurchasingPeriod,
+  isDateInPurchasingPeriod,
   purchasingAgeLabel,
+  purchasingYearOptions,
   type PurchasingTone,
 } from '@/components/purchasing/purchasing-ui';
 
@@ -56,6 +60,7 @@ export default function QuotationsPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'open' | 'approval' | 'quote' | 'done'>('all');
   const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
+  const [period, setPeriod] = useState(createDefaultPurchasingPeriod);
   const canView = canViewPurchasing(permissions);
   const canCreate = canCreateQuotation(permissions);
 
@@ -64,16 +69,31 @@ export default function QuotationsPage() {
     return supplier?.fantasyName ?? supplier?.name ?? 'Fornecedor a definir';
   };
 
+  const periodYears = useMemo(
+    () => purchasingYearOptions(quotations.map((quotation) => quotation.createdAt)),
+    [quotations],
+  );
+
+  const periodQuotations = useMemo(
+    () => quotations.filter((quotation) => isDateInPurchasingPeriod(quotation.createdAt, period)),
+    [period, quotations],
+  );
+
   const counts = useMemo(() => {
-    const open = quotations.filter((q) => q.status === 'draft').length;
-    const quote = quotations.filter((q) => q.status === 'partially_converted').length;
-    const done = quotations.filter((q) => q.status === 'quoted' || q.status === 'converted' || q.status === 'archived').length;
-    const attention = quotations.filter((q) => q.status === 'expired' || q.status === 'cancelled').length;
-    return { open, quote, done, attention };
-  }, [quotations]);
+    const open = periodQuotations.filter((q) => q.status === 'draft').length;
+    const quote = periodQuotations.filter((q) => q.status === 'partially_converted').length;
+    const quoted = periodQuotations.filter((q) => q.status === 'quoted').length;
+    const converted = periodQuotations.filter((q) => q.status === 'converted').length;
+    const archived = periodQuotations.filter((q) => q.status === 'archived').length;
+    const expired = periodQuotations.filter((q) => q.status === 'expired').length;
+    const cancelled = periodQuotations.filter((q) => q.status === 'cancelled').length;
+    const done = quoted + converted + archived + expired + cancelled;
+    const attention = expired + cancelled;
+    return { open, quote, done, attention, quoted, converted, archived, expired, cancelled };
+  }, [periodQuotations]);
 
   const cards = useMemo(() => {
-    return quotations
+    return periodQuotations
       .map((quotation) => {
         const cfg = statusConfig[quotation.status] ?? fallbackStatusConfig;
         const supplier = supplierName(quotation.supplierId);
@@ -86,7 +106,7 @@ export default function QuotationsPage() {
       })
       .filter((entry) => filter === 'all' || entry.cfg.bucket === filter)
       .filter((entry) => !search.trim() || entry.searchText.includes(search.trim().toLowerCase()));
-  }, [filter, quotations, search, entities]);
+  }, [filter, periodQuotations, search, entities]);
 
   return (
     <PermissionGuard allowed={canView}>
@@ -114,14 +134,36 @@ export default function QuotationsPage() {
         />
 
         <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <PurchasingMetricCard active label="Total em RFQ" value={quotations.length} detail={`${counts.open + counts.quote} ativas`} tone="purple" icon={<Send className="h-5 w-5" />} />
+          <PurchasingMetricCard active label="Total de cotações" value={periodQuotations.length} detail={`${counts.open + counts.quote} ativas`} tone="purple" icon={<Send className="h-5 w-5" />} />
           <PurchasingMetricCard label="Abertas" value={counts.open} detail="aguardando itens" tone="blue" icon={<FileText className="h-5 w-5" />} />
           <PurchasingMetricCard label="Em cotação" value={counts.quote} detail="comparativos abertos" tone="purple" icon={<BarChart3 className="h-5 w-5" />} />
-          <PurchasingMetricCard label="Atenção" value={counts.attention} detail="expiradas/canceladas" tone="rose" icon={<AlertTriangle className="h-5 w-5" />} />
+          <PurchasingMetricCard
+            label="Concluídas"
+            value={counts.done}
+            detail="encerradas no período"
+            tone="green"
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            foot={
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                <span>Convertidas {counts.converted}</span>
+                <span>Finalizadas {counts.quoted}</span>
+                <span>Arquivadas {counts.archived}</span>
+                <span>Canceladas {counts.cancelled}</span>
+                <span>Expiradas {counts.expired}</span>
+              </div>
+            }
+          />
         </div>
 
-        <PurchasingToolbar search={search} onSearchChange={setSearch} resultLabel={`${cards.length} de ${quotations.length} itens`} view={view} onViewChange={setView}>
-          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={quotations.length} onClick={() => setFilter('all')} />
+        <PurchasingToolbar
+          search={search}
+          onSearchChange={setSearch}
+          resultLabel={`${cards.length} de ${periodQuotations.length} cotações`}
+          view={view}
+          onViewChange={setView}
+          periodControl={<PurchasingPeriodControl value={period} onChange={setPeriod} years={periodYears} />}
+        >
+          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={periodQuotations.length} onClick={() => setFilter('all')} />
           <PurchasingFilterChip active={filter === 'open'} label="Aberta" count={counts.open} tone="blue" onClick={() => setFilter('open')} />
           <PurchasingFilterChip active={filter === 'quote'} label="Em cotação" count={counts.quote} tone="purple" onClick={() => setFilter('quote')} />
           <PurchasingFilterChip active={filter === 'done'} label="Concluída" count={counts.done} tone="green" onClick={() => setFilter('done')} />
