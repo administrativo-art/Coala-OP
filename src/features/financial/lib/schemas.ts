@@ -211,23 +211,10 @@ export const expenseDescriptionFormSchema = z.object({
 });
 export type ExpenseDescriptionFormValues = z.infer<typeof expenseDescriptionFormSchema>;
 
-export const DRE_CATEGORIES = [
-  { value: "impostos_deducoes",     label: "Impostos e deduções",        color: "text-red-700 bg-red-50 border-red-200" },
-  { value: "custos_variaveis",      label: "Custos variáveis",            color: "text-orange-700 bg-orange-50 border-orange-200" },
-  { value: "pessoal",               label: "Pessoal",                     color: "text-blue-700 bg-blue-50 border-blue-200" },
-  { value: "ocupacao",              label: "Ocupação",                    color: "text-purple-700 bg-purple-50 border-purple-200" },
-  { value: "despesas_operacionais", label: "Despesas operacionais",       color: "text-slate-700 bg-slate-50 border-slate-200" },
-  { value: "despesas_financeiras",  label: "Despesas financeiras",        color: "text-rose-700 bg-rose-50 border-rose-200" },
-  { value: "ir_csll",               label: "IR / CSLL",                   color: "text-amber-700 bg-amber-50 border-amber-200" },
-] as const;
-
-export type DreCategoryValue = typeof DRE_CATEGORIES[number]["value"];
-
 export const accountPlanFormSchema = z.object({
   name: z.string().min(3, "O nome da conta deve ter pelo menos 3 caracteres."),
   description: z.string().optional(),
   parentId: z.string().nullable().optional(),
-  dreCategory: z.string().nullable().optional(),
 });
 export type AccountPlanFormValues = z.infer<typeof accountPlanFormSchema>;
 

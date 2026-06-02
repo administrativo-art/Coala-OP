@@ -41,9 +41,6 @@ import { cn } from "@/lib/utils";
 // ── constants ─────────────────────────────────────────────────────────────────
 
 const DRE_POSITIONS = [
-  { value: "receita_bruta_produto",   label: "Receita — Produto" },
-  { value: "receita_bruta_delivery",  label: "Receita — Delivery" },
-  { value: "receita_bruta_evento",    label: "Receita — Evento" },
   { value: "impostos_deducoes",       label: "Impostos e deduções" },
   { value: "custos_variaveis",        label: "Custos variáveis" },
   { value: "pessoal",                 label: "Pessoal" },
@@ -57,9 +54,6 @@ const DRE_POSITIONS = [
 ] as const;
 
 const DRE_POS_COLORS: Record<string, string> = {
-  receita_bruta_produto:   "text-emerald-700 bg-emerald-50 border-emerald-200",
-  receita_bruta_delivery:  "text-emerald-700 bg-emerald-50 border-emerald-200",
-  receita_bruta_evento:    "text-emerald-700 bg-emerald-50 border-emerald-200",
   impostos_deducoes:       "text-red-700 bg-red-50 border-red-200",
   custos_variaveis:        "text-orange-700 bg-orange-50 border-orange-200",
   pessoal:                 "text-blue-700 bg-blue-50 border-blue-200",

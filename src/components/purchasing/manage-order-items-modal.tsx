@@ -234,12 +234,16 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           const product = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
           const productLabel = product ? getProductFullName(product) : '';
           const aliasCandidate = item.itemName?.trim() ?? '';
-          const itemTreatment = inferPurchaseItemTreatment(item);
+          const inferredTreatment = inferPurchaseItemTreatment(item);
+          const itemTreatment = inferredTreatment === 'service' ? 'expense' : inferredTreatment;
           const entryType = getTreatmentEntryType(itemTreatment);
+          const usesOperationalCategory = !purchaseTreatmentSkipsOperationalEntry(itemTreatment);
           const inferredCategory =
-            activeCategories.find((category) => category.id === item.operationalCategoryId) ??
-            activeCategories.find((category) => product?.operationalCategoryId && category.id === product.operationalCategoryId) ??
-            activeCategories.find((category) => category.destination === entryType);
+            usesOperationalCategory
+              ? activeCategories.find((category) => category.id === item.operationalCategoryId) ??
+                activeCategories.find((category) => product?.operationalCategoryId && category.id === product.operationalCategoryId) ??
+                activeCategories.find((category) => category.destination === entryType)
+              : undefined;
 
           return {
             key: item.id,
@@ -291,6 +295,15 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
         }
         if (patch.itemTreatment) {
           next.entryType = getTreatmentEntryType(patch.itemTreatment);
+          if (purchaseTreatmentSkipsOperationalEntry(patch.itemTreatment)) {
+            next.operationalCategoryId = '';
+            next.operationalCategoryName = undefined;
+            next.isRegistered = false;
+            next.productId = '';
+            next.baseItemId = '';
+            next.purchaseUnitType = 'content';
+            if (!next.unit) next.unit = 'un';
+          }
           if (patch.itemTreatment === 'asset') {
             next.isRegistered = false;
             next.productId = '';
@@ -366,10 +379,10 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
 
   const validItems = items.filter((item) => {
     const category = activeCategories.find((entry) => entry.id === item.operationalCategoryId);
+    const skipsOperationalEntry = purchaseTreatmentSkipsOperationalEntry(item.itemTreatment);
     const canUseManualItem =
       item.itemTreatment === 'asset' ||
       item.itemTreatment === 'asset_component' ||
-      item.itemTreatment === 'service' ||
       item.itemTreatment === 'expense';
     const hasItem =
       category?.destination === 'asset' || canUseManualItem
@@ -377,7 +390,9 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
         : item.isRegistered
           ? !!item.baseItemId
           : item.itemName.trim().length > 0 && item.unit.trim().length > 0;
-    return !!category && hasItem && item.quantityOrdered > 0 && item.unitPriceOrdered > 0;
+    const hasRequiredCategory = skipsOperationalEntry || !!category;
+    const hasRequiredUnit = skipsOperationalEntry ? item.unit.trim().length > 0 : true;
+    return hasRequiredCategory && hasItem && hasRequiredUnit && item.quantityOrdered > 0 && item.unitPriceOrdered > 0;
   });
 
   const handleSave = async () => {
@@ -403,7 +418,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           baseItemId: item.baseItemId,
           productId: item.productId || undefined,
           itemName: item.itemName || undefined,
-          operationalCategoryId: item.operationalCategoryId,
+          operationalCategoryId: item.operationalCategoryId || undefined,
           operationalCategoryName: item.operationalCategoryName,
           itemDestination: item.entryType,
           unit: item.unit,
@@ -481,32 +496,55 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                 : [];
 
               const skipsOperationalEntry = purchaseTreatmentSkipsOperationalEntry(item.itemTreatment);
+              const usesOperationalCategory = !skipsOperationalEntry;
 
               return (
-              <div key={item.key} className="grid grid-cols-1 gap-3 rounded-xl border bg-muted/20 p-3 md:grid-cols-[160px_minmax(280px,1fr)_100px_110px_130px_110px_40px] md:items-end">
+              <div key={item.key} className="grid grid-cols-1 gap-3 rounded-xl border bg-muted/20 p-3 md:grid-cols-[190px_160px_minmax(280px,1fr)_100px_110px_130px_110px_40px] md:items-end">
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-semibold text-muted-foreground">Categoria</label>
+                  <label className="text-[10px] uppercase font-semibold text-muted-foreground">Tratamento</label>
                   <Select
-                    value={item.operationalCategoryId}
-                    onValueChange={(value) => updateItem(item.key, { operationalCategoryId: value })}
+                    value={item.itemTreatment}
+                    onValueChange={(value) => updateItem(item.key, { itemTreatment: value as PurchaseItemTreatment })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {activeCategories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
+                      {PURCHASE_ITEM_TREATMENT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+                {usesOperationalCategory ? (
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-semibold text-muted-foreground">Categoria</label>
+                    <Select
+                      value={item.operationalCategoryId}
+                      onValueChange={(value) => updateItem(item.key, { operationalCategoryId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeCategories.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="hidden md:block" />
+                )}
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">
                     {categoryDestination === 'asset' ? 'Patrimônio' : 'Insumo'}
                   </label>
-                  {categoryDestination === 'asset' || item.itemTreatment === 'asset' || item.itemTreatment === 'asset_component' || item.itemTreatment === 'service' || item.itemTreatment === 'expense' ? (
+                  {categoryDestination === 'asset' || item.itemTreatment === 'asset' || item.itemTreatment === 'asset_component' || item.itemTreatment === 'expense' ? (
                     <Input
                       placeholder={item.itemTreatment === 'asset_component' ? 'Ex: Extensor inox para máquina' : 'Ex: Máquina de sorvete'}
                       value={item.itemName}
@@ -568,7 +606,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                     if (categoryDestination === 'asset' || item.itemTreatment === 'asset') {
                       return <Input value="un" readOnly className="bg-muted" />;
                     }
-                    if (!item.isRegistered || item.itemTreatment === 'asset_component' || item.itemTreatment === 'service' || item.itemTreatment === 'expense') {
+                    if (!item.isRegistered || item.itemTreatment === 'asset_component' || item.itemTreatment === 'expense') {
                       return (
                         <Input
                           placeholder="un"
@@ -645,27 +683,8 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
-                <div className="space-y-2 md:col-span-6 md:col-start-2">
-                  <div className="grid gap-2 lg:grid-cols-[220px_minmax(220px,1fr)_220px]">
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase font-semibold text-muted-foreground">Tratamento</label>
-                      <Select
-                        value={item.itemTreatment}
-                        onValueChange={(value) => updateItem(item.key, { itemTreatment: value as PurchaseItemTreatment })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PURCHASE_ITEM_TREATMENT_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
+                <div className="space-y-2 md:col-span-full">
+                  <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_220px]">
                     {item.itemTreatment === 'asset_component' && (
                       <>
                         <div className="space-y-1">

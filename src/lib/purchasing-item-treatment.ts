@@ -26,13 +26,8 @@ export const PURCHASE_ITEM_TREATMENT_OPTIONS: Array<{
     description: 'Agrega custo/historico a um patrimonio existente, sem criar estoque.',
   },
   {
-    value: 'service',
-    label: 'Servico/manutencao',
-    description: 'Registra custo do servico, sem criar estoque ou patrimonio.',
-  },
-  {
     value: 'expense',
-    label: 'Despesa/consumo direto',
+    label: 'Despesa | Consumo direto',
     description: 'Registra despesa operacional, sem entrada de estoque.',
   },
 ];
@@ -76,5 +71,6 @@ export function purchaseTreatmentSkipsOperationalEntry(treatment?: PurchaseItemT
 }
 
 export function getPurchaseItemTreatmentLabel(treatment?: PurchaseItemTreatment) {
+  if (treatment === 'service') return 'Despesa | Consumo direto';
   return PURCHASE_ITEM_TREATMENT_OPTIONS.find((option) => option.value === treatment)?.label ?? 'Estoque';
 }

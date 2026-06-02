@@ -90,12 +90,12 @@ function normalizePurchaseStockEntryType(value: unknown): PurchaseStockEntryType
 
 function normalizePurchaseItemTreatment(item: Record<string, any>): PurchaseItemTreatment {
   const raw = item.itemTreatment;
+  if (raw === 'service') return 'expense';
   if (
     raw === 'stock' ||
     raw === 'uniform' ||
     raw === 'asset' ||
     raw === 'asset_component' ||
-    raw === 'service' ||
     raw === 'expense'
   ) {
     return raw;
