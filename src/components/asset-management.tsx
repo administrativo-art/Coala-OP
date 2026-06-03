@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Box, Briefcase, Check, ChevronRight, ChevronsUpDown, Coins, Grid2X2, History, ImageIcon, MapPin, MoveRight, Plus, Printer, QrCode, Rows3, Search, Table2, Tags, Upload, Wrench } from 'lucide-react';
+import { Box, Briefcase, Check, ChevronRight, ChevronsUpDown, Coins, FileText, Grid2X2, History, ImageIcon, MapPin, MoveRight, Plus, Printer, QrCode, Rows3, Search, Table2, Tags, Upload, Wrench } from 'lucide-react';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useSearchParams } from 'next/navigation';
 
@@ -1132,17 +1132,18 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                           className="hidden"
                           onChange={(event) => void handleFiscalDocumentFile(event.target.files?.[0] ?? null)}
                         />
+                        <input type="hidden" {...field} value={field.value ?? ''} />
                         <div className="flex flex-col gap-2 sm:flex-row">
-                          <FormControl>
-                            <Input
-                              placeholder="Nenhum arquivo anexado"
-                              {...field}
-                              value={field.value ?? ''}
-                              readOnly
-                              disabled={!permissions.assets?.edit}
-                              className="font-mono text-xs"
-                            />
-                          </FormControl>
+                          <div className="flex h-10 flex-1 items-center gap-2 rounded-md border bg-muted/40 px-3 text-sm">
+                            {documentUrl ? (
+                              <>
+                                <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
+                                <span className="font-medium text-foreground">Nota fiscal anexada</span>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">Nenhum arquivo anexado</span>
+                            )}
+                          </div>
                           <Button
                             type="button"
                             variant="outline"
@@ -1150,7 +1151,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                             onClick={() => fiscalDocumentInputRef.current?.click()}
                           >
                             <Upload className="mr-2 h-4 w-4" />
-                            {uploadingFiscalDocument ? 'Enviando...' : 'Anexar NF'}
+                            {uploadingFiscalDocument ? 'Enviando...' : documentUrl ? 'Trocar NF' : 'Anexar NF'}
                           </Button>
                           {documentUrl ? (
                             <Button type="button" variant="outline" asChild>
