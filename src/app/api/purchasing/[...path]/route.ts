@@ -812,6 +812,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const order = orderSnap.data() ?? {};
     const orderItemsSnap = await orderRef.collection('items').get();
     const orderItemsById = new Map(orderItemsSnap.docs.map((d) => [d.id, d.data()]));
+    const receiptItemsSnap = await receiptRef.collection('items').get();
+    const receiptItemsById = new Map(receiptItemsSnap.docs.map((d) => [d.id, d.data()]));
+    const payloadReceiptItemIds = new Set(
+      Array.isArray(body.items) ? body.items.map((i: any) => i.receiptItemId) : [],
+    );
 
     let totalConfirmed = 0;
     let hasDivergence = false;
@@ -821,18 +826,30 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     if (Array.isArray(body.items)) {
       for (const item of body.items) {
         const orderItem = orderItemsById.get(item.purchaseOrderItemId);
+        const existingReceiptItem = receiptItemsById.get(item.receiptItemId);
         const treatmentFields = purchaseItemTreatmentFields({ ...(orderItem ?? {}), ...item });
         const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         const quantityOrdered = Number(orderItem?.quantityOrdered ?? item.quantityReceived);
         const unitPriceOrdered = Number(orderItem?.unitPriceOrdered ?? item.unitPriceConfirmed);
         const disposition = item.receiptDisposition ?? 'receive';
-        const quantityReceived =
+        const previousReceived = Number(existingReceiptItem?.quantityReceived ?? 0);
+        const currentReceived =
           disposition === 'receive' || disposition === 'receive_less' || disposition === 'receive_more'
             ? Number(item.quantityReceived ?? 0)
             : 0;
+        const quantityReceived = Math.max(previousReceived + currentReceived, 0);
+        const hasOpenBalance = quantityReceived < quantityOrdered;
         const itemStatus =
           disposition === 'pending'
-            ? 'pending'
+            ? previousReceived > 0
+              ? getReceiptItemStatus(
+                  previousReceived,
+                  quantityOrdered,
+                  item.unitPriceConfirmed,
+                  unitPriceOrdered,
+                  item.divergenceReason,
+                )
+              : 'pending'
             : disposition === 'receive_less'
             ? 'partial'
             : disposition === 'receive_more'
@@ -850,8 +867,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               );
 
         totalConfirmed += quantityReceived * item.unitPriceConfirmed;
-        if (quantityReceived > 0) hasStockEntry = true;
-        if (itemStatus === 'partial' || itemStatus === 'pending') hasRemaining = true;
+        if (currentReceived > 0) hasStockEntry = true;
+        if (hasOpenBalance || itemStatus === 'partial' || itemStatus === 'pending') hasRemaining = true;
         if (itemStatus === 'partial' || itemStatus === 'divergent' || disposition !== 'receive') hasDivergence = true;
 
         batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
@@ -862,6 +879,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           entryType: itemDestination,
           ...treatmentFields,
           quantityReceived,
+          quantityPendingStockEntry: currentReceived,
           unitPriceConfirmed: item.unitPriceConfirmed,
           totalConfirmed: quantityReceived * item.unitPriceConfirmed,
           status: itemStatus,
@@ -874,6 +892,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         });
       }
     }
+
+    receiptItemsById.forEach((existingItem, rId) => {
+      if (payloadReceiptItemIds.has(rId)) return;
+      const existingTotal =
+        Number(existingItem.quantityReceived ?? 0) *
+        Number(existingItem.unitPriceConfirmed ?? existingItem.unitPriceOrdered ?? 0);
+      totalConfirmed += existingTotal;
+      if (existingItem.status === 'partial' || existingItem.status === 'pending') hasRemaining = true;
+      if (existingItem.status === 'partial' || existingItem.status === 'divergent') hasDivergence = true;
+    });
 
     const nextReceiptStatus = hasStockEntry
       ? 'awaiting_stock'
@@ -989,8 +1017,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
         const confirmedUnitPrice = existingReceiptItem?.unitPriceConfirmed ?? orderItem?.unitPriceOrdered ?? 0;
         const previousReceived = Number(existingReceiptItem?.quantityReceived ?? 0);
-        const payloadReceivedQuantity = previousReceived;
-        const cumulativeReceived = previousReceived;
+        const pendingStockEntryRaw = existingReceiptItem?.quantityPendingStockEntry;
+        const pendingStockEntry = Number(pendingStockEntryRaw ?? 0);
+        const hasPendingStockEntry = pendingStockEntryRaw != null && pendingStockEntry > 0;
+        const payloadReceivedQuantity = hasPendingStockEntry
+          ? pendingStockEntry
+          : Number(item.quantityReceived ?? 0);
+        const cumulativeReceived = hasPendingStockEntry
+          ? previousReceived
+          : Math.max(previousReceived, payloadReceivedQuantity);
         const quantityOrdered = Number(orderItem?.quantityOrdered ?? cumulativeReceived);
 
         if (skipsOperationalEntry) {
@@ -1049,6 +1084,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
             itemDestination: entryType,
             ...treatmentFields,
             quantityReceived: cumulativeReceived,
+            quantityPendingStockEntry: 0,
             totalConfirmed: cumulativeReceived * confirmedUnitPrice,
             status: receiptItemStatus,
             lots: [],
@@ -1126,6 +1162,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
             itemDestination: entryType,
             ...treatmentFields,
             quantityReceived: cumulativeReceived,
+            quantityPendingStockEntry: 0,
             totalConfirmed: cumulativeReceived * confirmedUnitPrice,
             status: receiptItemStatus,
             ...(payloadReceivedQuantity > 0 ? { stockedAt: now } : {}),
@@ -1250,6 +1287,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           itemDestination: entryType,
           ...treatmentFields,
           quantityReceived: cumulativeReceived,
+          quantityPendingStockEntry: 0,
           totalConfirmed: cumulativeReceived * confirmedUnitPrice,
           status: receiptItemStatus,
           ...(payloadReceivedQuantity > 0 ? { stockedAt: now } : {}),

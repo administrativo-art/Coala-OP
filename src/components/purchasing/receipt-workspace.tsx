@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -55,6 +56,7 @@ interface LotDraft {
   _key: string;
   lotCode: string;
   expiryDate?: string;
+  indefiniteValidity?: boolean;
   quantity: number;
 }
 
@@ -70,7 +72,10 @@ interface ItemDraft {
   purchaseUnitType: PurchaseReceiptItem['purchaseUnitType'];
   purchaseUnitLabel: string;
   quantityOrdered: number;
+  quantityPreviouslyReceived: number;
+  quantityRemaining: number;
   quantityReceived: number;
+  lockedFromPreviousReceipt: boolean;
   unitPriceConfirmed: number;
   divergenceReason: string;
   resolutionNotes: string;
@@ -138,11 +143,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
 
   const isImmediate = receipt.receiptMode === 'immediate_pickup';
   const isAwaitingDelivery = receipt.status === 'awaiting_delivery';
-  const isInConference = receipt.status === 'in_conference';
+  const isPartiallyStocked = receipt.status === 'partially_stocked';
+  const isInConference = receipt.status === 'in_conference' || isPartiallyStocked;
   const isAwaitingStock = receipt.status === 'awaiting_stock';
   const isInStockEntry =
     receipt.status === 'in_stock_entry' ||
-    receipt.status === 'partially_stocked' ||
     (isImmediate && receipt.status === 'awaiting_stock');
   const isDone = receipt.status === 'stocked' || receipt.status === 'stocked_with_divergence' || receipt.status === 'cancelled';
   const canReceive = canReceivePurchase(permissions);
@@ -186,7 +191,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
       setDrafts(
         items
           .filter((item) => {
-            if (receipt.status === 'partially_stocked') return item.status === 'pending' || item.status === 'partial';
+            if (receipt.status === 'partially_stocked') return item.status !== 'cancelled';
             if (isInStockEntry) return Number(item.quantityReceived ?? 0) > 0 && item.status !== 'pending';
             return true;
           })
@@ -194,15 +199,19 @@ export function ReceiptWorkspace({ receipt }: Props) {
             const base = baseProducts.find((bp) => bp.id === item.baseItemId);
             const itemTreatment = inferPurchaseItemTreatment(item);
             const entryType = getTreatmentEntryType(itemTreatment);
+            const quantityPreviouslyReceived = Number(item.quantityReceived ?? 0);
+            const quantityPendingStockEntry = Number(item.quantityPendingStockEntry ?? 0);
+            const quantityRemaining = Math.max(Number(item.quantityOrdered ?? 0) - quantityPreviouslyReceived, 0);
+            const lockedFromPreviousReceipt = isPartiallyStocked && quantityRemaining <= 0 && quantityPreviouslyReceived > 0;
             const remainingQuantity =
               isInStockEntry
-                ? Number(item.quantityReceived ?? 0)
-                : receipt.status === 'partially_stocked'
-                ? Math.max(item.quantityOrdered - (item.quantityReceived ?? 0), 0)
-                : (item.quantityReceived && item.quantityReceived > 0 ? item.quantityReceived : item.quantityOrdered);
+                ? (quantityPendingStockEntry > 0 ? quantityPendingStockEntry : quantityPreviouslyReceived)
+                : isPartiallyStocked
+                ? quantityRemaining
+                : (quantityPreviouslyReceived > 0 ? quantityPreviouslyReceived : item.quantityOrdered);
             const shouldPreseedLot =
               isInStockEntry &&
-              Number(item.quantityReceived ?? 0) > 0 &&
+              remainingQuantity > 0 &&
               purchaseTreatmentCreatesStock(itemTreatment);
             return {
               receiptItemId: item.id,
@@ -216,7 +225,10 @@ export function ReceiptWorkspace({ receipt }: Props) {
               purchaseUnitType: item.purchaseUnitType ?? 'content',
               purchaseUnitLabel: item.purchaseUnitLabel || item.unit || base?.unit || '',
               quantityOrdered: item.quantityOrdered,
+              quantityPreviouslyReceived,
+              quantityRemaining,
               quantityReceived: remainingQuantity,
+              lockedFromPreviousReceipt,
               unitPriceConfirmed: item.unitPriceConfirmed || item.unitPriceOrdered,
               divergenceReason: '',
               resolutionNotes: item.resolutionNotes ?? '',
@@ -228,13 +240,14 @@ export function ReceiptWorkspace({ receipt }: Props) {
               linkedAssetName: item.linkedAssetName ?? null,
               componentAction: item.componentAction ?? null,
               receiptDisposition: item.receiptDisposition ?? 'receive',
-              selectedForReceipt: item.receiptDisposition !== 'pending',
+              selectedForReceipt: lockedFromPreviousReceipt ? false : item.receiptDisposition !== 'pending',
               lots: shouldPreseedLot
                 ? [
                     {
                       _key: lotKey(),
                       lotCode: '',
                       expiryDate: '',
+                      indefiniteValidity: false,
                       quantity: remainingQuantity,
                     },
                   ]
@@ -244,7 +257,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
       );
       setLoadingItems(false);
     });
-  }, [baseProducts, fetchReceiptItems, isInStockEntry, receipt.id, receipt.notes, receipt.receiptProofDescription, receipt.status]);
+  }, [baseProducts, fetchReceiptItems, isInStockEntry, isPartiallyStocked, receipt.id, receipt.notes, receipt.receiptProofDescription, receipt.status]);
 
   const updateDraft = (idx: number, patch: Partial<ItemDraft>) => {
     setDrafts((prev) => {
@@ -262,7 +275,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
         ...next[idx],
         lots: [
           ...next[idx].lots,
-          { _key: lotKey(), lotCode: generateLotCode(base?.name ?? 'INS'), expiryDate: '', quantity: 0 },
+          { _key: lotKey(), lotCode: generateLotCode(base?.name ?? 'INS'), expiryDate: '', indefiniteValidity: false, quantity: 0 },
         ],
       };
       return next;
@@ -328,19 +341,20 @@ export function ReceiptWorkspace({ receipt }: Props) {
   );
 
   const hasAnyReceived = useMemo(
-    () => drafts.some((d) => d.selectedForReceipt && d.receiptDisposition !== 'pending' && d.quantityReceived > 0),
+    () => drafts.some((d) => !d.lockedFromPreviousReceipt && d.selectedForReceipt && d.receiptDisposition !== 'pending' && d.quantityReceived > 0),
     [drafts],
   );
 
   const selectedDraftsValid = useMemo(
     () =>
       drafts.every((d) => {
+        if (d.lockedFromPreviousReceipt) return true;
         if (!d.selectedForReceipt) return true;
         if (d.unitPriceConfirmed <= 0 || d.quantityReceived < 0) return false;
         if (d.receiptDisposition === 'receive_less') {
-          return d.quantityReceived < d.quantityOrdered && !!d.resolutionNotes.trim();
+          return d.quantityReceived < d.quantityRemaining && !!d.resolutionNotes.trim();
         }
-        if (d.receiptDisposition === 'receive_more') return d.quantityReceived > d.quantityOrdered;
+        if (d.receiptDisposition === 'receive_more') return d.quantityReceived > d.quantityRemaining;
         return true;
       }),
     [drafts],
@@ -405,7 +419,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
         notes,
         receiptProofUrl,
         receiptProofDescription: proofDescription || undefined,
-        items: drafts.map((d) => ({
+        items: drafts.filter((d) => !d.lockedFromPreviousReceipt).map((d) => ({
           receiptItemId: d.receiptItemId,
           purchaseOrderItemId: d.purchaseOrderItemId,
           baseItemId: d.baseItemId,
@@ -484,7 +498,10 @@ export function ReceiptWorkspace({ receipt }: Props) {
           quantityReceived: d.quantityReceived,
           purchaseUnitType: d.purchaseUnitType,
           purchaseUnitLabel: d.purchaseUnitLabel,
-          lots: d.lots.map(({ _key, ...rest }) => rest),
+          lots: d.lots.map(({ _key, indefiniteValidity, expiryDate, ...rest }) => ({
+            ...rest,
+            ...(indefiniteValidity ? {} : { expiryDate }),
+          })),
         })),
       });
       router.push(`/dashboard/purchasing/orders/${receipt.purchaseOrderId}`);
@@ -608,11 +625,12 @@ export function ReceiptWorkspace({ receipt }: Props) {
                   const hasDivergence =
                     draft.selectedForReceipt &&
                     (draft.receiptDisposition !== 'receive' ||
-                      Math.abs(draft.quantityReceived - draft.quantityOrdered) > 0.001 ||
+                      Math.abs((draft.quantityPreviouslyReceived + draft.quantityReceived) - draft.quantityOrdered) > 0.001 ||
                       !!draft.divergenceReason ||
                       !!draft.resolutionNotes);
                   
                   const isReadonly = isAwaitingDelivery || isDone;
+                  const isDraftReadonly = isReadonly || draft.lockedFromPreviousReceipt;
 
                   return (
                     <div key={draft.receiptItemId} className={cn(
@@ -625,18 +643,18 @@ export function ReceiptWorkspace({ receipt }: Props) {
                           {isInConference && (
                             <Checkbox
                               checked={draft.selectedForReceipt}
-                              disabled={isReadonly}
+                              disabled={isDraftReadonly}
                               onCheckedChange={(checked) => {
                                 const selected = checked === true;
                                 updateDraft(idx, {
                                   selectedForReceipt: selected,
                                   receiptDisposition: selected ? 'receive' : 'pending',
-                                  quantityReceived: selected ? draft.quantityOrdered : 0,
+                                  quantityReceived: selected ? draft.quantityRemaining : 0,
                                   resolutionNotes: selected ? draft.resolutionNotes : '',
                                   divergenceReason: selected ? draft.divergenceReason : '',
                                   lots: draft.lots.map((lot) => ({
                                     ...lot,
-                                    quantity: selected ? draft.quantityOrdered : 0,
+                                    quantity: selected ? draft.quantityRemaining : 0,
                                   })),
                                 });
                               }}
@@ -656,6 +674,12 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             <p className="font-semibold text-lg">{displayName}</p>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <span>Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmt(draft.unitPriceConfirmed)}</span>
+                              {draft.quantityPreviouslyReceived > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span>Recebido: {fmtQty(draft.quantityPreviouslyReceived)} / {fmtQty(draft.quantityOrdered)} {draft.purchaseUnitLabel}</span>
+                                </>
+                              )}
                               {base && (
                                 <>
                                   <span>•</span>
@@ -667,7 +691,12 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             </div>
                           </div>
                         </div>
-                        {!draft.selectedForReceipt && isInConference ? (
+                        {draft.lockedFromPreviousReceipt ? (
+                          <Badge variant="outline" className="text-emerald-600 border-emerald-300 shrink-0">
+                            <CheckCircle2 className="mr-1 h-3 w-3" />
+                            Já recebido
+                          </Badge>
+                        ) : !draft.selectedForReceipt && isInConference ? (
                           <Badge variant="outline" className="text-muted-foreground shrink-0">
                             Pendente
                           </Badge>
@@ -696,7 +725,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                 });
                               }}
                             >
-                              <SelectTrigger disabled={isReadonly}><SelectValue /></SelectTrigger>
+                              <SelectTrigger disabled={isDraftReadonly}><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 {activeCategories.map((category) => (
                                   <SelectItem key={category.id} value={category.id}>
@@ -715,11 +744,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
                               onValueChange={(value: ItemDraft['receiptDisposition']) => {
                                 const nextQuantity =
                                   value === 'receive'
-                                    ? draft.quantityOrdered
+                                    ? draft.quantityRemaining
                                     : value === 'receive_less'
-                                    ? Math.min(draft.quantityReceived, draft.quantityOrdered)
+                                    ? Math.min(draft.quantityReceived, draft.quantityRemaining)
                                     : value === 'receive_more'
-                                    ? Math.max(draft.quantityReceived, draft.quantityOrdered)
+                                    ? Math.max(draft.quantityReceived, draft.quantityRemaining)
                                     : 0;
                                 updateDraft(idx, {
                                   receiptDisposition: value,
@@ -729,7 +758,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                 });
                               }}
                             >
-                              <SelectTrigger disabled={isReadonly || !draft.selectedForReceipt}>
+                              <SelectTrigger disabled={isDraftReadonly || !draft.selectedForReceipt}>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -748,7 +777,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             type="number"
                             step="0.001"
                             value={draft.quantityReceived}
-                            disabled={isReadonly || !draft.selectedForReceipt || isNonStockDisposition || isInStockEntry}
+                            disabled={isDraftReadonly || !draft.selectedForReceipt || isNonStockDisposition || isInStockEntry}
                             onChange={(e) => updateDraft(idx, { quantityReceived: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
@@ -758,7 +787,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                             type="number"
                             step="0.01"
                             value={draft.unitPriceConfirmed}
-                            disabled={isReadonly || !draft.selectedForReceipt || isNonStockDisposition || isInStockEntry}
+                            disabled={isDraftReadonly || !draft.selectedForReceipt || isNonStockDisposition || isInStockEntry}
                             onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
@@ -774,7 +803,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                               />
                             ) : (
                               <Select value={draft.productId} onValueChange={(v) => updateDraft(idx, { productId: v })}>
-                                <SelectTrigger className={cn(!draft.productId && 'border-amber-400')} disabled={isReadonly}>
+                                <SelectTrigger className={cn(!draft.productId && 'border-amber-400')} disabled={isDraftReadonly}>
                                   <SelectValue placeholder="Selecione..." />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -843,7 +872,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                           </div>
                           <div className="space-y-2">
                             {draft.lots.map((lot) => (
-                              <div key={lot._key} className="grid grid-cols-[1fr_1fr_120px_auto] gap-2 items-end">
+                              <div key={lot._key} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_150px_140px_auto] sm:items-end">
                                 <div className="space-y-1">
                                   <Label className="text-[10px] text-muted-foreground uppercase">Cód. Lote</Label>
                                   <Input value={lot.lotCode} placeholder="Informe" disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { lotCode: e.target.value })} className="h-8 text-sm" />
@@ -854,7 +883,18 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                 </div>
                                 <div className="space-y-1">
                                   <Label className="text-[10px] text-muted-foreground uppercase">Validade</Label>
-                                  <Input type="date" value={lot.expiryDate} disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { expiryDate: e.target.value })} className="h-8 text-sm" />
+                                  <Input type="date" value={lot.expiryDate} disabled={isReadonly || lot.indefiniteValidity} onChange={(e) => updateLot(idx, lot._key, { expiryDate: e.target.value })} className="h-8 text-sm" />
+                                </div>
+                                <div className="flex h-8 items-center gap-2">
+                                  <Switch
+                                    checked={!!lot.indefiniteValidity}
+                                    disabled={isReadonly}
+                                    onCheckedChange={(checked) => updateLot(idx, lot._key, {
+                                      indefiniteValidity: checked,
+                                      expiryDate: checked ? '' : lot.expiryDate,
+                                    })}
+                                  />
+                                  <Label className="text-xs text-muted-foreground">Sem validade</Label>
                                 </div>
                                 {!isReadonly && (
                                   <Button variant="ghost" size="icon" onClick={() => removeLot(idx, lot._key)} className="h-8 w-8 text-destructive">

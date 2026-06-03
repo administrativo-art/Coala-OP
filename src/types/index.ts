@@ -1403,6 +1403,7 @@ export type PurchaseReceiptItem = {
   purchaseUnitLabel?: string;
   quantityOrdered: number;
   quantityReceived: number;
+  quantityPendingStockEntry?: number;
   unitPriceOrdered: number;
   unitPriceConfirmed: number;
   totalConfirmed: number;

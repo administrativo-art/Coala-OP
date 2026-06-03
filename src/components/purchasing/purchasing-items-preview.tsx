@@ -21,6 +21,18 @@ function itemUnit(item: PurchasingPreviewItem) {
   return ('purchaseUnitLabel' in item && item.purchaseUnitLabel) || item.unit || '';
 }
 
+function itemQuantityLabel(item: PurchasingPreviewItem) {
+  const unit = itemUnit(item);
+  const formatQty = (value: number) =>
+    Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+  if ('quantityReceived' in item && 'quantityOrdered' in item) {
+    return `Recebido: ${formatQty(Number(item.quantityReceived ?? 0))} / ${formatQty(Number(item.quantityOrdered ?? 0))} ${unit}`;
+  }
+
+  return `Quantidade: ${formatQty(Number(itemQuantity(item) || 0))} ${unit}`;
+}
+
 function fallbackItemName(item: PurchasingPreviewItem) {
   return item.itemName || ('freeText' in item ? item.freeText : '') || item.baseItemId || 'Item da compra';
 }
@@ -87,7 +99,7 @@ export function PurchasingItemsPreview({ orderId, quotationId, receiptId }: { or
         <div className="min-w-0">
           <p className="line-clamp-2 text-xs font-bold leading-snug text-zinc-700">{name}</p>
           <p className="mt-0.5 text-[11px] text-zinc-400">
-            Quantidade: {Number(itemQuantity(first) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} {itemUnit(first)}
+            {itemQuantityLabel(first)}
             {items.length > 1 ? ` · +${items.length - 1} item${items.length > 2 ? 's' : ''}` : ''}
           </p>
         </div>
