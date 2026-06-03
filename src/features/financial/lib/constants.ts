@@ -1,7 +1,6 @@
 export const FINANCIAL_COLLECTIONS = {
   users: "users",
   accounts: "accounts",
-  accountPlans: "accountPlans",
   resultCenters: "resultCenters",
   expenseDescriptions: "expenseDescriptions",
   expenses: "expenses",
