@@ -80,6 +80,7 @@ import {
   type PurchaseOrderItem,
   type PurchasePaymentCondition,
 } from '@/types';
+import { purchaseTreatmentSkipsOperationalEntry } from '@/lib/purchasing-item-treatment';
 
 const RECEIPT_LABELS: Record<string, string> = {
   future_delivery: 'Entrega futura',
@@ -293,6 +294,9 @@ export default function PurchaseOrderPage() {
       displayItems.filter(
         (item) =>
           item.entryType !== 'asset' &&
+          // Componentes de patrimônio, despesas e serviços são compras avulsas:
+          // não geram lote de estoque nem exigem cadastro de insumo.
+          !purchaseTreatmentSkipsOperationalEntry(item.itemTreatment) &&
           (!item.productId || !item.baseItemId),
       ),
     [displayItems],

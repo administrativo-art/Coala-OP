@@ -171,7 +171,8 @@ export type AssetMovementType =
   | 'ALTERACAO_STATUS'
   | 'BAIXA'
   | 'ETIQUETA_REIMPRESSA'
-  | 'RETIRADA';
+  | 'RETIRADA'
+  | 'COMPONENTE';
 
 export type Asset = {
   id: string;

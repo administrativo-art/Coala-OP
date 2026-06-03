@@ -11,6 +11,7 @@ import {
   calculateStockQuantityFromPurchase,
 } from '@/lib/purchasing-units';
 import {
+  getPurchaseComponentActionLabel,
   getTreatmentEntryType,
   inferPurchaseItemTreatment,
   purchaseTreatmentCreatesAsset,
@@ -1003,6 +1004,45 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           );
           if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
           if (receiptItemStatus === 'partial' || receiptItemStatus === 'pending') hasRemaining = true;
+
+          // Componente de patrimônio vinculado a um patrimônio: registra um
+          // histórico nesse patrimônio (valor, data, NF, fornecedor, ação).
+          // Guard por stockedAt para não duplicar em reconfirmações.
+          if (
+            treatmentFields.itemTreatment === 'asset_component' &&
+            treatmentFields.linkedAssetId &&
+            cumulativeReceived > 0 &&
+            !existingReceiptItem?.stockedAt
+          ) {
+            const componentName =
+              item.itemName || existingReceiptItem?.itemName || orderItem?.itemName || 'Componente';
+            const totalValue = cumulativeReceived * confirmedUnitPrice;
+            const fmt = (value: number) =>
+              value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const purchaseDate =
+              order.purchaseDate ?? order.fiscal?.issuedAt?.slice?.(0, 10) ?? order.createdAt?.slice?.(0, 10) ?? null;
+            const supplierName = order.fiscal?.issuerName ?? order.supplierName ?? receipt.supplierName ?? null;
+            const invoiceNumber = order.invoiceNumber ?? order.fiscal?.number ?? null;
+            const noteParts = [
+              `${getPurchaseComponentActionLabel(treatmentFields.componentAction)}: ${componentName}`,
+              `${cumulativeReceived}× ${fmt(confirmedUnitPrice)} = ${fmt(totalValue)}`,
+              purchaseDate ? `Compra ${String(purchaseDate).split('-').reverse().join('/')}` : null,
+              invoiceNumber ? `NF ${invoiceNumber}` : null,
+              supplierName ? `Fornecedor: ${supplierName}` : null,
+            ].filter(Boolean);
+            batch.set(dbAdmin.collection('assetMovements').doc(), {
+              assetId: treatmentFields.linkedAssetId,
+              assetCode: treatmentFields.linkedAssetCode ?? null,
+              assetName: treatmentFields.linkedAssetName ?? null,
+              type: 'COMPONENTE',
+              userId: decoded.uid,
+              username: body.username ?? 'Sistema',
+              occurredAt: now,
+              notes: noteParts.join(' · '),
+              sourceType: 'purchase_receipt',
+              sourceId: id,
+            });
+          }
 
           batch.update(receiptRef.collection('items').doc(item.receiptItemId), {
             entryType,

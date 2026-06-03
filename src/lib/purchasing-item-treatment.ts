@@ -70,6 +70,10 @@ export function purchaseTreatmentSkipsOperationalEntry(treatment?: PurchaseItemT
   return treatment === 'asset_component' || treatment === 'service' || treatment === 'expense';
 }
 
+export function getPurchaseComponentActionLabel(action?: PurchaseAssetComponentAction | null) {
+  return PURCHASE_COMPONENT_ACTION_OPTIONS.find((option) => option.value === action)?.label ?? 'Peça/Componente';
+}
+
 export function getPurchaseItemTreatmentLabel(treatment?: PurchaseItemTreatment) {
   if (treatment === 'service') return 'Despesa | Consumo direto';
   return PURCHASE_ITEM_TREATMENT_OPTIONS.find((option) => option.value === treatment)?.label ?? 'Estoque';
