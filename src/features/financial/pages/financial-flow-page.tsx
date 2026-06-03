@@ -34,7 +34,7 @@ export function FinancialFlowPage() {
   const [monthsBack, setMonthsBack] = useState("6");
   const [statusFilter, setStatusFilter] = useState("all");
   const { data: expenses, loading } = useFinancialCollection<any>(financialCollection("expenses"));
-  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accountPlans"));
+  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
 
   if (!permissions.financial?.financialFlow) {
     return (
@@ -108,7 +108,7 @@ export function FinancialFlowPage() {
         const due = toDate(expense.dueDate);
         return [
           `"${expense.description.replace(/"/g, '""')}"`,
-          `"${(accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "").replace(/"/g, '""')}"`,
+          `"${(accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "").replace(/"/g, '""')}"`,
           (expense.totalValue || 0).toFixed(2),
           competence ? format(competence, "dd/MM/yyyy") : "",
           due ? format(due, "dd/MM/yyyy") : "",
@@ -246,7 +246,7 @@ export function FinancialFlowPage() {
                         <div>
                           <p className="font-medium">{expense.description}</p>
                           <p className="text-xs text-muted-foreground">
-                            {accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "—"}
+                            {accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—"}
                           </p>
                         </div>
                       </TableCell>

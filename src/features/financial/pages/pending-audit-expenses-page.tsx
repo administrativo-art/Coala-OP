@@ -26,7 +26,7 @@ export function PendingAuditExpensesPage() {
   const { toast } = useToast();
   const { data: expensesData, loading } = useFinancialCollection<any>(financialCollection("expenses"));
   const { data: transactionsData, loading: transactionsLoading } = useFinancialCollection<any>(financialCollection("transactions"));
-  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accountPlans"));
+  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -77,7 +77,7 @@ export function PendingAuditExpensesPage() {
       Array.from(
         new Set(
           [
-            ...expenses.map((expense) => accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan),
+            ...expenses.map((expense) => accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan),
             ...transactions.map((transaction) => transaction.accountPlanName || accountPlanMap[transaction.accountPlanId]),
           ]
             .filter(Boolean)
@@ -108,7 +108,7 @@ export function PendingAuditExpensesPage() {
         source: "purchasing" as const,
         description: expense.description,
         supplier: expense.supplier || "",
-        planName: accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "",
+        planName: accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "",
         dueDate: toDate(expense.dueDate),
         competenceDate: toDate(expense.competenceDate),
         unitName: expense.resultCenter || "",

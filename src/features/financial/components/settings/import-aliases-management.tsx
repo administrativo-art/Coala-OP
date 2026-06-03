@@ -62,7 +62,7 @@ export default function ImportAliasesManagement({ canManage = true }: { canManag
   const { kiosks } = useKiosks();
   const { toast } = useToast();
   const { data: aliases, loading } = useFinancialCollection<any>(financialCollection("importAliases"));
-  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accountPlans"));
+  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
   const units = useMemo(
     () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
     [kiosks]
@@ -311,11 +311,14 @@ export default function ImportAliasesManagement({ canManage = true }: { canManag
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="none">Nenhum</SelectItem>
-                        {accountPlans?.map((plan) => (
-                          <SelectItem key={plan.id} value={plan.id}>
-                            {plan.name}
-                          </SelectItem>
-                        ))}
+                        {(accountPlans || [])
+                          .filter((plan) => plan.active !== false)
+                          .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+                          .map((plan) => (
+                            <SelectItem key={plan.id} value={plan.id}>
+                              {plan.name}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

@@ -881,7 +881,7 @@ export function FinancialImportPage({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: aliasesData } = useFinancialCollection<any>(financialCollection("importAliases"));
-  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accountPlans"));
+  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
   const { data: expensesData } = useFinancialCollection<any>(financialCollection("expenses"));
   const { data: bankAccountsData } = useFinancialCollection<Account>(financialCollection("bankAccounts"));
   const { data: resultCentersData } = useFinancialCollection<{ id: string; name: string }>(financialCollection("resultCenters"));
@@ -1678,6 +1678,7 @@ export function FinancialImportPage({
             for (const split of item.expenseDraft.splitExpenses) {
               const createdExpense = await addDoc(financialCollection("expenses"), {
                 accountPlan: split.accountPlanId,
+                accountId: split.accountPlanId,
                 accountPlanName: split.accountPlanName,
                 description: split.description,
                 supplier: split.supplier || "",
@@ -1716,6 +1717,7 @@ export function FinancialImportPage({
           } else if (item.expenseDraft.mode === "new") {
             const expensePayload = {
               accountPlan: item.expenseDraft.accountPlanId,
+              accountId: item.expenseDraft.accountPlanId,
               accountPlanName: item.expenseDraft.accountPlanName,
               description: item.expenseDraft.description,
               supplier: item.expenseDraft.supplier || "",

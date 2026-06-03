@@ -231,7 +231,7 @@ function matchesBaseFilters(
     now: Date;
   }
 ) {
-  const planName = accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "";
+  const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "";
   const due = toDate(expense.dueDate);
   const competence = toDate(expense.competenceDate);
   const belongsToUnit =
@@ -291,7 +291,7 @@ export function ExpensesPage() {
   const searchParams = useSearchParams();
   const { data: expensesData, loading } = useFinancialCollection<any>(financialCollection("expenses"));
   const { data: transactionsData } = useFinancialCollection<any>(financialCollection("transactions"));
-  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accountPlans"));
+  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") ?? "all");
   const [originFilter, setOriginFilter] = useState(searchParams.get("origin") ?? "all");
@@ -386,7 +386,7 @@ export function ExpensesPage() {
       Array.from(
         new Set(
           expenses
-            .map((expense) => accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan)
+            .map((expense) => accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan)
             .filter(Boolean)
         )
       ).sort((a, b) => String(a).localeCompare(String(b), "pt-BR")) as string[],
@@ -766,7 +766,7 @@ export function ExpensesPage() {
                     const due = toDate(expense.dueDate);
                     const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                     const isExpanded = expandedExpenseId === expense.id;
-                    const planName = accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "—";
+                    const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
                     const primaryUnit = expense.isApportioned
                       ? expense.apportionments?.[0]?.resultCenter || "Rateado"
                       : expense.resultCenter || "—";
@@ -951,7 +951,7 @@ export function ExpensesPage() {
                 {filtered.map((expense) => {
                   const due = toDate(expense.dueDate);
                   const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
-                  const planName = accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "—";
+                  const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
                   const primaryUnit = expense.isApportioned
                     ? expense.apportionments?.[0]?.resultCenter || "Rateado"
                     : expense.resultCenter || "—";

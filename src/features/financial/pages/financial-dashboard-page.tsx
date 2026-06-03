@@ -126,7 +126,7 @@ function matchesFilters(
   const due = toDate(expense.dueDate);
   const competence = toDate(expense.competenceDate);
   const supplier = expense.supplier || "";
-  const accountPlanName = accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan || "";
+  const accountPlanName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "";
   const computedStatus = getComputedStatus(expense, now);
 
   if (filters.dateFrom && (!due || due < new Date(`${filters.dateFrom}T00:00:00`))) {
@@ -239,7 +239,7 @@ function ExpenseList({
           <div className="min-w-0">
             <p className="truncate font-medium">{expense.description}</p>
             <p className="truncate text-xs text-muted-foreground">
-              {expense.supplier || "—"} • {expense.accountPlanName || expense.accountPlan || "—"} • Venc.{" "}
+              {expense.supplier || "—"} • {expense.accountPlanName || expense.accountId || expense.accountPlan || "—"} • Venc.{" "}
               {toDate(expense.dueDate) ? format(toDate(expense.dueDate)!, "dd/MM/yyyy") : "—"}
             </p>
           </div>
@@ -293,7 +293,7 @@ export function FinancialDashboardPage() {
   const { kiosks } = useKiosks();
   const { indicators, loading } = useFinancialDashboardIndicators();
   const { data: expenses } = useFinancialCollection<any>(financialCollection("expenses"));
-  const { data: accountPlansData } = useFinancialCollection<any>(financialCollection("accountPlans"));
+  const { data: accountPlansData } = useFinancialCollection<any>(financialCollection("accounts"));
   const [monthFilters, setMonthFilters] = useState<ExpenseFilters>(DEFAULT_FILTERS);
   const [overdueFilters, setOverdueFilters] = useState<ExpenseFilters>(DEFAULT_FILTERS);
   const [auditFilters, setAuditFilters] = useState<ExpenseFilters>(DEFAULT_FILTERS);
@@ -334,7 +334,7 @@ export function FinancialDashboardPage() {
       Array.from(
         new Set(
           expensesList
-            .map((expense) => accountPlanMap[expense.accountPlan] || expense.accountPlanName || expense.accountPlan)
+            .map((expense) => accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan)
             .filter(Boolean)
         )
       ).sort((a, b) => String(a).localeCompare(String(b), "pt-BR")) as string[],
