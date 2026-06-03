@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from 'react';
-import { Check, ChevronsUpDown, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Plus, Trash2, X } from 'lucide-react';
 
 import {
   Dialog,
@@ -24,9 +24,11 @@ import {
 } from '@/components/ui/select';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useProducts } from '@/hooks/use-products';
+import { useAssets } from '@/hooks/use-assets';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { getContentPurchaseUnitLabel, getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
 import {
+  type Asset,
   type Product,
   type PurchaseAssetComponentAction,
   type PurchaseItemTreatment,
@@ -220,9 +222,97 @@ function ProductCombobox({
   );
 }
 
+// Busca de patrimônio: prefixo "PAT-" fixo, usuário digita só o número.
+function AssetLinkField({
+  linkedAssetId,
+  linkedAssetCode,
+  linkedAssetName,
+  assets,
+  onSelect,
+  onClear,
+}: {
+  linkedAssetId?: string | null;
+  linkedAssetCode?: string | null;
+  linkedAssetName?: string | null;
+  assets: Asset[];
+  onSelect: (asset: Asset) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [focused, setFocused] = useState(false);
+
+  const matches = useMemo(() => {
+    const raw = query.trim().toLowerCase();
+    if (!raw) return [] as Asset[];
+    const digits = raw.replace(/\D/g, '');
+    return assets
+      .filter((a) => {
+        const code = (a.code ?? '').toLowerCase();
+        const codeDigits = code.replace(/\D/g, '');
+        const name = (a.name ?? '').toLowerCase();
+        return code.includes(raw) || (!!digits && codeDigits.includes(digits)) || name.includes(raw);
+      })
+      .slice(0, 8);
+  }, [assets, query]);
+
+  if (linkedAssetId && linkedAssetCode) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-1.5">
+        <div className="min-w-0">
+          <p className="font-mono text-xs font-semibold">{linkedAssetCode}</p>
+          {linkedAssetName ? <p className="truncate text-xs text-muted-foreground">{linkedAssetName}</p> : null}
+        </div>
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onClear}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  const showList = focused && query.trim().length > 0;
+
+  return (
+    <div className="relative">
+      <div className="flex h-9 items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+        <span className="select-none self-stretch border-r bg-muted px-2.5 py-2 font-mono text-xs font-semibold text-muted-foreground">PAT-</span>
+        <input
+          inputMode="numeric"
+          placeholder="número do patrimônio"
+          className="h-full w-full rounded-r-md bg-transparent px-2 text-sm outline-none"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => window.setTimeout(() => setFocused(false), 150)}
+        />
+      </div>
+      {showList ? (
+        <div className="absolute z-50 mt-1 max-h-[240px] w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+          {matches.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">Nenhum patrimônio encontrado.</div>
+          ) : (
+            matches.map((asset) => (
+              <button
+                key={asset.id}
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => { onSelect(asset); setQuery(''); setFocused(false); }}
+              >
+                <span className="font-mono text-xs font-semibold">{asset.code}</span>
+                <span className="truncate text-muted-foreground">{asset.name}</span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChange, onSuccess }: Props) {
   const { products, getProductFullName, updateProduct } = useProducts();
   const { activeCategories } = useOperationalItemCategories();
+  const { assets } = useAssets();
   const { updateOrder } = usePurchaseOrders();
   const [items, setItems] = useState<DraftItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -455,7 +545,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[min(96vw,1180px)] overflow-y-auto sm:max-w-none">
+      <DialogContent className="max-h-[92vh] w-[min(96vw,760px)] overflow-y-auto sm:max-w-none">
         <DialogHeader>
           <DialogTitle>Gerenciar itens do pedido</DialogTitle>
         </DialogHeader>
@@ -499,47 +589,60 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
               const usesOperationalCategory = !skipsOperationalEntry;
 
               return (
-              <div key={item.key} className="grid grid-cols-1 gap-3 rounded-xl border bg-muted/20 p-3 md:grid-cols-[190px_160px_minmax(280px,1fr)_100px_110px_130px_110px_40px] md:items-end">
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-semibold text-muted-foreground">Tratamento</label>
-                  <Select
-                    value={item.itemTreatment}
-                    onValueChange={(value) => updateItem(item.key, { itemTreatment: value as PurchaseItemTreatment })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PURCHASE_ITEM_TREATMENT_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {usesOperationalCategory ? (
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-semibold text-muted-foreground">Categoria</label>
-                    <Select
-                      value={item.operationalCategoryId}
-                      onValueChange={(value) => updateItem(item.key, { operationalCategoryId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeCategories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              <div key={item.key} className="space-y-3 rounded-xl border bg-muted/20 p-3">
+                <div className="flex items-end justify-between gap-3">
+                  <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-semibold text-muted-foreground">Tratamento</label>
+                      <Select
+                        value={item.itemTreatment}
+                        onValueChange={(value) => updateItem(item.key, { itemTreatment: value as PurchaseItemTreatment })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PURCHASE_ITEM_TREATMENT_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {usesOperationalCategory ? (
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase font-semibold text-muted-foreground">Categoria</label>
+                        <Select
+                          value={item.operationalCategoryId}
+                          onValueChange={(value) => updateItem(item.key, { operationalCategoryId: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {activeCategories.map((category) => (
+                              <SelectItem key={category.id} value={category.id}>
+                                {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="hidden sm:block" />
+                    )}
                   </div>
-                ) : (
-                  <div className="hidden md:block" />
-                )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setItems((prev) => prev.filter((current) => current.key !== item.key))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">
                     {categoryDestination === 'asset' ? 'Patrimônio' : 'Insumo'}
@@ -599,6 +702,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                     </div>
                   )}
                 </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">Un.</label>
                   {(() => {
@@ -674,25 +778,20 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                     onChange={(value) => updateItem(item.key, { discountOrdered: value })}
                   />
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => setItems((prev) => prev.filter((current) => current.key !== item.key))}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-                <div className="space-y-2 md:col-span-full">
-                  <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_220px]">
+                </div>
+                <div className="space-y-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {item.itemTreatment === 'asset_component' && (
                       <>
                         <div className="space-y-1">
                           <label className="text-[10px] uppercase font-semibold text-muted-foreground">Patrimônio relacionado</label>
-                          <Input
-                            placeholder="Código ou nome do patrimônio (opcional)"
-                            value={item.linkedAssetName ?? ''}
-                            onChange={(event) => updateItem(item.key, { linkedAssetName: event.target.value })}
+                          <AssetLinkField
+                            linkedAssetId={item.linkedAssetId}
+                            linkedAssetCode={item.linkedAssetCode}
+                            linkedAssetName={item.linkedAssetName}
+                            assets={assets}
+                            onSelect={(asset) => updateItem(item.key, { linkedAssetId: asset.id, linkedAssetCode: asset.code, linkedAssetName: asset.name })}
+                            onClear={() => updateItem(item.key, { linkedAssetId: null, linkedAssetCode: null, linkedAssetName: null })}
                           />
                         </div>
                         <div className="space-y-1">
