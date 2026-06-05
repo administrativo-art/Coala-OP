@@ -51,6 +51,14 @@ function receiptCode(id: string) {
   return `CMP-${id.slice(-8).toUpperCase()}`;
 }
 
+// totalConfirmed só é > 0 após o recebimento; antes disso vem como 0 (não null),
+// então não dá pra usar ?? e precisamos cair no estimado explicitamente.
+function receiptDisplayTotal(receipt: PurchaseReceipt) {
+  return receipt.totalConfirmed && receipt.totalConfirmed > 0
+    ? receipt.totalConfirmed
+    : receipt.totalEstimated;
+}
+
 export default function ReceiptsPage() {
   const { permissions } = useAuth();
   const { receipts, loading } = usePurchaseReceipts();
@@ -142,7 +150,7 @@ export default function ReceiptsPage() {
                   <span className="font-mono text-xs font-black text-zinc-600">{receiptCode(receipt.purchaseOrderId)}</span>
                   <span className="font-bold text-zinc-950">{receipt.supplierName || 'Recebimento de compra'}</span>
                   <span><PurchasingStatusBadge label={cfg.label} tone={cfg.tone} /></span>
-                  <span className="text-right font-mono font-black text-zinc-950">{purchasingCompactMoney(receipt.totalConfirmed ?? receipt.totalEstimated)}</span>
+                  <span className="text-right font-mono font-black text-zinc-950">{purchasingCompactMoney(receiptDisplayTotal(receipt))}</span>
                   <span className="text-zinc-500">{new Date(receipt.expectedDate).toLocaleDateString('pt-BR')}</span>
                   <span className="text-right text-zinc-400">›</span>
                 </Link>
@@ -175,7 +183,7 @@ export default function ReceiptsPage() {
                           <PurchasingItemsPreview receiptId={receipt.id} />
                           <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
                             <span>{receipt.receiptMode === 'immediate_pickup' ? 'Retirada' : 'Entrega'}</span>
-                            <span className="font-mono font-black text-zinc-900">{purchasingCompactMoney(receipt.totalConfirmed ?? receipt.totalEstimated)}</span>
+                            <span className="font-mono font-black text-zinc-900">{purchasingCompactMoney(receiptDisplayTotal(receipt))}</span>
                           </div>
                         </Link>
                       ))}
@@ -202,7 +210,7 @@ export default function ReceiptsPage() {
                   { label: receipt.notes || 'Sem observação' },
                 ]}
                 footerLeft={<span>{receipt.status === 'awaiting_delivery' ? 'Aguardando chegada' : 'Recebimento'}</span>}
-                amount={purchasingCompactMoney(receipt.totalConfirmed ?? receipt.totalEstimated)}
+                amount={purchasingCompactMoney(receiptDisplayTotal(receipt))}
                 age={purchasingAgeLabel(receipt.stockEnteredAt ?? receipt.createdAt)}
               />
             ))}
