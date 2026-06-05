@@ -660,7 +660,8 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                                     aria-label="Selecionar todos"
                                 />
                             </TableHead>
-                            <TableHead className="w-[30%]">Insumo</TableHead>
+                            <TableHead className="w-[25%]">Insumo</TableHead>
+                            <TableHead>Marca</TableHead>
                             <TableHead>Produto Base</TableHead>
                             <TableHead>Categoria do item</TableHead>
                             <TableHead>Embalagem</TableHead>
@@ -674,7 +675,7 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                         {loading ? (
                             [...Array(5)].map((_, i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell>
+                                    <TableCell colSpan={10}><Skeleton className="h-10 w-full" /></TableCell>
                                 </TableRow>
                             ))
                         ) : activeFiltered.length > 0 ? (
@@ -706,8 +707,15 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                                                         <Box className="h-5 w-5 text-muted-foreground" />
                                                     </div>
                                                 )}
-                                                <span className="font-semibold">{getProductFullName(product)}</span>
+                                                <span className="font-semibold">{product.baseName}</span>
                                             </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {product.brand ? (
+                                                product.brand
+                                            ) : (
+                                                <span className="text-muted-foreground">-</span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             {product.baseProductId ? (
@@ -749,7 +757,7 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                             })
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                                     <div className="flex flex-col items-center gap-2">
                                         <Inbox className="h-8 w-8" />
                                         <span>Nenhum insumo ativo encontrado.</span>
@@ -769,7 +777,8 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                             <TableHeader>
                                 <TableRow>
                                     <TableHead className="w-10" />
-                                    <TableHead className="w-[30%]">Insumo</TableHead>
+                                    <TableHead className="w-[25%]">Insumo</TableHead>
+                                    <TableHead>Marca</TableHead>
                                     <TableHead>Produto Base</TableHead>
                                     <TableHead>Categoria do item</TableHead>
                                     <TableHead>Embalagem</TableHead>
@@ -803,8 +812,15 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                                                             <Box className="h-5 w-5 text-muted-foreground" />
                                                         </div>
                                                     )}
-                                                    <span className="font-semibold">{getProductFullName(product)}</span>
+                                                    <span className="font-semibold">{product.baseName}</span>
                                                 </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {product.brand ? (
+                                                    product.brand
+                                                ) : (
+                                                    <span className="text-muted-foreground">-</span>
+                                                )}
                                             </TableCell>
                                             <TableCell>
                                                 {product.baseProductId ? (

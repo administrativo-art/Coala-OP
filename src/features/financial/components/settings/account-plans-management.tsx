@@ -216,7 +216,7 @@ function SortableRow({
       <div
         className={cn(
           "flex items-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm transition-colors",
-          isRoot ? "hover:bg-muted/30" : "hover:bg-muted/20",
+          isRoot ? "hover:bg-muted/80" : "hover:bg-muted/70",
           isDragging && "border-border bg-muted/20"
         )}
         style={{ paddingLeft: `${8 + depth * 20}px` }}
