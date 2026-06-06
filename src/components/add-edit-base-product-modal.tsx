@@ -164,7 +164,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden">
+        <DialogContent className="w-[95vw] sm:max-w-5xl p-0 gap-0 overflow-hidden">
           {/* Header */}
           <DialogHeader className="space-y-2 border-b px-6 py-4 text-left">
             <div className="flex flex-wrap items-center gap-2">
