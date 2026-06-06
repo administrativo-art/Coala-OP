@@ -103,7 +103,7 @@ export function TechnicalSheetViewerModal({ open, onOpenChange, simulation }: Te
                     src={simulation.ppo.referenceImageUrl}
                     alt={simulation.name}
                     fill
-                    className="object-cover"
+                    className="object-contain p-4"
                     sizes="280px"
                   />
                   <div

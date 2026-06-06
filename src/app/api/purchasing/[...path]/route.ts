@@ -1242,6 +1242,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               occurredAt: now,
             });
 
+            batch.update(dbAdmin.collection('baseProducts').doc(item.baseItemId), {
+              lastEffectivePrice: {
+                baseProductId: item.baseItemId,
+                productId: item.productId,
+                price: confirmedUnitPrice,
+                pricePerUnit: convertedPrice.pricePerBaseUnit,
+                entityId: receipt.supplierId ?? 'N/A',
+                confirmedBy: decoded.uid,
+                confirmedAt: now,
+              },
+            });
+
             const lotKey = `${item.productId}_${body.destinationKioskId}_${lot.lotCode}_${
               lot.expiryDate ?? 'noval'
             }`;

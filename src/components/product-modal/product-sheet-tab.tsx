@@ -194,7 +194,7 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
                 <div className="flex items-center gap-4">
                   <div className="w-24 h-24 rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden">
                     {form.watch('referenceImageUrl') ? (
-                      <img src={form.watch('referenceImageUrl')} className="w-full h-full object-cover" />
+                      <img src={form.watch('referenceImageUrl')} className="w-full h-full object-contain p-2" />
                     ) : (
                       <Camera className="h-8 w-8 text-gray-300" />
                     )}

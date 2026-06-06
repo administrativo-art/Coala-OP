@@ -128,7 +128,15 @@ function ProductCard({
           {/* Full-bleed image — top 65% */}
           <div className="relative" style={{ height: '65%', background: color.bg }}>
             {product.imageUrl ? (
-              <Image src={product.imageUrl} alt={product.name} fill className="object-cover" sizes="300px" />
+              <div className="absolute inset-3 flex items-center justify-center">
+                <Image
+                  src={product.imageUrl}
+                  alt={product.name}
+                  fill
+                  className="object-contain"
+                  sizes="300px"
+                />
+              </div>
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <UtensilsCrossed size={40} style={{ color: color.dot, opacity: 0.4 }} />

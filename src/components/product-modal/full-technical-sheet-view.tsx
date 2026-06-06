@@ -151,7 +151,7 @@ export default function FullTechnicalSheetView({ simulation }: { simulation: Pro
               {/* Photo */}
               {simulation.ppo?.referenceImageUrl ? (
                 <div className="bg-white p-2 rounded-2xl border shadow-sm">
-                   <img src={simulation.ppo.referenceImageUrl} className="w-full aspect-square object-cover rounded-xl" />
+                   <img src={simulation.ppo.referenceImageUrl} className="w-full aspect-square object-contain rounded-xl" />
                 </div>
               ) : (
                 <div className="bg-gray-50 p-2 rounded-2xl border-2 border-dashed border-gray-200 aspect-square flex flex-col items-center justify-center text-gray-400">
