@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { BackButton } from '@/components/navigation/back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,6 @@ import { PriceComparisonTable } from '@/components/price-comparison-table';
 import { CompetitorManagementModal } from '@/components/competitor-management-modal';
 import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
 import { LineChart, SlidersHorizontal, Group, Users, Menu } from 'lucide-react';
-import { useCompetitors } from '@/hooks/use-competitors';
 import { CompetitorSelectionModal } from '@/components/competitor-selection-modal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from "@/hooks/use-auth";
@@ -20,12 +19,7 @@ export default function PriceComparisonPage() {
   const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
-  const { competitors } = useCompetitors();
   const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<string[]>([]);
-  
-  const selectedCompetitors = useMemo(() => {
-    return competitors.filter(c => selectedCompetitorIds.includes(c.id));
-  }, [selectedCompetitorIds, competitors]);
 
   return (
     <PermissionGuard allowed={permissions.pricing.view}>

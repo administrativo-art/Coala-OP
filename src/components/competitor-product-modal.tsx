@@ -9,6 +9,7 @@ import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useToast } from '@/hooks/use-toast';
 import { type CompetitorProduct } from '@/types';
 import { units, unitCategories } from '@/lib/conversion';
+import { normalizeSearchText } from '@/lib/product-search';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,7 @@ interface CompetitorProductModalProps {
 }
 
 export function CompetitorProductModal({ isOpen, onClose, productToEdit }: CompetitorProductModalProps) {
-  const { competitors, competitorGroups, addProduct, updateProduct } = useCompetitors();
+  const { competitors, competitorGroups, addProduct, updateProduct, addPrice } = useCompetitors();
   const { simulations } = useProductSimulation();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,6 +71,20 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
       sim.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [simulations, searchTerm]);
+
+  // Sugestão automática de vínculo: casa o nome da mercadoria do concorrente
+  // com uma das suas simulações (quando ainda não há vínculo).
+  const itemNameWatch = form.watch('itemName');
+  const ksProductIdWatch = form.watch('ksProductId');
+  const suggestedSim = useMemo(() => {
+    if (ksProductIdWatch) return null;
+    const tokens = normalizeSearchText(itemNameWatch || '').split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return null;
+    return simulations.find(sim => {
+      const name = normalizeSearchText(sim.name);
+      return tokens.every(t => name.includes(t));
+    }) || null;
+  }, [itemNameWatch, ksProductIdWatch, simulations]);
 
   const competitorsInGroup = useMemo(() => {
     if (!selectedGroupId) return [];
@@ -130,8 +145,18 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
     setIsSubmitting(true);
     try {
         if (productToEdit) {
-          const { price, ...updateValues } = values; // Price is not edited here
+          const { price, ...updateValues } = values;
           await updateProduct(productToEdit.id, updateValues);
+          // Se um preço foi informado na edição, registra uma nova coleta.
+          if (price && price > 0) {
+            await addPrice({
+              competitorProductId: productToEdit.id,
+              price,
+              data_coleta: new Date().toISOString(),
+              fonte: 'Atualização manual',
+              promocional: false,
+            });
+          }
           toast({ title: 'Mercadoria atualizada com sucesso!' });
         } else {
           if (!values.price) {
@@ -275,32 +300,42 @@ export function CompetitorProductModal({ isOpen, onClose, productToEdit }: Compe
                       )}
                     />
                 </div>
-                 {!productToEdit && (
-                   <FormField
-                      control={form.control}
-                      name="price"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Preço (R$)</FormLabel>
-                          <FormControl>
-                            <Input
-                                type="text"
-                                placeholder="Ex: 19,90"
-                                value={formatPrice(field.value)}
-                                onChange={e => handlePriceChange(e, field)}
-                            />
-                            </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                 )}
+                 <FormField
+                    control={form.control}
+                    name="price"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{productToEdit ? 'Registrar novo preço (opcional)' : 'Preço (R$)'}</FormLabel>
+                        <FormControl>
+                          <Input
+                              type="text"
+                              placeholder="Ex: 19,90"
+                              value={formatPrice(field.value)}
+                              onChange={e => handlePriceChange(e, field)}
+                          />
+                          </FormControl>
+                        {productToEdit && <p className="text-xs text-muted-foreground">Deixe em branco para manter o preço atual. Um valor aqui registra uma nova coleta de hoje.</p>}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 <FormField
                   control={form.control}
                   name="ksProductId"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Correlacionar com sua mercadoria (opcional)</FormLabel>
+                      {suggestedSim && (
+                        <button
+                          type="button"
+                          onClick={() => field.onChange(suggestedSim.id)}
+                          className="flex w-full items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-left text-xs text-indigo-700 transition-colors hover:bg-indigo-100"
+                        >
+                          <Search className="h-3.5 w-3.5 shrink-0" />
+                          <span className="flex-1 truncate">Sugestão: <strong>{suggestedSim.name}</strong></span>
+                          <span className="font-semibold">Vincular</span>
+                        </button>
+                      )}
                        <Select
                         onValueChange={(value) => field.onChange(value === 'none' ? null : value)}
                         value={field.value || 'none'}

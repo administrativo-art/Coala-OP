@@ -13,11 +13,12 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PlusCircle, Edit, Trash2, Search, Eraser, Building, Link2 } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Search, Eraser, Building, Link2, History } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { CompetitorProductModal } from './competitor-product-modal';
+import { CompetitorPriceModal } from './competitor-price-modal';
 import { type CompetitorProduct } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { ScrollArea } from './ui/scroll-area';
@@ -29,6 +30,7 @@ export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: 
 
   const [selectedProduct, setSelectedProduct] = useState<CompetitorProduct | null>(null);
   const [productToDelete, setProductToDelete] = useState<CompetitorProduct | null>(null);
+  const [priceHistoryProduct, setPriceHistoryProduct] = useState<CompetitorProduct | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [competitorFilter, setCompetitorFilter] = useState('all');
@@ -153,6 +155,7 @@ export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: 
                                         <TableCell>{competitor ? competitor.name : <Badge variant="destructive">N/A</Badge>}</TableCell>
                                         <TableCell>{correlatedSim ? correlatedSim.name : <Badge variant="outline">Não vinculado</Badge>}</TableCell>
                                         <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" title="Histórico de preços" onClick={() => setPriceHistoryProduct(p)}><History className="h-4 w-4" /></Button>
                                             <Button variant="ghost" size="icon" onClick={() => handleEdit(p)}><Edit className="h-4 w-4" /></Button>
                                             <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setProductToDelete(p)}><Trash2 className="h-4 w-4" /></Button>
                                         </TableCell>
@@ -179,6 +182,14 @@ export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: 
         onClose={() => setIsProductModalOpen(false)}
         productToEdit={selectedProduct}
       />
+
+      {priceHistoryProduct && (
+        <CompetitorPriceModal
+          isOpen={!!priceHistoryProduct}
+          onClose={() => setPriceHistoryProduct(null)}
+          product={priceHistoryProduct}
+        />
+      )}
       
       <DeleteConfirmationDialog 
         open={!!productToDelete}
