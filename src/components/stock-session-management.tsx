@@ -1,7 +1,8 @@
 
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -22,7 +23,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History, PackagePlus } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History, PackagePlus, ChevronRight, Store, ClipboardList } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -35,6 +36,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, Di
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { useItemAddition } from '@/hooks/use-item-addition';
 
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
@@ -370,15 +372,25 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   const { baseProducts } = useBaseProducts();
   const { auditSessions, activeSession, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession, loading } = useStockAudit();
   const { adjustLotQuantity } = useExpiryProducts();
+  const { requests: itemAdditionRequests } = useItemAddition();
   const { toast } = useToast();
-  
+
   const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
 
   const isAdmin = permissions.settings.manageUsers; // admin vê tudo
-  const pendingAudits = useMemo(() => auditSessions.filter(s => 
-    s.status === 'pending_review' && 
+  const pendingAudits = useMemo(() => auditSessions.filter(s =>
+    s.status === 'pending_review' &&
     (isAdmin || user?.assignedKioskIds?.includes(s.kioskId))
   ), [auditSessions, isAdmin, user]);
+
+  const countableKiosks = useMemo(
+    () => (isAdmin ? kiosks : kiosks.filter((k) => user?.assignedKioskIds?.includes(k.id))),
+    [isAdmin, kiosks, user],
+  );
+  const pendingRequests = useMemo(
+    () => itemAdditionRequests.filter((r) => r.status === 'pending' && (isAdmin || user?.assignedKioskIds?.includes(r.kioskId))),
+    [itemAdditionRequests, isAdmin, user],
+  );
   
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
@@ -492,49 +504,129 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     return <AuditForm session={activeSession} onSave={handleSaveAndExit} onFinalize={handleFinalize} onCancel={handleCancelAudit} />;
   }
 
+  const canPerform = permissions.stock.stockCount.perform;
+  const canReview = permissions.stock.stockCount.perform || permissions.stock.stockCount.approve;
+
   return (
     <>
-        <Card>
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <div>
-                        <CardTitle className="flex items-center gap-2">
-                           <ListOrdered /> Contagem de estoque
-                        </CardTitle>
-                        <CardDescription>Inicie uma nova contagem ou continue uma sessão salva para revisão.</CardDescription>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Contagem de estoque</h1>
+            <p className="text-sm text-muted-foreground">Inicie uma nova contagem ou conclua uma sessão salva para revisão.</p>
+          </div>
+          <div className="flex gap-2">
+            {showExportButton && (
+              <Button onClick={handleExport} variant="outline"><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+            )}
+            {canPerform && (
+              <Button onClick={() => setIsKioskSelectionOpen(true)} className="bg-indigo-500 hover:bg-indigo-600">
+                <PlusCircle className="mr-2 h-4 w-4" /> Realizar contagem
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Metric cards */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[
+            { icon: ClipboardList, value: pendingAudits.length, label: 'Sessões em aberto', detail: `${pendingAudits.length} aguardando revisão`, tone: 'text-indigo-600 bg-indigo-50' },
+            { icon: PackagePlus, value: pendingRequests.length, label: 'Solicitações de insumo', detail: 'Aguardando o administrador', tone: 'text-amber-600 bg-amber-50' },
+            { icon: Store, value: countableKiosks.length, label: 'Quiosques ativos', detail: 'Disponíveis para contar', tone: 'text-emerald-600 bg-emerald-50' },
+          ].map((m) => (
+            <Card key={m.label} className="p-4">
+              <div className="flex items-start gap-3">
+                <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', m.tone)}>
+                  {React.createElement(m.icon, { className: 'h-5 w-5' })}
+                </div>
+                <div>
+                  <p className="text-2xl font-bold leading-none">{loading ? '—' : m.value}</p>
+                  <p className="mt-1 text-sm font-medium">{m.label}</p>
+                  <p className="text-xs text-muted-foreground">{m.detail}</p>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        {/* Two columns */}
+        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+          {/* Concluir contagem */}
+          <Card className="p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 font-semibold"><ListOrdered className="h-4 w-4" /> Concluir contagem</h3>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">{pendingAudits.length}</span>
+            </div>
+            <div className="space-y-2">
+              {loading ? (
+                <Skeleton className="h-20 w-full" />
+              ) : pendingAudits.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
+                  <Inbox className="h-8 w-8" />
+                  <p className="text-sm">Nenhuma sessão em aberto.</p>
+                </div>
+              ) : (
+                pendingAudits.map((s) => (
+                  <div key={s.id} className="flex items-center gap-3 rounded-lg border p-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                      <Store className="h-5 w-5" />
                     </div>
-                     {showExportButton && (
-                        <Button onClick={handleExport} variant="outline" size="sm" className="w-full sm:w-auto">
-                            <Download className="mr-2 h-4 w-4" />
-                            Exportar
-                        </Button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-semibold">{s.kioskName}</p>
+                        <Badge variant="outline" className="border-emerald-300 text-emerald-700">Pronta p/ revisão</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{s.auditedBy.username} · {format(parseISO(s.startedAt), 'dd/MM · HH:mm')}</p>
+                    </div>
+                    {canReview && (
+                      <Button size="sm" className="bg-indigo-500 hover:bg-indigo-600" onClick={() => setActiveSession(s)}>Revisar</Button>
                     )}
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+
+          {/* Right column */}
+          <div className="space-y-4">
+            <Card className="p-4">
+              <h3 className="flex items-center gap-2 font-semibold"><PlusCircle className="h-4 w-4" /> Nova contagem</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Escolha um quiosque e o sistema lista todos os lotes em estoque para conferência.</p>
+              {canPerform && (
+                <Button onClick={() => setIsKioskSelectionOpen(true)} variant="outline" className="mt-3 w-full">
+                  <PlusCircle className="mr-2 h-4 w-4" /> Iniciar contagem
+                </Button>
+              )}
+            </Card>
+
+            <Link href="/dashboard/stock/item-requests" className="block">
+              <Card className="flex items-center gap-3 p-4 transition-colors hover:bg-muted/50">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                  <PackagePlus className="h-5 w-5" />
                 </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                {permissions.stock.stockCount.perform && (
-                    <Button onClick={() => setIsKioskSelectionOpen(true)} className="w-full md:w-auto">Realizar contagem</Button>
-                )}
-                <div className="space-y-3 pt-4 border-t">
-                    <h3 className="text-sm font-bold uppercase text-muted-foreground">Concluir contagem</h3>
-                    {loading ? <Skeleton className="h-24 w-full" /> : pendingAudits.length === 0 ? <p className="text-sm text-muted-foreground italic">Nada pendente.</p> : 
-                        pendingAudits.map(s => (
-                            <div key={s.id} className="p-3 border rounded-md flex justify-between items-center bg-muted/10">
-                                <div className="space-y-0.5"><p className="font-bold text-sm">{s.kioskName}</p><p className="text-[10px] text-muted-foreground uppercase">{s.auditedBy.username} • {format(parseISO(s.startedAt), 'dd/MM HH:mm')}</p></div>
-                                {(permissions.stock.stockCount.perform || permissions.stock.stockCount.approve) && (
-                                    <Button size="sm" variant="outline" onClick={() => setActiveSession(s)}>Continuar</Button>
-                                )}
-                            </div>
-                        ))
-                    }
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-2 font-semibold">Solicitações de cadastro
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">{pendingRequests.length}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">Insumos encontrados na contagem, sem cadastro.</p>
                 </div>
-            </CardContent>
-        </Card>
-      <KioskSelectionModal 
-        open={isKioskSelectionOpen} 
-        onOpenChange={setIsKioskSelectionOpen} 
-        kiosks={isAdmin ? kiosks : kiosks.filter(k => user?.assignedKioskIds?.includes(k.id))} 
-        onSelectKiosk={handleStartSession} 
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </Card>
+            </Link>
+
+            <p className="rounded-lg bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
+              Contagens com divergência seguem para <span className="font-medium text-foreground">aprovação do administrador</span>, que ajusta o estoque ao concluir.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <KioskSelectionModal
+        open={isKioskSelectionOpen}
+        onOpenChange={setIsKioskSelectionOpen}
+        kiosks={countableKiosks}
+        onSelectKiosk={handleStartSession}
       />
     </>
   );
