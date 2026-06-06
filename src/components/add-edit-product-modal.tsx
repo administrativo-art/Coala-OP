@@ -11,8 +11,8 @@ import dynamic from 'next/dynamic';
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
-import { getUnitsForCategory, units, type UnitCategory, unitCategories, packageTypes, type PackageType } from '@/lib/conversion';
-import { type Product, type NutritionalData } from '@/types';
+import { getUnitsForCategory, convertValue, formatQuantity, type UnitCategory, unitCategories, packageTypes, type PackageType } from '@/lib/conversion';
+import { type Product } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useClassifications } from '@/hooks/use-classifications';
 
@@ -23,10 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Camera, Trash2, Upload, Info, Settings, Search, Loader2, FlaskConical, ImageIcon, ZoomIn, Tags, Plus } from 'lucide-react';
+import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, Link2, ScanLine } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
-import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
@@ -68,7 +66,7 @@ const productFormSchema = z.object({
   enableLogistics: z.boolean().optional(),
   multiplo_caixa: z.coerce.number().optional(),
   rotulo_caixa: z.string().optional(),
-  
+
   enableCountingInstruction: z.boolean().optional(),
   countingInstruction: z.string().optional(),
   countingInstructionImageUrl: z.string().optional(),
@@ -97,7 +95,7 @@ type ProductFormValues = z.infer<typeof productFormSchema>;
 function normalizeAlias(value: string) {
     return value
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[̀-ͯ]/g, '')
         .toLowerCase()
         .trim();
 }
@@ -108,6 +106,13 @@ interface AddEditProductModalProps {
   productToEdit: Product | null;
   onManageBaseProducts: () => void;
 }
+
+const WIZARD_STEPS = [
+    { id: 1, label: 'Identificação', icon: FileText, description: 'Foto, nome, vínculo com o produto base e observações.' },
+    { id: 2, label: 'Aliases de compra', icon: Tag, description: 'Nomes que os fornecedores usam para este item nos pedidos e notas. O sistema reconhece esses nomes automaticamente nas compras.' },
+    { id: 3, label: 'Detalhes logísticos', icon: Package, description: 'O item físico que você compra. Define a conversão para a unidade do estoque.' },
+    { id: 4, label: 'Nutricional', icon: ImageIcon, description: 'Opcional — fotografe a embalagem; o assistente transcreve quando solicitado.' },
+] as const;
 
 export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
@@ -122,10 +127,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const [isNutritionalPhotoModalOpen, setIsNutritionalPhotoModalOpen] = useState(false);
     const [isCompositionPhotoModalOpen, setIsCompositionPhotoModalOpen] = useState(false);
     const [zoomedImage, setZoomedImage] = useState<string | null>(null);
-    const [isFetchingProduct, setIsFetchingProduct] = useState(false);
     const [aliases, setAliases] = useState<string[]>([]);
     const [aliasInput, setAliasInput] = useState('');
-    const [aliasesOpen, setAliasesOpen] = useState(false);
+    const [currentStep, setCurrentStep] = useState(1);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const instructionFileInputRef = useRef<HTMLInputElement>(null);
     const nutritionalTableFileInputRef = useRef<HTMLInputElement>(null);
@@ -147,7 +151,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             nutritionalTableImageUrl: '', compositionImageUrl: '',
         }
     });
-    
+
     const groupedBaseProducts = useMemo(() => {
         const classMap = new Map(classifications.map(c => [c.id, c.name]));
         const groups: Record<string, typeof baseProducts> = {};
@@ -168,7 +172,33 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const enableLogisticsWatch = form.watch('enableLogistics');
     const enableCountingInstructionWatch = form.watch('enableCountingInstruction');
     const baseProductIdWatch = form.watch('baseProductId');
+    const operationalCategoryIdWatch = form.watch('operationalCategoryId');
+    const packageTypeWatch = form.watch('packageType');
+    const packageSizeWatch = form.watch('packageSize');
+    const unitWatch = form.watch('unit');
+    const countingUnitWatch = form.watch('defaultCountingUnit') || 'package';
     const isApparel = categoryWatch === 'Vestimenta';
+
+    const linkedBaseProduct = useMemo(
+        () => baseProducts.find((bp) => bp.id === baseProductIdWatch),
+        [baseProducts, baseProductIdWatch],
+    );
+    const operationalCategoryName = useMemo(
+        () => activeCategories.find((c) => c.id === operationalCategoryIdWatch)?.name,
+        [activeCategories, operationalCategoryIdWatch],
+    );
+
+    // Conversão da embalagem para a unidade do produto base (linha "1 Pacote = ...").
+    const baseConversion = useMemo(() => {
+        if (!linkedBaseProduct || !packageSizeWatch || !unitWatch) return null;
+        try {
+            const converted = convertValue(Number(packageSizeWatch), unitWatch, linkedBaseProduct.unit, categoryWatch);
+            if (!isFinite(converted) || converted <= 0) return null;
+            return `${formatQuantity(converted, linkedBaseProduct.unit)}`;
+        } catch {
+            return null;
+        }
+    }, [linkedBaseProduct, packageSizeWatch, unitWatch, categoryWatch]);
 
     const handleCategoryChange = (value: UnitCategory) => {
         form.setValue('category', value, { shouldDirty: true, shouldValidate: true });
@@ -184,6 +214,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
     useEffect(() => {
         if (open) {
+            setCurrentStep(1);
             if (productToEdit) {
                  form.reset({
                     baseName: productToEdit.baseName,
@@ -208,7 +239,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     enableLogistics: !!productToEdit.multiplo_caixa,
                     multiplo_caixa: productToEdit.multiplo_caixa || undefined,
                     rotulo_caixa: productToEdit.rotulo_caixa || '',
-                    
+
                     enableCountingInstruction: !!(productToEdit.countingInstruction || productToEdit.countingInstructionImageUrl),
                     countingInstruction: productToEdit.countingInstruction || '',
                     countingInstructionImageUrl: productToEdit.countingInstructionImageUrl || '',
@@ -233,10 +264,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                 setAliases([]);
             }
             setAliasInput('');
-            setAliasesOpen(false);
         }
     }, [open, productToEdit, form]);
-    
+
     useEffect(() => {
         if (form.formState.isDirty && !productToEdit) {
             form.setValue('unit', getUnitsForCategory(categoryWatch)[0]);
@@ -342,7 +372,33 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
         onOpenChange(false);
     };
-    
+
+    const fieldStep: Partial<Record<keyof ProductFormValues, number>> = {
+        baseName: 1, operationalCategoryId: 1,
+        packageType: 3, category: 3, packageSize: 3, unit: 3, multiplo_caixa: 3, rotulo_caixa: 3, countingInstruction: 3,
+    };
+
+    const onInvalid = (errors: Record<string, unknown>) => {
+        const steps = Object.keys(errors).map((key) => fieldStep[key as keyof ProductFormValues] ?? 1);
+        const firstStep = steps.length > 0 ? Math.min(...steps) : 1;
+        setCurrentStep(firstStep);
+        toast({ variant: 'destructive', title: 'Campos obrigatórios não preenchidos', description: 'Verifique os campos destacados em vermelho.' });
+    };
+
+    const stepFields: Record<number, (keyof ProductFormValues)[]> = {
+        1: ['baseName', 'operationalCategoryId'],
+        2: [],
+        3: ['packageType', 'category', 'packageSize', 'unit',
+            ...(enableLogisticsWatch ? (['multiplo_caixa', 'rotulo_caixa'] as (keyof ProductFormValues)[]) : []),
+            ...(enableCountingInstructionWatch ? (['countingInstruction'] as (keyof ProductFormValues)[]) : [])],
+        4: [],
+    };
+
+    const handleNext = async () => {
+        const valid = await form.trigger(stepFields[currentStep]);
+        if (valid) setCurrentStep((step) => Math.min(WIZARD_STEPS.length, step + 1));
+    };
+    const handleBack = () => setCurrentStep((step) => Math.max(1, step - 1));
 
     const handleAddAlias = () => {
         const nextAlias = aliasInput.trim();
@@ -362,531 +418,571 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         setAliases((current) => current.filter((alias) => normalizeAlias(alias) !== normalizeAlias(aliasToRemove)));
     };
 
-    const renderLinkageCard = () => (
-        <Card className="p-4 bg-violet-100 dark:bg-violet-900/20">
-            <h3 className="font-medium mb-4">Vínculo</h3>
-            <FormField control={form.control} name="operationalCategoryId" render={({ field }) => (
-                <FormItem className="mb-4">
-                    <FormLabel>Categoria do item</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Selecione a categoria do item..."/></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {activeCategories
-                                .filter((category) => category.destination !== 'asset')
-                                .map((category) => (
-                                    <SelectItem key={category.id} value={category.id}>
-                                        {category.name}
-                                    </SelectItem>
-                                ))}
-                        </SelectContent>
-                    </Select>
-                    <FormDescription>
-                        Esta categoria define como o item será tratado nas compras e no recebimento.
-                    </FormDescription>
-                    <FormMessage />
-                </FormItem>
-            )}/>
-            {activeCategories.length === 0 && (
-                <Alert className="mb-4">
-                    <AlertTitle>Cadastre categorias operacionais</AlertTitle>
-                    <AlertDescription>
-                        As categorias padrão são Insumo, Material de limpeza, Vestimenta e Patrimônio.
-                    </AlertDescription>
-                </Alert>
-            )}
-            <FormField control={form.control} name="baseProductId" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Insumo base</FormLabel>
-                    <div className="flex gap-2 items-center">
-                        <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
-                            <FormControl>
-                                <SelectTrigger><SelectValue placeholder="Selecione para agrupar este insumo..."/></SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                {groupedBaseProducts.map(([groupName, items]) => (
-                                    <SelectGroup key={groupName}>
-                                        <SelectLabel>{groupName}</SelectLabel>
-                                        {items.map(ap => (
-                                            <SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}>
-                            <Settings className="h-4 w-4"/>
-                        </Button>
-                    </div>
-                    <FormMessage />
-                </FormItem>
-            )}/>
-            
-        </Card>
-    );
+    const countingOptions = [
+        { value: 'package' as const, title: 'Unidade do Lote', desc: `Conta embalagens físicas${packageTypeWatch ? ` (${packageTypeWatch.toLowerCase()}s)` : ''}` },
+        { value: 'base' as const, title: 'Unid. do Produto Base', desc: linkedBaseProduct ? `Conta na base (${linkedBaseProduct.unit})` : 'Conta na unidade do produto base' },
+        { value: 'content' as const, title: 'Unid. do Conteúdo', desc: `Mede o conteúdo (${unitWatch || 'un'} restantes)` },
+    ];
 
-    const renderNotesCard = () => (
-        <Card className="p-4 bg-muted/40">
-            <FormField control={form.control} name="notes" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Observações</FormLabel>
-                    <FormControl>
-                        <Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} />
-                    </FormControl>
-                    <FormMessage />
-                </FormItem>
-            )}/>
-        </Card>
-    );
-
+    const editingTitle = productToEdit
+        ? `Editar insumo${linkedBaseProduct ? ' derivado' : ''}`
+        : 'Adicionar novo insumo';
+    const subtitle = productToEdit ? getProductFullName(productToEdit) : 'Preencha os detalhes do insumo nas etapas abaixo.';
 
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>{productToEdit ? `Editando ${getProductFullName(productToEdit)}` : 'Adicionar novo insumo'}</DialogTitle>
-                        <DialogDescription>
-                            Preencha os detalhes do insumo abaixo.
-                        </DialogDescription>
+                <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden">
+                    {/* Header */}
+                    <DialogHeader className="space-y-2 border-b px-6 py-4 text-left">
+                        <div className="flex flex-wrap items-center gap-2">
+                            {categoryWatch && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-amber-700">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                    {categoryWatch}
+                                </span>
+                            )}
+                            {operationalCategoryName && (
+                                <span className="inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
+                                    {operationalCategoryName}
+                                </span>
+                            )}
+                            {linkedBaseProduct && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                                    <Link2 className="h-3 w-3" />
+                                    {linkedBaseProduct.name}
+                                </span>
+                            )}
+                        </div>
+                        <DialogTitle className="text-2xl font-bold">{editingTitle}</DialogTitle>
+                        <DialogDescription className="text-sm">{subtitle}</DialogDescription>
                     </DialogHeader>
+
                     <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit, () => {
-                        toast({ variant: 'destructive', title: 'Campos obrigatórios não preenchidos', description: 'Role o formulário para cima e verifique os campos destacados em vermelho.' });
-                    })}>
-                        <ScrollArea className="h-[60vh] -mx-6 px-6 pr-8">
-                            <div className="space-y-4 pt-4">
-                                <Card className="p-4 bg-blue-500/5 dark:bg-blue-900/10">
-                                    <div className="space-y-2">
-                                        <FormLabel>Foto do insumo</FormLabel>
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
-                                                {form.watch('imageUrl') ? <Image src={form.watch('imageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                    <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
+                        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
+                            {/* Stepper sidebar */}
+                            <aside className="border-r bg-muted/40 px-5 py-6">
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {WIZARD_STEPS.length}</p>
+                                <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                    <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${(currentStep / WIZARD_STEPS.length) * 100}%` }} />
+                                </div>
+                                <nav className="space-y-1">
+                                    {WIZARD_STEPS.map((step) => {
+                                        const isActive = step.id === currentStep;
+                                        const isDone = step.id < currentStep;
+                                        return (
+                                            <button
+                                                key={step.id}
+                                                type="button"
+                                                onClick={() => setCurrentStep(step.id)}
+                                                className={cn(
+                                                    'flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm transition-colors',
+                                                    isActive ? 'font-semibold text-foreground' : 'text-muted-foreground hover:bg-muted',
+                                                )}
+                                            >
+                                                <span className={cn(
+                                                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                                                    isActive ? 'bg-indigo-500 text-white' : isDone ? 'bg-indigo-100 text-indigo-600' : 'bg-muted text-muted-foreground',
+                                                )}>
+                                                    {isDone ? <Check className="h-4 w-4" /> : step.id}
+                                                </span>
+                                                <span className="truncate">{step.label}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </nav>
+                            </aside>
+
+                            {/* Step content */}
+                            <ScrollArea className="h-[62vh]">
+                                <div className="px-6 py-6">
+                                    {/* Section header */}
+                                    <div className="mb-5 flex items-start justify-between gap-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50 text-foreground">
+                                                {React.createElement(WIZARD_STEPS[currentStep - 1].icon, { className: 'h-4 w-4' })}
                                             </div>
-                                            <div className="flex flex-col gap-2">
-                                                <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
-                                                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
-                                                {form.watch('imageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
+                                            <div>
+                                                <h3 className="font-semibold leading-tight">{WIZARD_STEPS[currentStep - 1].label}</h3>
+                                                <p className="text-sm text-muted-foreground">{WIZARD_STEPS[currentStep - 1].description}</p>
                                             </div>
                                         </div>
-                                        <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'main')} />
-                                        <FormField control={form.control} name="imageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                    </div>
-                                </Card>
-
-                                <Card className="p-4 bg-blue-500/5 dark:bg-blue-900/10">
-                                     <h3 className="font-medium mb-4">Informações básicas</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo</FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                        <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                    </div>
-                                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background/70 p-3">
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-medium">Aliases de compra</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {aliases.length > 0
-                                                    ? `${aliases.length} alias${aliases.length === 1 ? '' : 'es'} vinculado${aliases.length === 1 ? '' : 's'} a este insumo.`
-                                                    : 'Nenhum alias cadastrado.'}
-                                            </p>
-                                        </div>
-                                        <Popover open={aliasesOpen} onOpenChange={setAliasesOpen}>
-                                            <PopoverTrigger asChild>
-                                                <Button type="button" variant="outline" size="sm">
-                                                    <Tags className="mr-2 h-4 w-4" />
-                                                    Gerenciar aliases
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent align="end" className="w-80 space-y-3">
-                                                <div>
-                                                    <p className="text-sm font-medium">Aliases deste insumo</p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Nomes vindos de pedidos que devem apontar para este cadastro.
-                                                    </p>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <Input
-                                                        placeholder="Ex: TUBITOS 750G POTE C/50UN"
-                                                        value={aliasInput}
-                                                        onChange={(event) => setAliasInput(event.target.value)}
-                                                        onKeyDown={(event) => {
-                                                            if (event.key === 'Enter') {
-                                                                event.preventDefault();
-                                                                handleAddAlias();
-                                                            }
-                                                        }}
-                                                    />
-                                                    <Button type="button" size="icon" onClick={handleAddAlias}>
-                                                        <Plus className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                                <div className="max-h-48 space-y-2 overflow-y-auto">
-                                                    {aliases.length === 0 ? (
-                                                        <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                                                            Nenhum alias salvo.
-                                                        </p>
-                                                    ) : (
-                                                        aliases.map((alias) => (
-                                                            <div key={alias} className="flex items-center gap-2 rounded-md border px-2 py-1.5">
-                                                                <span className="min-w-0 flex-1 truncate text-sm">{alias}</span>
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-7 w-7 text-destructive hover:text-destructive"
-                                                                    onClick={() => handleRemoveAlias(alias)}
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            </div>
-                                                        ))
-                                                    )}
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                    </div>
-                                    
-                                    <FormField control={form.control} name="barcode" render={({ field }) => (
-                                        <FormItem className='mt-4'><FormLabel>Código de barras</FormLabel>
-                                            <div className="flex gap-2">
-                                                <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
-                                                <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><Camera className="h-4 w-4" /></Button>
-                                            </div>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                </Card>
-
-                                {renderLinkageCard()}
-                                
-                                <Card className="p-4 bg-amber-100 dark:bg-amber-900/20">
-                                    <div className="space-y-0.5 mb-4">
-                                        <h3 className="font-medium">Embalagem de conteúdo</h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            Detalhes do item físico que você compra. Ex: um pacote de 500g, uma lata de 395g, etc.
-                                        </p>
-                                    </div>
-                                     <FormField
-                                        control={form.control}
-                                        name="packageType"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel>Tipo de embalagem</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione o tipo de embalagem" />
-                                                </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    {packageTypes.map((type) => (
-                                                        <SelectItem key={type} value={type}>
-                                                        {type}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                            </FormItem>
+                                        {currentStep === 1 && linkedBaseProduct && (
+                                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                                                <Link2 className="h-3 w-3" /> base vinculada
+                                            </span>
                                         )}
-                                    />
-                                    <div className="grid grid-cols-3 gap-4 mt-4">
-                                        <FormField control={form.control} name="category" render={({ field }) => (
-                                          <FormItem>
-                                            <FormLabel>Categoria</FormLabel>
-                                            <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value}>
-                                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                              <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                          </FormItem>
-                                        )}/>
-                                        <FormField control={form.control} name="packageSize" render={({ field }) => (<FormItem>
-                                            <div className="flex items-center gap-2">
-                                                <FormLabel>Qtd. embalagem</FormLabel>
-                                                <TooltipProvider delayDuration={100}>
-                                                    <Tooltip>
-                                                        <TooltipTrigger type="button" onClick={(e) => e.preventDefault()}>
-                                                            <Info className="h-4 w-4 text-muted-foreground" />
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            <p>Informe o conteúdo da embalagem. Ex: para 400g, digite 400.</p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
-                                            </div>
-                                            <FormControl><Input type="number" step="any" placeholder="ex: 250" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                        <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
                                     </div>
-                                </Card>
 
-                                {isApparel && (
-                                  <Card className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700">
-                                    <p className="text-sm font-semibold mb-3">Atributos do item</p>
-                                    <div className="grid grid-cols-2 gap-3">
-                                      <FormField control={form.control} name="apparelSize" render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel>Tamanho</FormLabel>
-                                          <Select value={field.value ?? ''} onValueChange={field.onChange}>
-                                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                            <SelectContent>
-                                              {['PP','P','M','G','GG','XGG','Único'].map(s => (
-                                                <SelectItem key={s} value={s}>{s}</SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                        </FormItem>
-                                      )} />
-                                      <FormField control={form.control} name="apparelColor" render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel>Cor</FormLabel>
-                                          <FormControl><Input placeholder="Ex: Preto" {...field} value={field.value ?? ''} /></FormControl>
-                                        </FormItem>
-                                      )} />
-                                      <FormField control={form.control} name="apparelType" render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel>Modelo</FormLabel>
-                                          <FormControl><Input placeholder="Ex: Camiseta, Avental" {...field} value={field.value ?? ''} /></FormControl>
-                                        </FormItem>
-                                      )} />
-                                      <FormField control={form.control} name="apparelMaterial" render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel>Tecido / material</FormLabel>
-                                          <FormControl><Input placeholder="Ex: Algodão, Poliéster" {...field} value={field.value ?? ''} /></FormControl>
-                                        </FormItem>
-                                      )} />
-                                      <FormField control={form.control} name="apparelUsage" render={({ field }) => (
-                                        <FormItem className="col-span-2">
-                                          <FormLabel>Uso</FormLabel>
-                                          <FormControl><Input placeholder="Ex: Cozinha, Atendimento, EPI" {...field} value={field.value ?? ''} /></FormControl>
-                                        </FormItem>
-                                      )} />
-                                    </div>
-                                  </Card>
-                                )}
-
-                                <Card className="p-4 bg-blue-100 dark:bg-blue-900/20">
-                                    <div className="flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <FormLabel className="text-base">Detalhes logísticos</FormLabel>
-                                            <FormDescription>Embalagem de agrupamento.</FormDescription>
-                                        </div>
-                                        <FormField control={form.control} name="enableLogistics" render={({ field }) => (
-                                            <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                                        )} />
-                                    </div>
-                                    {enableLogisticsWatch && (
-                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-blue-500/20 mt-4">
-                                            <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Quantidade</FormLabel>
-                                                    <FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl>
-                                                    <FormDescription className="text-xs">
-                                                        Informe quantas unidades do insumo de compra (ex: bags, latas, pacotes) cabem dentro da embalagem de agrupamento. Exemplo: se 1 'Caixa' contém 10 'Bags', insira '10'.
-                                                    </FormDescription>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}/>
-                                            <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Tipo de agrupamento</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value}>
-                                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                                        <SelectContent>
-                                                            <SelectItem value="Caixa">Caixa</SelectItem>
-                                                            <SelectItem value="Fardo">Fardo</SelectItem>
-                                                            <SelectItem value="Pallet">Pallet</SelectItem>
-                                                            <SelectItem value="Tambor">Tambor</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}/>
-                                        </div>
-                                    )}
-                                </Card>
-                                
-                                <Card className="p-4 bg-green-100 dark:bg-green-900/20">
-                                  <FormField
-                                      control={form.control}
-                                      name="defaultCountingUnit"
-                                      render={({ field }) => (
-                                          <FormItem>
-                                              <FormLabel>Unidade Padrão para Contagem</FormLabel>
-                                              <Select onValueChange={field.onChange} value={field.value}>
-                                                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                  <SelectContent>
-                                                      <SelectItem value="package">Unidade do Lote</SelectItem>
-                                                      <SelectItem value="base">Unidade do Produto Base</SelectItem>
-                                                      <SelectItem value="content">Unidade do Conteúdo</SelectItem>
-                                                  </SelectContent>
-                                              </Select>
-                                              <FormDescription>Define como este insumo será exibido e contado no módulo de contagem de estoque.</FormDescription>
-                                              <FormMessage />
-                                          </FormItem>
-                                      )}
-                                  />
-                                </Card>
-
-                                <Card className="p-4 bg-sky-100 dark:bg-sky-900/20">
-                                    <div className="flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <FormLabel className="text-base">Instrução de Contagem</FormLabel>
-                                            <FormDescription>Adicione um texto ou imagem para guiar a contagem.</FormDescription>
-                                        </div>
-                                        <FormField control={form.control} name="enableCountingInstruction" render={({ field }) => (
-                                            <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                                        )}/>
-                                    </div>
-                                    {enableCountingInstructionWatch && (
-                                        <div className="space-y-4 pt-4 border-t border-sky-500/20 mt-4">
-                                            <FormField control={form.control} name="countingInstruction" render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Texto da instrução</FormLabel>
-                                                    <FormControl><Textarea placeholder="Ex: Contar por peso na balança..." {...field} value={field.value ?? ''} /></FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}/>
+                                    {/* ===== STEP 1 — Identificação ===== */}
+                                    {currentStep === 1 && (
+                                        <div className="space-y-5">
                                             <div className="space-y-2">
-                                                <FormLabel>Imagem de instrução</FormLabel>
+                                                <FormLabel>Foto do insumo</FormLabel>
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-24 h-24 rounded-md bg-secondary flex items-center justify-center overflow-hidden">
-                                                        {form.watch('countingInstructionImageUrl') ? <Image src={form.watch('countingInstructionImageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                                                    <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-md bg-secondary">
+                                                        {form.watch('imageUrl') ? <Image src={form.watch('imageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
                                                     </div>
                                                     <div className="flex flex-col gap-2">
-                                                        <Button type="button" variant="outline" onClick={() => setIsInstructionPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('countingInstructionImageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
-                                                        <Button type="button" variant="outline" onClick={() => instructionFileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
-                                                        {form.watch('countingInstructionImageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('countingInstructionImageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
+                                                        <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
+                                                        <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
+                                                        {form.watch('imageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
                                                     </div>
                                                 </div>
-                                                <Input type="file" ref={instructionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'instruction')} />
-                                                <FormField control={form.control} name="countingInstructionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'main')} />
+                                                <FormField control={form.control} name="imageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                            </div>
+
+                                            <Separator />
+
+                                            <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo <span className="text-rose-500">*</span></FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+
+                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                <FormField control={form.control} name="barcode" render={({ field }) => (
+                                                    <FormItem>
+                                                        <div className="flex items-center justify-between">
+                                                            <FormLabel>Código de barras</FormLabel>
+                                                            <span className="text-xs text-muted-foreground">EAN-13 / GTIN</span>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
+                                                            <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><ScanLine className="h-4 w-4" /></Button>
+                                                        </div>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}/>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                <FormField control={form.control} name="operationalCategoryId" render={({ field }) => (
+                                                    <FormItem>
+                                                        <div className="flex items-center justify-between">
+                                                            <FormLabel>Categoria do item <span className="text-rose-500">*</span></FormLabel>
+                                                            <span className="text-xs text-muted-foreground">define o fluxo de compra</span>
+                                                        </div>
+                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione a categoria do item..."/></SelectTrigger></FormControl>
+                                                            <SelectContent>
+                                                                {activeCategories.filter((category) => category.destination !== 'asset').map((category) => (
+                                                                    <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}/>
+                                                <FormField control={form.control} name="baseProductId" render={({ field }) => (
+                                                    <FormItem>
+                                                        <div className="flex items-center justify-between">
+                                                            <FormLabel>Insumo base</FormLabel>
+                                                            <span className="text-xs text-muted-foreground">agrupa e converte o estoque</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
+                                                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar..."/></SelectTrigger></FormControl>
+                                                                <SelectContent>
+                                                                    {groupedBaseProducts.map(([groupName, items]) => (
+                                                                        <SelectGroup key={groupName}>
+                                                                            <SelectLabel>{groupName}</SelectLabel>
+                                                                            {items.map(ap => (<SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>))}
+                                                                        </SelectGroup>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}><Settings className="h-4 w-4"/></Button>
+                                                        </div>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}/>
+                                            </div>
+
+                                            {activeCategories.length === 0 && (
+                                                <Alert>
+                                                    <AlertTitle>Cadastre categorias operacionais</AlertTitle>
+                                                    <AlertDescription>As categorias padrão são Insumo, Material de limpeza, Vestimenta e Patrimônio.</AlertDescription>
+                                                </Alert>
+                                            )}
+
+                                            <FormField control={form.control} name="notes" render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center justify-between">
+                                                        <FormLabel>Observações</FormLabel>
+                                                        <span className="text-xs text-muted-foreground">opcional</span>
+                                                    </div>
+                                                    <FormControl><Textarea placeholder="Insira observações (opcional)" {...field} value={field.value ?? ''} /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}/>
+                                        </div>
+                                    )}
+
+                                    {/* ===== STEP 2 — Aliases de compra ===== */}
+                                    {currentStep === 2 && (
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                                                    {aliases.length} alias{aliases.length === 1 ? '' : 'es'}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    placeholder="Ex: BISC RECH OREO 144G C/4"
+                                                    value={aliasInput}
+                                                    onChange={(event) => setAliasInput(event.target.value)}
+                                                    onKeyDown={(event) => {
+                                                        if (event.key === 'Enter') { event.preventDefault(); handleAddAlias(); }
+                                                    }}
+                                                />
+                                                <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleAddAlias}>
+                                                    <Plus className="mr-1.5 h-4 w-4" /> Adicionar
+                                                </Button>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                {aliases.length === 0 ? (
+                                                    <p className="rounded-md bg-muted px-3 py-6 text-center text-sm text-muted-foreground">
+                                                        Nenhum alias cadastrado. Adicione os nomes que os fornecedores usam para este item.
+                                                    </p>
+                                                ) : (
+                                                    aliases.map((alias) => (
+                                                        <div key={alias} className="flex items-center gap-3 rounded-lg border bg-background px-3 py-2.5">
+                                                            <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                                            <span className="min-w-0 flex-1 truncate text-sm font-medium">{alias}</span>
+                                                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleRemoveAlias(alias)}>
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+
+                                            {/* Card educativo: como o alias age numa importação */}
+                                            <div className="rounded-xl bg-zinc-900 p-4 text-zinc-100">
+                                                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-zinc-400">Como o alias age numa importação de pedido</p>
+                                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                                    <div className="flex-1 rounded-lg bg-zinc-800 p-3">
+                                                        <p className="text-[10px] uppercase tracking-wide text-zinc-500">Linha do pedido · fornecedor</p>
+                                                        <p className="mt-1 font-mono text-xs">OREO BISC ORIG RECH 144G</p>
+                                                    </div>
+                                                    <div className="flex items-center justify-center">
+                                                        <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-400">match</span>
+                                                    </div>
+                                                    <div className="flex-1 rounded-lg bg-zinc-800 p-3">
+                                                        <p className="text-[10px] uppercase tracking-wide text-emerald-400">reconhecido</p>
+                                                        <p className="mt-1 text-xs font-medium">{productToEdit ? getProductFullName(productToEdit) : 'Este insumo'}</p>
+                                                    </div>
+                                                </div>
+                                                <p className="mt-3 text-xs leading-relaxed text-zinc-400">
+                                                    Sem o alias, esta linha cairia em &quot;não reconhecido&quot; e exigiria vínculo manual a cada compra. Com o alias salvo, ela entra direto no estoque com custo e conversão corretos.
+                                                </p>
                                             </div>
                                         </div>
                                     )}
-                                </Card>
-                                
-                                <Card className="p-4 bg-emerald-50 dark:bg-emerald-900/20">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <FlaskConical className="h-4 w-4 text-emerald-600" />
-                                        <h3 className="font-medium text-emerald-900 dark:text-emerald-100">Tabela Nutricional e Composição</h3>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mb-4">Fotografe a embalagem. Os dados serão transcritos pelo assistente quando solicitado.</p>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {/* Nutritional Table Photo */}
-                                        <div className="space-y-2">
-                                            <FormLabel className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Foto — Tabela Nutricional</FormLabel>
-                                            <div className="flex items-center gap-3">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => form.watch('nutritionalTableImageUrl') ? setZoomedImage(form.watch('nutritionalTableImageUrl')!) : undefined}
-                                                    className="w-20 h-20 rounded-md bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0 border border-emerald-200 focus:outline-none"
-                                                >
-                                                    {form.watch('nutritionalTableImageUrl') ? (
-                                                        <div className="relative w-full h-full group">
-                                                            <Image src={form.watch('nutritionalTableImageUrl')!} alt="Tabela Nutricional" width={80} height={80} className="object-cover w-full h-full" />
-                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <ZoomIn className="h-5 w-5 text-white" />
-                                                            </div>
-                                                        </div>
-                                                    ) : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
-                                                </button>
-                                                <div className="flex flex-col gap-1.5">
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsNutritionalPhotoModalOpen(true)}><Camera className="mr-1.5 h-3.5 w-3.5" /> Câmera</Button>
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => nutritionalTableFileInputRef.current?.click()}><Upload className="mr-1.5 h-3.5 w-3.5" /> Upload</Button>
-                                                    {form.watch('nutritionalTableImageUrl') && (
-                                                        <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600 px-2" onClick={() => form.setValue('nutritionalTableImageUrl', '', { shouldDirty: true })}>
-                                                            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Remover
-                                                        </Button>
+                                    {/* ===== STEP 3 — Detalhes logísticos ===== */}
+                                    {currentStep === 3 && (
+                                        <div className="space-y-5">
+                                            <Card className="space-y-4 border-amber-200 bg-amber-50/60 p-4 dark:bg-amber-900/20">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <h4 className="font-medium">Embalagem &amp; conversão</h4>
+                                                        <p className="text-sm text-muted-foreground">O item físico que você compra. Define a conversão para a unidade do estoque.</p>
+                                                    </div>
+                                                    {linkedBaseProduct && baseConversion && (
+                                                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                                                            <Check className="h-3 w-3" /> compatível com a base
+                                                        </span>
                                                     )}
                                                 </div>
-                                            </div>
-                                            <Input type="file" ref={nutritionalTableFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'nutritionalTable')} />
-                                            <FormField control={form.control} name="nutritionalTableImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl></FormItem>)}/>
-                                        </div>
+                                                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                                                    <FormField control={form.control} name="packageType" render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Tipo de embalagem <span className="text-rose-500">*</span></FormLabel>
+                                                            <Select onValueChange={field.onChange} value={field.value}>
+                                                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                                                                <SelectContent>{packageTypes.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
+                                                            </Select>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}/>
+                                                    <FormField control={form.control} name="category" render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Categoria da unidade <span className="text-rose-500">*</span></FormLabel>
+                                                            <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value}>
+                                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                                <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
+                                                            </Select>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}/>
+                                                    <FormField control={form.control} name="packageSize" render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Qtd. embalagem <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormControl><Input type="number" step="any" placeholder="ex: 144" {...field} value={field.value ?? ''} /></FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}/>
+                                                    <FormField control={form.control} name="unit" render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Unidade <span className="text-rose-500">*</span></FormLabel>
+                                                            <Select onValueChange={field.onChange} value={field.value}>
+                                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                                <SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                                                            </Select>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}/>
+                                                </div>
+                                                {packageSizeWatch && unitWatch && (
+                                                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-background/70 px-3 py-2 text-sm">
+                                                        <Settings className="h-4 w-4 text-muted-foreground" />
+                                                        <span className="font-medium">1 {packageTypeWatch || 'embalagem'} = {packageSizeWatch} {unitWatch}</span>
+                                                        {linkedBaseProduct && baseConversion && (
+                                                            <span className="font-semibold text-emerald-600">→ {baseConversion} de {linkedBaseProduct.name}</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </Card>
 
-                                        {/* Composition Photo */}
-                                        <div className="space-y-2">
-                                            <FormLabel className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Foto — Composição / Ingredientes</FormLabel>
-                                            <div className="flex items-center gap-3">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => form.watch('compositionImageUrl') ? setZoomedImage(form.watch('compositionImageUrl')!) : undefined}
-                                                    className="w-20 h-20 rounded-md bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0 border border-emerald-200 focus:outline-none"
-                                                >
-                                                    {form.watch('compositionImageUrl') ? (
-                                                        <div className="relative w-full h-full group">
-                                                            <Image src={form.watch('compositionImageUrl')!} alt="Composição" width={80} height={80} className="object-cover w-full h-full" />
-                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <ZoomIn className="h-5 w-5 text-white" />
-                                                            </div>
-                                                        </div>
-                                                    ) : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
-                                                </button>
-                                                <div className="flex flex-col gap-1.5">
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsCompositionPhotoModalOpen(true)}><Camera className="mr-1.5 h-3.5 w-3.5" /> Câmera</Button>
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => compositionFileInputRef.current?.click()}><Upload className="mr-1.5 h-3.5 w-3.5" /> Upload</Button>
-                                                    {form.watch('compositionImageUrl') && (
-                                                        <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600 px-2" onClick={() => form.setValue('compositionImageUrl', '', { shouldDirty: true })}>
-                                                            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Remover
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <Input type="file" ref={compositionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'composition')} />
-                                            <FormField control={form.control} name="compositionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl></FormItem>)}/>
-                                        </div>
-                                    </div>
+                                            {isApparel && (
+                                                <Card className="border-amber-200 bg-amber-50 p-4 dark:bg-amber-900/20">
+                                                    <p className="mb-3 text-sm font-semibold">Atributos do item</p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <FormField control={form.control} name="apparelSize" render={({ field }) => (
+                                                            <FormItem>
+                                                                <FormLabel>Tamanho</FormLabel>
+                                                                <Select value={field.value ?? ''} onValueChange={field.onChange}>
+                                                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                                                    <SelectContent>{['PP','P','M','G','GG','XGG','Único'].map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
+                                                                </Select>
+                                                            </FormItem>
+                                                        )} />
+                                                        <FormField control={form.control} name="apparelColor" render={({ field }) => (<FormItem><FormLabel>Cor</FormLabel><FormControl><Input placeholder="Ex: Preto" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
+                                                        <FormField control={form.control} name="apparelType" render={({ field }) => (<FormItem><FormLabel>Modelo</FormLabel><FormControl><Input placeholder="Ex: Camiseta, Avental" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
+                                                        <FormField control={form.control} name="apparelMaterial" render={({ field }) => (<FormItem><FormLabel>Tecido / material</FormLabel><FormControl><Input placeholder="Ex: Algodão, Poliéster" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
+                                                        <FormField control={form.control} name="apparelUsage" render={({ field }) => (<FormItem className="col-span-2"><FormLabel>Uso</FormLabel><FormControl><Input placeholder="Ex: Cozinha, Atendimento, EPI" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
+                                                    </div>
+                                                </Card>
+                                            )}
 
-                                    {/* Read-only display of transcribed nutritional data */}
-                                    {productToEdit?.nutritionalData ? (
-                                        <div className="mt-4 pt-4 border-t border-emerald-200 space-y-3">
-                                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Dados Transcritos</p>
-                                            <div className="bg-white rounded-lg border border-emerald-100 overflow-hidden">
-                                                <div className="px-3 py-2 bg-emerald-600 text-white">
-                                                    <p className="text-xs font-bold">INFORMAÇÃO NUTRICIONAL</p>
-                                                    <p className="text-[10px] text-emerald-100">Porção: {productToEdit.nutritionalData.portionSize}{productToEdit.nutritionalData.portionDescription ? ` (${productToEdit.nutritionalData.portionDescription})` : ''}</p>
+                                            <Card className="p-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="space-y-0.5">
+                                                        <FormLabel className="text-base">Embalagem de agrupamento</FormLabel>
+                                                        <FormDescription>Quando o fornecedor entrega em caixas que agrupam várias unidades.</FormDescription>
+                                                    </div>
+                                                    <FormField control={form.control} name="enableLogistics" render={({ field }) => (<FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>)} />
                                                 </div>
-                                                <div className="divide-y divide-gray-50">
-                                                    {productToEdit.nutritionalData.nutrients.map((n, i) => (
-                                                        <div key={i} className="flex justify-between items-center px-3 py-1.5">
-                                                            <span className="text-xs text-gray-700">{n.name}</span>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-xs font-bold text-gray-900">{n.amount}{n.unit}</span>
-                                                                {n.dailyValue && <span className="text-[10px] text-gray-400">{n.dailyValue}</span>}
+                                                {enableLogisticsWatch ? (
+                                                    <div className="mt-4 grid grid-cols-2 gap-4 border-t pt-4">
+                                                        <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (
+                                                            <FormItem>
+                                                                <FormLabel>Quantidade</FormLabel>
+                                                                <FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl>
+                                                                <FormDescription className="text-xs">Quantas unidades de compra cabem na embalagem de agrupamento (ex: 10 bags por caixa → 10).</FormDescription>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}/>
+                                                        <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (
+                                                            <FormItem>
+                                                                <FormLabel>Tipo de agrupamento</FormLabel>
+                                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="Caixa">Caixa</SelectItem>
+                                                                        <SelectItem value="Fardo">Fardo</SelectItem>
+                                                                        <SelectItem value="Pallet">Pallet</SelectItem>
+                                                                        <SelectItem value="Tambor">Tambor</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}/>
+                                                    </div>
+                                                ) : (
+                                                    <p className="mt-3 text-xs text-muted-foreground">Desligado — este insumo é comprado por {packageTypeWatch ? packageTypeWatch.toLowerCase() : 'unidade'} avulso.</p>
+                                                )}
+                                            </Card>
+
+                                            <Card className="space-y-3 border-emerald-200 bg-emerald-50/60 p-4 dark:bg-emerald-900/20">
+                                                <div>
+                                                    <h4 className="font-medium">Contagem de estoque</h4>
+                                                    <p className="text-sm text-muted-foreground">Como este insumo é exibido e contado no inventário físico.</p>
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                                    {countingOptions.map((opt) => {
+                                                        const selected = countingUnitWatch === opt.value;
+                                                        return (
+                                                            <button
+                                                                key={opt.value}
+                                                                type="button"
+                                                                onClick={() => form.setValue('defaultCountingUnit', opt.value, { shouldDirty: true })}
+                                                                className={cn(
+                                                                    'flex flex-col items-start gap-1 rounded-lg border bg-background p-3 text-left transition-colors',
+                                                                    selected ? 'border-indigo-500 ring-1 ring-indigo-500' : 'hover:border-muted-foreground/40',
+                                                                )}
+                                                            >
+                                                                <span className="flex items-center gap-2 text-sm font-semibold">
+                                                                    <span className={cn('flex h-4 w-4 items-center justify-center rounded-full border', selected ? 'border-indigo-500 bg-indigo-500' : 'border-muted-foreground/40')}>
+                                                                        {selected && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                                                                    </span>
+                                                                    {opt.title}
+                                                                </span>
+                                                                <span className="text-xs text-muted-foreground">{opt.desc}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                <div className="flex items-center justify-between border-t border-emerald-200 pt-3">
+                                                    <div className="space-y-0.5">
+                                                        <FormLabel className="text-sm">Instrução de contagem</FormLabel>
+                                                        <FormDescription>Adicione um texto ou imagem para guiar a contagem.</FormDescription>
+                                                    </div>
+                                                    <FormField control={form.control} name="enableCountingInstruction" render={({ field }) => (<FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>)}/>
+                                                </div>
+                                                {enableCountingInstructionWatch && (
+                                                    <div className="space-y-4 border-t border-emerald-200 pt-4">
+                                                        <FormField control={form.control} name="countingInstruction" render={({ field }) => (
+                                                            <FormItem>
+                                                                <FormLabel>Texto da instrução</FormLabel>
+                                                                <FormControl><Textarea placeholder="Ex: Contar por peso na balança..." {...field} value={field.value ?? ''} /></FormControl>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}/>
+                                                        <div className="space-y-2">
+                                                            <FormLabel>Imagem de instrução</FormLabel>
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-md bg-secondary">
+                                                                    {form.watch('countingInstructionImageUrl') ? <Image src={form.watch('countingInstructionImageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                                                                </div>
+                                                                <div className="flex flex-col gap-2">
+                                                                    <Button type="button" variant="outline" onClick={() => setIsInstructionPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('countingInstructionImageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
+                                                                    <Button type="button" variant="outline" onClick={() => instructionFileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
+                                                                    {form.watch('countingInstructionImageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('countingInstructionImageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
+                                                                </div>
                                                             </div>
+                                                            <Input type="file" ref={instructionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'instruction')} />
+                                                            <FormField control={form.control} name="countingInstructionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                            {productToEdit.compositionText && (
-                                                <div className="bg-white rounded-lg border border-emerald-100 p-3">
-                                                    <p className="text-[10px] font-bold uppercase text-emerald-700 mb-1">Composição</p>
-                                                    <p className="text-xs text-gray-600 leading-relaxed">{productToEdit.compositionText}</p>
-                                                </div>
-                                            )}
-                                            {productToEdit.detectedAllergens && productToEdit.detectedAllergens.length > 0 && (
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {productToEdit.detectedAllergens.map((a, i) => (
-                                                        <span key={i} className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold border border-orange-200">{a}</span>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="mt-4 pt-4 border-t border-emerald-200">
-                                            <p className="text-xs text-muted-foreground text-center py-2">Dados nutricionais ainda não transcritos — solicite no chat.</p>
+                                                    </div>
+                                                )}
+                                            </Card>
                                         </div>
                                     )}
-                                </Card>
 
-                                {renderNotesCard()}
+                                    {/* ===== STEP 4 — Nutricional ===== */}
+                                    {currentStep === 4 && (
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                                {/* Tabela nutricional */}
+                                                <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-6 text-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => form.watch('nutritionalTableImageUrl') ? setZoomedImage(form.watch('nutritionalTableImageUrl')!) : setIsNutritionalPhotoModalOpen(true)}
+                                                        className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-secondary focus:outline-none"
+                                                    >
+                                                        {form.watch('nutritionalTableImageUrl') ? <Image src={form.watch('nutritionalTableImageUrl')!} alt="Tabela Nutricional" width={64} height={64} className="h-full w-full object-cover" /> : <Camera className="h-7 w-7 text-muted-foreground" />}
+                                                    </button>
+                                                    <div>
+                                                        <p className="text-sm font-semibold">Tabela nutricional</p>
+                                                        <p className="text-xs text-muted-foreground">Câmera ou upload</p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button type="button" variant="outline" size="sm" onClick={() => setIsNutritionalPhotoModalOpen(true)}><Camera className="mr-1.5 h-3.5 w-3.5" /> Câmera</Button>
+                                                        <Button type="button" variant="outline" size="sm" onClick={() => nutritionalTableFileInputRef.current?.click()}><Upload className="mr-1.5 h-3.5 w-3.5" /> Upload</Button>
+                                                        {form.watch('nutritionalTableImageUrl') && <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => form.setValue('nutritionalTableImageUrl', '', { shouldDirty: true })}><Trash2 className="h-3.5 w-3.5" /></Button>}
+                                                    </div>
+                                                    <Input type="file" ref={nutritionalTableFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'nutritionalTable')} />
+                                                    <FormField control={form.control} name="nutritionalTableImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl></FormItem>)}/>
+                                                </div>
+
+                                                {/* Composição */}
+                                                <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-6 text-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => form.watch('compositionImageUrl') ? setZoomedImage(form.watch('compositionImageUrl')!) : setIsCompositionPhotoModalOpen(true)}
+                                                        className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-secondary focus:outline-none"
+                                                    >
+                                                        {form.watch('compositionImageUrl') ? <Image src={form.watch('compositionImageUrl')!} alt="Composição" width={64} height={64} className="h-full w-full object-cover" /> : <Camera className="h-7 w-7 text-muted-foreground" />}
+                                                    </button>
+                                                    <div>
+                                                        <p className="text-sm font-semibold">Composição / ingredientes</p>
+                                                        <p className="text-xs text-muted-foreground">Câmera ou upload</p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button type="button" variant="outline" size="sm" onClick={() => setIsCompositionPhotoModalOpen(true)}><Camera className="mr-1.5 h-3.5 w-3.5" /> Câmera</Button>
+                                                        <Button type="button" variant="outline" size="sm" onClick={() => compositionFileInputRef.current?.click()}><Upload className="mr-1.5 h-3.5 w-3.5" /> Upload</Button>
+                                                        {form.watch('compositionImageUrl') && <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => form.setValue('compositionImageUrl', '', { shouldDirty: true })}><Trash2 className="h-3.5 w-3.5" /></Button>}
+                                                    </div>
+                                                    <Input type="file" ref={compositionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'composition')} />
+                                                    <FormField control={form.control} name="compositionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl></FormItem>)}/>
+                                                </div>
+                                            </div>
+
+                                            {productToEdit?.nutritionalData ? (
+                                                <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                                                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Dados Transcritos</p>
+                                                    <div className="overflow-hidden rounded-lg border border-emerald-100 bg-white">
+                                                        <div className="bg-emerald-600 px-3 py-2 text-white">
+                                                            <p className="text-xs font-bold">INFORMAÇÃO NUTRICIONAL</p>
+                                                            <p className="text-[10px] text-emerald-100">Porção: {productToEdit.nutritionalData.portionSize}{productToEdit.nutritionalData.portionDescription ? ` (${productToEdit.nutritionalData.portionDescription})` : ''}</p>
+                                                        </div>
+                                                        <div className="divide-y divide-gray-50">
+                                                            {productToEdit.nutritionalData.nutrients.map((n, i) => (
+                                                                <div key={i} className="flex items-center justify-between px-3 py-1.5">
+                                                                    <span className="text-xs text-gray-700">{n.name}</span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-xs font-bold text-gray-900">{n.amount}{n.unit}</span>
+                                                                        {n.dailyValue && <span className="text-[10px] text-gray-400">{n.dailyValue}</span>}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    {productToEdit.compositionText && (
+                                                        <div className="rounded-lg border border-emerald-100 bg-white p-3">
+                                                            <p className="mb-1 text-[10px] font-bold uppercase text-emerald-700">Composição</p>
+                                                            <p className="text-xs leading-relaxed text-gray-600">{productToEdit.compositionText}</p>
+                                                        </div>
+                                                    )}
+                                                    {productToEdit.detectedAllergens && productToEdit.detectedAllergens.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {productToEdit.detectedAllergens.map((a, i) => (
+                                                                <span key={i} className="rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-700">{a}</span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <p className="py-2 text-center text-xs text-muted-foreground">Dados nutricionais ainda não transcritos — solicite no chat.</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </ScrollArea>
+                        </div>
+
+                        {/* Footer */}
+                        <DialogFooter className="flex flex-row items-center justify-between gap-4 border-t px-6 py-4 sm:justify-between">
+                            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                            <div className="hidden flex-col items-center text-center sm:flex">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {WIZARD_STEPS.length}</span>
+                                <span className="text-sm font-medium">{WIZARD_STEPS[currentStep - 1].label}</span>
                             </div>
-                        </ScrollArea>
-                        <DialogFooter className="pt-4 border-t">
-                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                            <Button type="submit">{productToEdit ? 'Salvar alterações' : 'Adicionar insumo'}</Button>
+                            <div className="flex items-center gap-2">
+                                {currentStep > 1 && (
+                                    <Button type="button" variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" /> Voltar</Button>
+                                )}
+                                {currentStep < WIZARD_STEPS.length ? (
+                                    <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
+                                ) : (
+                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600">{productToEdit ? 'Salvar alterações' : 'Adicionar insumo'}</Button>
+                                )}
+                            </div>
                         </DialogFooter>
                     </form>
                     </Form>
@@ -902,13 +998,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             {/* Zoom lightbox */}
             {zoomedImage && (
                 <Dialog open={!!zoomedImage} onOpenChange={() => setZoomedImage(null)}>
-                    <DialogContent className="max-w-3xl p-2 bg-black border-none">
-                        <Image src={zoomedImage} alt="Ampliado" width={800} height={1000} className="w-full h-auto object-contain max-h-[85vh] rounded" />
+                    <DialogContent className="max-w-3xl border-none bg-black p-2">
+                        <Image src={zoomedImage} alt="Ampliado" width={800} height={1000} className="h-auto max-h-[85vh] w-full rounded object-contain" />
                     </DialogContent>
                 </Dialog>
             )}
         </>
     );
 }
-
-    
