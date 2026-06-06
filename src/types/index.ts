@@ -1156,6 +1156,11 @@ export type Entity = {
     email?: string;
   };
   responsible?: string; // Only for pessoa_juridica
+  status?: 'active' | 'inactive';
+  rg?: string; // Only for pessoa_fisica
+  birthDate?: string; // Only for pessoa_fisica
+  notes?: string;
+  imageUrl?: string; // avatar
 };
 
 // Purchase Module Types (legacy — cotação v1)
