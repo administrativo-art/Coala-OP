@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, Info, ShoppingCart, ReceiptText, Scale, Truck, Building2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, Info, ShoppingCart, ReceiptText, Scale, Truck, Building2, ChevronsUpDown, Check } from 'lucide-react';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
@@ -47,17 +48,100 @@ import {
   type PurchaseReceipt,
   type PurchaseReceiptItem,
   type PurchaseStockEntryType,
+  type Product,
 } from '@/types';
 import { cn } from '@/lib/utils';
+import { buildProductSearchText, matchProductByName, normalizeSearchText } from '@/lib/product-search';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { usePurchaseFinancials } from '@/hooks/use-purchase-financials';
+
+// Combobox pesquisável de insumo (com busca por alias) para o vínculo de estoque.
+function StockProductCombobox({
+  value,
+  options,
+  getFullName,
+  onSelect,
+  disabled,
+  invalid,
+}: {
+  value: string;
+  options: Product[];
+  getFullName: (product: Product) => string;
+  onSelect: (product: Product) => void;
+  disabled?: boolean;
+  invalid?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const selected = options.find((p) => p.id === value);
+  const tokens = normalizeSearchText(search).split(/\s+/).filter(Boolean);
+  const filtered =
+    tokens.length === 0
+      ? options
+      : options.filter((p) => {
+          const text = buildProductSearchText(p, getFullName(p));
+          return tokens.every((token) => text.includes(token));
+        });
+  const label = (p: Product) => `${p.baseName}${p.brand ? ` — ${p.brand}` : ''} (${p.packageSize}${p.unit})`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className={cn('w-full justify-between font-normal', invalid && !value && 'border-amber-400')}
+        >
+          <span className="truncate">{selected ? label(selected) : 'Selecione...'}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <div className="border-b p-2">
+          <Input
+            autoFocus
+            placeholder="Buscar insumo..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-8 text-sm"
+          />
+        </div>
+        <div className="max-h-[300px] overflow-y-auto p-1">
+          {filtered.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">Nenhum insumo encontrado.</div>
+          ) : (
+            filtered.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                  onSelect(p);
+                  setOpen(false);
+                  setSearch('');
+                }}
+              >
+                <Check className={cn('mr-2 h-4 w-4 shrink-0', value === p.id ? 'opacity-100' : 'opacity-0')} />
+                <span className="truncate">{label(p)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 interface LotDraft {
   _key: string;
   lotCode: string;
   expiryDate?: string;
   indefiniteValidity?: boolean;
-  quantity: number;
+  quantity: number | '';
 }
 
 interface ItemDraft {
@@ -213,11 +297,22 @@ export function ReceiptWorkspace({ receipt }: Props) {
               isInStockEntry &&
               remainingQuantity > 0 &&
               purchaseTreatmentCreatesStock(itemTreatment);
+            // Quando o item ainda não tem insumo vinculado, sugere pelo nome/alias.
+            const needsStockProductLink =
+              isInStockEntry && purchaseTreatmentCreatesStock(itemTreatment) && !item.productId;
+            const stockCandidates = needsStockProductLink
+              ? (item.baseItemId
+                  ? products.filter((p) => p.baseProductId === item.baseItemId && !p.isArchived)
+                  : products.filter((p) => !p.isArchived))
+              : [];
+            const suggestedProduct = needsStockProductLink
+              ? matchProductByName(item.itemName, stockCandidates, getProductFullName)
+              : undefined;
             return {
               receiptItemId: item.id,
               purchaseOrderItemId: item.purchaseOrderItemId,
-              baseItemId: item.baseItemId,
-              productId: item.productId || '',
+              baseItemId: item.baseItemId || suggestedProduct?.baseProductId || '',
+              productId: item.productId || suggestedProduct?.id || '',
               itemName: item.itemName ?? undefined,
               operationalCategoryId: item.operationalCategoryId,
               operationalCategoryName: item.operationalCategoryName,
@@ -257,7 +352,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
       );
       setLoadingItems(false);
     });
-  }, [baseProducts, fetchReceiptItems, isInStockEntry, isPartiallyStocked, receipt.id, receipt.notes, receipt.receiptProofDescription, receipt.status]);
+  }, [baseProducts, products, getProductFullName, fetchReceiptItems, isInStockEntry, isPartiallyStocked, receipt.id, receipt.notes, receipt.receiptProofDescription, receipt.status]);
 
   const updateDraft = (idx: number, patch: Partial<ItemDraft>) => {
     setDrafts((prev) => {
@@ -275,7 +370,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
         ...next[idx],
         lots: [
           ...next[idx].lots,
-          { _key: lotKey(), lotCode: generateLotCode(base?.name ?? 'INS'), expiryDate: '', indefiniteValidity: false, quantity: 0 },
+          { _key: lotKey(), lotCode: generateLotCode(base?.name ?? 'INS'), expiryDate: '', indefiniteValidity: false, quantity: '' },
         ],
       };
       return next;
@@ -498,8 +593,9 @@ export function ReceiptWorkspace({ receipt }: Props) {
           quantityReceived: d.quantityReceived,
           purchaseUnitType: d.purchaseUnitType,
           purchaseUnitLabel: d.purchaseUnitLabel,
-          lots: d.lots.map(({ _key, indefiniteValidity, expiryDate, ...rest }) => ({
+          lots: d.lots.map(({ _key, indefiniteValidity, expiryDate, quantity, ...rest }) => ({
             ...rest,
+            quantity: quantity || 0,
             ...(indefiniteValidity ? {} : { expiryDate }),
           })),
         })),
@@ -602,9 +698,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
               <div className="divide-y">
                 {drafts.map((draft, idx) => {
                   const base = baseProducts.find((bp) => bp.id === draft.baseItemId);
-                  const variantOptions = products.filter(
-                    (p) => p.baseProductId === draft.baseItemId && !p.isArchived,
-                  );
+                  // Com Produto Base, restringe aos insumos daquele base; sem base
+                  // (item de texto livre), permite buscar em todos os insumos.
+                  const variantOptions = draft.baseItemId
+                    ? products.filter((p) => p.baseProductId === draft.baseItemId && !p.isArchived)
+                    : products.filter((p) => !p.isArchived);
                   const selectedStockProduct = products.find((p) => p.id === draft.productId);
                   const displayName =
                     (selectedStockProduct ? getProductFullName(selectedStockProduct) : '') ||
@@ -794,26 +892,21 @@ export function ReceiptWorkspace({ receipt }: Props) {
                         {isInStockEntry && createsStockEntry && (
                           <div className="space-y-1">
                             <Label className="text-xs">Unidade estoque</Label>
-                            {selectedStockProduct ? (
+                            {isDraftReadonly ? (
                               <Input
-                                value={`${selectedStockProduct.baseName} (${selectedStockProduct.packageSize}${selectedStockProduct.unit})`}
+                                value={selectedStockProduct ? `${selectedStockProduct.baseName} (${selectedStockProduct.packageSize}${selectedStockProduct.unit})` : '—'}
                                 readOnly
                                 disabled
                                 className="bg-muted font-medium"
                               />
                             ) : (
-                              <Select value={draft.productId} onValueChange={(v) => updateDraft(idx, { productId: v })}>
-                                <SelectTrigger className={cn(!draft.productId && 'border-amber-400')} disabled={isDraftReadonly}>
-                                  <SelectValue placeholder="Selecione..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {variantOptions.map((p) => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                      {p.baseName} ({p.packageSize}{p.unit})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              <StockProductCombobox
+                                value={draft.productId}
+                                options={variantOptions}
+                                getFullName={getProductFullName}
+                                invalid={!draft.productId}
+                                onSelect={(p) => updateDraft(idx, { productId: p.id, baseItemId: draft.baseItemId || p.baseProductId || '' })}
+                              />
                             )}
                           </div>
                         )}
@@ -879,7 +972,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                 </div>
                                 <div className="space-y-1">
                                   <Label className="text-[10px] text-muted-foreground uppercase">Qtd.</Label>
-                                  <Input type="number" value={lot.quantity} disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { quantity: parseFloat(e.target.value) || 0 })} className="h-8 text-sm" />
+                                  <Input type="number" value={lot.quantity} placeholder="0" disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { quantity: e.target.value === '' ? '' : (parseFloat(e.target.value) || 0) })} className="h-8 text-sm" />
                                 </div>
                                 <div className="space-y-1">
                                   <Label className="text-[10px] text-muted-foreground uppercase">Validade</Label>
