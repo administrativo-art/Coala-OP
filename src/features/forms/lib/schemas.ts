@@ -224,6 +224,15 @@ export const formApplicationSchema = z.object({
     .default({ type: "none" }),
 });
 
+export const formModelSchema = z.object({
+  name: z.string().trim().min(2),
+  description: z.string().trim().max(2000).optional(),
+  category: z.string().trim().max(120).optional(),
+  context: z.enum(["operational", "recruitment"]).default("operational"),
+  is_active: z.boolean().default(true),
+  sections: z.array(formTemplateSectionSchema).min(1),
+});
+
 export const formExecutionItemUpdateSchema = z.object({
   template_item_id: z.string().trim().min(1),
   section_id: z.string().trim().min(1),
@@ -271,4 +280,5 @@ export type FormTypeInput = z.infer<typeof formTypeSchema>;
 export type FormSubtypeInput = z.infer<typeof formSubtypeSchema>;
 export type FormTemplateInput = z.infer<typeof formTemplateSchema>;
 export type FormApplicationInput = z.infer<typeof formApplicationSchema>;
+export type FormModelInput = z.infer<typeof formModelSchema>;
 export type FormExecutionUpdateInput = z.infer<typeof formExecutionUpdateSchema>;

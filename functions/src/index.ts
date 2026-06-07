@@ -965,6 +965,7 @@ export const checklistDailyGenerate = onSchedule(
               form_subtype_id: t.form_subtype_id ?? null,
               context: 'operational',
               template_id: tDoc.id,
+              assignment_id: t.active_assignment_id ?? null,
               template_name: t.name,
               template_version: typeof t.version === 'number' ? t.version : 1,
               occurrence_type: t.occurrence_type ?? 'manual',

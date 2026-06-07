@@ -112,6 +112,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const formProjectId = searchParams.get("formProjectId")?.trim() || null;
     const status = searchParams.get("status")?.trim() || null;
+    const assignedToMe = searchParams.get("assignedToMe") === "true";
     const limit = Number(searchParams.get("limit") ?? "50");
 
     if (formProjectId) {
@@ -127,6 +128,7 @@ export async function GET(request: NextRequest) {
       workspaceId: context.workspace_id,
       formProjectId,
       status,
+      assignedUserId: assignedToMe ? context.userDoc.id : null,
       limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 50,
     });
 
@@ -169,6 +171,7 @@ export async function POST(request: NextRequest) {
       form_subtype_id: template.form_subtype_id,
       context: template.context,
       template_id: body.template_id,
+      assignment_id: template.active_assignment_id ?? null,
       template_name: template.name,
       template_version: template.version,
       template_snapshot: template,

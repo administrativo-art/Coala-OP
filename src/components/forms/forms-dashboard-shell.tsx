@@ -27,6 +27,7 @@ import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import {
   createFormProject,
   createFormTemplate,
+  fetchFormModels,
   fetchFormsBootstrap,
   updateFormTemplateApplication,
   updateFormProject,
@@ -77,7 +78,7 @@ const APPLICATION_MODE_LABELS: Record<string, string> = {
   event: "Evento do sistema",
 };
 
-const FORM_MODEL_LIBRARY = [
+const DEFAULT_FORM_MODELS = [
   {
     id: "opening-checklist",
     name: "Checklist de abertura",
@@ -138,6 +139,26 @@ const FORM_MODEL_LIBRARY = [
     ],
   },
 ] as const;
+
+type UiFormModel = {
+  id: string;
+  name: string;
+  description?: string;
+  sections: Array<{
+    id: string;
+    title: string;
+    items: Array<{
+      id: string;
+      title: string;
+      type: string;
+      required?: boolean;
+      weight?: number;
+      block_next?: boolean;
+      criticality?: "low" | "medium" | "high" | "critical";
+      action_required?: boolean;
+    }>;
+  }>;
+};
 
 const STATUS_META: Record<
   FormExecution["status"],
@@ -305,6 +326,7 @@ export function FormsDashboardShell() {
   const [projects, setProjects] = useState<FormProject[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [executions, setExecutions] = useState<FormExecution[]>([]);
+  const [models, setModels] = useState<UiFormModel[]>([]);
   const [canCreateProjects, setCanCreateProjects] = useState(false);
   const [canManageTemplates, setCanManageTemplates] = useState(false);
   const [canViewAnalytics, setCanViewAnalytics] = useState(false);
@@ -321,7 +343,7 @@ export function FormsDashboardShell() {
   });
   const [templateForm, setTemplateForm] = useState<TemplateFormState>({
     source: "blank",
-    model_id: FORM_MODEL_LIBRARY[0]?.id ?? "",
+    model_id: DEFAULT_FORM_MODELS[0]?.id ?? "",
     duplicate_template_id: "",
     form_project_id: "",
     name: "",
@@ -356,17 +378,49 @@ export function FormsDashboardShell() {
   }, [executions]);
 
   const stats = useMemo(() => {
+    const completedDurations = executions
+      .filter((execution) => execution.status === "completed" && execution.completed_at)
+      .map((execution) => {
+        const start = new Date(String(execution.claimed_at ?? execution.created_at));
+        const end = new Date(String(execution.completed_at));
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+        return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+      })
+      .filter((duration): duration is number => typeof duration === "number");
+
     return {
       pending: executions.filter((execution) => execution.status === "pending").length,
       inProgress: executions.filter((execution) => execution.status === "in_progress").length,
       completed: executions.filter((execution) => execution.status === "completed").length,
       overdue: executions.filter((execution) => execution.status === "overdue").length,
+      averageDuration:
+        completedDurations.length === 0
+          ? 0
+          : Math.round(completedDurations.reduce((sum, duration) => sum + duration, 0) / completedDurations.length),
     };
   }, [executions]);
 
+  const availableModels = useMemo(() => {
+    if (models.length > 0) return models;
+    return DEFAULT_FORM_MODELS.map((model) => ({
+      id: model.id,
+      name: model.name,
+      description: model.description,
+      sections: model.sections.map((section) => ({
+        id: section.id,
+        title: section.title,
+        items: section.items.map((item) => ({
+          id: item.id,
+          title: item.title,
+          type: item.type,
+        })),
+      })),
+    }));
+  }, [models]);
+
   const selectedModel = useMemo(() => {
-    return FORM_MODEL_LIBRARY.find((model) => model.id === templateForm.model_id) ?? FORM_MODEL_LIBRARY[0];
-  }, [templateForm.model_id]);
+    return availableModels.find((model) => model.id === templateForm.model_id) ?? availableModels[0];
+  }, [availableModels, templateForm.model_id]);
 
   const selectedModelItemIds = useMemo(() => {
     return new Set(templateForm.selected_model_item_ids);
@@ -414,11 +468,15 @@ export function FormsDashboardShell() {
       setError(null);
 
       try {
-        const data = await fetchFormsBootstrap(firebaseUser);
+        const [data, modelsPayload] = await Promise.all([
+          fetchFormsBootstrap(firebaseUser),
+          fetchFormModels(firebaseUser).catch(() => ({ models: [] })),
+        ]);
         if (!cancelled) {
           setProjects(data.projects);
           setTemplates(data.templates);
           setExecutions(data.executions);
+          setModels(modelsPayload.models as UiFormModel[]);
           setCanCreateProjects(data.access.can_create_projects);
           setCanManageTemplates(data.access.can_manage_templates);
           setCanViewAnalytics(data.access.can_view_analytics);
@@ -465,7 +523,7 @@ export function FormsDashboardShell() {
   }
 
   function selectAllModelItems(modelId = templateForm.model_id) {
-    const model = FORM_MODEL_LIBRARY.find((entry) => entry.id === modelId);
+    const model = availableModels.find((entry) => entry.id === modelId);
     const itemIds = model?.sections.flatMap((section) => section.items.map((item) => item.id)) ?? [];
     setTemplateForm((current) => ({ ...current, selected_model_item_ids: itemIds }));
   }
@@ -567,9 +625,11 @@ export function FormsDashboardShell() {
   async function reloadBootstrap() {
     if (!firebaseUser) return;
     const data = await fetchFormsBootstrap(firebaseUser);
+    const modelsPayload = await fetchFormModels(firebaseUser).catch(() => ({ models: [] }));
     setProjects(data.projects);
     setTemplates(data.templates);
     setExecutions(data.executions);
+    setModels(modelsPayload.models as UiFormModel[]);
     setCanCreateProjects(data.access.can_create_projects);
     setCanManageTemplates(data.access.can_manage_templates);
     setCanViewAnalytics(data.access.can_view_analytics);
@@ -687,7 +747,7 @@ export function FormsDashboardShell() {
       setTemplateForm((current) => ({
         ...current,
         source: "blank",
-        model_id: FORM_MODEL_LIBRARY[0]?.id ?? "",
+        model_id: availableModels[0]?.id ?? DEFAULT_FORM_MODELS[0]?.id ?? "",
         duplicate_template_id: "",
         name: "",
         description: "",
@@ -767,11 +827,12 @@ export function FormsDashboardShell() {
         </div>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 xl:grid-cols-5">
         <KpiCard label="Pendentes" value={stats.pending} subtitle="Preenchimentos aguardando início" tone="amber" />
         <KpiCard label="Em andamento" value={stats.inProgress} subtitle="Preenchimentos já assumidos" tone="blue" />
         <KpiCard label="Concluídas" value={stats.completed} subtitle="Fluxos encerrados" tone="emerald" />
         <KpiCard label="Atrasadas" value={stats.overdue} subtitle="Preenchimentos em atenção" tone="red" />
+        <KpiCard label="Tempo médio" value={stats.averageDuration} subtitle="Minutos por preenchimento" tone="blue" />
       </div>
 
       <Tabs defaultValue="operations" className="space-y-4">
@@ -989,7 +1050,7 @@ export function FormsDashboardShell() {
 
         <TabsContent value="models" className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-3">
-            {FORM_MODEL_LIBRARY.map((model) => {
+            {availableModels.map((model) => {
               const itemCount = model.sections.reduce((total, section) => total + section.items.length, 0);
               return (
                 <Card key={model.id}>
@@ -1027,7 +1088,7 @@ export function FormsDashboardShell() {
                             model_id: model.id,
                             form_project_id: current.form_project_id || projects[0]?.id || "",
                             name: model.name,
-                            description: model.description,
+                            description: model.description ?? "",
                             selected_model_item_ids: itemIds,
                           }));
                           setTemplateDialogOpen(true);
@@ -1229,7 +1290,7 @@ export function FormsDashboardShell() {
                     <Select
                       value={templateForm.model_id}
                       onValueChange={(value) => {
-                        const model = FORM_MODEL_LIBRARY.find((entry) => entry.id === value);
+                        const model = availableModels.find((entry) => entry.id === value);
                         const itemIds = model?.sections.flatMap((section) => section.items.map((item) => item.id)) ?? [];
                         setTemplateForm((current) => ({
                           ...current,
@@ -1244,7 +1305,7 @@ export function FormsDashboardShell() {
                         <SelectValue placeholder="Selecione um modelo" />
                       </SelectTrigger>
                       <SelectContent>
-                        {FORM_MODEL_LIBRARY.map((model) => (
+                        {availableModels.map((model) => (
                           <SelectItem key={model.id} value={model.id}>
                             {model.name}
                           </SelectItem>

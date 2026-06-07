@@ -2,6 +2,7 @@ import type {
   FormAssignment,
   FormExecution,
   FormExecutionEvent,
+  FormModel,
   FormProject,
   FormSubtype,
   FormTemplate,
@@ -162,6 +163,35 @@ export async function createFormProject(
     "POST",
     body,
     "Falha ao criar o projeto."
+  );
+}
+
+export async function fetchFormModels(firebaseUser: FirebaseUserLike) {
+  return authorizedGet<{ models: FormModel[] }>(
+    "/api/forms/models",
+    firebaseUser,
+    "Falha ao carregar modelos."
+  );
+}
+
+export async function createFormModel(
+  firebaseUser: FirebaseUserLike,
+  body: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ model: FormModel }>(
+    "/api/forms/models",
+    firebaseUser,
+    "POST",
+    body,
+    "Falha ao criar modelo."
+  );
+}
+
+export async function fetchMyFormExecutions(firebaseUser: FirebaseUserLike) {
+  return authorizedGet<{ executions: FormExecution[] }>(
+    "/api/forms/executions?assignedToMe=true&limit=100",
+    firebaseUser,
+    "Falha ao carregar meus formulários."
   );
 }
 

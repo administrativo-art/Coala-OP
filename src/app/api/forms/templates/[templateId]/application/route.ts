@@ -86,6 +86,7 @@ export async function PATCH(
     });
 
     const batch = checklistDbAdmin.batch();
+    const activeAssignmentIds = activeAssignments.map((assignment) => assignment.id);
     for (const assignment of activeAssignments) {
       const assignmentRef = checklistDbAdmin.collection("form_assignments").doc(assignment.id);
       batch.update(assignmentRef, {
@@ -104,6 +105,29 @@ export async function PATCH(
           username: user.userDoc.username,
         },
       });
+    }
+
+    if (parsed.pending_policy === "cancel") {
+      const pendingSnap = await checklistDbAdmin
+        .collection("form_executions")
+        .where("template_id", "==", templateId)
+        .where("status", "==", "pending")
+        .get();
+
+      pendingSnap.docs
+        .filter((doc) => {
+          const assignmentId = doc.data()?.assignment_id;
+          return !assignmentId || activeAssignmentIds.includes(String(assignmentId));
+        })
+        .forEach((doc) => {
+          batch.update(doc.ref, {
+            status: "canceled",
+            canceled_by_user_id: user.userDoc.id,
+            canceled_at: now.toISOString(),
+            updated_at: now,
+            cancellation_reason: "application_replaced",
+          });
+        });
     }
 
     const assignmentRef = checklistDbAdmin.collection("form_assignments").doc();
@@ -143,7 +167,7 @@ export async function PATCH(
     batch.set(assignmentRef, assignment);
     batch.update(checklistDbAdmin.collection("form_templates").doc(templateId), {
       application_mode: parsed.application_mode,
-      active_assignment_id: assignmentRef.id,
+              active_assignment_id: assignmentRef.id,
       occurrence_type: parsed.occurrence_type,
       unit_ids: parsed.unit_ids,
       unit_names: parsed.unit_names,

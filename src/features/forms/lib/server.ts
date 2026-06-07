@@ -1,6 +1,7 @@
 import type {
   FormExecution,
   FormAssignment,
+  FormModel,
   FormProject,
   FormSubtype,
   FormTemplate,
@@ -58,6 +59,22 @@ export async function getActiveFormAssignment(params: {
       String(left.updated_at ?? left.created_at ?? "")
     )
   )[0] ?? null;
+}
+
+export async function listFormModels(params: {
+  workspaceId: string;
+  isActive?: boolean;
+}) {
+  let query = collectionWithWorkspace("form_models", params.workspaceId);
+  if (typeof params.isActive === "boolean") {
+    query = query.where("is_active", "==", params.isActive);
+  }
+
+  const snap = await query.get();
+  return snap.docs.map((doc) => ({
+    id: doc.id,
+    ...((serializeFormValue(doc.data()) as Record<string, unknown>) ?? {}),
+  })) as FormModel[];
 }
 
 export async function listFormProjects(workspaceId: string) {
@@ -139,6 +156,7 @@ export async function listFormExecutions(params: {
   workspaceId: string;
   formProjectId?: string | null;
   status?: string | null;
+  assignedUserId?: string | null;
   limit?: number;
 }) {
   let query = collectionWithWorkspace("form_executions", params.workspaceId);
@@ -147,6 +165,9 @@ export async function listFormExecutions(params: {
   }
   if (params.status) {
     query = query.where("status", "==", params.status);
+  }
+  if (params.assignedUserId) {
+    query = query.where("assigned_user_id", "==", params.assignedUserId);
   }
 
   const snap = await query.limit(params.limit ?? 50).get();

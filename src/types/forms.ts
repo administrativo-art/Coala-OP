@@ -227,6 +227,21 @@ export type FormAssignment = {
   updated_by?: { user_id: string; username: string };
 };
 
+export type FormModel = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  context: FormContext;
+  sections: FormTemplateSection[];
+  is_active: boolean;
+  created_at: Timestamp | string;
+  updated_at?: Timestamp | string;
+  created_by?: { user_id: string; username: string };
+  updated_by?: { user_id: string; username: string };
+};
+
 export type FormDueRule = {
   type: 'none' | 'fixed_time' | 'after_shift_start' | 'after_creation';
   time?: string;
@@ -390,6 +405,7 @@ export type FormExecution = {
   form_subtype_id?: string;
   context: FormContext;
   template_id: string;
+  assignment_id?: string | null;
   template_name: string;
   template_version: number;
   template_snapshot?: FormTemplate;
