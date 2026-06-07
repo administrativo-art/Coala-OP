@@ -161,6 +161,17 @@ export const formTemplateSchema = z.object({
   occurrence_type: z
     .enum(["manual", "daily", "weekly", "biweekly", "monthly", "annual", "custom"])
     .optional(),
+  application_mode: z.enum(["manual", "unit", "schedule", "event"]).optional(),
+  active_assignment_id: z.string().trim().min(1).optional(),
+  created_from_model_id: z.string().trim().min(1).optional(),
+  created_from_model_name: z.string().trim().min(1).optional(),
+  due_rule: z
+    .object({
+      type: z.enum(["none", "fixed_time", "after_shift_start", "after_creation"]).default("none"),
+      time: z.string().trim().optional(),
+      minutes: z.number().int().min(0).optional(),
+    })
+    .optional(),
   annual_schedule: z
     .object({
       month: z.number().int().min(1).max(12),
@@ -188,6 +199,29 @@ export const formTemplateSchema = z.object({
   change_notes: z.string().trim().max(500).optional(),
   sections: z.array(formTemplateSectionSchema).min(1),
   recruitment_config: formRecruitmentConfigSchema.optional(),
+});
+
+export const formApplicationSchema = z.object({
+  application_mode: z.enum(["manual", "unit", "schedule", "event"]),
+  occurrence_type: z
+    .enum(["manual", "daily", "weekly", "biweekly", "monthly", "annual", "custom"])
+    .default("manual"),
+  unit_ids: z.array(z.string().trim().min(1)).default([]),
+  unit_names: z.array(z.string().trim().min(1)).default([]),
+  shift_definition_ids: z.array(z.string().trim().min(1)).default([]),
+  shift_definition_names: z.array(z.string().trim().min(1)).default([]),
+  job_role_ids: z.array(z.string().trim().min(1)).default([]),
+  job_role_names: z.array(z.string().trim().min(1)).default([]),
+  job_function_ids: z.array(z.string().trim().min(1)).default([]),
+  job_function_names: z.array(z.string().trim().min(1)).default([]),
+  pending_policy: z.enum(["keep", "cancel", "manual_migration"]).default("keep"),
+  due_rule: z
+    .object({
+      type: z.enum(["none", "fixed_time", "after_shift_start", "after_creation"]).default("none"),
+      time: z.string().trim().optional(),
+      minutes: z.number().int().min(0).optional(),
+    })
+    .default({ type: "none" }),
 });
 
 export const formExecutionItemUpdateSchema = z.object({
@@ -236,4 +270,5 @@ export type FormProjectInput = z.infer<typeof formProjectSchema>;
 export type FormTypeInput = z.infer<typeof formTypeSchema>;
 export type FormSubtypeInput = z.infer<typeof formSubtypeSchema>;
 export type FormTemplateInput = z.infer<typeof formTemplateSchema>;
+export type FormApplicationInput = z.infer<typeof formApplicationSchema>;
 export type FormExecutionUpdateInput = z.infer<typeof formExecutionUpdateSchema>;

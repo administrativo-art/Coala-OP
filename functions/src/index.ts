@@ -418,6 +418,32 @@ function shouldGenerateFormTemplate(template: any, date: string): boolean {
   return false;
 }
 
+function resolveFormDueAt(template: any, date: string, shiftStartTime?: string): string | null {
+  const dueRule = template?.due_rule && typeof template.due_rule === 'object' ? template.due_rule : null;
+  if (!dueRule || dueRule.type === 'none') return null;
+
+  if (dueRule.type === 'fixed_time' && typeof dueRule.time === 'string' && dueRule.time) {
+    return `${date}T${dueRule.time}:00-03:00`;
+  }
+
+  const minutes = typeof dueRule.minutes === 'number' ? dueRule.minutes : 0;
+  if (dueRule.type === 'after_shift_start' && shiftStartTime) {
+    const startMinutes = parseHhmm(shiftStartTime);
+    if (startMinutes === null) return null;
+    const due = new Date(`${date}T00:00:00-03:00`);
+    due.setMinutes(startMinutes + minutes);
+    return due.toISOString();
+  }
+
+  if (dueRule.type === 'after_creation') {
+    const due = new Date();
+    due.setMinutes(due.getMinutes() + minutes);
+    return due.toISOString();
+  }
+
+  return null;
+}
+
 function userMatchesFormTemplate(template: any, userData: any): boolean {
   const roleIds = Array.isArray(template?.job_role_ids) ? template.job_role_ids : [];
   const functionIds = Array.isArray(template?.job_function_ids) ? template.job_function_ids : [];
@@ -957,6 +983,7 @@ export const checklistDailyGenerate = onSchedule(
               collaborator_user_ids: [],
               collaborator_usernames: [],
               scheduled_for: today,
+              due_at: resolveFormDueAt(t, today, s.startTime),
               sections,
               items,
               sections_summary: sectSummary,

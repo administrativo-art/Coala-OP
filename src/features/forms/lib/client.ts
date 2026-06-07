@@ -1,4 +1,5 @@
 import type {
+  FormAssignment,
   FormExecution,
   FormExecutionEvent,
   FormProject,
@@ -287,6 +288,34 @@ export async function updateFormTemplate(
     "PATCH",
     body,
     "Falha ao atualizar o formulário."
+  );
+}
+
+export async function fetchFormTemplateApplication(
+  firebaseUser: FirebaseUserLike,
+  templateId: string
+) {
+  return authorizedGet<{
+    active_assignment: FormAssignment | null;
+    assignments: FormAssignment[];
+  }>(
+    `/api/forms/templates/${templateId}/application`,
+    firebaseUser,
+    "Falha ao carregar aplicação do formulário."
+  );
+}
+
+export async function updateFormTemplateApplication(
+  firebaseUser: FirebaseUserLike,
+  templateId: string,
+  body: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ assignment: FormAssignment }>(
+    `/api/forms/templates/${templateId}/application`,
+    firebaseUser,
+    "PATCH",
+    body,
+    "Falha ao atualizar aplicação do formulário."
   );
 }
 

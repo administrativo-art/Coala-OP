@@ -1,5 +1,6 @@
 import type {
   FormExecution,
+  FormAssignment,
   FormProject,
   FormSubtype,
   FormTemplate,
@@ -16,6 +17,47 @@ function collectionWithWorkspace(collectionName: string, workspaceId: string) {
   return checklistDbAdmin
     .collection(collectionName)
     .where("workspace_id", "==", workspaceId);
+}
+
+export async function listFormAssignments(params: {
+  workspaceId: string;
+  formProjectId?: string | null;
+  formTemplateId?: string | null;
+  status?: string | null;
+}) {
+  let query = collectionWithWorkspace("form_assignments", params.workspaceId);
+  if (params.formProjectId) {
+    query = query.where("form_project_id", "==", params.formProjectId);
+  }
+  if (params.formTemplateId) {
+    query = query.where("form_template_id", "==", params.formTemplateId);
+  }
+  if (params.status) {
+    query = query.where("status", "==", params.status);
+  }
+
+  const snap = await query.get();
+  return snap.docs.map((doc) => ({
+    id: doc.id,
+    ...((serializeFormValue(doc.data()) as Record<string, unknown>) ?? {}),
+  })) as FormAssignment[];
+}
+
+export async function getActiveFormAssignment(params: {
+  workspaceId: string;
+  formTemplateId: string;
+}) {
+  const assignments = await listFormAssignments({
+    workspaceId: params.workspaceId,
+    formTemplateId: params.formTemplateId,
+    status: "active",
+  });
+
+  return assignments.sort((left, right) =>
+    String(right.updated_at ?? right.created_at ?? "").localeCompare(
+      String(left.updated_at ?? left.created_at ?? "")
+    )
+  )[0] ?? null;
 }
 
 export async function listFormProjects(workspaceId: string) {

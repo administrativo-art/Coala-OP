@@ -2,14 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, Layers3, ArrowLeft, Pencil, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, Layers3, ArrowLeft, Pencil, Plus, Trash2, MapPin } from "lucide-react";
 
-import type { FormTemplate } from "@/types/forms";
+import type { FormAssignment, FormTemplate } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
-import { fetchFormTemplate, updateFormTemplate } from "@/features/forms/lib/client";
+import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
+import {
+  fetchFormTemplate,
+  fetchFormTemplateApplication,
+  updateFormTemplate,
+  updateFormTemplateApplication,
+} from "@/features/forms/lib/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +26,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +51,12 @@ function inferApplicationMode(template: FormTemplate) {
   if ((template.shift_definition_ids?.length ?? 0) > 0) return "Por escala/turno";
   if ((template.unit_ids?.length ?? 0) > 0) return "Recorrente por unidade";
   return "Manual";
+}
+
+function inferApplicationModeValue(template: FormTemplate): ApplicationFormState["application_mode"] {
+  if ((template.shift_definition_ids?.length ?? 0) > 0) return "schedule";
+  if ((template.unit_ids?.length ?? 0) > 0) return "unit";
+  return "manual";
 }
 
 function formatScope(template: FormTemplate) {
@@ -127,6 +142,17 @@ type EditorConditionalBranch = {
   items: EditorItem[];
 };
 
+type ApplicationFormState = {
+  application_mode: "manual" | "unit" | "schedule" | "event";
+  occurrence_type: string;
+  unit_ids: string[];
+  shift_definition_ids: string[];
+  pending_policy: "keep" | "cancel" | "manual_migration";
+  due_rule_type: "none" | "fixed_time" | "after_shift_start" | "after_creation";
+  due_minutes: string;
+  due_time: string;
+};
+
 function createLocalId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -159,15 +185,30 @@ function createEmptyEditorItem(): EditorItem {
 
 export function FormTemplateDetailShell({ templateId }: { templateId: string }) {
   const { firebaseUser } = useAuth();
+  const { units, shiftDefinitions } = useDPBootstrap();
   const { toast } = useToast();
   const [template, setTemplate] = useState<FormTemplate | null>(null);
+  const [activeAssignment, setActiveAssignment] = useState<FormAssignment | null>(null);
+  const [assignments, setAssignments] = useState<FormAssignment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [applicationOpen, setApplicationOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingApplication, setSavingApplication] = useState(false);
   const [formState, setFormState] = useState({
     name: "",
     description: "",
     sections: [] as EditorSection[],
+  });
+  const [applicationForm, setApplicationForm] = useState<ApplicationFormState>({
+    application_mode: "manual",
+    occurrence_type: "manual",
+    unit_ids: [],
+    shift_definition_ids: [],
+    pending_policy: "keep",
+    due_rule_type: "none",
+    due_minutes: "",
+    due_time: "",
   });
   const defaultTaskProjectId = template?.form_project_id ?? "";
 
@@ -178,9 +219,36 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
       if (!firebaseUser) return;
 
       try {
-        const payload = await fetchFormTemplate(firebaseUser, templateId);
+        const [payload, applicationPayload] = await Promise.all([
+          fetchFormTemplate(firebaseUser, templateId),
+          fetchFormTemplateApplication(firebaseUser, templateId).catch(() => ({
+            active_assignment: null,
+            assignments: [],
+          })),
+        ]);
         if (!cancelled) {
           setTemplate(payload);
+          setActiveAssignment(applicationPayload.active_assignment);
+          setAssignments(applicationPayload.assignments);
+          const assignment = applicationPayload.active_assignment;
+          setApplicationForm({
+            application_mode:
+              assignment?.application_mode ??
+              payload.application_mode ??
+              inferApplicationModeValue(payload),
+            occurrence_type:
+              assignment?.occurrence_type ?? payload.occurrence_type ?? "manual",
+            unit_ids: assignment?.unit_ids ?? payload.unit_ids ?? [],
+            shift_definition_ids:
+              assignment?.shift_definition_ids ?? payload.shift_definition_ids ?? [],
+            pending_policy: assignment?.pending_policy ?? "keep",
+            due_rule_type: assignment?.due_rule?.type ?? "none",
+            due_minutes:
+              typeof assignment?.due_rule?.minutes === "number"
+                ? String(assignment.due_rule.minutes)
+                : "",
+            due_time: assignment?.due_rule?.time ?? "",
+          });
           setFormState({
             name: payload.name,
             description: payload.description ?? "",
@@ -448,6 +516,66 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  function toggleApplicationArray(field: "unit_ids" | "shift_definition_ids", value: string, checked: boolean) {
+    setApplicationForm((current) => {
+      const next = new Set(current[field]);
+      if (checked) next.add(value);
+      else next.delete(value);
+      return { ...current, [field]: Array.from(next) };
+    });
+  }
+
+  async function handleSaveApplication() {
+    if (!firebaseUser || !template) return;
+
+    try {
+      setSavingApplication(true);
+      const unitNames = applicationForm.unit_ids
+        .map((unitId) => units.find((unit) => unit.id === unitId)?.name)
+        .filter((name): name is string => !!name);
+      const shiftNames = applicationForm.shift_definition_ids
+        .map((shiftId) => shiftDefinitions.find((shift) => shift.id === shiftId)?.name)
+        .filter((name): name is string => !!name);
+
+      const result = await updateFormTemplateApplication(firebaseUser, template.id, {
+        application_mode: applicationForm.application_mode,
+        occurrence_type: applicationForm.occurrence_type,
+        unit_ids: applicationForm.unit_ids,
+        unit_names: unitNames,
+        shift_definition_ids:
+          applicationForm.application_mode === "schedule"
+            ? applicationForm.shift_definition_ids
+            : [],
+        shift_definition_names:
+          applicationForm.application_mode === "schedule" ? shiftNames : [],
+        pending_policy: applicationForm.pending_policy,
+        due_rule: {
+          type: applicationForm.due_rule_type,
+          minutes:
+            applicationForm.due_minutes.trim() === ""
+              ? undefined
+              : Number(applicationForm.due_minutes),
+          time: applicationForm.due_time.trim() || undefined,
+        },
+      });
+
+      const refreshed = await fetchFormTemplate(firebaseUser, template.id);
+      const applicationPayload = await fetchFormTemplateApplication(firebaseUser, template.id);
+      setTemplate(refreshed);
+      setActiveAssignment(result.assignment);
+      setAssignments(applicationPayload.assignments);
+      setApplicationOpen(false);
+      toast({ title: "Aplicação atualizada" });
+    } catch (saveError) {
+      toast({
+        variant: "destructive",
+        title: saveError instanceof Error ? saveError.message : "Falha ao atualizar aplicação.",
+      });
+    } finally {
+      setSavingApplication(false);
     }
   }
 
@@ -719,6 +847,10 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setApplicationOpen(true)}>
+            <MapPin className="mr-2 h-4 w-4" />
+            Editar aplicação
+          </Button>
           <Button variant="outline" onClick={() => setEditorOpen(true)}>
             <Pencil className="mr-2 h-4 w-4" />
             Editar perguntas
@@ -847,6 +979,11 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                 <p className="mt-1 text-muted-foreground">
                   {inferApplicationMode(template)} · {formatScope(template)}
                 </p>
+                {activeAssignment ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Vínculo ativo desde {String(activeAssignment.starts_at).slice(0, 10)}
+                  </p>
+                ) : null}
               </div>
               <div className="rounded-xl border p-3">
                 <p className="font-medium">Recorrência</p>
@@ -866,10 +1003,219 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   {template.updated_at ? String(template.updated_at) : "Sem atualização registrada"}
                 </p>
               </div>
+              <div className="rounded-xl border p-3">
+                <p className="font-medium">Histórico de vínculos</p>
+                <p className="mt-1 text-muted-foreground">
+                  {assignments.length} registro(s) de aplicação preservado(s).
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      <Dialog open={applicationOpen} onOpenChange={setApplicationOpen}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar aplicação</DialogTitle>
+            <DialogDescription>
+              Substitui o vínculo ativo preservando o histórico anterior. Novas gerações passam a usar esta configuração.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label>Modo</Label>
+                <Select
+                  value={applicationForm.application_mode}
+                  onValueChange={(value) =>
+                    setApplicationForm((current) => ({
+                      ...current,
+                      application_mode: value as ApplicationFormState["application_mode"],
+                      occurrence_type:
+                        value === "manual"
+                          ? "manual"
+                          : current.occurrence_type === "manual"
+                            ? "daily"
+                            : current.occurrence_type,
+                      shift_definition_ids:
+                        value === "schedule" ? current.shift_definition_ids : [],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="unit">Recorrente por unidade</SelectItem>
+                    <SelectItem value="schedule">Por escala/turno</SelectItem>
+                    <SelectItem value="event">Evento do sistema</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Recorrência</Label>
+                <Select
+                  value={applicationForm.occurrence_type}
+                  onValueChange={(value) =>
+                    setApplicationForm((current) => ({ ...current, occurrence_type: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="daily">Diária</SelectItem>
+                    <SelectItem value="weekly">Semanal</SelectItem>
+                    <SelectItem value="biweekly">Quinzenal</SelectItem>
+                    <SelectItem value="monthly">Mensal</SelectItem>
+                    <SelectItem value="custom">Personalizada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Pendentes ao substituir</Label>
+                <Select
+                  value={applicationForm.pending_policy}
+                  onValueChange={(value) =>
+                    setApplicationForm((current) => ({
+                      ...current,
+                      pending_policy: value as ApplicationFormState["pending_policy"],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="keep">Manter</SelectItem>
+                    <SelectItem value="cancel">Cancelar</SelectItem>
+                    <SelectItem value="manual_migration">Migrar manualmente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label>Regra de prazo</Label>
+                <Select
+                  value={applicationForm.due_rule_type}
+                  onValueChange={(value) =>
+                    setApplicationForm((current) => ({
+                      ...current,
+                      due_rule_type: value as ApplicationFormState["due_rule_type"],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem prazo</SelectItem>
+                    <SelectItem value="fixed_time">Horário fixo</SelectItem>
+                    <SelectItem value="after_shift_start">Após início do turno</SelectItem>
+                    <SelectItem value="after_creation">Após criação</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Minutos</Label>
+                <Input
+                  type="number"
+                  value={applicationForm.due_minutes}
+                  onChange={(event) =>
+                    setApplicationForm((current) => ({ ...current, due_minutes: event.target.value }))
+                  }
+                  placeholder="Ex: 30"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Horário</Label>
+                <Input
+                  type="time"
+                  value={applicationForm.due_time}
+                  onChange={(event) =>
+                    setApplicationForm((current) => ({ ...current, due_time: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Unidades vinculadas</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setApplicationForm((current) => ({
+                      ...current,
+                      unit_ids:
+                        current.unit_ids.length === units.length
+                          ? []
+                          : units.map((unit) => unit.id),
+                    }))
+                  }
+                >
+                  {applicationForm.unit_ids.length === units.length ? "Limpar" : "Selecionar todas"}
+                </Button>
+              </div>
+              <div className="grid max-h-48 gap-2 overflow-y-auto rounded-xl border p-3 md:grid-cols-2">
+                {units.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhuma unidade carregada.</p>
+                ) : (
+                  units.map((unit) => (
+                    <label key={unit.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
+                      <Checkbox
+                        checked={applicationForm.unit_ids.includes(unit.id)}
+                        onCheckedChange={(checked) => toggleApplicationArray("unit_ids", unit.id, checked === true)}
+                      />
+                      <span>{unit.name}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {applicationForm.application_mode === "schedule" ? (
+              <div className="space-y-2">
+                <Label>Períodos da escala</Label>
+                <div className="grid max-h-48 gap-2 overflow-y-auto rounded-xl border p-3 md:grid-cols-2">
+                  {shiftDefinitions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhum período carregado.</p>
+                  ) : (
+                    shiftDefinitions.map((shift) => (
+                      <label key={shift.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
+                        <Checkbox
+                          checked={applicationForm.shift_definition_ids.includes(shift.id)}
+                          onCheckedChange={(checked) => toggleApplicationArray("shift_definition_ids", shift.id, checked === true)}
+                        />
+                        <span>{shift.name} · {shift.startTime}-{shift.endTime}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+              Desvincular uma unidade aqui não apaga preenchimentos antigos. O vínculo anterior fica inativo e as próximas gerações usam a nova aplicação.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApplicationOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void handleSaveApplication()} disabled={savingApplication}>
+              {savingApplication ? "Salvando..." : "Salvar aplicação"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
         <DialogContent className="max-h-[92vh] max-w-6xl overflow-auto">

@@ -190,6 +190,49 @@ export type FormOccurrenceType =
   | 'annual'
   | 'custom';
 
+export type FormApplicationMode = 'manual' | 'unit' | 'schedule' | 'event';
+
+export type FormAssignmentStatus = 'active' | 'inactive' | 'scheduled';
+
+export type FormAssignment = {
+  id: string;
+  workspace_id: string;
+  form_project_id: string;
+  form_template_id: string;
+  application_mode: FormApplicationMode;
+  status: FormAssignmentStatus;
+  starts_at: string;
+  ends_at?: string | null;
+  ended_at?: string | null;
+  ended_by?: { user_id: string; username: string } | null;
+  ended_reason?: string;
+  pending_policy?: 'keep' | 'cancel' | 'manual_migration';
+  occurrence_type?: FormOccurrenceType;
+  unit_ids: string[];
+  unit_names?: string[];
+  job_role_ids?: string[];
+  job_role_names?: string[];
+  job_function_ids?: string[];
+  job_function_names?: string[];
+  shift_definition_ids?: string[];
+  shift_definition_names?: string[];
+  due_rule?: {
+    type: 'none' | 'fixed_time' | 'after_shift_start' | 'after_creation';
+    time?: string;
+    minutes?: number;
+  };
+  created_at: Timestamp | string;
+  updated_at?: Timestamp | string;
+  created_by?: { user_id: string; username: string };
+  updated_by?: { user_id: string; username: string };
+};
+
+export type FormDueRule = {
+  type: 'none' | 'fixed_time' | 'after_shift_start' | 'after_creation';
+  time?: string;
+  minutes?: number;
+};
+
 export type FormCustomSchedule = {
   modes: ('weekdays' | 'monthdays' | 'interval' | 'once')[];
   weekdays?: number[];
@@ -208,6 +251,11 @@ export type FormTemplate = {
   name: string;
   description?: string;
   occurrence_type?: FormOccurrenceType;
+  application_mode?: FormApplicationMode;
+  active_assignment_id?: string;
+  created_from_model_id?: string;
+  created_from_model_name?: string;
+  due_rule?: FormDueRule;
   annual_schedule?: { month: number; day: number };
   custom_schedule?: FormCustomSchedule;
   unit_ids?: string[];
@@ -362,6 +410,7 @@ export type FormExecution = {
   created_by_user_id?: string;
   created_by_username?: string;
   scheduled_for?: string;
+  due_at?: string | null;
   sections: FormExecutionSection[];
   items?: FormExecutionItem[];
   sections_summary?: FormSectionsSummary;

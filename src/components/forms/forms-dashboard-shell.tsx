@@ -28,6 +28,7 @@ import {
   createFormProject,
   createFormTemplate,
   fetchFormsBootstrap,
+  updateFormTemplateApplication,
   updateFormProject,
 } from "@/features/forms/lib/client";
 import { cn } from "@/lib/utils";
@@ -642,12 +643,44 @@ export function FormsDashboardShell() {
           selectedDuplicateTemplate?.description ||
           "",
         occurrence_type: templateForm.occurrence_type,
+        application_mode: templateForm.application_mode,
+        created_from_model_id: templateForm.source === "model" ? selectedModel?.id : undefined,
+        created_from_model_name: templateForm.source === "model" ? selectedModel?.name : undefined,
+        due_rule: { type: "none" },
         unit_ids: templateForm.unit_ids,
+        unit_names: templateForm.unit_ids
+          .map((unitId) => units.find((unit) => unit.id === unitId)?.name)
+          .filter(Boolean),
         job_role_ids: [],
         job_function_ids: [],
         shift_definition_ids: templateForm.application_mode === "schedule" ? templateForm.shift_definition_ids : [],
+        shift_definition_names:
+          templateForm.application_mode === "schedule"
+            ? templateForm.shift_definition_ids
+                .map((shiftId) => shiftDefinitions.find((shift) => shift.id === shiftId)?.name)
+                .filter(Boolean)
+            : [],
         is_active: true,
         sections,
+      });
+
+      await updateFormTemplateApplication(firebaseUser, result.template.id, {
+        application_mode: templateForm.application_mode,
+        occurrence_type: templateForm.occurrence_type,
+        unit_ids: templateForm.unit_ids,
+        unit_names: templateForm.unit_ids
+          .map((unitId) => units.find((unit) => unit.id === unitId)?.name)
+          .filter(Boolean),
+        shift_definition_ids:
+          templateForm.application_mode === "schedule" ? templateForm.shift_definition_ids : [],
+        shift_definition_names:
+          templateForm.application_mode === "schedule"
+            ? templateForm.shift_definition_ids
+                .map((shiftId) => shiftDefinitions.find((shift) => shift.id === shiftId)?.name)
+                .filter(Boolean)
+            : [],
+        pending_policy: "keep",
+        due_rule: { type: "none" },
       });
 
       setTemplateDialogOpen(false);
