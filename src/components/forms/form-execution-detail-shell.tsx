@@ -776,8 +776,8 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Execução</CardTitle>
-          <CardDescription>{error ?? "Execução não encontrada."}</CardDescription>
+          <CardTitle>Preenchimento</CardTitle>
+          <CardDescription>{error ?? "Preenchimento não encontrado."}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -824,7 +824,7 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Execução
+                  Preenchimento
                 </p>
                 <p className="text-base font-semibold">
                   {execution.unit_name ?? execution.unit_id} • {execution.assigned_username}
@@ -1263,7 +1263,7 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
               Eventos recentes
             </CardTitle>
             <CardDescription>
-              Histórico de criação, salvamento, conclusão e evidências da execução.
+              Histórico de criação, salvamento, conclusão e evidências do preenchimento.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -1309,10 +1309,10 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
 
           <div className="mr-auto text-sm text-muted-foreground">
             {remainingRequired > 0
-              ? `Faltam ${remainingRequired} item(ns) obrigatório(s) para concluir.`
+              ? `Faltam ${remainingRequired} pergunta(s) obrigatória(s) para concluir.`
               : executionView.missingSectionEvidence
                 ? "Ainda faltam evidências obrigatórias em pelo menos uma seção."
-                : `${executionView.completedItems} de ${executionView.activeItems} item(ns) respondidos.`}
+                : `${executionView.completedItems} de ${executionView.activeItems} pergunta(s) respondida(s).`}
           </div>
 
           {canEdit ? (
@@ -1327,7 +1327,7 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                 disabled={submitting !== null || remainingRequired > 0 || executionView.missingSectionEvidence}
               >
                 {submitting === "complete" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                Concluir execução
+                Concluir preenchimento
               </Button>
               <Button type="button" variant="destructive" onClick={() => void runAction("cancel")} disabled={submitting !== null}>
                 {submitting === "cancel" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}

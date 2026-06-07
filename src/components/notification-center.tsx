@@ -262,7 +262,7 @@ export function NotificationCenter({
                             </button>
                           ) : null}
                           <Link
-                            href={`/dashboard/dp/checklists?tab=operations&executionId=${task.executionId}`}
+                            href="/dashboard/forms"
                             onClick={() => setOpen(false)}
                             className="text-[10px] font-semibold text-primary hover:underline"
                           >
@@ -330,7 +330,7 @@ export function NotificationCenter({
           {/* Footer */}
           <div className="flex-shrink-0 border-t border-border px-4 py-2.5 text-center">
             <Link
-              href="/dashboard/dp/checklists?tab=operations"
+              href="/dashboard/forms"
               onClick={() => setOpen(false)}
               className="text-xs font-semibold text-primary hover:underline"
             >

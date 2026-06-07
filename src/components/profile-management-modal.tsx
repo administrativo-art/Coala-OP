@@ -783,14 +783,14 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                   </div>
                                 </div>
 
-                                {/* Checklists */}
+                                {/* Formulários operacionais */}
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><ClipboardCheck className="h-4 w-4" /> Checklists Operacionais</h4>
-                                  {renderPermissionSwitch("permissions.dp.checklists.view" as any, "Visualizar Checklists", "Permite ver a lista de execuções e abrir checklists em modo leitura.", !dpViewWatch)}
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><ClipboardCheck className="h-4 w-4" /> Formulários Operacionais</h4>
+                                  {renderPermissionSwitch("permissions.dp.checklists.view" as any, "Visualizar formulários", "Permite ver a lista de execuções e abrir formulários em modo leitura.", !dpViewWatch)}
                                   <div className="pl-6 space-y-2">
-                                    {renderPermissionSwitch("permissions.dp.checklists.operate" as any, "Preencher Checklists", "Permite assumir e responder checklists atribuídos.", !dpChecklistsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.dp.checklists.create" as any, "Criar Checklist Manual", "Permite criar execuções manuais a partir de templates ou em branco.", !dpChecklistsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.dp.checklists.manageTemplates" as any, "Gerenciar Templates", "Permite criar, editar e desativar templates de checklist.", !dpChecklistsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.checklists.operate" as any, "Preencher formulários", "Permite assumir e responder formulários atribuídos.", !dpChecklistsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.checklists.create" as any, "Criar formulário manual", "Permite criar execuções manuais a partir de templates ou em branco.", !dpChecklistsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.checklists.manageTemplates" as any, "Gerenciar templates", "Permite criar, editar e desativar templates de formulário.", !dpChecklistsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.checklists.viewAnalytics" as any, "Ver Análises", "Permite acessar a aba analítica e os dashboards por tipo.", !dpChecklistsViewWatch, true)}
                                   </div>
                                 </div>

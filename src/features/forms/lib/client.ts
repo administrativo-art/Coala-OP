@@ -73,7 +73,7 @@ export async function fetchFormTemplate(
   return authorizedGet<FormTemplate>(
     `/api/forms/templates/${templateId}`,
     firebaseUser,
-    "Falha ao carregar o template."
+    "Falha ao carregar o formulário."
   );
 }
 
@@ -87,7 +87,7 @@ export async function fetchFormExecution(
   }>(
     `/api/forms/executions/${executionId}`,
     firebaseUser,
-    "Falha ao carregar a execução."
+    "Falha ao carregar o preenchimento."
   );
 }
 
@@ -129,7 +129,7 @@ export async function claimFormExecution(
     firebaseUser,
     "POST",
     {},
-    "Falha ao assumir a execução."
+    "Falha ao assumir o preenchimento."
   );
 }
 
@@ -147,7 +147,7 @@ export async function updateFormExecution(
     firebaseUser,
     "PATCH",
     body,
-    "Falha ao atualizar a execução."
+    "Falha ao atualizar o preenchimento."
   );
 }
 
@@ -187,7 +187,7 @@ export async function createFormTemplate(
     firebaseUser,
     "POST",
     body,
-    "Falha ao criar o template."
+    "Falha ao criar o formulário."
   );
 }
 
@@ -286,7 +286,7 @@ export async function updateFormTemplate(
     firebaseUser,
     "PATCH",
     body,
-    "Falha ao atualizar o template."
+    "Falha ao atualizar o formulário."
   );
 }
 

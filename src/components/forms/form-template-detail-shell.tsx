@@ -23,6 +23,41 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 
+const OCCURRENCE_LABELS: Record<string, string> = {
+  manual: "Manual",
+  daily: "Diária",
+  weekly: "Semanal",
+  biweekly: "Quinzenal",
+  monthly: "Mensal",
+  annual: "Anual",
+  custom: "Personalizada",
+};
+
+function formatOccurrence(value?: string) {
+  if (!value) return "Manual";
+  return OCCURRENCE_LABELS[value] ?? value;
+}
+
+function inferApplicationMode(template: FormTemplate) {
+  if ((template.shift_definition_ids?.length ?? 0) > 0) return "Por escala/turno";
+  if ((template.unit_ids?.length ?? 0) > 0) return "Recorrente por unidade";
+  return "Manual";
+}
+
+function formatScope(template: FormTemplate) {
+  const units = template.unit_names?.length || template.unit_ids?.length || 0;
+  const shifts = template.shift_definition_names?.length || template.shift_definition_ids?.length || 0;
+  const roles = template.job_role_names?.length || template.job_role_ids?.length || 0;
+  const functions = template.job_function_names?.length || template.job_function_ids?.length || 0;
+  const parts = [];
+
+  if (units > 0) parts.push(`${units} unidade(s)`);
+  if (shifts > 0) parts.push(`${shifts} período(s)`);
+  if (roles + functions > 0) parts.push(`${roles + functions} cargo(s)/função(ões)`);
+
+  return parts.length > 0 ? parts.join(" · ") : "Sem vínculo automático";
+}
+
 type EditorItem = {
   id: string;
   title: string;
@@ -243,7 +278,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
           setError(
             requestError instanceof Error
               ? requestError.message
-              : "Falha ao carregar template."
+              : "Falha ao carregar formulário."
           );
         }
       }
@@ -263,8 +298,8 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Template</CardTitle>
-          <CardDescription>{error ?? "Template não encontrado."}</CardDescription>
+          <CardTitle>Formulário</CardTitle>
+          <CardDescription>{error ?? "Formulário não encontrado."}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -405,11 +440,11 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
       const refreshed = await fetchFormTemplate(firebaseUser, template.id);
       setTemplate(refreshed);
       setEditorOpen(false);
-      toast({ title: "Template atualizado" });
+      toast({ title: "Formulário atualizado" });
     } catch (saveError) {
       toast({
         variant: "destructive",
-        title: saveError instanceof Error ? saveError.message : "Falha ao atualizar template.",
+        title: saveError instanceof Error ? saveError.message : "Falha ao atualizar formulário.",
       });
     } finally {
       setSaving(false);
@@ -678,7 +713,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
               <Badge variant="outline">{template.context}</Badge>
             </div>
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              {template.description?.trim() || "Template operacional no novo domínio de formulários."}
+              {template.description?.trim() || "Formulário operacional publicado para gerar preenchimentos."}
             </p>
           </div>
         </div>
@@ -686,7 +721,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setEditorOpen(true)}>
             <Pencil className="mr-2 h-4 w-4" />
-            Abrir builder
+            Editar perguntas
           </Button>
         </div>
       </div>
@@ -700,7 +735,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Itens</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Perguntas</p>
             <p className="mt-2 text-3xl font-semibold tracking-tight">
               {template.sections.reduce((total, section) => total + section.items.length, 0)}
             </p>
@@ -708,7 +743,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Branches</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Condicionais</p>
             <p className="mt-2 text-3xl font-semibold tracking-tight">
               {template.sections.reduce(
                 (total, section) =>
@@ -724,7 +759,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Triggers</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tarefas</p>
             <p className="mt-2 text-3xl font-semibold tracking-tight">
               {template.sections.reduce(
                 (total, section) =>
@@ -750,7 +785,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   {section.title}
                 </CardTitle>
                 <CardDescription>
-                  {section.items.length} item(ns) nesta seção
+                  {section.items.length} pergunta(s) nesta seção
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -794,23 +829,35 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ClipboardList className="h-5 w-5" />
-                Resumo do template
+                Resumo do formulário
               </CardTitle>
               <CardDescription>
-                Leituras rápidas antes de abrir o builder completo.
+                Estrutura, aplicação e versionamento preservados para os próximos preenchimentos.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="rounded-xl border p-3">
                 <p className="font-medium">Escopo</p>
                 <p className="mt-1 text-muted-foreground">
-                  Projeto {template.form_project_id} • contexto {template.context}
+                  Projeto {template.form_project_id} · contexto {template.context}
+                </p>
+              </div>
+              <div className="rounded-xl border p-3">
+                <p className="font-medium">Aplicação</p>
+                <p className="mt-1 text-muted-foreground">
+                  {inferApplicationMode(template)} · {formatScope(template)}
                 </p>
               </div>
               <div className="rounded-xl border p-3">
                 <p className="font-medium">Recorrência</p>
                 <p className="mt-1 text-muted-foreground">
-                  {template.occurrence_type ?? "manual"}
+                  {formatOccurrence(template.occurrence_type)}
+                </p>
+              </div>
+              <div className="rounded-xl border p-3">
+                <p className="font-medium">Histórico seguro</p>
+                <p className="mt-1 text-muted-foreground">
+                  Alterações neste formulário valem para novos preenchimentos; preenchimentos antigos preservam o snapshot da versão usada.
                 </p>
               </div>
               <div className="rounded-xl border p-3">
@@ -827,9 +874,9 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
         <DialogContent className="max-h-[92vh] max-w-6xl overflow-auto">
           <DialogHeader>
-            <DialogTitle>Editar template</DialogTitle>
+            <DialogTitle>Editar formulário</DialogTitle>
             <DialogDescription>
-              Builder com múltiplas seções, lógica condicional, branches e triggers.
+              Edite perguntas, condicionais e gatilhos de tarefa. O histórico de preenchimentos já gerados permanece preservado.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
@@ -838,7 +885,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
               onChange={(event) =>
                 setFormState((current) => ({ ...current, name: event.target.value }))
               }
-              placeholder="Nome do template"
+              placeholder="Nome do formulário"
             />
             <Textarea
               value={formState.description}
@@ -1568,7 +1615,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
               Fechar
             </Button>
             <Button onClick={() => void handleSaveTemplate()} disabled={saving}>
-              {saving ? "Salvando..." : "Salvar template"}
+              {saving ? "Salvando..." : "Salvar formulário"}
             </Button>
           </DialogFooter>
         </DialogContent>

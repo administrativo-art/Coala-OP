@@ -94,7 +94,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           { label: "Painel de Operações", href: "/dashboard/operations", icon: LayoutGrid, show: permissions.dashboard.operational },
           { label: "Tarefas gerais", href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, badge: pendingTaskCount > 0 ? { count: pendingTaskCount, variant: "warn" } : undefined },
           { label: "Formulários", href: "/dashboard/forms", icon: FileText, show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.dp?.checklists?.view || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.manageTemplates },
-          { label: "Checklists", href: "/dashboard/dp/checklists", icon: ListChecks, show: permissions.dp?.checklists?.view || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.manageTemplates || permissions.dp?.view },
           {
             label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package, show: permissions.stock.view,
             children: [

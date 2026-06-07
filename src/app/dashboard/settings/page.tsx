@@ -17,10 +17,6 @@ const UserManagement = dynamic(
   () => import("@/components/user-management").then((m) => m.UserManagement),
   { ssr: false }
 );
-const DPChecklistsV2Page = dynamic(
-  () => import("@/components/dp/dp-checklists-v2-page").then((m) => m.DPChecklistsV2Page),
-  { ssr: false }
-);
 const ItemManagement = dynamic(
   () => import("@/components/item-management").then((m) => m.ItemManagement),
   { ssr: false }
@@ -268,61 +264,14 @@ function SettingsLaunchPanel({
 }
 
 function OperationalChecklistsPanel() {
-  const { firebaseUser } = useAuth();
-  const [mode, setMode] = useState<"loading" | "forms" | "legacy">("loading");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function resolveMode() {
-      if (!firebaseUser) {
-        if (!cancelled) setMode("legacy");
-        return;
-      }
-
-      try {
-        const token = await firebaseUser.getIdToken();
-        const response = await fetch("/api/forms/navigation", {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          cache: "no-store",
-        });
-
-        if (!cancelled) {
-          setMode(response.ok ? "forms" : "legacy");
-        }
-      } catch {
-        if (!cancelled) {
-          setMode("legacy");
-        }
-      }
-    }
-
-    resolveMode();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [firebaseUser]);
-
-  if (mode === "loading") {
-    return <EmptySection label="Checklists" />;
-  }
-
-  if (mode === "forms") {
-    return (
-      <SettingsLaunchPanel
-        title="Novo módulo de formulários"
-        description="A configuração operacional já foi migrada para o novo domínio de formulários. Use esse acesso para projetos, templates e execuções."
-        href="/dashboard/forms"
-        actionLabel="Abrir formulários"
-      />
-    );
-  }
-
-  return <DPChecklistsV2Page />;
+  return (
+    <SettingsLaunchPanel
+      title="Módulo de formulários"
+      description="A configuração operacional foi migrada para o domínio de formulários. Use esse acesso para projetos, templates e execuções."
+      href="/dashboard/forms"
+      actionLabel="Abrir formulários"
+    />
+  );
 }
 
 type NestedTab = {
@@ -422,8 +371,8 @@ export default function SettingsPage() {
   const operationalTabs: NestedTab[] = [
     {
       value: "checklists",
-      label: "Checklists",
-      title: "Checklists operacionais",
+      label: "Formulários",
+      title: "Formulários operacionais",
       description: "Centralize o acesso às configurações operacionais dos formulários e ao catálogo de templates.",
       content: <OperationalChecklistsPanel />,
     },

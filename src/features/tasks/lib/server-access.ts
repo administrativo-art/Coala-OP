@@ -46,7 +46,7 @@ export async function loadTasksNavigation(params: {
     },
     links: [
       { label: "Painel de tarefas", href: "/dashboard/tasks" },
-      { label: "Checklists legados", href: "/dashboard/dp/checklists?tab=operations" },
+      { label: "Formulários", href: "/dashboard/forms" },
     ],
   };
 }
