@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Clock,
   ClipboardCheck,
   GalleryVerticalEnd,
   History,
@@ -200,6 +201,18 @@ function formatDateTime(value: unknown) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(date);
+}
+
+function formatDuration(start: unknown, end: unknown) {
+  if (!start || !end) return "—";
+  const startDate = new Date(String(start));
+  const endDate = new Date(String(end));
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "—";
+  const minutes = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours}h ${rest}min` : `${hours}h`;
 }
 
 function formatRelative(value: unknown) {
@@ -786,6 +799,25 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
   const currentSection = sectionsMode ? execution.sections[sectionIdx] : null;
   const sectionIdsToRender = sectionsMode && currentSection ? [currentSection.id] : execution.sections.map((section) => section.id);
   const remainingRequired = Math.max(executionView.requiredItems - executionView.completedRequiredItems, 0);
+  const generatedTaskItems = (execution.items ?? []).filter((item) => item.linked_project_task_id);
+  const visibleItemsBySection = new Map<string, FormExecutionItem[]>();
+  executionView.visibleItems.forEach((item) => {
+    const entries = visibleItemsBySection.get(item.section_id) ?? [];
+    entries.push(item);
+    visibleItemsBySection.set(item.section_id, entries);
+  });
+  const sectionProgressRows = execution.sections.map((section) => {
+    const visibleItems = visibleItemsBySection.get(section.id) ?? [];
+    const completedItems = visibleItems.filter((item) =>
+      isItemCompleted({ ...item, ...(drafts[item.id] ?? normalizeDraftItem(item)) })
+    ).length;
+    return {
+      id: section.id,
+      title: section.title,
+      total: visibleItems.length,
+      completed: completedItems,
+    };
+  });
 
   return (
     <div className="-m-4 flex min-h-screen flex-col md:-m-8">
@@ -809,115 +841,104 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
         ) : null}
       </div>
 
-      <div className="mx-auto w-full max-w-[1600px] space-y-4 px-4 py-6 pb-28 lg:px-6">
-        <div className="overflow-hidden rounded-2xl border">
-          <div className="flex flex-col gap-3 border-b bg-slate-50 px-5 py-4 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge className={STATUS_META[execution.status].className}>
-                  {getStatusLabel(execution.status)}
-                </Badge>
-                <Badge variant="outline">{execution.occurrence_type ?? "manual"}</Badge>
-                {executionView.criticalAlerts > 0 ? (
-                  <Badge variant="destructive">{executionView.criticalAlerts} alerta(s)</Badge>
-                ) : null}
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Preenchimento
-                </p>
-                <p className="text-base font-semibold">
-                  {execution.unit_name ?? execution.unit_id} • {execution.assigned_username}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span>Status: {getStatusLabel(execution.status)}</span>
-                <span>Atualizado {formatRelative(execution.updated_at)}</span>
-                <span>{formatDateTime(execution.updated_at)}</span>
-              </div>
-              <p className="flex items-center gap-2 text-xs text-emerald-700">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {renderAutosaveLabel()}
-              </p>
+      <div className="mx-auto w-full max-w-[1600px] space-y-5 px-4 py-6 pb-10 lg:px-6">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <ClipboardCheck className="h-5 w-5 text-primary" />
+              <h1 className="text-2xl font-semibold tracking-tight">{execution.template_name}</h1>
+              <Badge variant="outline">v{execution.template_version}</Badge>
+              <Badge className={STATUS_META[execution.status].className}>
+                {getStatusLabel(execution.status)}
+              </Badge>
+              {executionView.criticalAlerts > 0 ? (
+                <Badge variant="destructive">{executionView.criticalAlerts} alerta(s)</Badge>
+              ) : null}
             </div>
-
-            <div className="min-w-[180px] space-y-1 text-right">
-              <div className="mb-1 flex justify-end">
-                <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={toggleSectionsMode}>
-                  {sectionsMode ? (
-                    <>
-                      <List className="h-3.5 w-3.5" />
-                      Lista
-                    </>
-                  ) : (
-                    <>
-                      <GalleryVerticalEnd className="h-3.5 w-3.5" />
-                      Seções
-                    </>
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Progresso
-              </p>
-              <p className="text-2xl font-semibold tracking-tight">
-                {executionView.completedItems}
-                <span className="text-sm font-medium text-muted-foreground">
-                  {" "}
-                  / {executionView.activeItems}
-                </span>
-              </p>
-              <p className="text-sm text-muted-foreground">{executionView.completionPercent}% respondido</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              <span>{execution.unit_name ?? execution.unit_id}</span>
+              <span>{execution.occurrence_type ?? "manual"}</span>
+              {execution.due_at ? <span>Vence {formatDateTime(execution.due_at)}</span> : null}
+              <span>{execution.form_project_id}</span>
             </div>
           </div>
-
-          <div className="space-y-3 px-5 py-4">
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="text-muted-foreground">Progresso atual</span>
-              <span className="font-semibold text-emerald-700">
-                {executionView.completionPercent}%
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  execution.status === "overdue" ? "bg-red-500" : "bg-emerald-500"
-                )}
-                style={{ width: `${Math.max(executionView.completionPercent, 4)}%` }}
-              />
-            </div>
-          </div>
+          <Button type="button" variant="outline" size="sm" className="w-fit" onClick={toggleSectionsMode}>
+            {sectionsMode ? (
+              <>
+                <List className="mr-2 h-4 w-4" />
+                Ver em lista
+              </>
+            ) : (
+              <>
+                <GalleryVerticalEnd className="mr-2 h-4 w-4" />
+                Ver por seções
+              </>
+            )}
+          </Button>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-4">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Obrigatórios</p>
-              <p className="mt-2 text-2xl font-semibold">{executionView.completedRequiredItems}/{executionView.requiredItems}</p>
+        {execution.status === "pending" ? (
+          <Alert className="border-primary/30 bg-primary/5">
+            <Clock className="h-4 w-4" />
+            <AlertTitle>Preenchimento pendente</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span>Assuma a responsabilidade para começar. O autosave será ativado após assumir.</span>
+              <Button onClick={() => void runAction("claim")} disabled={submitting !== null} size="sm">
+                {submitting === "claim" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}
+                Assumir preenchimento
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {execution.status === "completed" ? (
+          <Card className="mx-auto max-w-2xl overflow-hidden">
+            <CardHeader className="bg-emerald-600 text-white">
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5" />
+                Preenchimento concluído
+              </CardTitle>
+              <CardDescription className="text-emerald-50">
+                {execution.template_name} · enviado {formatRelative(execution.completed_at)}
+              </CardDescription>
+              <div className="grid gap-3 pt-4 sm:grid-cols-3">
+                <div className="rounded-xl bg-white/15 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-50">Score final</p>
+                  <p className="mt-1 text-2xl font-semibold">{execution.score ?? 0}%</p>
+                </div>
+                <div className="rounded-xl bg-white/15 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-50">Duração</p>
+                  <p className="mt-1 text-2xl font-semibold">{formatDuration(execution.claimed_at ?? execution.created_at, execution.completed_at)}</p>
+                </div>
+                <div className="rounded-xl bg-white/15 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-50">Tarefas geradas</p>
+                  <p className="mt-1 text-2xl font-semibold">{generatedTaskItems.length}</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 p-5">
+              <p className="text-sm font-medium">Tarefas criadas automaticamente</p>
+              {generatedTaskItems.length > 0 ? generatedTaskItems.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.linked_project_task_status ?? "Em aberto"}
+                    </p>
+                  </div>
+                  <Badge variant="outline">Tarefa</Badge>
+                </div>
+              )) : (
+                <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+                  Nenhuma tarefa automática foi gerada.
+                </div>
+              )}
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Score</p>
-              <p className="mt-2 text-2xl font-semibold">{execution.score ?? 0}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Seções</p>
-              <p className="mt-2 text-2xl font-semibold">{execution.sections.length}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Evidência</p>
-              <p className="mt-2 text-sm font-medium">
-                {executionView.missingSectionEvidence ? "Pendente" : "Em dia"}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        ) : null}
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-4">
 
         {sectionIdsToRender.map((sectionId, sectionRenderIndex) => {
           const section = execution.sections.find((entry) => entry.id === sectionId);
@@ -1281,67 +1302,131 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
             )}
           </CardContent>
         </Card>
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 z-10 border-t bg-background/95 px-6 py-4 backdrop-blur lg:left-64">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3">
-          {sectionsMode && execution.sections.length > 0 ? (
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" disabled={sectionIdx === 0} onClick={() => setSectionIdx((current) => Math.max(0, current - 1))}>
-                <ChevronLeft className="mr-1 h-4 w-4" />
-                Anterior
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                Seção {sectionIdx + 1} / {execution.sections.length}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={sectionIdx >= execution.sections.length - 1 || sectionIdx >= executionView.sectionBlockedAt}
-                onClick={() => setSectionIdx((current) => Math.min(execution.sections.length - 1, current + 1))}
-              >
-                Próxima
-                <ChevronRight className="ml-1 h-4 w-4" />
-              </Button>
-            </div>
-          ) : null}
-
-          <div className="mr-auto text-sm text-muted-foreground">
-            {remainingRequired > 0
-              ? `Faltam ${remainingRequired} pergunta(s) obrigatória(s) para concluir.`
-              : executionView.missingSectionEvidence
-                ? "Ainda faltam evidências obrigatórias em pelo menos uma seção."
-                : `${executionView.completedItems} de ${executionView.activeItems} pergunta(s) respondida(s).`}
           </div>
 
-          {canEdit ? (
-            <>
-              <Button type="button" variant="outline" onClick={() => void runAction("save")} disabled={submitting !== null}>
-                {submitting === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Salvar progresso
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void runAction("complete")}
-                disabled={submitting !== null || remainingRequired > 0 || executionView.missingSectionEvidence}
-              >
-                {submitting === "complete" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                Concluir preenchimento
-              </Button>
-              <Button type="button" variant="destructive" onClick={() => void runAction("cancel")} disabled={submitting !== null}>
-                {submitting === "cancel" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
-                Cancelar
-              </Button>
-            </>
-          ) : null}
+          <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start">
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center gap-4">
+                  <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-muted">
+                    <div
+                      className="absolute inset-0 rounded-full"
+                      style={{
+                        background: `conic-gradient(hsl(var(--primary)) ${executionView.completionPercent * 3.6}deg, hsl(var(--muted)) 0deg)`,
+                      }}
+                    />
+                    <div className="relative flex h-16 w-16 flex-col items-center justify-center rounded-full bg-background">
+                      <span className="text-xl font-semibold text-primary">{execution.score ?? executionView.completionPercent}</span>
+                      <span className="text-[10px] uppercase text-muted-foreground">score</span>
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Progresso</p>
+                    <p className="mt-1 text-2xl font-semibold">
+                      {executionView.completedItems}/{executionView.activeItems} itens
+                    </p>
+                    <p className={cn("mt-1 text-sm", autosaveState === "error" ? "text-destructive" : "text-emerald-700")}>
+                      {renderAutosaveLabel()}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-          {(execution.status === "completed" || execution.status === "canceled") ? (
-            <Button type="button" variant="outline" onClick={() => void runAction("reopen")} disabled={submitting !== null}>
-              {submitting === "reopen" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-2 h-4 w-4" />}
-              Reabrir
-            </Button>
-          ) : null}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Seções</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {sectionProgressRows.map((section, index) => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60",
+                      sectionsMode && sectionIdx === index && "bg-primary/10 text-primary"
+                    )}
+                    onClick={() => {
+                      setSectionsMode(true);
+                      localStorage.setItem("forms-sections-mode", "true");
+                      setSectionIdx(index);
+                    }}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs">{index + 1}</span>
+                      <span className="truncate font-medium">{section.title}</span>
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{section.completed}/{section.total}</span>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+
+            {sectionsMode && execution.sections.length > 0 ? (
+              <Card>
+                <CardContent className="flex items-center justify-between gap-2 p-3">
+                  <Button type="button" variant="outline" size="sm" disabled={sectionIdx === 0} onClick={() => setSectionIdx((current) => Math.max(0, current - 1))}>
+                    <ChevronLeft className="mr-1 h-4 w-4" />
+                    Anterior
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {sectionIdx + 1} / {execution.sections.length}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={sectionIdx >= execution.sections.length - 1 || sectionIdx >= executionView.sectionBlockedAt}
+                    onClick={() => setSectionIdx((current) => Math.min(execution.sections.length - 1, current + 1))}
+                  >
+                    Próxima
+                    <ChevronRight className="ml-1 h-4 w-4" />
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            <Card>
+              <CardContent className="space-y-3 p-5">
+                <p className="text-sm text-muted-foreground">
+                  {remainingRequired > 0
+                    ? `Faltam ${remainingRequired} pergunta(s) obrigatória(s).`
+                    : executionView.missingSectionEvidence
+                      ? "Ainda faltam evidências obrigatórias."
+                      : `${executionView.completedItems} de ${executionView.activeItems} pergunta(s) respondida(s).`}
+                </p>
+
+                {canEdit ? (
+                  <>
+                    <Button type="button" variant="outline" className="w-full" onClick={() => void runAction("save")} disabled={submitting !== null}>
+                      {submitting === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Salvar progresso
+                    </Button>
+                    <Button
+                      type="button"
+                      className="w-full"
+                      onClick={() => void runAction("complete")}
+                      disabled={submitting !== null || remainingRequired > 0 || executionView.missingSectionEvidence}
+                    >
+                      {submitting === "complete" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                      Concluir preenchimento
+                    </Button>
+                    <Button type="button" variant="destructive" className="w-full" onClick={() => void runAction("cancel")} disabled={submitting !== null}>
+                      {submitting === "cancel" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                      Cancelar
+                    </Button>
+                  </>
+                ) : null}
+
+                {(execution.status === "completed" || execution.status === "canceled") ? (
+                  <Button type="button" variant="outline" className="w-full" onClick={() => void runAction("reopen")} disabled={submitting !== null}>
+                    {submitting === "reopen" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-2 h-4 w-4" />}
+                    Reabrir
+                  </Button>
+                ) : null}
+              </CardContent>
+            </Card>
+          </aside>
         </div>
       </div>
 
