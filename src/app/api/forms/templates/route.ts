@@ -63,11 +63,13 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
     const ref = checklistDbAdmin.collection("form_templates").doc();
+    const versionRef = checklistDbAdmin.collection("form_versions").doc();
     const version = 1;
     const template = {
       ...parsed,
       workspace_id: context.workspace_id,
       version,
+      current_version_id: versionRef.id,
       version_history: [],
       created_at: now,
       updated_at: now,
@@ -81,7 +83,23 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    await ref.set(template);
+    await checklistDbAdmin.runTransaction(async (transaction) => {
+      transaction.set(ref, template);
+      transaction.set(versionRef, {
+        workspace_id: context.workspace_id,
+        form_template_id: ref.id,
+        form_project_id: parsed.form_project_id,
+        version,
+        name: parsed.name,
+        description: parsed.description ?? "",
+        sections: parsed.sections,
+        created_at: now,
+        created_by: {
+          user_id: context.userDoc.id,
+          username: context.userDoc.username,
+        },
+      });
+    });
     await mirrorTemplateToLegacy({
       templateId: ref.id,
       template: template as unknown as FormTemplate,

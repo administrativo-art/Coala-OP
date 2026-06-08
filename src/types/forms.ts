@@ -283,6 +283,7 @@ export type FormTemplate = {
   shift_definition_names?: string[];
   is_active: boolean;
   version: number;
+  current_version_id?: string;
   version_history?: FormTemplateVersionHistoryEntry[];
   last_execution_at?: string | null;
   sections: FormTemplateSection[];
@@ -291,6 +292,20 @@ export type FormTemplate = {
   updated_at?: Timestamp | string;
   created_by?: { user_id: string; username: string };
   updated_by?: { user_id: string; username: string };
+};
+
+export type FormVersion = {
+  id: string;
+  workspace_id: string;
+  form_template_id: string;
+  form_project_id: string;
+  version: number;
+  name: string;
+  description?: string;
+  sections: FormTemplateSection[];
+  created_at: Timestamp | string;
+  created_by?: { user_id: string; username: string };
+  change_notes?: string;
 };
 
 // ─── Execution ─────────────────────────────────────────────────────────────────
@@ -406,6 +421,7 @@ export type FormExecution = {
   context: FormContext;
   template_id: string;
   assignment_id?: string | null;
+  form_version_id?: string | null;
   template_name: string;
   template_version: number;
   template_snapshot?: FormTemplate;

@@ -172,6 +172,7 @@ export async function POST(request: NextRequest) {
       context: template.context,
       template_id: body.template_id,
       assignment_id: template.active_assignment_id ?? null,
+      form_version_id: template.current_version_id ?? null,
       template_name: template.name,
       template_version: template.version,
       template_snapshot: template,

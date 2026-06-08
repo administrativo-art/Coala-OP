@@ -64,12 +64,15 @@ export async function PATCH(
 
     const currentVersion =
       typeof currentData.version === "number" ? currentData.version : 1;
+    const nextVersion = currentVersion + 1;
+    const versionRef = checklistDbAdmin.collection("form_versions").doc();
     const history = Array.isArray(currentData.version_history)
       ? currentData.version_history
       : [];
     const patch = {
       ...parsed,
-      version: currentVersion + 1,
+      version: nextVersion,
+      current_version_id: versionRef.id,
       version_history: [
         ...history,
         {
@@ -86,7 +89,24 @@ export async function PATCH(
       },
     };
 
-    await ref.update(patch);
+    await checklistDbAdmin.runTransaction(async (transaction) => {
+      transaction.update(ref, patch);
+      transaction.set(versionRef, {
+        workspace_id: user.workspace_id,
+        form_template_id: templateId,
+        form_project_id: parsed.form_project_id,
+        version: nextVersion,
+        name: parsed.name,
+        description: parsed.description ?? "",
+        sections: parsed.sections,
+        change_notes: parsed.change_notes ?? "",
+        created_at: new Date(),
+        created_by: {
+          user_id: user.userDoc.id,
+          username: user.userDoc.username,
+        },
+      });
+    });
     await mirrorTemplateToLegacy({
       templateId,
       template: {
@@ -105,7 +125,7 @@ export async function PATCH(
       metadata: {
         template_id: templateId,
         form_project_id: parsed.form_project_id,
-        version: currentVersion + 1,
+        version: nextVersion,
         name: parsed.name,
       },
     });
