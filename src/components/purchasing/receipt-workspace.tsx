@@ -727,7 +727,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
                       Math.abs((draft.quantityPreviouslyReceived + draft.quantityReceived) - draft.quantityOrdered) > 0.001 ||
                       !!draft.divergenceReason ||
                       !!draft.resolutionNotes);
-                  const divergenceReasons = [
+                  const stockEntryIssues = [
+                    isInStockEntry && createsStockEntry && !draft.productId ? 'Item não selecionado para entrada no estoque' : null,
+                    isInStockEntry && createsStockEntry && !lotValid ? `Lotes somam ${fmtQty(lotSum)} de ${fmtQty(draft.quantityReceived)}` : null,
+                  ].filter((reason): reason is string => !!reason);
+                  const issueReasons = [
                     draft.receiptDisposition === 'receive_less' ? 'Recebimento a menos' : null,
                     draft.receiptDisposition === 'receive_more' ? 'Recebimento a mais' : null,
                     draft.receiptDisposition === 'exchange_pending' ? 'Troca pendente' : null,
@@ -737,9 +741,9 @@ export function ReceiptWorkspace({ receipt }: Props) {
                       : null,
                     draft.divergenceReason.trim() ? draft.divergenceReason.trim() : null,
                     draft.resolutionNotes.trim() ? draft.resolutionNotes.trim() : null,
-                    isInStockEntry && createsStockEntry && !draft.productId ? 'Item de estoque não selecionado' : null,
-                    isInStockEntry && createsStockEntry && !lotValid ? `Lotes somam ${fmtQty(lotSum)} de ${fmtQty(draft.quantityReceived)}` : null,
+                    ...stockEntryIssues,
                   ].filter((reason): reason is string => !!reason);
+                  const hasItemIssue = hasDivergence || stockEntryIssues.length > 0;
                   
                   const isReadonly = isAwaitingDelivery || isDone;
                   const isDraftReadonly = isReadonly || draft.lockedFromPreviousReceipt;
@@ -748,7 +752,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                     <div key={draft.receiptItemId} className={cn(
                       "px-5 py-5 space-y-4",
                       !draft.selectedForReceipt && 'bg-muted/20',
-                      hasDivergence && 'bg-amber-50/30 dark:bg-amber-950/10'
+                      hasItemIssue && 'bg-amber-50/30 dark:bg-amber-950/10'
                     )}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 items-start gap-3">
@@ -812,18 +816,18 @@ export function ReceiptWorkspace({ receipt }: Props) {
                           <Badge variant="outline" className="text-muted-foreground shrink-0">
                             Pendente
                           </Badge>
-                        ) : hasDivergence && (
+                        ) : hasItemIssue && (
                           <Badge variant="outline" className="text-amber-600 border-amber-400 shrink-0">
                             <AlertTriangle className="mr-1 h-3 w-3" />
-                            Divergência
+                            {hasDivergence ? 'Divergência' : 'Pendência'}
                           </Badge>
                         )}
                       </div>
-                      {hasDivergence && divergenceReasons.length > 0 && (
+                      {hasItemIssue && issueReasons.length > 0 && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300">
-                          <div className="font-medium">Motivo da divergência</div>
+                          <div className="font-medium">{hasDivergence ? 'Motivo da divergência' : 'Pendência da entrada'}</div>
                           <div className="mt-1 flex flex-wrap gap-1.5">
-                            {divergenceReasons.map((reason) => (
+                            {issueReasons.map((reason) => (
                               <span key={reason} className="rounded-full bg-background/80 px-2 py-0.5">
                                 {reason}
                               </span>
