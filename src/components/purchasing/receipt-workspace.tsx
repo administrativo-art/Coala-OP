@@ -176,6 +176,15 @@ interface ItemDraft {
   selectedForReceipt: boolean;
 }
 
+const RECEIPT_DISPOSITION_LABELS: Record<ItemDraft['receiptDisposition'], string> = {
+  pending: 'Pendente',
+  receive: 'Recebido',
+  receive_less: 'Recebimento a menos',
+  receive_more: 'Recebimento a mais',
+  exchange_pending: 'Troca pendente',
+  returned: 'Devolvido',
+};
+
 function generateLotCode(baseItemName: string) {
   const prefix = baseItemName.slice(0, 3).toUpperCase().replace(/\s/g, '');
   const date = new Date();
@@ -236,6 +245,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
     (isImmediate && receipt.status === 'awaiting_stock');
   const isDone = receipt.status === 'stocked' || receipt.status === 'stocked_with_divergence' || receipt.status === 'cancelled';
   const canReceive = canReceivePurchase(permissions);
+  const canEditCompletedReceipt = process.env.NODE_ENV === 'development';
 
   const fmt = (value?: number | null) => {
     if (typeof value !== 'number' || Number.isNaN(value)) return '—';
@@ -807,6 +817,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
                   
                   const isReadonly = isAwaitingDelivery || isDone;
                   const isDraftReadonly = isReadonly || draft.lockedFromPreviousReceipt;
+                  const receiptFieldDisabled =
+                    isDraftReadonly ||
+                    !draft.selectedForReceipt ||
+                    isNonStockDisposition ||
+                    (isInStockEntry && !canEditCompletedReceipt);
 
                   return (
                     <div key={draft.receiptItemId} className={cn(
@@ -896,203 +911,328 @@ export function ReceiptWorkspace({ receipt }: Props) {
                         </div>
                       )}
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {isInStockEntry && !skipsOperationalEntry && (
-                          <div className="space-y-1">
-                            <Label className="text-xs">Categoria do item</Label>
-                            <Select
-                              value={draft.operationalCategoryId}
-                              onValueChange={(value) => {
-                                const category = activeCategories.find((entry) => entry.id === value);
-                                const entryType = (category?.destination ?? 'stock') as PurchaseStockEntryType;
-                                const currentProduct = products.find((product) => product.id === draft.productId);
-                                const keepCurrentProduct =
-                                  !currentProduct ||
-                                  currentProduct.operationalCategoryId === category?.id ||
-                                  (!currentProduct.operationalCategoryId && category?.destination === 'stock');
-                                updateDraft(idx, {
-                                  operationalCategoryId: category?.id,
-                                  operationalCategoryName: category?.name,
-                                  entryType,
-                                  itemTreatment: entryType,
-                                  productId: keepCurrentProduct ? draft.productId : '',
-                                });
-                              }}
-                            >
-                              <SelectTrigger disabled={isDraftReadonly}><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {activeCategories.map((category) => (
-                                  <SelectItem key={category.id} value={category.id}>
-                                    {category.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                        {isInConference && (
-                          <div className="space-y-1">
-                            <Label className="text-xs">Tratativa</Label>
-                            <Select
-                              value={draft.receiptDisposition}
-                              onValueChange={(value: ItemDraft['receiptDisposition']) => {
-                                const nextQuantity =
-                                  value === 'receive'
-                                    ? draft.quantityRemaining
-                                    : value === 'receive_less'
-                                    ? Math.min(draft.quantityReceived, draft.quantityRemaining)
-                                    : value === 'receive_more'
-                                    ? Math.max(draft.quantityReceived, draft.quantityRemaining)
-                                    : 0;
-                                updateDraft(idx, {
-                                  receiptDisposition: value,
-                                  selectedForReceipt: value !== 'pending',
-                                  quantityReceived: nextQuantity,
-                                  lots: draft.lots.map((lot) => ({ ...lot, quantity: nextQuantity > 0 ? lot.quantity : 0 })),
-                                });
-                              }}
-                            >
-                              <SelectTrigger disabled={isDraftReadonly || !draft.selectedForReceipt}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="receive">Receber</SelectItem>
-                                <SelectItem value="receive_less">Recebimento a menos</SelectItem>
-                                <SelectItem value="receive_more">Recebimento a mais</SelectItem>
-                                <SelectItem value="exchange_pending">Troca pendente</SelectItem>
-                                <SelectItem value="returned">Devolvido</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                        <div className="space-y-1">
-                          <Label className="text-xs">Qtd. recebida</Label>
-                          <Input
-                            type="number"
-                            step="0.001"
-                            value={draft.quantityReceived}
-                            disabled={isDraftReadonly || !draft.selectedForReceipt || isNonStockDisposition || isInStockEntry}
-                            onChange={(e) => updateDraft(idx, { quantityReceived: parseFloat(e.target.value) || 0 })}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Preço unit. (R$)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={draft.unitPriceConfirmed}
-                            disabled={isDraftReadonly || !draft.selectedForReceipt || isNonStockDisposition || isInStockEntry}
-                            onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
-                          />
-                        </div>
-                        {isInStockEntry && createsStockEntry && (
-                          <div className="col-span-2 space-y-1 sm:col-span-3">
-                            <Label className="text-xs">Item</Label>
-                            {isDraftReadonly ? (
+                      {!isInStockEntry ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            {isInConference && (
+                              <div className="space-y-1">
+                                <Label className="text-xs">Tratativa</Label>
+                                <Select
+                                  value={draft.receiptDisposition}
+                                  onValueChange={(value: ItemDraft['receiptDisposition']) => {
+                                    const nextQuantity =
+                                      value === 'receive'
+                                        ? draft.quantityRemaining
+                                        : value === 'receive_less'
+                                        ? Math.min(draft.quantityReceived, draft.quantityRemaining)
+                                        : value === 'receive_more'
+                                        ? Math.max(draft.quantityReceived, draft.quantityRemaining)
+                                        : 0;
+                                    updateDraft(idx, {
+                                      receiptDisposition: value,
+                                      selectedForReceipt: value !== 'pending',
+                                      quantityReceived: nextQuantity,
+                                      lots: draft.lots.map((lot) => ({ ...lot, quantity: nextQuantity > 0 ? lot.quantity : 0 })),
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger disabled={isDraftReadonly || !draft.selectedForReceipt}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="receive">Receber</SelectItem>
+                                    <SelectItem value="receive_less">Recebimento a menos</SelectItem>
+                                    <SelectItem value="receive_more">Recebimento a mais</SelectItem>
+                                    <SelectItem value="exchange_pending">Troca pendente</SelectItem>
+                                    <SelectItem value="returned">Devolvido</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                            <div className="space-y-1">
+                              <Label className="text-xs">Qtd. recebida</Label>
                               <Input
-                                value={selectedStockProduct ? `${selectedStockProduct.baseName} (${selectedStockProduct.packageSize}${selectedStockProduct.unit})` : '—'}
-                                readOnly
-                                disabled
-                                className="bg-muted font-medium"
+                                type="number"
+                                step="0.001"
+                                value={draft.quantityReceived}
+                                disabled={receiptFieldDisabled}
+                                onChange={(e) => updateDraft(idx, { quantityReceived: parseFloat(e.target.value) || 0 })}
                               />
-                            ) : (
-                              <StockProductCombobox
-                                value={draft.productId}
-                                options={variantOptions}
-                                getFullName={getProductFullName}
-                                invalid={!draft.productId}
-                                onSelect={(p) => updateDraft(idx, { productId: p.id, baseItemId: draft.baseItemId || p.baseProductId || '' })}
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Preço unit. (R$)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={draft.unitPriceConfirmed}
+                                disabled={receiptFieldDisabled}
+                                onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
                               />
-                            )}
+                            </div>
                           </div>
-                        )}
-                      </div>
 
-                      {isInConference && draft.receiptDisposition === 'receive_less' && draft.selectedForReceipt && (
-                        <div className="space-y-1">
-                          <Label className="text-xs">Acompanhamento / resolução</Label>
-                          <Textarea
-                            rows={3}
-                            placeholder="Informe como a falta será resolvida..."
-                            value={draft.resolutionNotes}
-                            disabled={isReadonly}
-                            onChange={(e) => updateDraft(idx, { resolutionNotes: e.target.value })}
-                          />
-                          {!draft.resolutionNotes.trim() && (
-                            <p className="text-xs text-amber-600">Obrigatório para recebimento a menos.</p>
+                          {isInConference && draft.receiptDisposition === 'receive_less' && draft.selectedForReceipt && (
+                            <div className="space-y-1">
+                              <Label className="text-xs">Acompanhamento / resolução</Label>
+                              <Textarea
+                                rows={3}
+                                placeholder="Informe como a falta será resolvida..."
+                                value={draft.resolutionNotes}
+                                disabled={isReadonly}
+                                onChange={(e) => updateDraft(idx, { resolutionNotes: e.target.value })}
+                              />
+                              {!draft.resolutionNotes.trim() && (
+                                <p className="text-xs text-amber-600">Obrigatório para recebimento a menos.</p>
+                              )}
+                            </div>
                           )}
-                        </div>
-                      )}
 
-                      {hasDivergence && draft.receiptDisposition !== 'receive_less' && (
-                        <div className="space-y-1">
-                          <Label className="text-xs">Motivo da divergência</Label>
-                          <Input
-                            placeholder="Motivo..."
-                            value={draft.divergenceReason}
-                            disabled={isReadonly}
-                            onChange={(e) => updateDraft(idx, { divergenceReason: e.target.value })}
-                          />
-                        </div>
-                      )}
-
-                      {isInStockEntry && isAssetEntry && (
-                        <div className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-                          A confirmação criará {draft.quantityReceived} patrimônio(s) unitário(s), com código interno e QR Code. Nenhum lote de estoque será criado para este item.
-                        </div>
-                      )}
-
-                      {isInStockEntry && skipsOperationalEntry && (
-                        <div className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-                          Tratamento: <span className="font-medium text-foreground">{getPurchaseItemTreatmentLabel(draft.itemTreatment)}</span>. Este item será finalizado como custo/registro de compra, sem criar lote de estoque e sem gerar patrimônio novo.
-                          {draft.linkedAssetName ? ` Patrimônio vinculado: ${draft.linkedAssetCode ? `${draft.linkedAssetCode} - ` : ''}${draft.linkedAssetName}.` : ''}
-                        </div>
-                      )}
-
-                      {isInStockEntry && createsStockEntry && (
-                        <div className="space-y-3 pt-2">
-                           <div className="flex items-center justify-between">
-                            <Label className="text-xs font-medium">Lotes ({fmtQty(lotSum)} / {fmtQty(draft.quantityReceived)})</Label>
-                            {!isReadonly && (
-                              <Button type="button" variant="ghost" size="sm" onClick={() => addLot(idx)} className="h-7 text-xs">
-                                <Plus className="mr-1 h-3 w-3" /> Lote
-                              </Button>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            {draft.lots.map((lot) => (
-                              <div key={lot._key} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_150px_140px_auto] sm:items-end">
-                                <div className="space-y-1">
-                                  <Label className="text-[10px] text-muted-foreground uppercase">Cód. Lote</Label>
-                                  <Input value={lot.lotCode} placeholder="Informe" disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { lotCode: e.target.value })} className="h-8 text-sm" />
+                          {hasDivergence && draft.receiptDisposition !== 'receive_less' && (
+                            <div className="space-y-1">
+                              <Label className="text-xs">Motivo da divergência</Label>
+                              <Input
+                                placeholder="Motivo..."
+                                value={draft.divergenceReason}
+                                disabled={isReadonly}
+                                onChange={(e) => updateDraft(idx, { divergenceReason: e.target.value })}
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="space-y-4">
+                          <section className="rounded-xl border bg-muted/20 p-4">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-full border bg-background text-xs font-semibold text-muted-foreground">1</span>
+                                <div>
+                                  <h4 className="text-sm font-semibold">Recebimento</h4>
+                                  <p className="text-xs text-muted-foreground">
+                                    Etapa concluída. {canEditCompletedReceipt ? 'Editável em desenvolvimento.' : 'Somente leitura.'}
+                                  </p>
                                 </div>
-                                <div className="space-y-1">
-                                  <Label className="text-[10px] text-muted-foreground uppercase">Qtd.</Label>
-                                  <Input type="number" value={lot.quantity} placeholder="0" disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { quantity: e.target.value === '' ? '' : (parseFloat(e.target.value) || 0) })} className="h-8 text-sm" />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className="text-[10px] text-muted-foreground uppercase">Validade</Label>
-                                  <Input type="date" value={lot.expiryDate} disabled={isReadonly || lot.indefiniteValidity} onChange={(e) => updateLot(idx, lot._key, { expiryDate: e.target.value })} className="h-8 text-sm" />
-                                </div>
-                                <div className="flex h-8 items-center gap-2">
-                                  <Switch
-                                    checked={!!lot.indefiniteValidity}
-                                    disabled={isReadonly}
-                                    onCheckedChange={(checked) => updateLot(idx, lot._key, {
-                                      indefiniteValidity: checked,
-                                      expiryDate: checked ? '' : lot.expiryDate,
-                                    })}
+                              </div>
+                              <Badge variant="secondary" className="shrink-0">
+                                <CheckCircle2 className="mr-1 h-3 w-3" />
+                                Congelado
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Tratativa</Label>
+                                {canEditCompletedReceipt ? (
+                                  <Select
+                                    value={draft.receiptDisposition}
+                                    onValueChange={(value: ItemDraft['receiptDisposition']) => {
+                                      const nextQuantity =
+                                        value === 'receive'
+                                          ? draft.quantityRemaining
+                                          : value === 'receive_less'
+                                          ? Math.min(draft.quantityReceived, draft.quantityRemaining)
+                                          : value === 'receive_more'
+                                          ? Math.max(draft.quantityReceived, draft.quantityRemaining)
+                                          : 0;
+                                      updateDraft(idx, {
+                                        receiptDisposition: value,
+                                        selectedForReceipt: value !== 'pending',
+                                        quantityReceived: nextQuantity,
+                                        lots: draft.lots.map((lot) => ({ ...lot, quantity: nextQuantity > 0 ? lot.quantity : 0 })),
+                                      });
+                                    }}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="receive">Receber</SelectItem>
+                                      <SelectItem value="receive_less">Recebimento a menos</SelectItem>
+                                      <SelectItem value="receive_more">Recebimento a mais</SelectItem>
+                                      <SelectItem value="exchange_pending">Troca pendente</SelectItem>
+                                      <SelectItem value="returned">Devolvido</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Input
+                                    value={RECEIPT_DISPOSITION_LABELS[draft.receiptDisposition]}
+                                    readOnly
+                                    disabled
+                                    className="bg-background"
                                   />
-                                  <Label className="text-xs text-muted-foreground">Sem validade</Label>
-                                </div>
-                                {!isReadonly && (
-                                  <Button variant="ghost" size="icon" onClick={() => removeLot(idx, lot._key)} className="h-8 w-8 text-destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
                                 )}
                               </div>
-                            ))}
-                          </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Qtd. recebida</Label>
+                                <Input
+                                  type="number"
+                                  step="0.001"
+                                  value={draft.quantityReceived}
+                                  disabled={receiptFieldDisabled}
+                                  onChange={(e) => updateDraft(idx, { quantityReceived: parseFloat(e.target.value) || 0 })}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Preço unit. (R$)</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={draft.unitPriceConfirmed}
+                                  disabled={receiptFieldDisabled}
+                                  onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
+                                />
+                              </div>
+                            </div>
+                            {(draft.divergenceReason.trim() || draft.resolutionNotes.trim()) && (
+                              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                                {draft.divergenceReason.trim() && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Motivo registrado</Label>
+                                    <Input
+                                      value={draft.divergenceReason}
+                                      disabled={!canEditCompletedReceipt}
+                                      onChange={(e) => updateDraft(idx, { divergenceReason: e.target.value })}
+                                    />
+                                  </div>
+                                )}
+                                {draft.resolutionNotes.trim() && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Acompanhamento registrado</Label>
+                                    <Textarea
+                                      rows={2}
+                                      value={draft.resolutionNotes}
+                                      disabled={!canEditCompletedReceipt}
+                                      onChange={(e) => updateDraft(idx, { resolutionNotes: e.target.value })}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </section>
+
+                          <section className="rounded-xl border bg-background p-4">
+                            <div className="mb-3 flex items-center gap-2">
+                              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-xs font-semibold text-primary">2</span>
+                              <div>
+                                <h4 className="text-sm font-semibold">Entrada no estoque</h4>
+                                <p className="text-xs text-muted-foreground">Defina destino operacional, item e lote/patrimônio.</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                              {!skipsOperationalEntry && (
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Categoria do item</Label>
+                                  <Select
+                                    value={draft.operationalCategoryId}
+                                    onValueChange={(value) => {
+                                      const category = activeCategories.find((entry) => entry.id === value);
+                                      const entryType = (category?.destination ?? 'stock') as PurchaseStockEntryType;
+                                      const currentProduct = products.find((product) => product.id === draft.productId);
+                                      const keepCurrentProduct =
+                                        !currentProduct ||
+                                        currentProduct.operationalCategoryId === category?.id ||
+                                        (!currentProduct.operationalCategoryId && category?.destination === 'stock');
+                                      updateDraft(idx, {
+                                        operationalCategoryId: category?.id,
+                                        operationalCategoryName: category?.name,
+                                        entryType,
+                                        itemTreatment: entryType,
+                                        productId: keepCurrentProduct ? draft.productId : '',
+                                      });
+                                    }}
+                                  >
+                                    <SelectTrigger disabled={isDraftReadonly}><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      {activeCategories.map((category) => (
+                                        <SelectItem key={category.id} value={category.id}>
+                                          {category.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+                              {createsStockEntry && (
+                                <div className="space-y-1 md:col-span-2">
+                                  <Label className="text-xs">Item</Label>
+                                  {isDraftReadonly ? (
+                                    <Input
+                                      value={selectedStockProduct ? `${selectedStockProduct.baseName} (${selectedStockProduct.packageSize}${selectedStockProduct.unit})` : '—'}
+                                      readOnly
+                                      disabled
+                                      className="bg-muted font-medium"
+                                    />
+                                  ) : (
+                                    <StockProductCombobox
+                                      value={draft.productId}
+                                      options={variantOptions}
+                                      getFullName={getProductFullName}
+                                      invalid={!draft.productId}
+                                      onSelect={(p) => updateDraft(idx, { productId: p.id, baseItemId: draft.baseItemId || p.baseProductId || '' })}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {isAssetEntry && (
+                              <div className="mt-3 rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+                                A confirmação criará {draft.quantityReceived} patrimônio(s) unitário(s), com código interno e QR Code. Nenhum lote de estoque será criado para este item.
+                              </div>
+                            )}
+
+                            {skipsOperationalEntry && (
+                              <div className="mt-3 rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+                                Tratamento: <span className="font-medium text-foreground">{getPurchaseItemTreatmentLabel(draft.itemTreatment)}</span>. Este item será finalizado como custo/registro de compra, sem criar lote de estoque e sem gerar patrimônio novo.
+                                {draft.linkedAssetName ? ` Patrimônio vinculado: ${draft.linkedAssetCode ? `${draft.linkedAssetCode} - ` : ''}${draft.linkedAssetName}.` : ''}
+                              </div>
+                            )}
+
+                            {createsStockEntry && (
+                              <div className="mt-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs font-medium">Lotes ({fmtQty(lotSum)} / {fmtQty(draft.quantityReceived)})</Label>
+                                  {!isReadonly && (
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => addLot(idx)} className="h-7 text-xs">
+                                      <Plus className="mr-1 h-3 w-3" /> Lote
+                                    </Button>
+                                  )}
+                                </div>
+                                <div className="space-y-2">
+                                  {draft.lots.map((lot) => (
+                                    <div key={lot._key} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_150px_140px_auto] sm:items-end">
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] text-muted-foreground uppercase">Cód. Lote</Label>
+                                        <Input value={lot.lotCode} placeholder="Informe" disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { lotCode: e.target.value })} className="h-8 text-sm" />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] text-muted-foreground uppercase">Qtd.</Label>
+                                        <Input type="number" value={lot.quantity} placeholder="0" disabled={isReadonly} onChange={(e) => updateLot(idx, lot._key, { quantity: e.target.value === '' ? '' : (parseFloat(e.target.value) || 0) })} className="h-8 text-sm" />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] text-muted-foreground uppercase">Validade</Label>
+                                        <Input type="date" value={lot.expiryDate} disabled={isReadonly || lot.indefiniteValidity} onChange={(e) => updateLot(idx, lot._key, { expiryDate: e.target.value })} className="h-8 text-sm" />
+                                      </div>
+                                      <div className="flex h-8 items-center gap-2">
+                                        <Switch
+                                          checked={!!lot.indefiniteValidity}
+                                          disabled={isReadonly}
+                                          onCheckedChange={(checked) => updateLot(idx, lot._key, {
+                                            indefiniteValidity: checked,
+                                            expiryDate: checked ? '' : lot.expiryDate,
+                                          })}
+                                        />
+                                        <Label className="text-xs text-muted-foreground">Sem validade</Label>
+                                      </div>
+                                      {!isReadonly && (
+                                        <Button variant="ghost" size="icon" onClick={() => removeLot(idx, lot._key)} className="h-8 w-8 text-destructive">
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </section>
                         </div>
                       )}
                     </div>
