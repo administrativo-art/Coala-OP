@@ -2,7 +2,18 @@
 
 import { useEffect, useState, type DragEvent } from "react";
 import Link from "next/link";
-import { ClipboardList, Layers3, ArrowLeft, Plus, Trash2, MapPin, Save } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ClipboardList,
+  GripVertical,
+  Layers3,
+  MapPin,
+  Plus,
+  Save,
+  Settings2,
+  Trash2,
+} from "lucide-react";
 
 import type { FormAssignment, FormTemplate } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
@@ -84,6 +95,19 @@ function formatScope(template: FormTemplate) {
   if (roles + functions > 0) parts.push(`${roles + functions} cargo(s)/função(ões)`);
 
   return parts.length > 0 ? parts.join(" · ") : "Sem vínculo automático";
+}
+
+function formatDueRule(rule?: FormAssignment["due_rule"] | FormTemplate["due_rule"]) {
+  if (!rule || rule.type === "none") return "Sem prazo automático";
+  if (rule.type === "fixed_time") return `Até ${rule.time ?? "horário definido"}`;
+  if (rule.type === "after_shift_start") return `${rule.minutes ?? 0} min após início do turno`;
+  return `${rule.minutes ?? 0} min após criação`;
+}
+
+function formatPendingPolicy(policy?: FormAssignment["pending_policy"]) {
+  if (policy === "cancel") return "Cancelar pendentes substituídos";
+  if (policy === "manual_migration") return "Migrar pendentes manualmente";
+  return "Manter pendentes antigos";
 }
 
 type EditorItem = {
@@ -205,6 +229,10 @@ function createEditorItemByType(type: string): EditorItem {
   };
 }
 
+function getItemTypeLabel(type: string) {
+  return ITEM_TYPE_OPTIONS.find((option) => option.type === type)?.label ?? type;
+}
+
 export function FormTemplateDetailShell({ templateId }: { templateId: string }) {
   const { firebaseUser } = useAuth();
   const { units, shiftDefinitions } = useDPBootstrap();
@@ -217,6 +245,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
   const [applicationOpen, setApplicationOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingApplication, setSavingApplication] = useState(false);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [formState, setFormState] = useState({
     name: "",
     description: "",
@@ -669,19 +698,66 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
   }
 
   function addItemAt(sectionId: string, itemType: string, index: number) {
+    const nextItem = createEditorItemByType(itemType);
     setFormState((current) => ({
       ...current,
       sections: current.sections.map((section) => {
         if (section.id !== sectionId) return section;
         const nextItems = [...section.items];
-        nextItems.splice(Math.max(0, Math.min(index, nextItems.length)), 0, createEditorItemByType(itemType));
+        nextItems.splice(Math.max(0, Math.min(index, nextItems.length)), 0, nextItem);
         return { ...section, items: nextItems };
       }),
     }));
+    setExpandedItemId(nextItem.id);
+  }
+
+  function moveItemTo(sourceSectionId: string, itemId: string, targetSectionId: string, targetIndex: number) {
+    setFormState((current) => {
+      const sourceSection = current.sections.find((section) => section.id === sourceSectionId);
+      const movingItem = sourceSection?.items.find((item) => item.id === itemId);
+      if (!sourceSection || !movingItem) return current;
+      const sourceIndex = sourceSection.items.findIndex((item) => item.id === itemId);
+
+      return {
+        ...current,
+        sections: current.sections.map((section) => {
+          const withoutMovingItem =
+            section.id === sourceSectionId
+              ? section.items.filter((item) => item.id !== itemId)
+              : section.items;
+
+          if (section.id !== targetSectionId) {
+            return { ...section, items: withoutMovingItem };
+          }
+
+          const adjustedIndex =
+            sourceSectionId === targetSectionId
+              ? Math.max(0, targetIndex - (sourceIndex < targetIndex ? 1 : 0))
+              : targetIndex;
+          const nextItems = [...withoutMovingItem];
+          nextItems.splice(Math.max(0, Math.min(adjustedIndex, nextItems.length)), 0, movingItem);
+          return { ...section, items: nextItems };
+        }),
+      };
+    });
+    setExpandedItemId(itemId);
   }
 
   function handleQuestionDrop(sectionId: string, index: number, event: DragEvent<HTMLElement>) {
     event.preventDefault();
+    const existingPayload = event.dataTransfer.getData("application/x-form-existing-item");
+    if (existingPayload) {
+      try {
+        const payload = JSON.parse(existingPayload) as { sectionId?: string; itemId?: string };
+        if (payload.sectionId && payload.itemId) {
+          moveItemTo(payload.sectionId, payload.itemId, sectionId, index);
+        }
+      } catch {
+        return;
+      }
+      return;
+    }
+
     const itemType = event.dataTransfer.getData("application/x-form-item-type");
     if (!itemType) return;
     addItemAt(sectionId, itemType, index);
@@ -893,12 +969,12 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
           </Link>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-3xl font-semibold tracking-tight">{template.name}</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">{formState.name || template.name}</h1>
               <Badge variant="outline">v{template.version}</Badge>
               <Badge variant="outline">{template.context}</Badge>
             </div>
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              {template.description?.trim() || "Formulário operacional publicado para gerar preenchimentos."}
+              {formState.description.trim() || template.description?.trim() || "Formulário operacional publicado para gerar preenchimentos."}
             </p>
           </div>
         </div>
@@ -1086,21 +1162,58 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => handleQuestionDrop(section.id, 0, event)}
                 >
-                  Solte aqui para adicionar no início da seção
+                  + Início da seção
                 </div>
 
                 {section.items.map((item, itemIndex) => (
                   <div key={item.id} className="space-y-3">
-                    <div className="rounded-lg border p-4">
+                    <div className="rounded-lg border bg-background p-3">
                       <div className="flex items-center gap-2">
-                        <Input
-                          value={item.title}
-                          onChange={(event) =>
-                            updateItem(section.id, item.id, { title: event.target.value })
+                        <button
+                          type="button"
+                          draggable
+                          onClick={() =>
+                            setExpandedItemId((current) => (current === item.id ? null : item.id))
                           }
-                          placeholder="Texto da pergunta"
-                          className="font-medium"
-                        />
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData(
+                              "application/x-form-existing-item",
+                              JSON.stringify({ sectionId: section.id, itemId: item.id })
+                            );
+                            event.dataTransfer.effectAllowed = "move";
+                          }}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left transition hover:bg-muted/60"
+                        >
+                          <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {item.title.trim() || "Pergunta sem título"}
+                            </p>
+                            <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                              <span>{getItemTypeLabel(item.type)}</span>
+                              <span>peso {item.weight}</span>
+                              <span>{item.required ? "obrigatória" : "opcional"}</span>
+                              {item.show_if_enabled ? <span>condicional</span> : null}
+                              {item.action_required ? <span>ação corretiva</span> : null}
+                              {item.task_triggers.length > 0 ? <span>{item.task_triggers.length} tarefa(s)</span> : null}
+                            </div>
+                          </div>
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 text-muted-foreground transition ${
+                              expandedItemId === item.id ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            setExpandedItemId((current) => (current === item.id ? null : item.id))
+                          }
+                        >
+                          <Settings2 className="h-4 w-4" />
+                        </Button>
                         <Button
                           type="button"
                           variant="ghost"
@@ -1110,6 +1223,16 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
+                      {expandedItemId === item.id ? (
+                        <div className="mt-4 border-t pt-4">
+                      <Input
+                        value={item.title}
+                        onChange={(event) =>
+                          updateItem(section.id, item.id, { title: event.target.value })
+                        }
+                        placeholder="Texto da pergunta"
+                        className="font-medium"
+                      />
                       <Textarea
                         value={item.description}
                         onChange={(event) =>
@@ -1394,13 +1517,15 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           ) : null}
                         </div>
                       </div>
+                        </div>
+                      ) : null}
                     </div>
                     <div
                       className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-center text-sm text-muted-foreground"
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => handleQuestionDrop(section.id, itemIndex + 1, event)}
                     >
-                      Solte aqui para adicionar após esta pergunta
+                      + Depois desta pergunta
                     </div>
                   </div>
                 ))}
@@ -1425,9 +1550,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                 <ClipboardList className="h-5 w-5" />
                 Adicionar pergunta
               </CardTitle>
-              <CardDescription>
-                Arraste um tipo para a posição desejada dentro de uma seção.
-              </CardDescription>
+              <CardDescription>Tipos disponíveis para o formulário.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {ITEM_TYPE_OPTIONS.map((option) => (
@@ -1482,6 +1605,18 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
             <p className="font-medium">Recorrência</p>
             <p className="mt-1 text-muted-foreground">
               {formatOccurrence(template.occurrence_type)}
+            </p>
+          </div>
+          <div className="rounded-xl border p-3">
+            <p className="font-medium">Controle operacional</p>
+            <p className="mt-1 text-muted-foreground">
+              Responsável definido por {activeAssignment?.application_mode === "schedule" ? "escala/turno" : "aplicação"}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Prazo: {formatDueRule(activeAssignment?.due_rule ?? template.due_rule)}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Pendentes: {formatPendingPolicy(activeAssignment?.pending_policy)}
             </p>
           </div>
           <div className="rounded-xl border p-3">
