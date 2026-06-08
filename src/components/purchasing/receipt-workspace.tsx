@@ -679,36 +679,6 @@ export function ReceiptWorkspace({ receipt }: Props) {
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2.4fr)_minmax(340px,1fr)] gap-6 items-start">
         <div className="space-y-6">
-          {isInStockEntry && requiresStockDestination && (
-            <div className="rounded-2xl border bg-card p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <Truck className="h-4 w-4 text-muted-foreground" />
-                <h2 className="font-semibold">Destino do estoque</h2>
-              </div>
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-tight">Quiosque de destino</Label>
-                  <Select value={destinationKioskId} onValueChange={setDestinationKioskId}>
-                    <SelectTrigger className={!destinationKioskId ? 'border-amber-400' : ''}>
-                      <SelectValue placeholder="Selecione o quiosque..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {kiosks.map((k) => (
-                        <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Badge variant={destinationKioskId ? 'secondary' : 'outline'} className={!destinationKioskId ? 'border-amber-400 text-amber-600' : ''}>
-                  {destinationKioskId ? 'Destino definido' : 'Obrigatório'}
-                </Badge>
-              </div>
-              {!destinationKioskId && (
-                <p className="text-xs text-amber-600">Selecione o destino antes de confirmar a entrada no estoque.</p>
-              )}
-            </div>
-          )}
-
           {/* Main items section */}
           <div className="rounded-2xl border bg-card overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b">
@@ -718,6 +688,55 @@ export function ReceiptWorkspace({ receipt }: Props) {
               </div>
               <span className="text-sm text-muted-foreground">{drafts.length} item(ns)</span>
             </div>
+
+            <div className="border-b px-5 py-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <div className={cn(
+                  "flex items-center gap-2 rounded-full border px-3 py-1.5",
+                  isInConference ? "border-primary bg-primary/10 text-primary" : "bg-muted/40 text-muted-foreground"
+                )}>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-background text-xs font-semibold">1</span>
+                  <span className="font-medium">Recebimento</span>
+                </div>
+                <div className="h-px w-8 bg-border" />
+                <div className={cn(
+                  "flex items-center gap-2 rounded-full border px-3 py-1.5",
+                  isInStockEntry ? "border-primary bg-primary/10 text-primary" : "bg-muted/40 text-muted-foreground"
+                )}>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-background text-xs font-semibold">2</span>
+                  <span className="font-medium">Entrada no estoque</span>
+                </div>
+              </div>
+            </div>
+
+            {isInStockEntry && requiresStockDestination && (
+              <div className="border-b bg-muted/20 px-5 py-4">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-muted-foreground" />
+                      <Label className="text-xs text-muted-foreground uppercase tracking-tight">Destino do estoque</Label>
+                    </div>
+                    <Select value={destinationKioskId} onValueChange={setDestinationKioskId}>
+                      <SelectTrigger className={!destinationKioskId ? 'border-amber-400' : ''}>
+                        <SelectValue placeholder="Selecione o quiosque..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {kiosks.map((k) => (
+                          <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Badge variant={destinationKioskId ? 'secondary' : 'outline'} className={!destinationKioskId ? 'border-amber-400 text-amber-600' : ''}>
+                    {destinationKioskId ? 'Destino definido' : 'Obrigatório'}
+                  </Badge>
+                </div>
+                {!destinationKioskId && (
+                  <p className="mt-2 text-xs text-amber-600">Selecione o destino antes de confirmar a entrada no estoque.</p>
+                )}
+              </div>
+            )}
 
             {loadingItems ? (
               <div className="p-5 space-y-3">
