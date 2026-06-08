@@ -35,7 +35,7 @@ export default function ReceiptPage() {
 
   if (loading) {
     return (
-      <div className="container max-w-3xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -53,7 +53,7 @@ export default function ReceiptPage() {
 
   return (
     <PermissionGuard allowed={canView}>
-      <div className="container max-w-3xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
       <BackButton fallbackHref={`/dashboard/purchasing/orders/${params.orderId}`} label="Compra" variant="ghost" size="sm" className="-ml-2" />
 
       <div>

@@ -1024,7 +1024,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,2.4fr)_minmax(340px,1fr)]">
         <div className="space-y-4">
           <Card>
             <CardHeader>

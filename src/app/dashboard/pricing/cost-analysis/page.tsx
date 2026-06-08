@@ -12,7 +12,7 @@ export default function CostAnalysisPage() {
 
   return (
     <PermissionGuard allowed={permissions.pricing.view}>
-        <div className="space-y-6">
+        <div className="mx-auto w-full max-w-[1600px] space-y-6">
         <div className="flex items-center gap-4 mb-2">
             <BackButton
                 fallbackHref="/dashboard/pricing"

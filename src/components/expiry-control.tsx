@@ -869,7 +869,7 @@ function ExpiryControlContent() {
   return (
     <>
       <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
-        <div className='mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 space-y-4'>
+        <div className='mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 space-y-4'>
             <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -1021,7 +1021,7 @@ function ExpiryControlContent() {
                 })}
             </div>
         </div>
-        <div className="mx-auto w-full max-w-6xl flex-1 overflow-hidden px-4 pb-6 pt-0 sm:px-6">
+        <div className="mx-auto w-full max-w-[1600px] flex-1 overflow-hidden px-4 pb-6 pt-0 sm:px-6">
                 <ActiveReservationsSummary selectedKioskId={selectedKioskId} />
                 {renderContent()}
         </div>

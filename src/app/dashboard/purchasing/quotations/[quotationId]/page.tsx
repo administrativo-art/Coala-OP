@@ -65,7 +65,7 @@ export default function QuotationPage() {
 
   if (loading || fallbackLoading) {
     return (
-      <div className="container max-w-4xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -83,7 +83,7 @@ export default function QuotationPage() {
 
   return (
     <PermissionGuard allowed={canView}>
-      <div className="container max-w-4xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
       <BackButton fallbackHref="/dashboard/purchasing" label="Cotações" variant="ghost" size="sm" className="-ml-2" />
 
         <QuotationWorkspace quotation={quotation} />

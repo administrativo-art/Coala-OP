@@ -809,7 +809,7 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
         ) : null}
       </div>
 
-      <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 pb-28 lg:px-6">
+      <div className="mx-auto w-full max-w-[1600px] space-y-4 px-4 py-6 pb-28 lg:px-6">
         <div className="overflow-hidden rounded-2xl border">
           <div className="flex flex-col gap-3 border-b bg-slate-50 px-5 py-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
@@ -1284,7 +1284,7 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-10 border-t bg-background/95 px-6 py-4 backdrop-blur lg:left-64">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3">
           {sectionsMode && execution.sections.length > 0 ? (
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" size="sm" disabled={sectionIdx === 0} onClick={() => setSectionIdx((current) => Math.max(0, current - 1))}>

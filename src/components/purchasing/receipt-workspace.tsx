@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, Info, ShoppingCart, ReceiptText, Scale, Truck, Building2, ChevronsUpDown, Check } from 'lucide-react';
+import { Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, Info, ShoppingCart, ReceiptText, Scale, Truck, Building2, Check } from 'lucide-react';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -84,49 +84,50 @@ function StockProductCombobox({
           return tokens.every((token) => text.includes(token));
         });
   const label = (p: Product) => `${p.baseName}${p.brand ? ` — ${p.brand}` : ''} (${p.packageSize}${p.unit})`;
+  const selectedLabel = selected ? label(selected) : '';
+
+  useEffect(() => {
+    if (!open) setSearch(selectedLabel);
+  }, [open, selectedLabel]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
+        <Input
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className={cn('w-full justify-between font-normal', invalid && !value && 'border-amber-400')}
-        >
-          <span className="truncate">{selected ? label(selected) : 'Selecione...'}</span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+          placeholder="Buscar item..."
+          value={search}
+          onFocus={(event) => {
+            setOpen(true);
+            event.currentTarget.select();
+          }}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setOpen(true);
+          }}
+          className={cn('w-full font-normal', invalid && !value && 'border-amber-400')}
+        />
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <div className="border-b p-2">
-          <Input
-            autoFocus
-            placeholder="Buscar insumo..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="h-8 text-sm"
-          />
-        </div>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-[min(92vw,520px)] p-0" align="start">
         <div className="max-h-[300px] overflow-y-auto p-1">
           {filtered.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">Nenhum insumo encontrado.</div>
+            <div className="py-6 text-center text-sm text-muted-foreground">Nenhum item encontrado.</div>
           ) : (
             filtered.map((p) => (
               <button
                 key={p.id}
                 type="button"
-                className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                className="flex w-full items-start rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   onSelect(p);
                   setOpen(false);
-                  setSearch('');
+                  setSearch(label(p));
                 }}
               >
-                <Check className={cn('mr-2 h-4 w-4 shrink-0', value === p.id ? 'opacity-100' : 'opacity-0')} />
-                <span className="truncate">{label(p)}</span>
+                <Check className={cn('mr-2 mt-0.5 h-4 w-4 shrink-0', value === p.id ? 'opacity-100' : 'opacity-0')} />
+                <span className="min-w-0 whitespace-normal leading-snug">{label(p)}</span>
               </button>
             ))
           )}
@@ -676,7 +677,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1fr] gap-6 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2.4fr)_minmax(340px,1fr)] gap-6 items-start">
         <div className="space-y-6">
           {/* Main items section */}
           <div className="rounded-2xl border bg-card overflow-hidden">
@@ -726,6 +727,19 @@ export function ReceiptWorkspace({ receipt }: Props) {
                       Math.abs((draft.quantityPreviouslyReceived + draft.quantityReceived) - draft.quantityOrdered) > 0.001 ||
                       !!draft.divergenceReason ||
                       !!draft.resolutionNotes);
+                  const divergenceReasons = [
+                    draft.receiptDisposition === 'receive_less' ? 'Recebimento a menos' : null,
+                    draft.receiptDisposition === 'receive_more' ? 'Recebimento a mais' : null,
+                    draft.receiptDisposition === 'exchange_pending' ? 'Troca pendente' : null,
+                    draft.receiptDisposition === 'returned' ? 'Item devolvido' : null,
+                    Math.abs((draft.quantityPreviouslyReceived + draft.quantityReceived) - draft.quantityOrdered) > 0.001
+                      ? `Quantidade total ficará em ${fmtQty(draft.quantityPreviouslyReceived + draft.quantityReceived)} de ${fmtQty(draft.quantityOrdered)} ${draft.purchaseUnitLabel}`
+                      : null,
+                    draft.divergenceReason.trim() ? draft.divergenceReason.trim() : null,
+                    draft.resolutionNotes.trim() ? draft.resolutionNotes.trim() : null,
+                    isInStockEntry && createsStockEntry && !draft.productId ? 'Item de estoque não selecionado' : null,
+                    isInStockEntry && createsStockEntry && !lotValid ? `Lotes somam ${fmtQty(lotSum)} de ${fmtQty(draft.quantityReceived)}` : null,
+                  ].filter((reason): reason is string => !!reason);
                   
                   const isReadonly = isAwaitingDelivery || isDone;
                   const isDraftReadonly = isReadonly || draft.lockedFromPreviousReceipt;
@@ -805,6 +819,18 @@ export function ReceiptWorkspace({ receipt }: Props) {
                           </Badge>
                         )}
                       </div>
+                      {hasDivergence && divergenceReasons.length > 0 && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300">
+                          <div className="font-medium">Motivo da divergência</div>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {divergenceReasons.map((reason) => (
+                              <span key={reason} className="rounded-full bg-background/80 px-2 py-0.5">
+                                {reason}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {isInStockEntry && !skipsOperationalEntry && (
@@ -890,8 +916,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
                           />
                         </div>
                         {isInStockEntry && createsStockEntry && (
-                          <div className="space-y-1">
-                            <Label className="text-xs">Unidade estoque</Label>
+                          <div className="col-span-2 space-y-1 sm:col-span-3">
+                            <Label className="text-xs">Item</Label>
                             {isDraftReadonly ? (
                               <Input
                                 value={selectedStockProduct ? `${selectedStockProduct.baseName} (${selectedStockProduct.packageSize}${selectedStockProduct.unit})` : '—'}

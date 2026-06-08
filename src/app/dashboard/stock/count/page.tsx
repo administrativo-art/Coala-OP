@@ -6,7 +6,7 @@ import { StockSessionManagement } from "@/components/stock-session-management";
 
 export default function StockCountPage() {
     return (
-        <div className="space-y-3">
+        <div className="mx-auto w-full max-w-[1600px] space-y-3">
             <BackButton
               fallbackHref="/dashboard/stock"
               variant="ghost"

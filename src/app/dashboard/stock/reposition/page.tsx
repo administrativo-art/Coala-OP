@@ -27,7 +27,7 @@ export default function RepositionPage() {
     const activeCount = activities.filter(activity => activity.status !== 'Concluído' && activity.status !== 'Cancelada').length;
 
     return (
-        <div className="mx-auto w-full max-w-[1700px] space-y-5 pb-10">
+        <div className="mx-auto w-full max-w-[1600px] space-y-5 pb-10">
             <Button
                 type="button"
                 variant="ghost"

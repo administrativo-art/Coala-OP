@@ -110,7 +110,7 @@ export default function QuotationComparePage() {
 
   return (
     <PermissionGuard allowed={canView}>
-      <div className="container max-w-5xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
       <div className="flex items-center gap-3">
         <BackButton fallbackHref="/dashboard/purchasing/quotations" label="Cotações" variant="ghost" size="sm" className="-ml-2" />
       </div>
@@ -153,7 +153,7 @@ export default function QuotationComparePage() {
           Nenhum item normalizado em cotação ativa.
         </div>
       ) : (
-        <div className="rounded-md border">
+        <div className="overflow-x-auto rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>

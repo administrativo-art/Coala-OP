@@ -128,7 +128,7 @@ export default function EffectiveCostsPage() {
 
   return (
     <PermissionGuard allowed={canView}>
-      <div className="container max-w-5xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
       <div className="flex items-center gap-3">
         <BackButton fallbackHref="/dashboard/purchasing" label="Compras" variant="ghost" size="sm" className="-ml-2" />
       </div>

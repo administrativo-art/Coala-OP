@@ -8,7 +8,7 @@ import { ArrowRight, DollarSign, LineChart } from 'lucide-react';
 export default function PricingPage() {
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6">
         <div className="text-center mb-10">
             <h1 className="text-4xl font-bold tracking-tight">Gestão de preços e margens</h1>
             <p className="text-lg text-muted-foreground mt-2">Analise a lucratividade das suas mercadorias e compare seus preços com os da concorrência.</p>

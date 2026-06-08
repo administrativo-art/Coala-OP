@@ -1641,7 +1641,7 @@ export function GoalsTrackingDashboard() {
   if (loading) return <Skeleton className="h-64 w-full" />;
 
   return (
-    <div className="mx-auto flex max-w-[1040px] flex-col gap-8 pb-12">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
         <div>
           <h1 className="text-[2.15rem] font-bold tracking-[-0.04em] text-zinc-900">Metas de Faturamento</h1>

@@ -273,14 +273,14 @@ export default function ConfirmPurchasePage() {
 
   if (isLoading) {
     return (
-      <div className="container max-w-5xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-32 w-full" />
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-3 space-y-3">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2.4fr)_minmax(340px,1fr)] gap-6">
+          <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
           </div>
-          <div className="lg:col-span-2"><Skeleton className="h-80 w-full" /></div>
+          <div><Skeleton className="h-80 w-full" /></div>
         </div>
       </div>
     );
@@ -288,7 +288,7 @@ export default function ConfirmPurchasePage() {
 
   if (!quotation) {
     return (
-      <div className="container max-w-5xl py-8 space-y-4">
+      <div className="container max-w-3xl py-8 space-y-4">
         <p className="text-muted-foreground">Cotação não encontrada.</p>
         <BackButton fallbackHref="/dashboard/purchasing" />
       </div>
@@ -297,7 +297,7 @@ export default function ConfirmPurchasePage() {
 
   return (
     <PermissionGuard allowed={canView && canCreate}>
-      <div className="container max-w-5xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
 
         {/* Back */}
         <BackButton
@@ -371,10 +371,10 @@ export default function ConfirmPurchasePage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2.4fr)_minmax(340px,1fr)] gap-6 items-start">
 
           {/* ── Left: items ──────────────────────────────────────────── */}
-          <div className="lg:col-span-3 space-y-3">
+          <div className="space-y-3">
             <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
               Itens do pedido
             </h2>
@@ -462,7 +462,7 @@ export default function ConfirmPurchasePage() {
           </div>
 
           {/* ── Right: config + summary ───────────────────────────── */}
-          <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-6">
+          <div className="space-y-4 xl:sticky xl:top-6">
 
             {/* Recebimento */}
             <div className="rounded-xl border bg-card p-5 space-y-4">

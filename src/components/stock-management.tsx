@@ -27,7 +27,7 @@ export function StockManagement() {
     const canViewReposition = permissions.reposition.view || permissions.stock.analysis.restock;
 
     return (
-        <div className="w-full max-w-7xl mx-auto">
+        <div className="mx-auto w-full max-w-[1600px]">
             <div className="text-center mb-10">
                 <h1 className="text-4xl font-bold tracking-tight">Gestão de estoque</h1>
                 <p className="text-lg text-muted-foreground mt-2">Gerencie lotes, vencimentos, reposição e consumo do seu estoque em um só lugar.</p>

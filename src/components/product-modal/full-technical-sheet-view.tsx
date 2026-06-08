@@ -43,7 +43,7 @@ export default function FullTechnicalSheetView({ simulation }: { simulation: Pro
   return (
     <div className="h-full flex flex-col bg-gray-50/50">
       <ScrollArea className="flex-1 p-8">
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="mx-auto w-full max-w-[1600px] space-y-8">
           
           {/* Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

@@ -420,10 +420,10 @@ export default function PurchaseOrderPage() {
 
   if (loading || classificationLoading) {
     return (
-      <div className="container max-w-6xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-40 w-full" />
-        <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1fr] gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2.4fr)_minmax(340px,1fr)] gap-6">
           <Skeleton className="h-96 w-full" />
           <Skeleton className="h-96 w-full" />
         </div>
@@ -442,7 +442,7 @@ export default function PurchaseOrderPage() {
 
   return (
     <PermissionGuard allowed={canView}>
-      <div className="container max-w-6xl py-8 space-y-6">
+      <div className="container max-w-[1600px] py-8 space-y-6">
         <BackButton fallbackHref="/dashboard/purchasing/orders" label="Compras" variant="ghost" size="sm" className="-ml-2" />
 
         <div className="rounded-2xl border bg-card p-6 space-y-5">
@@ -639,7 +639,7 @@ export default function PurchaseOrderPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1fr] gap-6 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2.4fr)_minmax(340px,1fr)] gap-6 items-start">
           <div className="space-y-4">
             <div className="rounded-2xl border bg-card overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b">

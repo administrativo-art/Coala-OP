@@ -118,7 +118,7 @@ export default function RepositionHubPage() {
     };
 
     return (
-        <div className="mx-auto w-full max-w-[1500px] space-y-8 px-1 pb-10">
+        <div className="mx-auto w-full max-w-[1600px] space-y-8 px-1 pb-10">
             <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                     <span>Estoque</span>
