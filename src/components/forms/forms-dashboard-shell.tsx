@@ -353,6 +353,7 @@ export function FormsDashboardShell() {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
+  const [projectsInitialized, setProjectsInitialized] = useState(false);
   const [editingProject, setEditingProject] = useState<FormProject | null>(null);
   const [saving, setSaving] = useState<"project" | "template" | null>(null);
   const [projectForm, setProjectForm] = useState({
@@ -518,10 +519,11 @@ export function FormsDashboardShell() {
   }, [executions]);
 
   useEffect(() => {
-    if (expandedProjectIds.length === 0 && projects.length > 0) {
+    if (!projectsInitialized && projects.length > 0) {
       setExpandedProjectIds([projects[0].id]);
+      setProjectsInitialized(true);
     }
-  }, [expandedProjectIds.length, projects]);
+  }, [projects, projectsInitialized]);
 
   useEffect(() => {
     let cancelled = false;
