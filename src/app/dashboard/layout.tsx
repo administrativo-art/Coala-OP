@@ -250,7 +250,9 @@ export default function DashboardLayout({
           )}
           {children}
         </main>
-        <DebugPanel dataLoadTime={dataLoadTime} enabled={process.env.NODE_ENV === 'development'} />
+        {process.env.NODE_ENV === 'development' ? (
+          <DebugPanel dataLoadTime={dataLoadTime} />
+        ) : null}
       </div>
       {shouldOpenLoginAccessGate(loginAccessState) && loginAccessState && (
         <LoginAccessGateOverlay
