@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type DragEvent } from "react";
 import Link from "next/link";
-import { ClipboardList, Layers3, ArrowLeft, Pencil, Plus, Trash2, MapPin } from "lucide-react";
+import { ClipboardList, Layers3, ArrowLeft, Plus, Trash2, MapPin, Save } from "lucide-react";
 
 import type { FormAssignment, FormTemplate } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
@@ -41,6 +41,19 @@ const OCCURRENCE_LABELS: Record<string, string> = {
   annual: "Anual",
   custom: "Personalizada",
 };
+
+const ITEM_TYPE_OPTIONS = [
+  { type: "text", label: "Texto" },
+  { type: "checkbox", label: "Checkbox" },
+  { type: "yes_no", label: "Sim/Não" },
+  { type: "number", label: "Número" },
+  { type: "temperature", label: "Temperatura" },
+  { type: "photo", label: "Foto" },
+  { type: "signature", label: "Assinatura" },
+  { type: "date", label: "Data" },
+  { type: "file_upload", label: "Arquivo" },
+  { type: "location", label: "Localização" },
+] as const;
 
 function formatOccurrence(value?: string) {
   if (!value) return "Manual";
@@ -183,6 +196,15 @@ function createEmptyEditorItem(): EditorItem {
   };
 }
 
+function createEditorItemByType(type: string): EditorItem {
+  return {
+    ...createEmptyEditorItem(),
+    title: `Nova pergunta ${ITEM_TYPE_OPTIONS.find((option) => option.type === type)?.label.toLowerCase() ?? ""}`.trim(),
+    type,
+    action_required: type === "temperature" || type === "yes_no",
+  };
+}
+
 export function FormTemplateDetailShell({ templateId }: { templateId: string }) {
   const { firebaseUser } = useAuth();
   const { units, shiftDefinitions } = useDPBootstrap();
@@ -211,6 +233,22 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
     due_time: "",
   });
   const defaultTaskProjectId = template?.form_project_id ?? "";
+  const displayedSections = formState.sections.length > 0 ? formState.sections : [];
+  const questionCount = displayedSections.reduce((total, section) => total + section.items.length, 0);
+  const conditionalCount = displayedSections.reduce(
+    (total, section) =>
+      total +
+      section.items.reduce(
+        (innerTotal, item) => innerTotal + (item.conditional_branches?.length ?? 0) + (item.show_if_enabled ? 1 : 0),
+        0
+      ),
+    0
+  );
+  const taskTriggerCount = displayedSections.reduce(
+    (total, section) =>
+      total + section.items.reduce((innerTotal, item) => innerTotal + (item.task_triggers?.length ?? 0), 0),
+    0
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -630,6 +668,25 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
     }));
   }
 
+  function addItemAt(sectionId: string, itemType: string, index: number) {
+    setFormState((current) => ({
+      ...current,
+      sections: current.sections.map((section) => {
+        if (section.id !== sectionId) return section;
+        const nextItems = [...section.items];
+        nextItems.splice(Math.max(0, Math.min(index, nextItems.length)), 0, createEditorItemByType(itemType));
+        return { ...section, items: nextItems };
+      }),
+    }));
+  }
+
+  function handleQuestionDrop(sectionId: string, index: number, event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    const itemType = event.dataTransfer.getData("application/x-form-item-type");
+    if (!itemType) return;
+    addItemAt(sectionId, itemType, index);
+  }
+
   function updateItem(sectionId: string, itemId: string, patch: Partial<EditorItem>) {
     setFormState((current) => ({
       ...current,
@@ -851,9 +908,9 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
             <MapPin className="mr-2 h-4 w-4" />
             Editar aplicação
           </Button>
-          <Button variant="outline" onClick={() => setEditorOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Editar perguntas
+          <Button onClick={() => void handleSaveTemplate()} disabled={saving}>
+            <Save className="mr-2 h-4 w-4" />
+            {saving ? "Salvando..." : "Salvar formulário"}
           </Button>
         </div>
       </div>
@@ -862,14 +919,14 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
         <Card>
           <CardContent className="p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Seções</p>
-            <p className="mt-2 text-3xl font-semibold tracking-tight">{template.sections.length}</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight">{displayedSections.length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Perguntas</p>
             <p className="mt-2 text-3xl font-semibold tracking-tight">
-              {template.sections.reduce((total, section) => total + section.items.length, 0)}
+              {questionCount}
             </p>
           </CardContent>
         </Card>
@@ -877,15 +934,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
           <CardContent className="p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Condicionais</p>
             <p className="mt-2 text-3xl font-semibold tracking-tight">
-              {template.sections.reduce(
-                (total, section) =>
-                  total +
-                  section.items.reduce(
-                    (innerTotal, item) => innerTotal + (item.conditional_branches?.length ?? 0),
-                    0
-                  ),
-                0
-              )}
+              {conditionalCount}
             </p>
           </CardContent>
         </Card>
@@ -893,67 +942,480 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
           <CardContent className="p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tarefas</p>
             <p className="mt-2 text-3xl font-semibold tracking-tight">
-              {template.sections.reduce(
-                (total, section) =>
-                  total +
-                  section.items.reduce(
-                    (innerTotal, item) => innerTotal + (item.task_triggers?.length ?? 0),
-                    0
-                  ),
-                0
-              )}
+              {taskTriggerCount}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
-          {template.sections.map((section) => (
-            <Card key={section.id}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Dados do formulário</CardTitle>
+              <CardDescription>
+                Nome e descrição aparecem para quem vai preencher.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input
+                value={formState.name}
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, name: event.target.value }))
+                }
+                placeholder="Nome do formulário"
+              />
+              <Textarea
+                value={formState.description}
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+                placeholder="Descrição do formulário"
+              />
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={addSection}>
+              <Plus className="mr-2 h-4 w-4" />
+              Adicionar seção
+            </Button>
+          </div>
+
+          {displayedSections.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Adicione uma seção para começar a montar o formulário.
+              </CardContent>
+            </Card>
+          ) : (
+            displayedSections.map((section) => (
+              <Card key={section.id}>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Layers3 className="h-4 w-4" />
-                  {section.title}
-                </CardTitle>
-                <CardDescription>
-                  {section.items.length} pergunta(s) nesta seção
-                </CardDescription>
+                <div className="flex items-center gap-2">
+                  <Layers3 className="h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={section.title}
+                    onChange={(event) =>
+                      updateSection(section.id, { title: event.target.value })
+                    }
+                    placeholder="Título da seção"
+                    className="text-base font-semibold"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeSection(section.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <CardDescription>{section.items.length} pergunta(s) nesta seção</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {section.items.map((item) => (
-                  <div key={item.id} className="rounded-lg border p-3 text-sm">
-                    <div className="font-medium">{item.title}</div>
-                    <div className="text-muted-foreground">
-                      {item.type} • {item.required ? "obrigatório" : "opcional"} • peso {item.weight}
+              <CardContent className="space-y-4">
+                <div className="space-y-3 rounded-md border p-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={section.show_if_enabled}
+                      onChange={(event) =>
+                        updateSection(section.id, {
+                          show_if_enabled: event.target.checked,
+                        })
+                      }
+                    />
+                    Exibir seção condicionalmente
+                  </label>
+                  {section.show_if_enabled ? (
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <select
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        value={section.show_if_item_id}
+                        onChange={(event) =>
+                          updateSection(section.id, {
+                            show_if_item_id: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="">Pergunta base</option>
+                        {formState.sections.flatMap((candidateSection) =>
+                          candidateSection.items.map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidateSection.title} - {candidate.title}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      <select
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        value={section.show_if_operator}
+                        onChange={(event) =>
+                          updateSection(section.id, {
+                            show_if_operator:
+                              event.target.value as EditorSection["show_if_operator"],
+                          })
+                        }
+                      >
+                        <option value="equals">igual a</option>
+                        <option value="not_equals">diferente de</option>
+                        <option value="gt">maior que</option>
+                        <option value="lt">menor que</option>
+                        <option value="gte">maior ou igual</option>
+                        <option value="lte">menor ou igual</option>
+                        <option value="contains">contém</option>
+                        <option value="is_empty">vazio</option>
+                        <option value="is_not_empty">não vazio</option>
+                      </select>
+                      <Input
+                        value={section.show_if_value}
+                        onChange={(event) =>
+                          updateSection(section.id, { show_if_value: event.target.value })
+                        }
+                        placeholder="Valor"
+                      />
                     </div>
-                    {item.description ? (
-                      <div className="mt-1 text-muted-foreground">{item.description}</div>
-                    ) : null}
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      {item.block_next ? <span>bloqueia próximo</span> : null}
-                      {item.action_required ? <span>gera ação</span> : null}
-                      {item.reference_value !== undefined ? (
-                        <span>
-                          ref {item.reference_value}
-                          {item.tolerance_percent !== undefined
-                            ? ` ± ${item.tolerance_percent}%`
-                            : ""}
-                        </span>
+                  ) : null}
+                </div>
+
+                <div
+                  className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-center text-sm text-muted-foreground"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => handleQuestionDrop(section.id, 0, event)}
+                >
+                  Solte aqui para adicionar no início da seção
+                </div>
+
+                {section.items.map((item, itemIndex) => (
+                  <div key={item.id} className="space-y-3">
+                    <div className="rounded-lg border p-4">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={item.title}
+                          onChange={(event) =>
+                            updateItem(section.id, item.id, { title: event.target.value })
+                          }
+                          placeholder="Texto da pergunta"
+                          className="font-medium"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeItem(section.id, item.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <Textarea
+                        value={item.description}
+                        onChange={(event) =>
+                          updateItem(section.id, item.id, {
+                            description: event.target.value,
+                          })
+                        }
+                        placeholder="Detalhes ou orientação para preenchimento"
+                        className="mt-3"
+                      />
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <select
+                          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                          value={item.type}
+                          onChange={(event) =>
+                            updateItem(section.id, item.id, { type: event.target.value })
+                          }
+                        >
+                          {ITEM_TYPE_OPTIONS.map((option) => (
+                            <option key={option.type} value={option.type}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={item.required}
+                            onChange={(event) =>
+                              updateItem(section.id, item.id, {
+                                required: event.target.checked,
+                              })
+                            }
+                          />
+                          Obrigatório
+                        </label>
+                      </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <Input
+                          type="number"
+                          min="1"
+                          value={String(item.weight)}
+                          onChange={(event) =>
+                            updateItem(section.id, item.id, {
+                              weight: Number(event.target.value || 1),
+                            })
+                          }
+                          placeholder="Peso"
+                        />
+                        <select
+                          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                          value={item.criticality}
+                          onChange={(event) =>
+                            updateItem(section.id, item.id, {
+                              criticality: event.target.value as EditorItem["criticality"],
+                            })
+                          }
+                        >
+                          <option value="low">Baixa</option>
+                          <option value="medium">Média</option>
+                          <option value="high">Alta</option>
+                          <option value="critical">Crítica</option>
+                        </select>
+                      </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={item.block_next}
+                            onChange={(event) =>
+                              updateItem(section.id, item.id, {
+                                block_next: event.target.checked,
+                              })
+                            }
+                          />
+                          Bloquear próximo item
+                        </label>
+                        <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={item.action_required}
+                            onChange={(event) =>
+                              updateItem(section.id, item.id, {
+                                action_required: event.target.checked,
+                              })
+                            }
+                          />
+                          Exige ação corretiva
+                        </label>
+                      </div>
+                      {(item.type === "number" || item.type === "temperature") ? (
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <Input
+                            type="number"
+                            value={item.reference_value}
+                            onChange={(event) =>
+                              updateItem(section.id, item.id, {
+                                reference_value: event.target.value,
+                              })
+                            }
+                            placeholder="Valor de referência"
+                          />
+                          <Input
+                            type="number"
+                            value={item.tolerance_percent}
+                            onChange={(event) =>
+                              updateItem(section.id, item.id, {
+                                tolerance_percent: event.target.value,
+                              })
+                            }
+                            placeholder="Tolerância %"
+                          />
+                        </div>
                       ) : null}
-                      {item.show_if ? <span>condicional</span> : null}
-                      {item.conditional_branches?.length ? (
-                        <span>{item.conditional_branches.length} branch(es)</span>
-                      ) : null}
-                      {item.task_triggers?.length ? (
-                        <span>{item.task_triggers.length} trigger(s) de tarefa</span>
-                      ) : null}
+                      <div className="mt-3 space-y-3 rounded-md border p-3">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={item.show_if_enabled}
+                            onChange={(event) =>
+                              updateItem(section.id, item.id, {
+                                show_if_enabled: event.target.checked,
+                              })
+                            }
+                          />
+                          Exibir condicionalmente
+                        </label>
+                        {item.show_if_enabled ? (
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <select
+                              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                              value={item.show_if_item_id}
+                              onChange={(event) =>
+                                updateItem(section.id, item.id, {
+                                  show_if_item_id: event.target.value,
+                                })
+                              }
+                            >
+                              <option value="">Pergunta base</option>
+                              {formState.sections.flatMap((candidateSection) =>
+                                candidateSection.items
+                                  .filter((candidate) => candidate.id !== item.id)
+                                  .map((candidate) => (
+                                    <option key={candidate.id} value={candidate.id}>
+                                      {candidateSection.title} - {candidate.title}
+                                    </option>
+                                  ))
+                              )}
+                            </select>
+                            <select
+                              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                              value={item.show_if_operator}
+                              onChange={(event) =>
+                                updateItem(section.id, item.id, {
+                                  show_if_operator:
+                                    event.target.value as EditorItem["show_if_operator"],
+                                })
+                              }
+                            >
+                              <option value="equals">igual a</option>
+                              <option value="not_equals">diferente de</option>
+                              <option value="gt">maior que</option>
+                              <option value="lt">menor que</option>
+                              <option value="gte">maior ou igual</option>
+                              <option value="lte">menor ou igual</option>
+                              <option value="contains">contém</option>
+                              <option value="is_empty">vazio</option>
+                              <option value="is_not_empty">não vazio</option>
+                            </select>
+                            <Input
+                              value={item.show_if_value}
+                              onChange={(event) =>
+                                updateItem(section.id, item.id, {
+                                  show_if_value: event.target.value,
+                                })
+                              }
+                              placeholder="Valor"
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div className="rounded-md border p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium">Branches condicionais</p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.conditional_branches.length} configurada(s)
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addConditionalBranch(section.id, item.id)}
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Branch
+                            </Button>
+                          </div>
+                          {item.conditional_branches.length > 0 ? (
+                            <div className="mt-3 space-y-2">
+                              {item.conditional_branches.map((branch) => (
+                                <div key={branch.id} className="grid gap-2 rounded-md bg-muted/40 p-2 md:grid-cols-[1fr_1fr_auto]">
+                                  <Input
+                                    value={branch.value}
+                                    onChange={(event) =>
+                                      updateConditionalBranch(section.id, item.id, branch.id, {
+                                        value: event.target.value,
+                                      })
+                                    }
+                                    placeholder="Valor"
+                                  />
+                                  <Input
+                                    value={branch.label}
+                                    onChange={(event) =>
+                                      updateConditionalBranch(section.id, item.id, branch.id, {
+                                        label: event.target.value,
+                                      })
+                                    }
+                                    placeholder="Rótulo"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      removeConditionalBranch(section.id, item.id, branch.id)
+                                    }
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="rounded-md border p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium">Triggers de tarefa</p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.task_triggers.length} configurado(s)
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addTaskTrigger(section.id, item.id)}
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Trigger
+                            </Button>
+                          </div>
+                          {item.task_triggers.length > 0 ? (
+                            <div className="mt-3 space-y-2">
+                              {item.task_triggers.map((trigger) => (
+                                <div key={trigger.id} className="grid gap-2 rounded-md bg-muted/40 p-2 md:grid-cols-[1fr_auto]">
+                                  <Input
+                                    value={trigger.title_template}
+                                    onChange={(event) =>
+                                      updateTaskTrigger(section.id, item.id, trigger.id, {
+                                        title_template: event.target.value,
+                                      })
+                                    }
+                                    placeholder="Título da tarefa"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      removeTaskTrigger(section.id, item.id, trigger.id)
+                                    }
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-center text-sm text-muted-foreground"
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => handleQuestionDrop(section.id, itemIndex + 1, event)}
+                    >
+                      Solte aqui para adicionar após esta pergunta
                     </div>
                   </div>
                 ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => addItemAt(section.id, "text", section.items.length)}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar pergunta de texto
+                </Button>
               </CardContent>
             </Card>
-          ))}
+            ))
+          )}
         </div>
 
         <div className="space-y-4 xl:sticky xl:top-20 xl:self-start">
@@ -961,58 +1423,87 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ClipboardList className="h-5 w-5" />
-                Resumo do formulário
+                Adicionar pergunta
               </CardTitle>
               <CardDescription>
-                Estrutura, aplicação e versionamento preservados para os próximos preenchimentos.
+                Arraste um tipo para a posição desejada dentro de uma seção.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="rounded-xl border p-3">
-                <p className="font-medium">Escopo</p>
-                <p className="mt-1 text-muted-foreground">
-                  Projeto {template.form_project_id} · contexto {template.context}
-                </p>
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="font-medium">Aplicação</p>
-                <p className="mt-1 text-muted-foreground">
-                  {inferApplicationMode(template)} · {formatScope(template)}
-                </p>
-                {activeAssignment ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Vínculo ativo desde {String(activeAssignment.starts_at).slice(0, 10)}
-                  </p>
-                ) : null}
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="font-medium">Recorrência</p>
-                <p className="mt-1 text-muted-foreground">
-                  {formatOccurrence(template.occurrence_type)}
-                </p>
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="font-medium">Histórico seguro</p>
-                <p className="mt-1 text-muted-foreground">
-                  Alterações neste formulário valem para novos preenchimentos; preenchimentos antigos preservam o snapshot da versão usada.
-                </p>
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="font-medium">Última atividade</p>
-                <p className="mt-1 text-muted-foreground">
-                  {template.updated_at ? String(template.updated_at) : "Sem atualização registrada"}
-                </p>
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="font-medium">Histórico de vínculos</p>
-                <p className="mt-1 text-muted-foreground">
-                  {assignments.length} registro(s) de aplicação preservado(s).
-                </p>
-              </div>
+            <CardContent className="space-y-2">
+              {ITEM_TYPE_OPTIONS.map((option) => (
+                <button
+                  key={option.type}
+                  type="button"
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData("application/x-form-item-type", option.type);
+                    event.dataTransfer.effectAllowed = "copy";
+                  }}
+                  className="flex w-full cursor-grab items-center justify-between rounded-lg border bg-background px-3 py-3 text-left text-sm transition hover:bg-muted active:cursor-grabbing"
+                >
+                  <span className="font-medium">{option.label}</span>
+                  <span className="text-xs text-muted-foreground">{option.type}</span>
+                </button>
+              ))}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ClipboardList className="h-5 w-5" />
+            Resumo do formulário
+          </CardTitle>
+          <CardDescription>
+            Estrutura, aplicação e versionamento preservados para os próximos preenchimentos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
+          <div className="rounded-xl border p-3">
+            <p className="font-medium">Escopo</p>
+            <p className="mt-1 text-muted-foreground">
+              Projeto {template.form_project_id} · contexto {template.context}
+            </p>
+          </div>
+          <div className="rounded-xl border p-3">
+            <p className="font-medium">Aplicação</p>
+            <p className="mt-1 text-muted-foreground">
+              {inferApplicationMode(template)} · {formatScope(template)}
+            </p>
+            {activeAssignment ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Vínculo ativo desde {String(activeAssignment.starts_at).slice(0, 10)}
+              </p>
+            ) : null}
+          </div>
+          <div className="rounded-xl border p-3">
+            <p className="font-medium">Recorrência</p>
+            <p className="mt-1 text-muted-foreground">
+              {formatOccurrence(template.occurrence_type)}
+            </p>
+          </div>
+          <div className="rounded-xl border p-3">
+            <p className="font-medium">Histórico seguro</p>
+            <p className="mt-1 text-muted-foreground">
+              Alterações neste formulário valem para novos preenchimentos; preenchimentos antigos preservam o snapshot da versão usada.
+            </p>
+          </div>
+          <div className="rounded-xl border p-3">
+            <p className="font-medium">Última atividade</p>
+            <p className="mt-1 text-muted-foreground">
+              {template.updated_at ? String(template.updated_at) : "Sem atualização registrada"}
+            </p>
+          </div>
+          <div className="rounded-xl border p-3">
+            <p className="font-medium">Histórico de vínculos</p>
+            <p className="mt-1 text-muted-foreground">
+              {assignments.length} registro(s) de aplicação preservado(s).
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Dialog open={applicationOpen} onOpenChange={setApplicationOpen}>
         <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
