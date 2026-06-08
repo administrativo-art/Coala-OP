@@ -1570,6 +1570,84 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
               ))}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Aplicação
+              </CardTitle>
+              <CardDescription>Quando, onde e para quem este formulário é gerado.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div className="rounded-xl border p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Recorrência</p>
+                <p className="mt-1 font-medium">{formatOccurrence(activeAssignment?.occurrence_type ?? template.occurrence_type)}</p>
+              </div>
+              <div className="rounded-xl border p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Modo de aplicação</p>
+                <p className="mt-1 font-medium">{inferApplicationMode(template)}</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Unidades</p>
+                <div className="flex flex-wrap gap-2">
+                  {(activeAssignment?.unit_names?.length ? activeAssignment.unit_names : template.unit_names ?? []).slice(0, 6).map((unitName) => (
+                    <Badge key={unitName} variant="outline" className="border-primary/30 text-primary">
+                      {unitName}
+                    </Badge>
+                  ))}
+                  {(activeAssignment?.unit_names?.length || template.unit_names?.length) ? null : (
+                    <Badge variant="outline">Todas / manual</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Períodos / turnos</p>
+                <div className="space-y-2">
+                  {(activeAssignment?.shift_definition_names?.length
+                    ? activeAssignment.shift_definition_names
+                    : template.shift_definition_names ?? []
+                  ).slice(0, 4).map((shiftName) => (
+                    <div key={shiftName} className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-primary">
+                      {shiftName}
+                    </div>
+                  ))}
+                  {(activeAssignment?.shift_definition_names?.length || template.shift_definition_names?.length) ? null : (
+                    <div className="rounded-lg border bg-muted/30 px-3 py-2 text-muted-foreground">
+                      Sem vínculo de turno
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-xl border p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Prazo</p>
+                <p className="mt-1 font-medium">{formatDueRule(activeAssignment?.due_rule ?? template.due_rule)}</p>
+              </div>
+              <Button type="button" variant="outline" className="w-full" onClick={() => setApplicationOpen(true)}>
+                Editar aplicação
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings2 className="h-5 w-5" />
+                Versão
+              </CardTitle>
+              <CardDescription>Histórico preservado para execuções antigas.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between rounded-xl border p-3">
+                <span className="text-muted-foreground">Atual</span>
+                <Badge variant="outline">v{template.version}</Badge>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border p-3">
+                <span className="text-muted-foreground">Vínculos</span>
+                <span className="font-medium">{assignments.length}</span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   BarChart3,
   CalendarClock,
+  ChevronDown,
   CheckSquare,
   ClipboardCheck,
   ClipboardList,
@@ -274,7 +275,7 @@ function KpiCard({
   label: string;
   value: number;
   subtitle: string;
-  tone: "amber" | "blue" | "emerald" | "red";
+  tone: "amber" | "blue" | "emerald" | "red" | "purple";
 }) {
   const toneClass =
     tone === "amber"
@@ -283,7 +284,9 @@ function KpiCard({
         ? "from-blue-50 to-white text-blue-700 border-blue-200"
         : tone === "emerald"
           ? "from-emerald-50 to-white text-emerald-700 border-emerald-200"
-          : "from-red-50 to-white text-red-700 border-red-200";
+          : tone === "purple"
+            ? "from-violet-50 to-white text-violet-700 border-violet-200"
+            : "from-red-50 to-white text-red-700 border-red-200";
 
   return (
     <Card className={cn("bg-gradient-to-br", toneClass)}>
@@ -296,6 +299,21 @@ function KpiCard({
       </CardContent>
     </Card>
   );
+}
+
+function getModelVisual(modelId: string, index: number) {
+  if (modelId.includes("temperature")) {
+    return { className: "bg-amber-500 text-white", icon: CalendarClock };
+  }
+  if (modelId.includes("cleaning") || modelId.includes("audit")) {
+    return { className: "bg-emerald-500 text-white", icon: ClipboardCheck };
+  }
+  const fallbacks = [
+    { className: "bg-indigo-500 text-white", icon: ClipboardList },
+    { className: "bg-sky-500 text-white", icon: Layers3 },
+    { className: "bg-rose-500 text-white", icon: FileText },
+  ];
+  return fallbacks[index % fallbacks.length];
 }
 
 type TemplateDialogSource = "blank" | "model" | "duplicate";
@@ -334,6 +352,7 @@ export function FormsDashboardShell() {
   const [loading, setLoading] = useState(true);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
   const [editingProject, setEditingProject] = useState<FormProject | null>(null);
   const [saving, setSaving] = useState<"project" | "template" | null>(null);
   const [projectForm, setProjectForm] = useState({
@@ -342,7 +361,7 @@ export function FormsDashboardShell() {
     color: "",
   });
   const [templateForm, setTemplateForm] = useState<TemplateFormState>({
-    source: "blank",
+    source: "model",
     model_id: DEFAULT_FORM_MODELS[0]?.id ?? "",
     duplicate_template_id: "",
     form_project_id: "",
@@ -455,6 +474,55 @@ export function FormsDashboardShell() {
     });
   }, [executionsByProject, projects, templatesByProject]);
 
+  const dailyCompletionBuckets = useMemo(() => {
+    const today = new Date();
+    const buckets = Array.from({ length: 14 }, (_, index) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() - (13 - index));
+      return {
+        key: date.toISOString().slice(0, 10),
+        label: new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(date),
+        total: 0,
+      };
+    });
+    const byKey = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+    executions.forEach((execution) => {
+      if (execution.status !== "completed" || !execution.completed_at) return;
+      const key = new Date(String(execution.completed_at)).toISOString().slice(0, 10);
+      const bucket = byKey.get(key);
+      if (bucket) bucket.total += 1;
+    });
+    return buckets;
+  }, [executions]);
+
+  const unitRankings = useMemo(() => {
+    const byUnit = new Map<string, { name: string; total: number; completed: number }>();
+    executions.forEach((execution) => {
+      const key = execution.unit_id || execution.unit_name || "sem-unidade";
+      const current = byUnit.get(key) ?? {
+        name: execution.unit_name || execution.unit_id || "Sem unidade",
+        total: 0,
+        completed: 0,
+      };
+      current.total += 1;
+      if (execution.status === "completed") current.completed += 1;
+      byUnit.set(key, current);
+    });
+    return Array.from(byUnit.values())
+      .map((entry) => ({
+        ...entry,
+        rate: entry.total === 0 ? 0 : Math.round((entry.completed / entry.total) * 100),
+      }))
+      .sort((left, right) => right.rate - left.rate)
+      .slice(0, 5);
+  }, [executions]);
+
+  useEffect(() => {
+    if (expandedProjectIds.length === 0 && projects.length > 0) {
+      setExpandedProjectIds([projects[0].id]);
+    }
+  }, [expandedProjectIds.length, projects]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -520,6 +588,14 @@ export function FormsDashboardShell() {
       color: project.color ?? "",
     });
     setProjectDialogOpen(true);
+  }
+
+  function toggleProject(projectId: string) {
+    setExpandedProjectIds((current) =>
+      current.includes(projectId)
+        ? current.filter((id) => id !== projectId)
+        : [...current, projectId]
+    );
   }
 
   function selectAllModelItems(modelId = templateForm.model_id) {
@@ -746,7 +822,7 @@ export function FormsDashboardShell() {
       setTemplateDialogOpen(false);
       setTemplateForm((current) => ({
         ...current,
-        source: "blank",
+        source: "model",
         model_id: availableModels[0]?.id ?? DEFAULT_FORM_MODELS[0]?.id ?? "",
         duplicate_template_id: "",
         name: "",
@@ -814,6 +890,7 @@ export function FormsDashboardShell() {
               onClick={() => {
                 setTemplateForm((current) => ({
                   ...current,
+                  source: "model",
                   form_project_id: current.form_project_id || projects[0]?.id || "",
                 }));
                 selectAllModelItems();
@@ -832,7 +909,7 @@ export function FormsDashboardShell() {
         <KpiCard label="Em andamento" value={stats.inProgress} subtitle="Preenchimentos já assumidos" tone="blue" />
         <KpiCard label="Concluídas" value={stats.completed} subtitle="Fluxos encerrados" tone="emerald" />
         <KpiCard label="Atrasadas" value={stats.overdue} subtitle="Preenchimentos em atenção" tone="red" />
-        <KpiCard label="Tempo médio" value={stats.averageDuration} subtitle="Minutos por preenchimento" tone="blue" />
+        <KpiCard label="Tempo médio" value={stats.averageDuration} subtitle="Minutos por preenchimento" tone="purple" />
       </div>
 
       <Tabs defaultValue="operations" className="space-y-4">
@@ -853,19 +930,36 @@ export function FormsDashboardShell() {
               </CardContent>
             </Card>
           ) : (
-            projectSummaries.map(({ project, templates: projectTemplates, executions: projectExecutions, completionRate, items }) => (
+            projectSummaries.map(({ project, templates: projectTemplates, executions: projectExecutions, completionRate, items }) => {
+              const isExpanded = expandedProjectIds.includes(project.id);
+              return (
               <Card key={project.id}>
-                <CardHeader>
+                <CardHeader className="pb-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2">
-                      <CardTitle className="flex items-center gap-2 text-lg">
+                    <button
+                      type="button"
+                      onClick={() => toggleProject(project.id)}
+                      className="flex min-w-0 flex-1 items-start gap-3 rounded-lg text-left"
+                    >
+                      <ChevronDown
+                        className={cn(
+                          "mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                          isExpanded && "rotate-180"
+                        )}
+                      />
+                      <span
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
+                        style={{ backgroundColor: project.color || "#5b5cf6" }}
+                      >
                         <FolderKanban className="h-5 w-5" />
-                        {project.name}
-                      </CardTitle>
-                      <CardDescription>
-                        {project.description?.trim() || "Projeto operacional no novo domínio de formulários."}
-                      </CardDescription>
-                    </div>
+                      </span>
+                      <span className="min-w-0 space-y-1">
+                        <CardTitle className="text-lg">{project.name}</CardTitle>
+                        <CardDescription className="line-clamp-2">
+                          {project.description?.trim() || "Projeto operacional no domínio de formulários."}
+                        </CardDescription>
+                      </span>
+                    </button>
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="outline">{projectTemplates.length} formulário(s)</Badge>
                       <Badge variant="outline">{projectExecutions.length} preenchimento(s)</Badge>
@@ -882,7 +976,8 @@ export function FormsDashboardShell() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                {isExpanded ? (
+                <CardContent className="space-y-4 border-t pt-4">
                   {projectTemplates.length > 0 ? (
                     <div className="grid gap-3 xl:grid-cols-3">
                       {projectTemplates.slice(0, 3).map((template) => {
@@ -972,8 +1067,10 @@ export function FormsDashboardShell() {
                     </div>
                   )}
                 </CardContent>
+                ) : null}
               </Card>
-            ))
+              );
+            })
           )}
         </TabsContent>
 
@@ -997,7 +1094,7 @@ export function FormsDashboardShell() {
                     <TableHead>Aplicação</TableHead>
                     <TableHead>Escopo</TableHead>
                     <TableHead>Perguntas</TableHead>
-                    <TableHead>Último preenchimento</TableHead>
+                    <TableHead>Versão</TableHead>
                     <TableHead className="text-right">Ação</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1010,7 +1107,6 @@ export function FormsDashboardShell() {
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold">{template.name}</span>
-                              <Badge variant="outline">v{template.version}</Badge>
                             </div>
                             {template.description ? (
                               <p className="line-clamp-1 text-xs text-muted-foreground">
@@ -1028,7 +1124,9 @@ export function FormsDashboardShell() {
                         </TableCell>
                         <TableCell>{formatTemplateScope(template)}</TableCell>
                         <TableCell>{countTemplateItems(template)}</TableCell>
-                        <TableCell>{formatRelative(template.last_execution_at)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">v{template.version}</Badge>
+                        </TableCell>
                         <TableCell className="text-right">
                           <Button
                             type="button"
@@ -1050,15 +1148,17 @@ export function FormsDashboardShell() {
 
         <TabsContent value="models" className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-3">
-            {availableModels.map((model) => {
+            {availableModels.map((model, modelIndex) => {
               const itemCount = model.sections.reduce((total, section) => total + section.items.length, 0);
+              const visual = getModelVisual(model.id, modelIndex);
+              const Icon = visual.icon;
               return (
                 <Card key={model.id}>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Layers3 className="h-5 w-5" />
-                      {model.name}
-                    </CardTitle>
+                    <div className={cn("mb-2 flex h-10 w-10 items-center justify-center rounded-xl", visual.className)}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <CardTitle className="text-base">{model.name}</CardTitle>
                     <CardDescription>{model.description}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -1067,8 +1167,8 @@ export function FormsDashboardShell() {
                       <Badge variant="outline">{itemCount} pergunta(s)</Badge>
                     </div>
                     <div className="space-y-2">
-                      {model.sections.map((section) => (
-                        <div key={section.id} className="rounded-xl border p-3">
+                      {model.sections.slice(0, 3).map((section) => (
+                        <div key={section.id} className="rounded-xl border bg-muted/20 p-3">
                           <p className="text-sm font-medium">{section.title}</p>
                           <p className="text-xs text-muted-foreground">
                             {section.items.length} pergunta(s)
@@ -1111,52 +1211,50 @@ export function FormsDashboardShell() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="h-5 w-5" />
-                  Saúde operacional
+                  Preenchimentos · últimos 14 dias
                 </CardTitle>
                 <CardDescription>
-                  Leitura consolidada dos preenchimentos do novo módulo.
+                  Volume diário de execuções concluídas.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {projectSummaries.map(({ project, executions: projectExecutions, completionRate }) => (
-                  <div key={project.id} className="rounded-xl border p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="font-medium">{project.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {projectExecutions.length} preenchimento(s)
-                        </p>
+              <CardContent>
+                <div className="flex h-56 items-end gap-2 rounded-xl border bg-muted/20 p-4">
+                  {dailyCompletionBuckets.map((bucket) => {
+                    const max = Math.max(1, ...dailyCompletionBuckets.map((entry) => entry.total));
+                    const height = Math.max(12, Math.round((bucket.total / max) * 160));
+                    return (
+                      <div key={bucket.key} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2">
+                        <div
+                          className="w-full rounded-t-md bg-violet-500"
+                          style={{ height }}
+                          title={`${bucket.label}: ${bucket.total}`}
+                        />
+                        <span className="text-[10px] text-muted-foreground">{bucket.label.slice(0, 2)}</span>
                       </div>
-                      <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                        {completionRate}%
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <CalendarClock className="h-5 w-5" />
-                  Recorrência
+                  <UserCheck className="h-5 w-5" />
+                  Ranking por unidade
                 </CardTitle>
                 <CardDescription>
-                  Distribuição dos formulários por frequência operacional.
+                  Conformidade média por destino operacional.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {Object.entries(
-                  templates.reduce<Record<string, number>>((accumulator, template) => {
-                    const key = formatOccurrence(template.occurrence_type);
-                    accumulator[key] = (accumulator[key] ?? 0) + 1;
-                    return accumulator;
-                  }, {})
-                ).map(([label, total]) => (
-                  <div key={label} className="flex items-center justify-between rounded-xl border p-4">
-                    <span className="font-medium">{label}</span>
-                    <Badge variant="outline">{total}</Badge>
+              <CardContent className="space-y-4">
+                {(unitRankings.length > 0 ? unitRankings : [{ name: "Sem dados", total: 0, completed: 0, rate: 0 }]).map((entry) => (
+                  <div key={entry.name} className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-medium">{entry.name}</span>
+                      <span className="text-muted-foreground">{entry.rate}%</span>
+                    </div>
+                    <Progress value={entry.rate} className="h-2" />
                   </div>
                 ))}
               </CardContent>
@@ -1212,8 +1310,8 @@ export function FormsDashboardShell() {
           <div className="space-y-5">
             <div className="grid gap-3 md:grid-cols-3">
               {[
+                { value: "model", label: "A partir de modelo", icon: Layers3 },
                 { value: "blank", label: "Em branco", icon: FileText },
-                { value: "model", label: "Usar modelo", icon: Layers3 },
                 { value: "duplicate", label: "Duplicar", icon: Copy },
               ].map((option) => {
                 const Icon = option.icon;
