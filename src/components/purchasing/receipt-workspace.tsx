@@ -731,9 +731,16 @@ export function ReceiptWorkspace({ receipt }: Props) {
                   const base = baseProducts.find((bp) => bp.id === draft.baseItemId);
                   // Com Produto Base, restringe aos insumos daquele base; sem base
                   // (item de texto livre), permite buscar em todos os insumos.
-                  const variantOptions = draft.baseItemId
-                    ? products.filter((p) => p.baseProductId === draft.baseItemId && !p.isArchived)
-                    : products.filter((p) => !p.isArchived);
+                  const selectedOperationalCategory = activeCategories.find((category) => category.id === draft.operationalCategoryId);
+                  const variantOptions = products.filter((product) => {
+                    if (product.isArchived) return false;
+                    if (draft.baseItemId && product.baseProductId !== draft.baseItemId) return false;
+                    if (!selectedOperationalCategory) return true;
+                    return (
+                      product.operationalCategoryId === selectedOperationalCategory.id ||
+                      (!product.operationalCategoryId && selectedOperationalCategory.destination === 'stock')
+                    );
+                  });
                   const selectedStockProduct = products.find((p) => p.id === draft.productId);
                   const displayName =
                     (selectedStockProduct ? getProductFullName(selectedStockProduct) : '') ||
@@ -751,10 +758,14 @@ export function ReceiptWorkspace({ receipt }: Props) {
                       draft.receiptDisposition === 'receive_less' ||
                       draft.receiptDisposition === 'receive_more');
                   const isNonStockDisposition = !receivesQuantity;
+                  const shouldCheckReceiptQuantity = isInConference || isImmediate;
+                  const quantityDiverges =
+                    shouldCheckReceiptQuantity &&
+                    Math.abs((draft.quantityPreviouslyReceived + draft.quantityReceived) - draft.quantityOrdered) > 0.001;
                   const hasDivergence =
                     draft.selectedForReceipt &&
                     (draft.receiptDisposition !== 'receive' ||
-                      Math.abs((draft.quantityPreviouslyReceived + draft.quantityReceived) - draft.quantityOrdered) > 0.001 ||
+                      quantityDiverges ||
                       !!draft.divergenceReason ||
                       !!draft.resolutionNotes);
                   const stockEntryIssues = [
@@ -766,7 +777,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                     draft.receiptDisposition === 'receive_more' ? 'Recebimento a mais' : null,
                     draft.receiptDisposition === 'exchange_pending' ? 'Troca pendente' : null,
                     draft.receiptDisposition === 'returned' ? 'Item devolvido' : null,
-                    Math.abs((draft.quantityPreviouslyReceived + draft.quantityReceived) - draft.quantityOrdered) > 0.001
+                    quantityDiverges
                       ? `Quantidade total ficará em ${fmtQty(draft.quantityPreviouslyReceived + draft.quantityReceived)} de ${fmtQty(draft.quantityOrdered)} ${draft.purchaseUnitLabel}`
                       : null,
                     draft.divergenceReason.trim() ? draft.divergenceReason.trim() : null,
@@ -875,11 +886,17 @@ export function ReceiptWorkspace({ receipt }: Props) {
                               onValueChange={(value) => {
                                 const category = activeCategories.find((entry) => entry.id === value);
                                 const entryType = (category?.destination ?? 'stock') as PurchaseStockEntryType;
+                                const currentProduct = products.find((product) => product.id === draft.productId);
+                                const keepCurrentProduct =
+                                  !currentProduct ||
+                                  currentProduct.operationalCategoryId === category?.id ||
+                                  (!currentProduct.operationalCategoryId && category?.destination === 'stock');
                                 updateDraft(idx, {
                                   operationalCategoryId: category?.id,
                                   operationalCategoryName: category?.name,
                                   entryType,
                                   itemTreatment: entryType,
+                                  productId: keepCurrentProduct ? draft.productId : '',
                                 });
                               }}
                             >
