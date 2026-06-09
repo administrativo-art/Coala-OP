@@ -16,6 +16,7 @@ import { db } from "@/lib/firebase";
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 import { fetchMyFormExecutions } from "@/features/forms/lib/client";
 import type { FormExecution } from "@/types/forms";
+import { CollaboratorDashboardPanel } from "@/components/collaborator-dashboard-panel";
 
 interface OnlineUser {
     id: string;
@@ -396,19 +397,6 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            <div className="flex items-center justify-between rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-4">
-              <div>
-                <p className="text-sm font-semibold text-emerald-800">Painel do colaborador disponível abaixo</p>
-                <p className="text-xs text-muted-foreground">Acesse formulários, contagem, escala e metas do usuário logado.</p>
-              </div>
-              <Button variant="outline" size="sm" asChild>
-                <a href="#painel-colaborador">
-                  Ir para painel
-                  <ArrowRight className="ml-1.5 h-4 w-4" />
-                </a>
-              </Button>
-            </div>
-            
             {/* Core Panels Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {permissions.dashboard.operational && (
@@ -456,23 +444,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <CollaboratorPanel permissions={permissions} />
-
-            {/* Bottom Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-              <div className="lg:col-span-2">
-                <Card className="h-full border-muted/50 shadow-sm flex flex-col justify-center items-center text-center p-8 bg-gradient-to-br from-card to-muted/20">
-                    <LayoutDashboard className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                    <h3 className="text-xl font-semibold mb-2">Painéis Especializados</h3>
-                    <p className="text-sm text-muted-foreground max-w-md">
-                      Transferimos todos os widgets detalhados para painéis dedicados na nova barra lateral. Acesse <strong className="text-foreground">Operações</strong>, <strong className="text-foreground">Comercial</strong> ou o <strong className="text-foreground">DP</strong> para as funções avançadas.
-                    </p>
-                </Card>
-              </div>
-              <div className="lg:col-span-1">
-                <OnlineUsersPanel />
-              </div>
-            </div>
+            <CollaboratorDashboardPanel />
         </div>
     );
 }

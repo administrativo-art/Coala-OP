@@ -367,23 +367,43 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         {expanded ? null : <div className="mx-4 h-px bg-slate-200" />}
 
         <div className={cn("flex-shrink-0", expanded ? "px-4 pb-2" : "px-3 pb-2 pt-4")}>
-          <Link
-            href="/dashboard"
-            onClick={() => onOpenChange(false)}
-            className={cn(
-              "flex items-center transition-colors",
-              expanded
-                ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
-                : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
-              pathname === "/dashboard"
-                ? "border border-stone-200 bg-stone-50 text-slate-950"
-                : ""
-            )}
-            title="Painel Central"
-          >
-            <LayoutDashboard className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
-            {expanded ? <span>Painel Central</span> : null}
-          </Link>
+          <div className="space-y-2">
+            <Link
+              href="/dashboard"
+              onClick={() => onOpenChange(false)}
+              className={cn(
+                "flex items-center transition-colors",
+                expanded
+                  ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
+                  : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
+                pathname === "/dashboard"
+                  ? "border border-stone-200 bg-stone-50 text-slate-950"
+                  : ""
+              )}
+              title="Painel Central"
+            >
+              <LayoutDashboard className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+              {expanded ? <span>Painel Central</span> : null}
+            </Link>
+
+            <Link
+              href="/dashboard/collaborator"
+              onClick={() => onOpenChange(false)}
+              className={cn(
+                "flex items-center transition-colors",
+                expanded
+                  ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
+                  : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
+                pathname === "/dashboard/collaborator"
+                  ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
+                  : ""
+              )}
+              title="Painel do colaborador"
+            >
+              <ClipboardCheck className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+              {expanded ? <span>Painel do colaborador</span> : null}
+            </Link>
+          </div>
         </div>
 
         {/* Accordion nav */}
