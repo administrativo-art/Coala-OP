@@ -250,7 +250,7 @@ function CollaboratorPanel({ permissions }: { permissions: ReturnType<typeof use
   const canViewGoals = !!permissions.goals?.view;
 
   return (
-    <section className="space-y-4">
+    <section id="painel-colaborador" className="scroll-mt-6 space-y-4">
       <div className="flex flex-col gap-2 border-b border-border/50 pb-4 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 mb-3">
@@ -394,6 +394,19 @@ export default function DashboardPage() {
                 <div className="text-sm text-muted-foreground bg-muted/30 px-4 py-2 rounded-lg border border-muted/50 hidden sm:block">
                   {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
                 </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-4">
+              <div>
+                <p className="text-sm font-semibold text-emerald-800">Painel do colaborador disponível abaixo</p>
+                <p className="text-xs text-muted-foreground">Acesse formulários, contagem, escala e metas do usuário logado.</p>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <a href="#painel-colaborador">
+                  Ir para painel
+                  <ArrowRight className="ml-1.5 h-4 w-4" />
+                </a>
+              </Button>
             </div>
             
             {/* Core Panels Grid */}
