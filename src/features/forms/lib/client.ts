@@ -22,6 +22,7 @@ export type FormsBootstrapPayload = {
     can_view_analytics: boolean;
   };
   projects: FormProject[];
+  types: FormType[];
   templates: FormTemplate[];
   executions: FormExecution[];
 };

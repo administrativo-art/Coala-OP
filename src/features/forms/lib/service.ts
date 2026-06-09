@@ -10,6 +10,7 @@ import {
   listFormExecutions,
   listFormProjects,
   listFormTemplates,
+  listFormTypes,
 } from "@/features/forms/lib/server";
 import {
   getLegacyFormExecutionBySyntheticId,
@@ -38,10 +39,11 @@ export async function buildFormsBootstrap(params: {
     throw new Error("Sem permissão para acessar formulários.");
   }
 
-  const [projects, templates, executions] = await Promise.all([
+  const [projects, templates, executions, types] = await Promise.all([
     listFormProjects(params.workspaceId),
     listFormTemplates({ workspaceId: params.workspaceId, isActive: true }),
     listFormExecutions({ workspaceId: params.workspaceId, limit: 30 }),
+    listFormTypes({ workspaceId: params.workspaceId, isActive: true }),
   ]);
   const [legacyProjects, legacyTemplates, legacyExecutions] =
     flags.forms_read_from_legacy_enabled
@@ -91,6 +93,7 @@ export async function buildFormsBootstrap(params: {
         params.permissions.dp.checklists.viewAnalytics,
     },
     projects: visibleProjects,
+    types: types.filter((type) => visibleProjectIds.has(type.form_project_id)),
     templates: [...templates, ...legacyTemplates].filter((template) =>
       visibleProjectIds.has(template.form_project_id)
     ),

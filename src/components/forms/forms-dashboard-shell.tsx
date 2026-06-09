@@ -23,12 +23,13 @@ import {
   UserCheck,
 } from "lucide-react";
 
-import type { FormExecution, FormProject, FormTemplate } from "@/types/forms";
+import type { FormExecution, FormProject, FormTemplate, FormType } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import {
   createFormProject,
   createFormTemplate,
+  createFormType,
   deleteFormProject,
   fetchFormModels,
   fetchFormsBootstrap,
@@ -337,6 +338,7 @@ type TemplateFormState = {
   model_id: string;
   duplicate_template_id: string;
   form_project_id: string;
+  form_type_id: string;
   name: string;
   description: string;
   context: string;
@@ -356,6 +358,7 @@ export function FormsDashboardShell() {
   const { units, shiftDefinitions } = useDPBootstrap();
   const { toast } = useToast();
   const [projects, setProjects] = useState<FormProject[]>([]);
+  const [formTypes, setFormTypes] = useState<FormType[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [executions, setExecutions] = useState<FormExecution[]>([]);
   const [models, setModels] = useState<UiFormModel[]>([]);
@@ -365,6 +368,7 @@ export function FormsDashboardShell() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [subprojectDialogOpen, setSubprojectDialogOpen] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [projectDeleteTarget, setProjectDeleteTarget] = useState<FormProject | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
@@ -376,11 +380,17 @@ export function FormsDashboardShell() {
     description: "",
     color: "",
   });
+  const [subprojectForm, setSubprojectForm] = useState({
+    form_project_id: "",
+    name: "",
+    description: "",
+  });
   const [templateForm, setTemplateForm] = useState<TemplateFormState>({
     source: "model",
     model_id: DEFAULT_FORM_MODELS[0]?.id ?? "",
     duplicate_template_id: "",
     form_project_id: "",
+    form_type_id: "",
     name: "",
     description: "",
     context: "operational",
@@ -397,6 +407,24 @@ export function FormsDashboardShell() {
   const templatesByProject = useMemo(() => {
     return templates.reduce<Record<string, FormTemplate[]>>((accumulator, template) => {
       const key = template.form_project_id;
+      accumulator[key] ??= [];
+      accumulator[key].push(template);
+      return accumulator;
+    }, {});
+  }, [templates]);
+
+  const subprojectsByProject = useMemo(() => {
+    return formTypes.reduce<Record<string, FormType[]>>((accumulator, type) => {
+      const key = type.form_project_id;
+      accumulator[key] ??= [];
+      accumulator[key].push(type);
+      return accumulator;
+    }, {});
+  }, [formTypes]);
+
+  const templatesBySubproject = useMemo(() => {
+    return templates.reduce<Record<string, FormTemplate[]>>((accumulator, template) => {
+      const key = template.form_type_id || "manual";
       accumulator[key] ??= [];
       accumulator[key].push(template);
       return accumulator;
@@ -473,8 +501,10 @@ export function FormsDashboardShell() {
     return projects.map((project) => {
       const projectTemplates = templatesByProject[project.id] ?? [];
       const projectExecutions = executionsByProject[project.id] ?? [];
+      const projectSubprojects = subprojectsByProject[project.id] ?? [];
       return {
         project,
+        subprojects: projectSubprojects,
         templates: projectTemplates,
         executions: projectExecutions,
         items: projectTemplates.reduce((total, template) => total + countTemplateItems(template), 0),
@@ -488,7 +518,7 @@ export function FormsDashboardShell() {
               ),
       };
     });
-  }, [executionsByProject, projects, templatesByProject]);
+  }, [executionsByProject, projects, subprojectsByProject, templatesByProject]);
 
   const dailyCompletionBuckets = useMemo(() => {
     const today = new Date();
@@ -559,6 +589,7 @@ export function FormsDashboardShell() {
         ]);
         if (!cancelled) {
           setProjects(data.projects);
+          setFormTypes(data.types ?? []);
           setTemplates(data.templates);
           setExecutions(data.executions);
           setModels(modelsPayload.models as UiFormModel[]);
@@ -720,6 +751,7 @@ export function FormsDashboardShell() {
     const data = await fetchFormsBootstrap(firebaseUser);
     const modelsPayload = await fetchFormModels(firebaseUser).catch(() => ({ models: [] }));
     setProjects(data.projects);
+    setFormTypes(data.types ?? []);
     setTemplates(data.templates);
     setExecutions(data.executions);
     setModels(modelsPayload.models as UiFormModel[]);
@@ -788,6 +820,34 @@ export function FormsDashboardShell() {
     }
   }
 
+  async function handleSaveSubproject() {
+    if (!firebaseUser) return;
+
+    try {
+      setSaving("project");
+      const result = await createFormType(firebaseUser, {
+        form_project_id: subprojectForm.form_project_id,
+        name: subprojectForm.name,
+        description: subprojectForm.description,
+        requires_subtype: false,
+        context: "operational",
+        order: (subprojectsByProject[subprojectForm.form_project_id] ?? []).length,
+        is_active: true,
+      });
+      setFormTypes((current) => [...current, result.type]);
+      setSubprojectDialogOpen(false);
+      setSubprojectForm({ form_project_id: "", name: "", description: "" });
+      toast({ title: "Subprojeto criado" });
+    } catch (saveError) {
+      toast({
+        variant: "destructive",
+        title: saveError instanceof Error ? saveError.message : "Falha ao criar subprojeto.",
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
   async function handleCreateTemplate() {
     if (!firebaseUser) return;
 
@@ -804,7 +864,7 @@ export function FormsDashboardShell() {
 
       const result = await createFormTemplate(firebaseUser, {
         form_project_id: templateForm.form_project_id,
-        form_type_id: "manual",
+        form_type_id: templateForm.form_type_id,
         context: templateForm.context,
         name:
           templateForm.name ||
@@ -863,6 +923,7 @@ export function FormsDashboardShell() {
         source: "model",
         model_id: availableModels[0]?.id ?? DEFAULT_FORM_MODELS[0]?.id ?? "",
         duplicate_template_id: "",
+        form_type_id: "",
         name: "",
         description: "",
         occurrence_type: "manual",
@@ -926,10 +987,13 @@ export function FormsDashboardShell() {
             <Button
               variant="outline"
               onClick={() => {
+                const firstProject = projects[0];
+                const firstSubproject = firstProject ? (subprojectsByProject[firstProject.id] ?? [])[0] : undefined;
                 setTemplateForm((current) => ({
                   ...current,
                   source: "model",
-                  form_project_id: current.form_project_id || projects[0]?.id || "",
+                  form_project_id: current.form_project_id || firstProject?.id || "",
+                  form_type_id: current.form_type_id || firstSubproject?.id || "",
                 }));
                 selectAllModelItems();
                 setTemplateDialogOpen(true);
@@ -968,7 +1032,7 @@ export function FormsDashboardShell() {
               </CardContent>
             </Card>
           ) : (
-            projectSummaries.map(({ project, templates: projectTemplates, executions: projectExecutions, completionRate, items }) => {
+            projectSummaries.map(({ project, subprojects, templates: projectTemplates, executions: projectExecutions, completionRate, items }) => {
               const isExpanded = expandedProjectIds.includes(project.id);
               return (
               <Card key={project.id}>
@@ -1000,6 +1064,7 @@ export function FormsDashboardShell() {
                     </button>
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="outline">{projectTemplates.length} formulário(s)</Badge>
+                      <Badge variant="outline">{subprojects.length} subprojeto(s)</Badge>
                       <Badge variant="outline">{projectExecutions.length} preenchimento(s)</Badge>
                       <Badge variant="outline">{items} pergunta(s)</Badge>
                       <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">
@@ -1010,6 +1075,21 @@ export function FormsDashboardShell() {
                           <Button variant="ghost" size="sm" onClick={() => openEditProjectDialog(project)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             Editar projeto
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSubprojectForm({
+                                form_project_id: project.id,
+                                name: "",
+                                description: "",
+                              });
+                              setSubprojectDialogOpen(true);
+                            }}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Novo subprojeto
                           </Button>
                           <Button
                             variant="ghost"
@@ -1027,50 +1107,94 @@ export function FormsDashboardShell() {
                 </CardHeader>
                 {isExpanded ? (
                 <CardContent className="space-y-4 border-t pt-4">
-                  {projectTemplates.length > 0 ? (
-                    <div className="grid gap-3 xl:grid-cols-3">
-                      {projectTemplates.slice(0, 3).map((template) => {
-                        const templateExecutions = projectExecutions.filter(
-                          (execution) => execution.template_id === template.id
-                        );
-                        const completed = templateExecutions.filter(
-                          (execution) => execution.status === "completed"
-                        ).length;
-                        const rate =
-                          templateExecutions.length === 0
-                            ? 0
-                            : Math.round((completed / templateExecutions.length) * 100);
-
+                  {subprojects.length > 0 ? (
+                    <div className="space-y-4">
+                      {subprojects.map((subproject) => {
+                        const subprojectTemplates = templatesBySubproject[subproject.id] ?? [];
                         return (
-                          <Link key={template.id} href={`/dashboard/forms/${template.id}`}>
-                            <div className="h-full rounded-xl border p-4 transition-colors hover:bg-muted/30">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0 space-y-1">
-                                  <p className="line-clamp-1 font-semibold">{template.name}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {formatOccurrence(template.occurrence_type)} · {formatApplicationMode(template)}
-                                  </p>
-                                </div>
-                                <Badge variant="outline">v{template.version}</Badge>
+                          <div key={subproject.id} className="rounded-2xl border bg-muted/10 p-4">
+                            <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                              <div>
+                                <p className="font-semibold">{subproject.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {subproject.description || "Operação da unidade."}
+                                </p>
                               </div>
-                              <div className="mt-4 space-y-2">
-                                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                  <span>{templateExecutions.length} preenchimento(s)</span>
-                                  <span>{rate}%</span>
-                                </div>
-                                <Progress value={rate} />
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant="outline">{subprojectTemplates.length} formulário(s)</Badge>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setTemplateForm((current) => ({
+                                      ...current,
+                                      form_project_id: project.id,
+                                      form_type_id: subproject.id,
+                                      source: "model",
+                                    }));
+                                    selectAllModelItems();
+                                    setTemplateDialogOpen(true);
+                                  }}
+                                >
+                                  <Plus className="mr-2 h-4 w-4" />
+                                  Novo formulário
+                                </Button>
                               </div>
-                              <p className="mt-3 text-xs text-muted-foreground">
-                                {formatTemplateScope(template)}
-                              </p>
                             </div>
-                          </Link>
+                            {subprojectTemplates.length > 0 ? (
+                              <div className="grid gap-3 xl:grid-cols-3">
+                                {subprojectTemplates.map((template) => {
+                                  const templateExecutions = projectExecutions.filter(
+                                    (execution) => execution.template_id === template.id
+                                  );
+                                  const completed = templateExecutions.filter(
+                                    (execution) => execution.status === "completed"
+                                  ).length;
+                                  const rate =
+                                    templateExecutions.length === 0
+                                      ? 0
+                                      : Math.round((completed / templateExecutions.length) * 100);
+
+                                  return (
+                                    <Link key={template.id} href={`/dashboard/forms/${template.id}`}>
+                                      <div className="h-full rounded-xl border bg-background p-4 transition-colors hover:bg-muted/30">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0 space-y-1">
+                                            <p className="line-clamp-1 font-semibold">{template.name}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                              {formatOccurrence(template.occurrence_type)} · {formatApplicationMode(template)}
+                                            </p>
+                                          </div>
+                                          <Badge variant="outline">v{template.version}</Badge>
+                                        </div>
+                                        <div className="mt-4 space-y-2">
+                                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                            <span>{templateExecutions.length} preenchimento(s)</span>
+                                            <span>{rate}%</span>
+                                          </div>
+                                          <Progress value={rate} />
+                                        </div>
+                                        <p className="mt-3 text-xs text-muted-foreground">
+                                          {formatTemplateScope(template)}
+                                        </p>
+                                      </div>
+                                    </Link>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border border-dashed bg-background px-4 py-6 text-center text-sm text-muted-foreground">
+                                Este subprojeto ainda não tem formulários.
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
                   ) : (
                     <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-                      Este projeto ainda não tem formulários publicados.
+                      Este projeto ainda não tem subprojetos. Crie um subprojeto para organizar os formulários.
                     </div>
                   )}
 
@@ -1140,6 +1264,7 @@ export function FormsDashboardShell() {
                   <TableRow>
                     <TableHead>Formulário</TableHead>
                     <TableHead>Projeto</TableHead>
+                    <TableHead>Subprojeto</TableHead>
                     <TableHead>Aplicação</TableHead>
                     <TableHead>Escopo</TableHead>
                     <TableHead>Perguntas</TableHead>
@@ -1150,6 +1275,7 @@ export function FormsDashboardShell() {
                 <TableBody>
                   {templates.map((template) => {
                     const project = projects.find((entry) => entry.id === template.form_project_id);
+                    const subproject = formTypes.find((entry) => entry.id === template.form_type_id);
                     return (
                       <TableRow key={template.id}>
                         <TableCell>
@@ -1165,6 +1291,7 @@ export function FormsDashboardShell() {
                           </div>
                         </TableCell>
                         <TableCell>{project?.name ?? template.form_project_id}</TableCell>
+                        <TableCell>{subproject?.name ?? "Sem subprojeto"}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
                             <Badge variant="outline">{formatApplicationMode(template)}</Badge>
@@ -1396,6 +1523,72 @@ export function FormsDashboardShell() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={subprojectDialogOpen} onOpenChange={setSubprojectDialogOpen}>
+        <DialogContent className="max-w-2xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-6 py-5 text-left">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm">
+                <Layers3 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle>Novo subprojeto</DialogTitle>
+                <DialogDescription>
+                  Agrupe os formulários por operação, área ou rotina da unidade.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="space-y-4 px-6 py-5">
+            <div className="space-y-2">
+              <Label>Projeto</Label>
+              <Select
+                value={subprojectForm.form_project_id}
+                onValueChange={(value) => setSubprojectForm((current) => ({ ...current, form_project_id: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o projeto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Nome do subprojeto</Label>
+              <Input
+                value={subprojectForm.name}
+                onChange={(event) => setSubprojectForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="Ex: Operação da loja"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <Textarea
+                value={subprojectForm.description}
+                onChange={(event) => setSubprojectForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Ex: Abertura, fechamento, temperatura e conformidade da unidade."
+                className="min-h-24"
+              />
+            </div>
+          </div>
+          <DialogFooter className="border-t bg-background px-6 py-4">
+            <Button variant="outline" onClick={() => setSubprojectDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void handleSaveSubproject()}
+              disabled={saving === "project" || !subprojectForm.form_project_id || !subprojectForm.name.trim()}
+            >
+              {saving === "project" ? "Salvando..." : "Salvar subprojeto"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
         <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden p-0">
           <DialogHeader className="border-b px-6 py-5 text-left">
@@ -1604,7 +1797,14 @@ export function FormsDashboardShell() {
                 <Label>Projeto</Label>
                 <Select
                   value={templateForm.form_project_id}
-                  onValueChange={(value) => setTemplateForm((current) => ({ ...current, form_project_id: value }))}
+                  onValueChange={(value) => {
+                    const firstSubproject = (subprojectsByProject[value] ?? [])[0];
+                    setTemplateForm((current) => ({
+                      ...current,
+                      form_project_id: value,
+                      form_type_id: firstSubproject?.id ?? "",
+                    }));
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o projeto" />
@@ -1617,6 +1817,27 @@ export function FormsDashboardShell() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Subprojeto</Label>
+                <Select
+                  value={templateForm.form_type_id}
+                  onValueChange={(value) => setTemplateForm((current) => ({ ...current, form_type_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o subprojeto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(subprojectsByProject[templateForm.form_project_id] ?? []).map((subproject) => (
+                      <SelectItem key={subproject.id} value={subproject.id}>
+                        {subproject.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {templateForm.form_project_id && (subprojectsByProject[templateForm.form_project_id] ?? []).length === 0 ? (
+                  <p className="text-xs text-destructive">Crie um subprojeto antes de criar o formulário.</p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label>Recorrência</Label>
@@ -1775,6 +1996,7 @@ export function FormsDashboardShell() {
               disabled={
                 saving === "template" ||
                 !templateForm.form_project_id ||
+                !templateForm.form_type_id ||
                 (templateForm.source === "model" && selectedModelItemIds.size === 0) ||
                 (templateForm.source === "duplicate" && !templateForm.duplicate_template_id)
               }
