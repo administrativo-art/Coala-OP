@@ -380,10 +380,10 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                   ? "border border-stone-200 bg-stone-50 text-slate-950"
                   : ""
               )}
-              title="Painel Central"
+              title="Painel da gestão"
             >
               <LayoutDashboard className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
-              {expanded ? <span>Painel Central</span> : null}
+              {expanded ? <span>Painel da gestão</span> : null}
             </Link>
 
             <Link

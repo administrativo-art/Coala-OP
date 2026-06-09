@@ -47,7 +47,7 @@ const SECTION_MAP: Record<string, string> = {
 };
 
 const LABEL_MAP: Record<string, string> = {
-  "/dashboard": "Painel Central",
+  "/dashboard": "Painel da gestão",
   "/dashboard/operations": "Painel de Operações",
   "/dashboard/tasks": "Tarefas Gerais",
   "/dashboard/forms": "Formulários",
@@ -239,7 +239,7 @@ function StatusBar({ tasks }: { tasks: LegacyTask[] }) {
 // ── Search items (all navigable pages) ───────────────────────────────────────
 
 const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
-  { label: "Painel Central", href: "/dashboard", section: "Início" },
+  { label: "Painel da gestão", href: "/dashboard", section: "Início" },
   { label: "Painel de Operações", href: "/dashboard/operations", section: "Departamento Operacional" },
   { label: "Tarefas gerais", href: "/dashboard/tasks", section: "Departamento Operacional" },
   { label: "Formulários", href: "/dashboard/forms", section: "Departamento Operacional" },
