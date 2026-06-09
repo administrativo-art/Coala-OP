@@ -6,6 +6,8 @@ import {
   ArrowLeft,
   ChevronDown,
   ClipboardList,
+  FileQuestion,
+  GitBranch,
   GripVertical,
   Layers3,
   MapPin,
@@ -13,6 +15,7 @@ import {
   Save,
   Settings2,
   Trash2,
+  Zap,
 } from "lucide-react";
 
 import type { FormAssignment, FormTemplate } from "@/types/forms";
@@ -967,15 +970,20 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
               Voltar para formulários
             </Button>
           </Link>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-3xl font-semibold tracking-tight">{formState.name || template.name}</h1>
-              <Badge variant="outline">v{template.version}</Badge>
-              <Badge variant="outline">{template.context}</Badge>
+          <div className="flex items-start gap-3">
+            <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white">
+              <ClipboardList className="h-5 w-5" />
             </div>
-            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              {formState.description.trim() || template.description?.trim() || "Formulário operacional publicado para gerar preenchimentos."}
-            </p>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-tight">{formState.name || template.name}</h1>
+                <Badge variant="outline">v{template.version}</Badge>
+                <Badge variant="outline">{template.context}</Badge>
+              </div>
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                {formState.description.trim() || template.description?.trim() || "Formulário operacional publicado para gerar preenchimentos."}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -986,54 +994,62 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
           </Button>
           <Button onClick={() => void handleSaveTemplate()} disabled={saving}>
             <Save className="mr-2 h-4 w-4" />
-            {saving ? "Salvando..." : "Salvar formulário"}
+            {saving ? "Salvando..." : "Publicar nova versão"}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Seções</p>
-            <p className="mt-2 text-3xl font-semibold tracking-tight">{displayedSections.length}</p>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+              <Layers3 className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-2xl font-semibold tracking-tight">{displayedSections.length}</p>
+              <p className="text-xs font-medium text-muted-foreground">seções</p>
+            </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Perguntas</p>
-            <p className="mt-2 text-3xl font-semibold tracking-tight">
-              {questionCount}
-            </p>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+              <FileQuestion className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-2xl font-semibold tracking-tight">{questionCount}</p>
+              <p className="text-xs font-medium text-muted-foreground">perguntas</p>
+            </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Condicionais</p>
-            <p className="mt-2 text-3xl font-semibold tracking-tight">
-              {conditionalCount}
-            </p>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+              <GitBranch className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-2xl font-semibold tracking-tight">{conditionalCount}</p>
+              <p className="text-xs font-medium text-muted-foreground">condicionais</p>
+            </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tarefas</p>
-            <p className="mt-2 text-3xl font-semibold tracking-tight">
-              {taskTriggerCount}
-            </p>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+              <Zap className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-2xl font-semibold tracking-tight">{taskTriggerCount}</p>
+              <p className="text-xs font-medium text-muted-foreground">gatilhos de tarefa</p>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2.4fr)_minmax(340px,1fr)]">
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Dados do formulário</CardTitle>
-              <CardDescription>
-                Nome e descrição aparecem para quem vai preencher.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <div className="rounded-xl border bg-muted/20 p-4">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
               <Input
                 value={formState.name}
                 onChange={(event) =>
@@ -1050,9 +1066,10 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   }))
                 }
                 placeholder="Descrição do formulário"
+                className="min-h-10"
               />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           <div className="flex justify-end">
             <Button type="button" variant="outline" onClick={addSection}>
@@ -1719,14 +1736,36 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
       </Card>
 
       <Dialog open={applicationOpen} onOpenChange={setApplicationOpen}>
-        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar aplicação</DialogTitle>
-            <DialogDescription>
-              Substitui o vínculo ativo preservando o histórico anterior. Novas gerações passam a usar esta configuração.
-            </DialogDescription>
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-6 py-5 text-left">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm">
+                <MapPin className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle>Editar aplicação</DialogTitle>
+                <DialogDescription>
+                  Defina quando, onde e para quem este formulário será gerado. O histórico anterior permanece preservado.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-5">
+          <div className="max-h-[calc(92vh-145px)] space-y-5 overflow-y-auto px-6 py-5">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-xl border bg-primary/5 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">1 · Frequência</p>
+                <p className="mt-1 text-sm text-muted-foreground">Recorrência e prazo de resposta.</p>
+              </div>
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">2 · Escopo</p>
+                <p className="mt-1 text-sm text-muted-foreground">Unidades que receberão o formulário.</p>
+              </div>
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">3 · Turnos</p>
+                <p className="mt-1 text-sm text-muted-foreground">Períodos usados quando houver escala.</p>
+              </div>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label>Modo</Label>
@@ -1906,11 +1945,11 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
               </div>
             ) : null}
 
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-              Desvincular uma unidade aqui não apaga preenchimentos antigos. O vínculo anterior fica inativo e as próximas gerações usam a nova aplicação.
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              Desvincular uma unidade não apaga preenchimentos antigos. O vínculo anterior fica inativo e as próximas gerações usam esta nova aplicação.
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="border-t bg-background px-6 py-4">
             <Button variant="outline" onClick={() => setApplicationOpen(false)}>
               Cancelar
             </Button>
@@ -1922,14 +1961,21 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
       </Dialog>
 
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
-        <DialogContent className="max-h-[92vh] max-w-6xl overflow-auto">
-          <DialogHeader>
-            <DialogTitle>Editar formulário</DialogTitle>
-            <DialogDescription>
-              Edite perguntas, condicionais e gatilhos de tarefa. O histórico de preenchimentos já gerados permanece preservado.
-            </DialogDescription>
+        <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-6 py-5 text-left">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle>Editar formulário</DialogTitle>
+                <DialogDescription>
+                  Edite perguntas, condicionais e gatilhos de tarefa. O histórico de preenchimentos já gerados permanece preservado.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+          <div className="max-h-[calc(92vh-145px)] space-y-4 overflow-y-auto px-6 py-5">
             <Input
               value={formState.name}
               onChange={(event) =>
@@ -2660,7 +2706,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
               ))}
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="border-t bg-background px-6 py-4">
             <Button variant="outline" onClick={() => setEditorOpen(false)}>
               Fechar
             </Button>

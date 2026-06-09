@@ -79,6 +79,8 @@ const APPLICATION_MODE_LABELS: Record<string, string> = {
   event: "Evento do sistema",
 };
 
+const PROJECT_COLOR_PRESETS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#0ea5e9"];
+
 const DEFAULT_FORM_MODELS = [
   {
     id: "opening-checklist",
@@ -1266,35 +1268,83 @@ export function FormsDashboardShell() {
       </Tabs>
 
       <Dialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingProject ? "Editar projeto" : "Novo projeto"}</DialogTitle>
-            <DialogDescription>
-              Configure a base operacional que agrupa formulários e preenchimentos.
-            </DialogDescription>
+        <DialogContent className="max-w-2xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-6 py-5 text-left">
+            <div className="flex items-start gap-3">
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
+                style={{ backgroundColor: projectForm.color || PROJECT_COLOR_PRESETS[0] }}
+              >
+                <FolderKanban className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle>{editingProject ? "Editar projeto" : "Novo projeto"}</DialogTitle>
+                <DialogDescription>
+                  Base operacional que agrupa formulários, aplicações e preenchimentos.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-4">
-            <Input
-              value={projectForm.name}
-              onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="Nome do projeto"
-            />
-            <Textarea
-              value={projectForm.description}
-              onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
-              placeholder="Descrição"
-            />
-            <Input
-              value={projectForm.color}
-              onChange={(event) => setProjectForm((current) => ({ ...current, color: event.target.value }))}
-              placeholder="Cor (ex: #0f766e)"
-            />
+          <div className="space-y-5 px-6 py-5">
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
+              <div className="space-y-2">
+                <Label>Nome do projeto</Label>
+                <Input
+                  value={projectForm.name}
+                  onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Ex: Operação · Lojas"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Cor</Label>
+                <div className="grid grid-cols-6 gap-2 rounded-xl border p-2">
+                  {PROJECT_COLOR_PRESETS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={cn(
+                        "h-8 rounded-lg border transition-transform hover:scale-105",
+                        (projectForm.color || PROJECT_COLOR_PRESETS[0]) === color && "ring-2 ring-primary ring-offset-2"
+                      )}
+                      style={{ backgroundColor: color }}
+                      aria-label={`Usar cor ${color}`}
+                      onClick={() => setProjectForm((current) => ({ ...current, color }))}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <Textarea
+                value={projectForm.description}
+                onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Ex: Rotinas diárias de abertura, fechamento e controle operacional."
+                className="min-h-24"
+              />
+            </div>
+            <div className="rounded-xl border bg-muted/30 p-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white"
+                  style={{ backgroundColor: projectForm.color || PROJECT_COLOR_PRESETS[0] }}
+                >
+                  <FolderKanban className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{projectForm.name || "Nome do projeto"}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {projectForm.description || "Este projeto aparecerá no acordeon do painel de formulários."}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="border-t bg-background px-6 py-4">
             <Button variant="outline" onClick={() => setProjectDialogOpen(false)}>
-              Fechar
+              Cancelar
             </Button>
-            <Button onClick={() => void handleSaveProject()} disabled={saving === "project"}>
+            <Button onClick={() => void handleSaveProject()} disabled={saving === "project" || !projectForm.name.trim()}>
               {saving === "project" ? "Salvando..." : "Salvar projeto"}
             </Button>
           </DialogFooter>
@@ -1302,34 +1352,41 @@ export function FormsDashboardShell() {
       </Dialog>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Novo formulário</DialogTitle>
-            <DialogDescription>
-              Crie em branco, use um modelo com perguntas selecionáveis ou duplique um formulário existente.
-            </DialogDescription>
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-6 py-5 text-left">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle>Novo formulário</DialogTitle>
+                <DialogDescription>
+                  Crie a partir de um modelo, em branco ou duplicando.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-5">
-            <div className="grid gap-3 md:grid-cols-3">
+
+          <div className="max-h-[calc(92vh-145px)] space-y-5 overflow-y-auto px-6 py-5">
+            <div className="inline-flex rounded-full bg-slate-100 p-1">
               {[
-                { value: "model", label: "A partir de modelo", icon: Layers3 },
-                { value: "blank", label: "Em branco", icon: FileText },
-                { value: "duplicate", label: "Duplicar", icon: Copy },
+                { value: "model", label: "A partir de modelo" },
+                { value: "blank", label: "Em branco" },
+                { value: "duplicate", label: "Duplicar" },
               ].map((option) => {
-                const Icon = option.icon;
                 const active = templateForm.source === option.value;
                 return (
                   <button
                     key={option.value}
                     type="button"
                     className={cn(
-                      "flex items-center gap-3 rounded-xl border p-4 text-left transition-colors",
-                      active ? "border-primary bg-primary/5 text-primary" : "hover:bg-muted/40"
+                      "rounded-full px-5 py-2 text-sm font-semibold transition-colors",
+                      active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                     )}
                     onClick={() => {
                       setTemplateForm((current) => ({
-                            ...current,
-                            source: option.value as TemplateDialogSource,
+                        ...current,
+                        source: option.value as TemplateDialogSource,
                         selected_model_item_ids:
                           option.value === "model" && current.selected_model_item_ids.length === 0
                             ? selectedModel?.sections.flatMap((section) => section.items.map((item) => item.id)) ?? []
@@ -1337,126 +1394,110 @@ export function FormsDashboardShell() {
                       }));
                     }}
                   >
-                    <Icon className="h-5 w-5" />
-                    <span className="font-medium">{option.label}</span>
+                    {option.label}
                   </button>
                 );
               })}
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Projeto</Label>
-                <Select
-                  value={templateForm.form_project_id}
-                  onValueChange={(value) => setTemplateForm((current) => ({ ...current, form_project_id: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o projeto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Nome do formulário</Label>
-                <Input
-                  value={templateForm.name}
-                  onChange={(event) => setTemplateForm((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="Ex: Checklist de abertura"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea
-                value={templateForm.description}
-                onChange={(event) => setTemplateForm((current) => ({ ...current, description: event.target.value }))}
-                placeholder="Descreva quando e por que este formulário será usado."
-              />
-            </div>
-
             {templateForm.source === "model" ? (
-              <div className="space-y-4 rounded-xl border p-4">
-                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                  <div className="space-y-2">
-                    <Label>Modelo</Label>
-                    <Select
-                      value={templateForm.model_id}
-                      onValueChange={(value) => {
-                        const model = availableModels.find((entry) => entry.id === value);
-                        const itemIds = model?.sections.flatMap((section) => section.items.map((item) => item.id)) ?? [];
-                        setTemplateForm((current) => ({
-                          ...current,
-                          model_id: value,
-                          name: current.name || model?.name || "",
-                          description: current.description || model?.description || "",
-                          selected_model_item_ids: itemIds,
-                        }));
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um modelo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableModels.map((model) => (
-                          <SelectItem key={model.id} value={model.id}>
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button type="button" variant="outline" onClick={() => selectAllModelItems()}>
-                    <CheckSquare className="mr-2 h-4 w-4" />
-                    Selecionar tudo
-                  </Button>
-                </div>
-
-                <div className="space-y-3">
-                  {selectedModel?.sections.map((section) => {
-                    const sectionSelectedCount = section.items.filter((item) => selectedModelItemIds.has(item.id)).length;
-                    const sectionChecked = sectionSelectedCount === section.items.length;
+              <div className="space-y-4">
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {availableModels.map((model, modelIndex) => {
+                    const visual = getModelVisual(model.id, modelIndex);
+                    const Icon = visual.icon;
+                    const active = templateForm.model_id === model.id;
+                    const itemCount = model.sections.reduce((total, section) => total + section.items.length, 0);
                     return (
-                      <div key={section.id} className="rounded-xl border p-3">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={sectionChecked}
-                            onCheckedChange={(checked) => toggleModelSection(section.id, checked === true)}
-                          />
-                          <div>
-                            <p className="text-sm font-medium">{section.title}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {sectionSelectedCount}/{section.items.length} pergunta(s) selecionada(s)
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mt-3 grid gap-2 md:grid-cols-2">
-                          {section.items.map((item) => (
-                            <label key={item.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-                              <Checkbox
-                                checked={selectedModelItemIds.has(item.id)}
-                                onCheckedChange={(checked) => toggleModelItem(item.id, checked === true)}
-                              />
-                              <span>{item.title}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
+                      <button
+                        key={model.id}
+                        type="button"
+                        className={cn(
+                          "relative min-h-40 rounded-xl border p-4 text-left transition-colors",
+                          active ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/40"
+                        )}
+                        onClick={() => {
+                          const itemIds = model.sections.flatMap((section) => section.items.map((item) => item.id));
+                          setTemplateForm((current) => ({
+                            ...current,
+                            model_id: model.id,
+                            name: current.name || model.name,
+                            description: current.description || model.description || "",
+                            selected_model_item_ids: itemIds,
+                          }));
+                        }}
+                      >
+                        {active ? (
+                          <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                            <CheckSquare className="h-3.5 w-3.5" />
+                          </span>
+                        ) : null}
+                        <span className={cn("flex h-10 w-10 items-center justify-center rounded-xl", visual.className)}>
+                          <Icon className="h-5 w-5" />
+                        </span>
+                        <span className="mt-4 block text-sm font-semibold">{model.name}</span>
+                        <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">
+                          {model.description}
+                        </span>
+                        <span className="mt-4 block text-xs text-muted-foreground">{itemCount} itens</span>
+                      </button>
                     );
                   })}
+                </div>
+
+                <div className="rounded-xl border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Perguntas do modelo</p>
+                      <p className="text-xs text-muted-foreground">
+                        Selecione quais perguntas serão mantidas no formulário final.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => selectAllModelItems()}>
+                      <CheckSquare className="mr-2 h-4 w-4" />
+                      Selecionar tudo
+                    </Button>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {selectedModel?.sections.map((section) => {
+                      const sectionSelectedCount = section.items.filter((item) => selectedModelItemIds.has(item.id)).length;
+                      const sectionChecked = sectionSelectedCount === section.items.length;
+                      return (
+                        <div key={section.id} className="rounded-xl border bg-background p-3">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={sectionChecked}
+                              onCheckedChange={(checked) => toggleModelSection(section.id, checked === true)}
+                            />
+                            <div>
+                              <p className="text-sm font-medium">{section.title}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {sectionSelectedCount}/{section.items.length} pergunta(s) selecionada(s)
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-2 md:grid-cols-2">
+                            {section.items.map((item) => (
+                              <label key={item.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                                <Checkbox
+                                  checked={selectedModelItemIds.has(item.id)}
+                                  onCheckedChange={(checked) => toggleModelItem(item.id, checked === true)}
+                                />
+                                <span>{item.title}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : null}
 
             {templateForm.source === "duplicate" ? (
-              <div className="space-y-2 rounded-xl border p-4">
+              <div className="rounded-xl border p-4">
                 <Label>Formulário base</Label>
                 <Select
                   value={templateForm.duplicate_template_id}
@@ -1470,7 +1511,7 @@ export function FormsDashboardShell() {
                     }));
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="mt-2">
                     <SelectValue placeholder="Selecione um formulário para duplicar" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1505,8 +1546,51 @@ export function FormsDashboardShell() {
               </div>
             ) : null}
 
-            <div className="space-y-4 rounded-xl border p-4">
-              <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Nome do formulário</Label>
+                <Input
+                  value={templateForm.name}
+                  onChange={(event) => setTemplateForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Ex: Checklist de abertura"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Projeto</Label>
+                <Select
+                  value={templateForm.form_project_id}
+                  onValueChange={(value) => setTemplateForm((current) => ({ ...current, form_project_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o projeto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Recorrência</Label>
+                <Select
+                  value={templateForm.occurrence_type}
+                  onValueChange={(value) => setTemplateForm((current) => ({ ...current, occurrence_type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="daily">Diária</SelectItem>
+                    <SelectItem value="weekly">Semanal</SelectItem>
+                    <SelectItem value="monthly">Mensal</SelectItem>
+                    <SelectItem value="custom">Personalizada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label>Aplicação</Label>
                 <Select
@@ -1525,101 +1609,101 @@ export function FormsDashboardShell() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="unit">Recorrente por unidade</SelectItem>
+                    <SelectItem value="unit">Por unidade</SelectItem>
                     <SelectItem value="schedule">Por escala/turno</SelectItem>
                     <SelectItem value="event">Evento do sistema</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Recorrência inicial</Label>
-                <Select
-                  value={templateForm.occurrence_type}
-                  onValueChange={(value) => setTemplateForm((current) => ({ ...current, occurrence_type: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="daily">Diária</SelectItem>
-                    <SelectItem value="weekly">Semanal</SelectItem>
-                    <SelectItem value="monthly">Mensal</SelectItem>
-                    <SelectItem value="custom">Personalizada</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
-                Unidades e períodos ficam gravados no formulário. Funções, prazos e regras avançadas continuam editáveis pelo fluxo completo.
-              </div>
-              </div>
+            </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <Label>Unidades vinculadas</Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setTemplateForm((current) => ({
-                        ...current,
-                        unit_ids:
-                          current.unit_ids.length === units.length
-                            ? []
-                            : units.map((unit) => unit.id),
-                      }))
-                    }
-                  >
-                    {templateForm.unit_ids.length === units.length ? "Limpar" : "Selecionar todas"}
-                  </Button>
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <Textarea
+                value={templateForm.description}
+                onChange={(event) => setTemplateForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Descreva quando e por que este formulário será usado."
+                className="min-h-20"
+              />
+            </div>
+
+            <div className="rounded-xl border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Escopo de aplicação</p>
+                  <p className="text-xs text-muted-foreground">
+                    Defina as unidades e, quando usar escala, os períodos/turnos do formulário.
+                  </p>
                 </div>
-                {units.length > 0 ? (
-                  <div className="grid max-h-44 gap-2 overflow-y-auto rounded-xl border p-3 md:grid-cols-2">
-                    {units.map((unit) => (
-                      <label key={unit.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
-                        <Checkbox
-                          checked={templateForm.unit_ids.includes(unit.id)}
-                          onCheckedChange={(checked) => toggleTemplateArrayField("unit_ids", unit.id, checked === true)}
-                        />
-                        <span>{unit.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
-                    Nenhuma unidade do DP carregada neste contexto.
-                  </div>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">{templateForm.unit_ids.length} unidade(s)</Badge>
+                  {templateForm.application_mode === "schedule" ? (
+                    <Badge variant="outline">{templateForm.shift_definition_ids.length} período(s)</Badge>
+                  ) : null}
+                </div>
               </div>
 
-              {templateForm.application_mode === "schedule" ? (
+              <div className="mt-4 space-y-4">
                 <div className="space-y-2">
-                  <Label>Períodos da escala</Label>
-                  {shiftDefinitions.length > 0 ? (
-                    <div className="grid max-h-44 gap-2 overflow-y-auto rounded-xl border p-3 md:grid-cols-2">
-                      {shiftDefinitions.map((shift) => (
-                        <label key={shift.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Unidades</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setTemplateForm((current) => ({
+                          ...current,
+                          unit_ids:
+                            current.unit_ids.length === units.length
+                              ? []
+                              : units.map((unit) => unit.id),
+                        }))
+                      }
+                    >
+                      {templateForm.unit_ids.length === units.length ? "Limpar" : "Selecionar todas"}
+                    </Button>
+                  </div>
+                  {units.length > 0 ? (
+                    <div className="grid max-h-36 gap-2 overflow-y-auto rounded-xl border p-3 md:grid-cols-2">
+                      {units.map((unit) => (
+                        <label key={unit.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
                           <Checkbox
-                            checked={templateForm.shift_definition_ids.includes(shift.id)}
-                            onCheckedChange={(checked) => toggleTemplateArrayField("shift_definition_ids", shift.id, checked === true)}
+                            checked={templateForm.unit_ids.includes(unit.id)}
+                            onCheckedChange={(checked) => toggleTemplateArrayField("unit_ids", unit.id, checked === true)}
                           />
-                          <span>{shift.name} · {shift.startTime}-{shift.endTime}</span>
+                          <span>{unit.name}</span>
                         </label>
                       ))}
                     </div>
                   ) : (
                     <div className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
-                      Nenhum período de escala carregado neste contexto.
+                      Nenhuma unidade do DP carregada neste contexto.
                     </div>
                   )}
                 </div>
-              ) : null}
 
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">{templateForm.unit_ids.length} unidade(s)</Badge>
                 {templateForm.application_mode === "schedule" ? (
-                  <Badge variant="outline">{templateForm.shift_definition_ids.length} período(s)</Badge>
+                  <div className="space-y-2">
+                    <Label>Períodos/turnos</Label>
+                    {shiftDefinitions.length > 0 ? (
+                      <div className="grid max-h-36 gap-2 overflow-y-auto rounded-xl border p-3 md:grid-cols-2">
+                        {shiftDefinitions.map((shift) => (
+                          <label key={shift.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
+                            <Checkbox
+                              checked={templateForm.shift_definition_ids.includes(shift.id)}
+                              onCheckedChange={(checked) => toggleTemplateArrayField("shift_definition_ids", shift.id, checked === true)}
+                            />
+                            <span>{shift.name} · {shift.startTime}-{shift.endTime}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
+                        Nenhum período de escala carregado neste contexto.
+                      </div>
+                    )}
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -1637,7 +1721,7 @@ export function FormsDashboardShell() {
               </p>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="border-t bg-background px-6 py-4">
             <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>
               Cancelar
             </Button>

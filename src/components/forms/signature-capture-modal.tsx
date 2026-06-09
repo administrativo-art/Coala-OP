@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import SignatureCanvas from "react-signature-canvas";
+import { PenLine } from "lucide-react";
 
 import {
   Dialog,
@@ -41,22 +42,34 @@ export function SignatureCaptureModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Capturar assinatura</DialogTitle>
-          <DialogDescription>
-            Assine na área abaixo para anexar à execução.
-          </DialogDescription>
+      <DialogContent className="max-w-2xl overflow-hidden p-0">
+        <DialogHeader className="border-b px-6 py-5 text-left">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm">
+              <PenLine className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle>Capturar assinatura</DialogTitle>
+              <DialogDescription>
+                Assine na área abaixo para anexar à execução.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
-        <div className="overflow-hidden rounded-md border bg-white">
-          <SignatureCanvas
-            ref={signatureRef}
-            canvasProps={{
-              className: "h-56 w-full",
-            }}
-          />
+        <div className="px-6 py-5">
+          <div className="overflow-hidden rounded-xl border bg-white shadow-inner">
+            <SignatureCanvas
+              ref={signatureRef}
+              canvasProps={{
+                className: "h-64 w-full",
+              }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            A assinatura será salva como evidência do preenchimento.
+          </p>
         </div>
-        <DialogFooter>
+        <DialogFooter className="border-t bg-background px-6 py-4">
           <Button variant="outline" onClick={handleClear}>
             Limpar
           </Button>
