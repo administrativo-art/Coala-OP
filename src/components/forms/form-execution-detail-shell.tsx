@@ -15,6 +15,8 @@ import {
   Loader2,
   MapPin,
   Paperclip,
+  Thermometer,
+  Zap,
   Save,
   UploadCloud,
   UserCheck,
@@ -213,6 +215,22 @@ function formatDuration(start: unknown, end: unknown) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest > 0 ? `${hours}h ${rest}min` : `${hours}h`;
+}
+
+function getNumericRange(item: FormExecutionItem) {
+  if (typeof item.reference_value !== "number" || typeof item.tolerance_percent !== "number") return null;
+  const delta = Math.abs(item.reference_value * (item.tolerance_percent / 100));
+  return {
+    min: Number((item.reference_value - delta).toFixed(2)),
+    max: Number((item.reference_value + delta).toFixed(2)),
+  };
+}
+
+function isDraftOutOfRange(item: FormExecutionItem, draft: DraftItem) {
+  if (typeof draft.number_value !== "number") return item.is_out_of_range === true;
+  const range = getNumericRange(item);
+  if (!range) return false;
+  return draft.number_value < range.min || draft.number_value > range.max;
 }
 
 function formatRelative(value: unknown) {
@@ -917,16 +935,26 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
               </div>
             </CardHeader>
             <CardContent className="space-y-3 p-5">
-              <p className="text-sm font-medium">Tarefas criadas automaticamente</p>
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <Zap className="h-4 w-4 text-primary" />
+                Tarefas criadas automaticamente
+              </p>
               {generatedTaskItems.length > 0 ? generatedTaskItems.map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{item.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.linked_project_task_status ?? "Em aberto"}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Zap className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{item.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {item.section_title} · criticidade {item.criticality}
+                      </p>
+                    </div>
                   </div>
-                  <Badge variant="outline">Tarefa</Badge>
+                  <Badge variant="outline" className="shrink-0 border-blue-200 bg-blue-50 text-blue-700">
+                    {item.linked_project_task_status ?? "Em aberto"}
+                  </Badge>
                 </div>
               )) : (
                 <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
@@ -980,6 +1008,9 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                 {visibleItems.map((item) => {
                   const draft = drafts[item.id] ?? normalizeDraftItem(item);
                   const disabled = !canEdit || (blockReached && !isItemCompleted(draft));
+                  const options = item.config?.options ?? [];
+                  const range = getNumericRange(item);
+                  const outOfRange = isDraftOutOfRange(item, draft);
                   if (item.block_next && !isItemCompleted(draft)) {
                     blockReached = true;
                   }
@@ -989,7 +1020,7 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                       key={item.id}
                       className={cn(
                         "rounded-xl border p-4 space-y-3",
-                        item.is_out_of_range ? "border-red-200 bg-red-50/40" : "bg-background"
+                        outOfRange ? "border-red-200 bg-red-50/40" : "bg-background"
                       )}
                     >
                       <div>
@@ -997,10 +1028,16 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                           <div className="font-medium">{item.title}</div>
                           {item.required ? <Badge variant="outline">Obrigatório</Badge> : null}
                           {item.block_next ? <Badge variant="outline">Bloqueia avanço</Badge> : null}
-                          {item.is_out_of_range ? <Badge variant="destructive">Fora do intervalo</Badge> : null}
+                          {outOfRange ? <Badge variant="destructive">Fora do padrão</Badge> : null}
+                          {item.linked_project_task_id ? (
+                            <Badge variant="outline" className="border-primary/30 text-primary">
+                              <Zap className="mr-1 h-3 w-3" />
+                              Gera tarefa
+                            </Badge>
+                          ) : null}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {item.type} • criticidade {item.criticality}
+                          {item.type === "temperature" ? "Temperatura" : item.type} • criticidade {item.criticality}
                         </div>
                         {item.description ? (
                           <div className="mt-1 text-sm text-muted-foreground">{item.description}</div>
@@ -1030,26 +1067,60 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                       ) : null}
 
                       {(item.type === "text" || item.type === "select") ? (
-                        <Textarea
-                          value={String(draft.text_value ?? "")}
-                          disabled={disabled}
-                          onChange={(event) => updateDraft(item.id, { text_value: event.target.value })}
-                          placeholder="Digite a resposta"
-                        />
+                        options.length > 0 && item.type === "select" ? (
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            {options.map((option) => (
+                              <Button
+                                key={option}
+                                type="button"
+                                variant={draft.text_value === option ? "default" : "outline"}
+                                disabled={disabled}
+                                onClick={() => updateDraft(item.id, { text_value: option })}
+                                className="justify-start"
+                              >
+                                <span className={cn("mr-2 h-4 w-4 rounded-full border", draft.text_value === option && "border-primary-foreground bg-primary-foreground")} />
+                                {option}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : (
+                          <Textarea
+                            value={String(draft.text_value ?? "")}
+                            disabled={disabled}
+                            onChange={(event) => updateDraft(item.id, { text_value: event.target.value })}
+                            placeholder="Digite a resposta"
+                          />
+                        )
                       ) : null}
 
                       {(item.type === "number" || item.type === "temperature") ? (
-                        <Input
-                          type="number"
-                          value={draft.number_value === undefined ? "" : String(draft.number_value)}
-                          disabled={disabled}
-                          onChange={(event) =>
-                            updateDraft(item.id, {
-                              number_value: event.target.value === "" ? undefined : Number(event.target.value),
-                            })
-                          }
-                          placeholder="Informe um valor"
-                        />
+                        <div className={cn("rounded-xl border p-3", outOfRange ? "border-red-300 bg-red-50" : "bg-muted/20")}>
+                          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+                            {item.type === "temperature" ? <Thermometer className="h-4 w-4 text-muted-foreground" /> : null}
+                            {range ? (
+                              <Badge variant={outOfRange ? "destructive" : "outline"}>
+                                Faixa {range.min} - {range.max}{item.type === "temperature" ? " °C" : ""}
+                              </Badge>
+                            ) : null}
+                            {outOfRange ? (
+                              <span className="text-xs font-medium text-red-700">
+                                Fora do padrão - ação corretiva será gerada.
+                              </span>
+                            ) : null}
+                          </div>
+                          <Input
+                            type="number"
+                            value={draft.number_value === undefined ? "" : String(draft.number_value)}
+                            disabled={disabled}
+                            onChange={(event) =>
+                              updateDraft(item.id, {
+                                number_value: event.target.value === "" ? undefined : Number(event.target.value),
+                              })
+                            }
+                            placeholder="Informe um valor"
+                            className={outOfRange ? "border-red-300 bg-white" : undefined}
+                          />
+                        </div>
                       ) : null}
 
                       {item.type === "date" ? (
@@ -1062,19 +1133,44 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                       ) : null}
 
                       {item.type === "multi_select" ? (
-                        <Textarea
-                          value={Array.isArray(draft.multi_values) ? draft.multi_values.join(", ") : ""}
-                          disabled={disabled}
-                          onChange={(event) =>
-                            updateDraft(item.id, {
-                              multi_values: event.target.value
-                                .split(",")
-                                .map((value) => value.trim())
-                                .filter(Boolean),
-                            })
-                          }
-                          placeholder="Separe os valores por vírgula"
-                        />
+                        options.length > 0 ? (
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            {options.map((option) => {
+                              const values = Array.isArray(draft.multi_values) ? draft.multi_values : [];
+                              const checked = values.includes(option);
+                              return (
+                                <label key={option} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                  <Checkbox
+                                    checked={checked}
+                                    disabled={disabled}
+                                    onCheckedChange={(nextChecked) =>
+                                      updateDraft(item.id, {
+                                        multi_values: nextChecked === true
+                                          ? Array.from(new Set([...values, option]))
+                                          : values.filter((value) => value !== option),
+                                      })
+                                    }
+                                  />
+                                  {option}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <Textarea
+                            value={Array.isArray(draft.multi_values) ? draft.multi_values.join(", ") : ""}
+                            disabled={disabled}
+                            onChange={(event) =>
+                              updateDraft(item.id, {
+                                multi_values: event.target.value
+                                  .split(",")
+                                  .map((value) => value.trim())
+                                  .filter(Boolean),
+                              })
+                            }
+                            placeholder="Separe os valores por vírgula"
+                          />
+                        )
                       ) : null}
 
                       {item.type === "photo" ? (
@@ -1103,13 +1199,18 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                             </label>
                           </div>
                           {Array.isArray(draft.photo_urls) && draft.photo_urls.length > 0 ? (
-                            <div className="space-y-2">
+                            <div className="grid gap-2 sm:grid-cols-3">
                               {draft.photo_urls.map((url) => (
-                                <div key={url} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
-                                  <span className="truncate">{url}</span>
-                                  <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => void handleAssetDelete({ scope: "item", itemId: item.id, kind: "photo" }, url)}>
+                                <div key={url} className="overflow-hidden rounded-lg border bg-muted/20 text-sm">
+                                  <div className="flex aspect-video items-center justify-center bg-primary/10 text-primary">
+                                    <Camera className="h-6 w-6" />
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 px-3 py-2">
+                                    <span className="truncate text-xs">{url}</span>
+                                    <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => void handleAssetDelete({ scope: "item", itemId: item.id, kind: "photo" }, url)}>
                                     Remover
-                                  </Button>
+                                    </Button>
+                                  </div>
                                 </div>
                               ))}
                             </div>

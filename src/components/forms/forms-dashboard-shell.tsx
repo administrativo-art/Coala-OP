@@ -19,6 +19,7 @@ import {
   MapPin,
   Pencil,
   Plus,
+  Trash2,
   UserCheck,
 } from "lucide-react";
 
@@ -28,6 +29,7 @@ import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import {
   createFormProject,
   createFormTemplate,
+  deleteFormProject,
   fetchFormModels,
   fetchFormsBootstrap,
   updateFormTemplateApplication,
@@ -44,6 +46,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -354,10 +366,11 @@ export function FormsDashboardShell() {
   const [loading, setLoading] = useState(true);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [projectDeleteTarget, setProjectDeleteTarget] = useState<FormProject | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
   const [projectsInitialized, setProjectsInitialized] = useState(false);
   const [editingProject, setEditingProject] = useState<FormProject | null>(null);
-  const [saving, setSaving] = useState<"project" | "template" | null>(null);
+  const [saving, setSaving] = useState<"project" | "template" | "deleteProject" | null>(null);
   const [projectForm, setProjectForm] = useState({
     name: "",
     description: "",
@@ -754,6 +767,27 @@ export function FormsDashboardShell() {
     }
   }
 
+  async function handleDeleteProject() {
+    if (!firebaseUser || !projectDeleteTarget) return;
+
+    try {
+      setSaving("deleteProject");
+      await deleteFormProject(firebaseUser, projectDeleteTarget.id);
+      setProjects((current) => current.filter((project) => project.id !== projectDeleteTarget.id));
+      setExpandedProjectIds((current) => current.filter((projectId) => projectId !== projectDeleteTarget.id));
+      setProjectDeleteTarget(null);
+      await reloadBootstrap();
+      toast({ title: "Projeto excluído" });
+    } catch (deleteError) {
+      toast({
+        variant: "destructive",
+        title: deleteError instanceof Error ? deleteError.message : "Falha ao excluir projeto.",
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
   async function handleCreateTemplate() {
     if (!firebaseUser) return;
 
@@ -972,10 +1006,21 @@ export function FormsDashboardShell() {
                         {completionRate}% concluído
                       </Badge>
                       {canCreateProjects ? (
-                        <Button variant="ghost" size="sm" onClick={() => openEditProjectDialog(project)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Editar projeto
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => openEditProjectDialog(project)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Editar projeto
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setProjectDeleteTarget(project)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Excluir
+                          </Button>
+                        </>
                       ) : null}
                     </div>
                   </div>
@@ -1739,6 +1784,30 @@ export function FormsDashboardShell() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={projectDeleteTarget !== null} onOpenChange={(open) => !open && setProjectDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir projeto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O projeto "{projectDeleteTarget?.name}" será removido da lista ativa. Formulários, preenchimentos e histórico já criados permanecem preservados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving === "deleteProject"}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={saving === "deleteProject"}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteProject();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {saving === "deleteProject" ? "Excluindo..." : "Excluir projeto"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

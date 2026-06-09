@@ -122,6 +122,31 @@ async function authorizedJsonRequest<T>(
   return (await response.json()) as T;
 }
 
+async function authorizedDeleteRequest<T>(
+  path: string,
+  firebaseUser: FirebaseUserLike,
+  fallbackError: string
+) {
+  const token = await firebaseUser.getIdToken();
+  const response = await fetchWithTimeout(
+    path,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    },
+    20000
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, fallbackError));
+  }
+
+  return (await response.json()) as T;
+}
+
 export async function claimFormExecution(
   firebaseUser: FirebaseUserLike,
   executionId: string
@@ -206,6 +231,17 @@ export async function updateFormProject(
     "PATCH",
     body,
     "Falha ao atualizar o projeto."
+  );
+}
+
+export async function deleteFormProject(
+  firebaseUser: FirebaseUserLike,
+  projectId: string
+) {
+  return authorizedDeleteRequest<{ ok: true }>(
+    `/api/forms/projects/${projectId}`,
+    firebaseUser,
+    "Falha ao excluir o projeto."
   );
 }
 

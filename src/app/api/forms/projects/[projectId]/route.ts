@@ -62,3 +62,46 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ projectId: string }> }
+) {
+  try {
+    const user = await requireUser(request);
+    const { projectId } = await context.params;
+    assertFormPermission(user.permissions, user.isDefaultAdmin, projectId, "manage");
+
+    const ref = checklistDbAdmin.collection("form_projects").doc(projectId);
+    const existing = await ref.get();
+    if (!existing.exists) {
+      return NextResponse.json({ error: "Projeto não encontrado." }, { status: 404 });
+    }
+
+    await ref.update({
+      is_active: false,
+      updated_at: new Date(),
+      deleted_at: new Date(),
+      deleted_by: {
+        user_id: user.userDoc.id,
+        username: user.userDoc.username,
+      },
+    });
+
+    await logAction({
+      workspace_id: user.workspace_id,
+      user_id: user.userDoc.id,
+      username: user.userDoc.username,
+      module: "forms",
+      action: "project_deleted",
+      metadata: { project_id: projectId, name: existing.data()?.name ?? projectId },
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Falha ao excluir projeto." },
+      { status: 400 }
+    );
+  }
+}

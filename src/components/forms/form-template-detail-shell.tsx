@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ClipboardList,
   FileQuestion,
+  Flag,
   GitBranch,
   GripVertical,
   Layers3,
@@ -14,6 +15,7 @@ import {
   Plus,
   Save,
   Settings2,
+  Thermometer,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -27,6 +29,7 @@ import {
   updateFormTemplate,
   updateFormTemplateApplication,
 } from "@/features/forms/lib/client";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,6 +127,7 @@ type EditorItem = {
   criticality: "low" | "medium" | "high" | "critical";
   reference_value: string;
   tolerance_percent: string;
+  options_text: string;
   action_required: boolean;
   show_if_enabled: boolean;
   show_if_item_id: string;
@@ -213,6 +217,7 @@ function createEmptyEditorItem(): EditorItem {
     criticality: "medium",
     reference_value: "",
     tolerance_percent: "",
+    options_text: "",
     action_required: false,
     show_if_enabled: false,
     show_if_item_id: "",
@@ -349,6 +354,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   typeof item.tolerance_percent === "number"
                     ? String(item.tolerance_percent)
                     : "",
+                options_text: (item.config?.options ?? []).join("\n"),
                 action_required: item.action_required ?? false,
                 show_if_enabled: !!item.show_if,
                 show_if_item_id: item.show_if?.item_id ?? "",
@@ -394,6 +400,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                         typeof branchItem.tolerance_percent === "number"
                           ? String(branchItem.tolerance_percent)
                           : "",
+                      options_text: (branchItem.config?.options ?? []).join("\n"),
                       action_required: branchItem.action_required ?? false,
                       show_if_enabled: !!branchItem.show_if,
                       show_if_item_id: branchItem.show_if?.item_id ?? "",
@@ -495,6 +502,20 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                 ? undefined
                 : Number(item.tolerance_percent),
             action_required: item.action_required,
+            config:
+              item.options_text.trim() || item.type === "photo"
+                ? {
+                    ...(item.type === "photo" ? { min_photos: 1, allow_multiple: true } : {}),
+                    ...(item.options_text.trim()
+                      ? {
+                          options: item.options_text
+                            .split("\n")
+                            .map((option) => option.trim())
+                            .filter(Boolean),
+                        }
+                      : {}),
+                  }
+                : undefined,
             show_if:
               item.show_if_enabled && item.show_if_item_id
                 ? {
@@ -556,6 +577,15 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                     ? undefined
                     : Number(branchItem.tolerance_percent),
                 action_required: branchItem.action_required,
+                config:
+                  branchItem.options_text.trim()
+                    ? {
+                        options: branchItem.options_text
+                          .split("\n")
+                          .map((option) => option.trim())
+                          .filter(Boolean),
+                      }
+                    : undefined,
                 show_if:
                   branchItem.show_if_enabled && branchItem.show_if_item_id
                     ? {
@@ -1287,6 +1317,58 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           Obrigatório
                         </label>
                       </div>
+                      {(item.type === "select" || item.type === "multi_select") ? (
+                        <div className="mt-3 rounded-xl border p-3">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium">
+                                Opções ({item.type === "multi_select" ? "múltipla escolha" : "escolha única"})
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Uma alternativa por linha. O marcador muda conforme o tipo.
+                              </p>
+                            </div>
+                            <Badge variant="outline">
+                              {item.options_text.split("\n").map((option) => option.trim()).filter(Boolean).length} opções
+                            </Badge>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_260px]">
+                            <Textarea
+                              value={item.options_text}
+                              onChange={(event) =>
+                                updateItem(section.id, item.id, {
+                                  options_text: event.target.value,
+                                })
+                              }
+                              placeholder={"Manhã\nTarde\nNoite"}
+                              className="min-h-32"
+                            />
+                            <div className="space-y-2 rounded-lg bg-muted/30 p-3">
+                              {item.options_text.split("\n").map((option) => option.trim()).filter(Boolean).length > 0 ? (
+                                item.options_text
+                                  .split("\n")
+                                  .map((option) => option.trim())
+                                  .filter(Boolean)
+                                  .map((option) => (
+                                    <div key={option} className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm">
+                                      <span
+                                        className={cn(
+                                          "h-4 w-4 shrink-0 border",
+                                          item.type === "multi_select" ? "rounded" : "rounded-full"
+                                        )}
+                                      />
+                                      <span className="truncate">{option}</span>
+                                    </div>
+                                  ))
+                              ) : (
+                                <div className="rounded-md border border-dashed bg-background px-3 py-6 text-center text-xs text-muted-foreground">
+                                  As opções aparecerão aqui.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="mt-3 grid gap-3 md:grid-cols-2">
                         <Input
                           type="number"
@@ -1341,27 +1423,36 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                         </label>
                       </div>
                       {(item.type === "number" || item.type === "temperature") ? (
-                        <div className="mt-3 grid gap-3 md:grid-cols-2">
-                          <Input
-                            type="number"
-                            value={item.reference_value}
-                            onChange={(event) =>
-                              updateItem(section.id, item.id, {
-                                reference_value: event.target.value,
-                              })
-                            }
-                            placeholder="Valor de referência"
-                          />
-                          <Input
-                            type="number"
-                            value={item.tolerance_percent}
-                            onChange={(event) =>
-                              updateItem(section.id, item.id, {
-                                tolerance_percent: event.target.value,
-                              })
-                            }
-                            placeholder="Tolerância %"
-                          />
+                        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+                          <div className="mb-3 flex items-center gap-2 text-sm font-medium text-amber-900">
+                            <Thermometer className="h-4 w-4" />
+                            Faixa de referência e alerta
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <Input
+                              type="number"
+                              value={item.reference_value}
+                              onChange={(event) =>
+                                updateItem(section.id, item.id, {
+                                  reference_value: event.target.value,
+                                })
+                              }
+                              placeholder="Valor de referência"
+                            />
+                            <Input
+                              type="number"
+                              value={item.tolerance_percent}
+                              onChange={(event) =>
+                                updateItem(section.id, item.id, {
+                                  tolerance_percent: event.target.value,
+                                })
+                              }
+                              placeholder="Tolerância %"
+                            />
+                          </div>
+                          <p className="mt-2 text-xs text-amber-800">
+                            Valor fora da faixa marca alerta e pode gerar ação corretiva/tarefa.
+                          </p>
                         </div>
                       ) : null}
                       <div className="mt-3 space-y-3 rounded-md border p-3">
@@ -1490,7 +1581,10 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                         <div className="rounded-md border p-3">
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <p className="text-sm font-medium">Triggers de tarefa</p>
+                              <p className="flex items-center gap-2 text-sm font-medium">
+                                <Flag className="h-4 w-4 text-primary" />
+                                Gerar tarefa em não conformidade
+                              </p>
                               <p className="text-xs text-muted-foreground">
                                 {item.task_triggers.length} configurado(s)
                               </p>
@@ -1508,7 +1602,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           {item.task_triggers.length > 0 ? (
                             <div className="mt-3 space-y-2">
                               {item.task_triggers.map((trigger) => (
-                                <div key={trigger.id} className="grid gap-2 rounded-md bg-muted/40 p-2 md:grid-cols-[1fr_auto]">
+                                <div key={trigger.id} className="grid gap-2 rounded-md bg-muted/40 p-2">
                                   <Input
                                     value={trigger.title_template}
                                     onChange={(event) =>
@@ -1518,16 +1612,36 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                                     }
                                     placeholder="Título da tarefa"
                                   />
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() =>
-                                      removeTaskTrigger(section.id, item.id, trigger.id)
-                                    }
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  <div className="grid gap-2 md:grid-cols-[1fr_120px_auto]">
+                                    <Input
+                                      value={trigger.assignee_name}
+                                      onChange={(event) =>
+                                        updateTaskTrigger(section.id, item.id, trigger.id, {
+                                          assignee_name: event.target.value,
+                                        })
+                                      }
+                                      placeholder="Responsável"
+                                    />
+                                    <Input
+                                      value={trigger.sla_hours}
+                                      onChange={(event) =>
+                                        updateTaskTrigger(section.id, item.id, trigger.id, {
+                                          sla_hours: event.target.value,
+                                        })
+                                      }
+                                      placeholder="SLA h"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() =>
+                                        removeTaskTrigger(section.id, item.id, trigger.id)
+                                      }
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
