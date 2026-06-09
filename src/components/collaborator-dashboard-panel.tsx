@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Clock,
   ListOrdered,
+  ListTodo,
   Loader2,
   Target,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { ptBR } from "date-fns/locale";
 import { fetchMyFormExecutions } from "@/features/forms/lib/client";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
+import { useAllTasks, type LegacyTask as DashboardTaskNotification } from "@/hooks/use-all-tasks";
 import { useGoals } from "@/contexts/goals-context";
 import { GoalsProvider } from "@/components/goals-provider";
 import { useDPStore } from "@/store/use-dp-store";
@@ -286,6 +288,65 @@ function GoalsSummary({
   );
 }
 
+function TasksSummary({
+  tasks,
+  loading,
+}: {
+  tasks: DashboardTaskNotification[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Carregando tarefas...
+      </div>
+    );
+  }
+
+  if (tasks.length === 0) {
+    return (
+      <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+        <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-600" />
+        Nenhuma tarefa pendente agora.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-3">
+        <SummaryTile label="Pendentes" value={tasks.length} />
+        <SummaryTile label="Prioridade" value={tasks.some((task) => task.type === "Aprovação") ? "Aprovação" : "Execução"} />
+        <SummaryTile label="Origem" value="Sistema" />
+      </div>
+
+      <div className="space-y-2">
+        {tasks.slice(0, 8).map((task) => {
+          const Icon = task.icon;
+          return (
+            <Link key={task.id} href={task.link || "/dashboard/tasks"} className="block">
+              <div className="flex items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/40">
+                <div className="rounded-xl bg-primary/10 p-2 text-primary">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">{task.title}</p>
+                    <Badge variant="outline">{task.type}</Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
+                </div>
+                <ArrowRight className="mt-1 h-4 w-4 text-muted-foreground" />
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function FormExecutionRow({ execution }: { execution: FormExecution }) {
   return (
     <Link href={`/dashboard/forms/${execution.id}/view`} className="block">
@@ -358,6 +419,7 @@ function RoutineCard({
 function CollaboratorDashboardPanelInner() {
   const { firebaseUser, permissions, user } = useAuth();
   const { periods, employeeGoals, loading: goalsLoading } = useGoals();
+  const { taskNotifications, pendingTaskCount, loading: tasksLoading } = useAllTasks();
   const { schedules } = useDPStore();
   const [executions, setExecutions] = useState<FormExecution[]>([]);
   const [loadingForms, setLoadingForms] = useState(true);
@@ -465,6 +527,7 @@ function CollaboratorDashboardPanelInner() {
   const canOpenStockCount = !!(permissions.stock?.stockCount?.view || permissions.stock?.stockCount?.perform);
   const canOpenSchedule = !!permissions.dp?.schedules?.view;
   const canOpenGoals = !!permissions.goals?.view;
+  const canOpenTasks = !!permissions.tasks?.view;
   const userGoalKioskIds = useMemo(() => new Set([...(user?.assignedKioskIds ?? [])]), [user?.assignedKioskIds]);
   const activePeriods = useMemo(() => periods.filter((period) => period.status === "active"), [periods]);
   const visibleGoals = useMemo(() => {
@@ -527,7 +590,27 @@ function CollaboratorDashboardPanelInner() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <RoutineCard
+          title="Tarefas"
+          description="Acompanhe tarefas atribuídas e aprovações pendentes."
+          icon={<ListTodo className="h-5 w-5" />}
+          badge={`${pendingTaskCount} pendente(s)`}
+        >
+          <DialogHeader>
+            <DialogTitle>Minhas tarefas</DialogTitle>
+            <DialogDescription>Tarefas e aprovações atribuídas ao colaborador ou ao perfil dele.</DialogDescription>
+          </DialogHeader>
+          <TasksSummary tasks={taskNotifications} loading={tasksLoading} />
+          {canOpenTasks ? (
+            <div className="flex justify-end">
+              <Button asChild>
+                <Link href="/dashboard/tasks">Abrir central de tarefas</Link>
+              </Button>
+            </div>
+          ) : null}
+        </RoutineCard>
+
         <RoutineCard
           title="Contagem"
           description="Resumo da rotina de contagem do colaborador."
