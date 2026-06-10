@@ -40,6 +40,11 @@ const stdDev = (arr: number[]): number => {
 };
 
 const AUDIT_ZERO_DATE = '2026-04-01';
+// Corte de auditoria: instante logo ANTES da meia-noite de 01/04 (BRT).
+// Os lançamentos de inventário de abertura são datados dentro deste minuto,
+// de modo a aparecerem como "Inicial" (saldo de partida) mesmo quando o período
+// analisado começa em 01/04 — sem capturar o consumo do dia 31/03.
+const AUDIT_CUTOFF = '2026-04-01T02:59:00.000Z'; // = 31/03 23:59:00 BRT
 
 function getConsumptionReportDate(report: ConsumptionReport) {
   if (typeof report.day === 'number') {
@@ -428,7 +433,7 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate 
         if (!product || product.baseProductId !== selectedBaseId) return false;
         
         const movementDate = getMovementDate(movement.timestamp);
-        const cutoff = systemStartDate ? startOfDay(parseISO(systemStartDate)) : null;
+        const cutoff = parseISO(AUDIT_CUTOFF); // corte preciso (independe do início do período)
 
         if (!movementDate || !isWithinInterval(movementDate, { start: startDate, end: endDate })) {
             return false;
@@ -670,7 +675,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
         if (!product || product.baseProductId !== baseProduct.id) return;
         
         const movementDate = getMovementDate(movement.timestamp);
-        const cutoffDate = systemStartDate ? startOfDay(parseISO(systemStartDate)) : null;
+        const cutoffDate = parseISO(AUDIT_CUTOFF); // corte preciso (independe do início do período)
         if (!movementDate || movementDate >= startDate || (cutoffDate && movementDate < cutoffDate)) return;
 
         if (kioskId !== 'all') {
@@ -729,7 +734,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
         if (!product || product.baseProductId !== baseProduct.id) return false;
         
         const movementDate = getMovementDate(movement.timestamp);
-        const cutoff = systemStartDate ? startOfDay(parseISO(systemStartDate)) : null;
+        const cutoff = parseISO(AUDIT_CUTOFF); // corte preciso (independe do início do período)
 
         if (!movementDate || !isWithinInterval(movementDate, { start: startDate, end: endDate })) {
             return false;

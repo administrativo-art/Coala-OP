@@ -277,7 +277,7 @@ export function MovementHistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl h-[90vh] flex flex-col">
+      <DialogContent className="w-[96vw] max-w-7xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Auditoria de movimentações</DialogTitle>
           <DialogDescription>
@@ -328,10 +328,10 @@ export function MovementHistoryModal({
               {loading ? (
                   <div className="p-4"><Skeleton className="h-64 w-full" /></div>
               ) : (
-                  <Table className="min-w-[960px]">
+                  <Table className="min-w-[820px]">
                       <TableHeader className="sticky top-0 bg-muted z-10">
                       <TableRow>
-                          {['timestamp', 'productName', 'lotNumber', 'type', 'fromKioskId', 'quantityChange', 'username', 'notes'].map(key => {
+                          {['timestamp', 'productName', 'type', 'quantityChange', 'fromKioskId', 'username', 'lotNumber', 'notes'].map(key => {
                               const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário', notes: 'Observação' };
                               return (
                                   <TableHead key={key} className="cursor-pointer whitespace-nowrap hover:bg-muted-foreground/10" onClick={() => handleSort(key as SortKey)}>
@@ -360,10 +360,9 @@ export function MovementHistoryModal({
                                   <TableCell className="text-xs font-semibold whitespace-nowrap">{timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
                                   <TableCell>
                                       <TooltipProvider><Tooltip><TooltipTrigger>
-                                          <p className="font-medium truncate max-w-xs">{item.productName}</p>
+                                          <p className="font-medium truncate max-w-[220px]">{item.productName}</p>
                                       </TooltipTrigger><TooltipContent><p>{item.productName}</p></TooltipContent></Tooltip></TooltipProvider>
                                   </TableCell>
-                                  <TableCell>{item.lotNumber}</TableCell>
                                   <TableCell className="whitespace-nowrap">
                                       {item.type && MOVEMENT_TYPE_CONFIG[item.type] ? (() => {
                                           let label = MOVEMENT_TYPE_CONFIG[item.type].label;
@@ -388,9 +387,10 @@ export function MovementHistoryModal({
                                           <Badge variant="secondary">{item.type || 'N/A'}</Badge>
                                       )}
                                   </TableCell>
-                                  <TableCell className="text-xs">{kioskDisplay}</TableCell>
-                                  <TableCell className="text-right font-bold">{(Number(item.quantityChange) || 0).toLocaleString('pt-BR')}</TableCell>
-                                  <TableCell>{item.username}</TableCell>
+                                  <TableCell className="text-right font-bold whitespace-nowrap">{(Number(item.quantityChange) || 0).toLocaleString('pt-BR')}</TableCell>
+                                  <TableCell className="text-xs whitespace-nowrap">{kioskDisplay}</TableCell>
+                                  <TableCell className="whitespace-nowrap">{item.username}</TableCell>
+                                  <TableCell className="whitespace-nowrap">{item.lotNumber}</TableCell>
                                   <TableCell className="text-xs text-muted-foreground italic">{item.notes}</TableCell>
                               </TableRow>
                           )
