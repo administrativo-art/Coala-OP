@@ -58,6 +58,28 @@ service cloud.firestore {
         || getPerms().dp.collaborators.terminate == true;
     }
 
+    function canViewCollaboratorPanel() {
+      return isAuth() && (
+        getPerms().dashboard.view == true ||
+        getPerms().dashboard.get('collaborator', false) == true
+      );
+    }
+
+    function isOwnShift(data) {
+      return isAuth()
+        && data.userId is string
+        && (
+          data.userId == request.auth.uid ||
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            (
+              data.userId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.registrationIdBizneo ||
+              data.userId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.registrationIdPdv
+            )
+          )
+        );
+    }
+
     // --- FUNÇÕES DE VALIDAÇÃO DE SCHEMA ---
 
     function isValidUser(data) {
@@ -304,7 +326,7 @@ service cloud.firestore {
       allow write: if false;
     }
     match /dp_units/{id} {
-      allow read: if isAuth() && canReadUsersDirectory();
+      allow read: if isAuth() && (canReadUsersDirectory() || canViewCollaboratorPanel());
       allow write: if false;
     }
     match /dp_unitGroups/{id} {
@@ -312,16 +334,20 @@ service cloud.firestore {
       allow write: if false;
     }
     match /dp_shiftDefinitions/{id} {
-      allow read: if isAuth() && canReadUsersDirectory();
+      allow read: if isAuth() && (canReadUsersDirectory() || canViewCollaboratorPanel());
       allow write: if false;
     }
     match /dp_schedules/{id} {
       allow read: if isAuth() && canReadUsersDirectory();
       allow write: if false;
       match /shifts/{shiftId} {
-        allow read: if isAuth() && canReadUsersDirectory();
+        allow read: if isAuth() && (canReadUsersDirectory() || isOwnShift(resource.data));
         allow write: if false;
       }
+    }
+    match /{path=**}/shifts/{shiftId} {
+      allow read: if isAuth() && (canReadUsersDirectory() || isOwnShift(resource.data));
+      allow write: if false;
     }
     match /dp_calendars/{id} {
       allow read: if isAuth() && canReadUsersDirectory();
