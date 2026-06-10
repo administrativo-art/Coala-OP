@@ -3,7 +3,6 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { type ConsumptionReport, type BaseProduct } from '@/types';
@@ -45,9 +44,8 @@ export function ConsumptionDetailsModal({ open, onOpenChange, baseProduct, repor
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-grow overflow-hidden border rounded-lg flex flex-col mt-4">
-          <ScrollArea className="flex-1">
-            <Table>
+        <div className="flex-grow min-h-0 overflow-auto border rounded-lg mt-4">
+            <Table className="min-w-[520px]">
               <TableHeader className="sticky top-0 bg-muted z-10">
                 <TableRow>
                   <TableHead>Período</TableHead>
@@ -73,7 +71,6 @@ export function ConsumptionDetailsModal({ open, onOpenChange, baseProduct, repor
                 )}
               </TableBody>
             </Table>
-          </ScrollArea>
         </div>
 
         <DialogFooter className="pt-4 border-t shrink-0 flex justify-between items-center w-full">

@@ -9,7 +9,6 @@ import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { History, ArrowRight, ArrowDownUp, Download, ChevronsUpDown, CalendarIcon, Search } from 'lucide-react';
 import { useMovementHistory } from '@/hooks/use-movement-history';
 import { Skeleton } from './ui/skeleton';
@@ -325,18 +324,17 @@ export function MovementHistoryModal({
             <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
         </div>
         
-        <div className="flex-grow overflow-hidden border rounded-lg flex flex-col">
-          <ScrollArea className="flex-1">
+        <div className="flex-grow min-h-0 overflow-auto border rounded-lg">
               {loading ? (
                   <div className="p-4"><Skeleton className="h-64 w-full" /></div>
               ) : (
-                  <Table>
+                  <Table className="min-w-[960px]">
                       <TableHeader className="sticky top-0 bg-muted z-10">
                       <TableRow>
                           {['timestamp', 'productName', 'lotNumber', 'type', 'fromKioskId', 'quantityChange', 'username', 'notes'].map(key => {
                               const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário', notes: 'Observação' };
                               return (
-                                  <TableHead key={key} className="cursor-pointer hover:bg-muted-foreground/10" onClick={() => handleSort(key as SortKey)}>
+                                  <TableHead key={key} className="cursor-pointer whitespace-nowrap hover:bg-muted-foreground/10" onClick={() => handleSort(key as SortKey)}>
                                       <div className="flex items-center gap-2">
                                           {labels[key]}
                                           {sortKey === key && <ArrowDownUp className="h-3 w-3" />}
@@ -359,14 +357,14 @@ export function MovementHistoryModal({
                           
                           return (
                               <TableRow key={item.id}>
-                                  <TableCell className="text-xs font-semibold">{timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
+                                  <TableCell className="text-xs font-semibold whitespace-nowrap">{timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
                                   <TableCell>
                                       <TooltipProvider><Tooltip><TooltipTrigger>
                                           <p className="font-medium truncate max-w-xs">{item.productName}</p>
                                       </TooltipTrigger><TooltipContent><p>{item.productName}</p></TooltipContent></Tooltip></TooltipProvider>
                                   </TableCell>
                                   <TableCell>{item.lotNumber}</TableCell>
-                                  <TableCell>
+                                  <TableCell className="whitespace-nowrap">
                                       {item.type && MOVEMENT_TYPE_CONFIG[item.type] ? (() => {
                                           let label = MOVEMENT_TYPE_CONFIG[item.type].label;
                                           let color = MOVEMENT_TYPE_CONFIG[item.type].color;
@@ -402,7 +400,6 @@ export function MovementHistoryModal({
                       </TableBody>
                   </Table>
               )}
-          </ScrollArea>
         </div>
         <DialogFooter className="pt-4 border-t shrink-0 flex-row justify-between w-full">
             <p className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</p>

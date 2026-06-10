@@ -963,9 +963,15 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                   <TableHead className="text-right">Entradas</TableHead>
                   <TableHead className="text-right">Saídas (Sistema)</TableHead>
                   <TableHead className="text-right">Ajustes</TableHead>
-                  <TableHead className="text-right bg-muted/30 font-semibold">Final</TableHead>
+                  <TableHead className="text-right bg-muted/30 font-semibold">
+                    Final
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Inicial + Entradas − Saídas + Ajustes</div>
+                  </TableHead>
                   <TableHead className="text-right border-l-2 border-border">Vendas (API)</TableHead>
-                  <TableHead className="text-right">Divergência</TableHead>
+                  <TableHead className="text-right">
+                    Divergência
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Vendas (API) − Saídas + Ajustes</div>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1038,26 +1044,14 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                           {row.ajustes > 0 ? '+' : ''}{formatNumber(row.ajustes)}
                         </button>
                       </TableCell>
-                      {/* Final: resultado da conta (Inicial + Entradas − Saídas ± Ajustes) */}
+                      {/* Final: resultado de Inicial + Entradas − Saídas + Ajustes (fórmula no cabeçalho) */}
                       <TableCell className="text-right whitespace-nowrap bg-muted/30">
-                        {(() => {
-                          const hasOp = row.entradas !== 0 || row.saidasReais !== 0 || row.ajustes !== 0;
-                          return (
-                            <div className="flex flex-col items-end gap-0.5">
-                              {hasOp && !isNaN(row.estoqueInicial) && (
-                                <span className="text-[10px] text-muted-foreground tabular-nums">
-                                  {formatNumber(row.estoqueInicial)} +{formatNumber(row.entradas)} −{formatNumber(row.saidasReais)} {row.ajustes >= 0 ? '+' : '−'}{formatNumber(Math.abs(row.ajustes))}
-                                </span>
-                              )}
-                              <button
-                                onClick={() => openHistory(row.baseProductId)}
-                                className={cn("font-bold underline decoration-dotted underline-offset-4", row.estoqueFinal < 0 && "text-red-600")}
-                              >
-                                {hasOp ? '= ' : ''}{formatNumber(row.estoqueFinal)} {row.unit}
-                              </button>
-                            </div>
-                          );
-                        })()}
+                        <button
+                          onClick={() => openHistory(row.baseProductId)}
+                          className={cn("font-bold underline decoration-dotted underline-offset-4", row.estoqueFinal < 0 && "text-red-600")}
+                        >
+                          {formatNumber(row.estoqueFinal)} {row.unit}
+                        </button>
                       </TableCell>
                       {/* ── Venda × Resultado ── */}
                       <TableCell className="text-right border-l-2 border-border">
