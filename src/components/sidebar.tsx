@@ -368,23 +368,25 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
 
         <div className={cn("flex-shrink-0", expanded ? "px-4 pb-2" : "px-3 pb-2 pt-4")}>
           <div className="space-y-2">
-            <Link
-              href="/dashboard"
-              onClick={() => onOpenChange(false)}
-              className={cn(
-                "flex items-center transition-colors",
-                expanded
-                  ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
-                  : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
-                pathname === "/dashboard"
-                  ? "border border-stone-200 bg-stone-50 text-slate-950"
-                  : ""
-              )}
-              title="Painel da gestão"
-            >
-              <LayoutDashboard className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
-              {expanded ? <span>Painel da gestão</span> : null}
-            </Link>
+            {permissions.dashboard?.view ? (
+              <Link
+                href="/dashboard"
+                onClick={() => onOpenChange(false)}
+                className={cn(
+                  "flex items-center transition-colors",
+                  expanded
+                    ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
+                    : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
+                  pathname === "/dashboard"
+                    ? "border border-stone-200 bg-stone-50 text-slate-950"
+                    : ""
+                )}
+                title="Painel da gestão"
+              >
+                <LayoutDashboard className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+                {expanded ? <span>Painel da gestão</span> : null}
+              </Link>
+            ) : null}
 
             {(permissions.dashboard?.collaborator ?? permissions.dashboard?.view) ? (
               <Link

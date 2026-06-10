@@ -1,9 +1,11 @@
 "use client"
 
 import Link from "next/link"
+import { useEffect } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { ArrowRight, Briefcase, Calculator, Layers, Wallet } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { useAuth } from "@/hooks/use-auth"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -38,8 +40,20 @@ function SectionShortcut({ title, description, badge, href, icon, color }: any) 
 
 export default function DashboardPage() {
   const { user, permissions } = useAuth()
+  const router = useRouter()
+  const canViewManagementDashboard = permissions.dashboard.view
+  const canViewCollaboratorDashboard = permissions.dashboard.collaborator ?? permissions.dashboard.view
 
-  if (!permissions.dashboard.view) {
+  useEffect(() => {
+    if (!canViewManagementDashboard && canViewCollaboratorDashboard) {
+      router.replace("/dashboard/collaborator")
+    }
+  }, [canViewCollaboratorDashboard, canViewManagementDashboard, router])
+
+  if (!canViewManagementDashboard) {
+    if (canViewCollaboratorDashboard) {
+      return null
+    }
     return (
       <div className="flex h-full items-center justify-center">
         <GlassCard className="w-full max-w-md text-center">
