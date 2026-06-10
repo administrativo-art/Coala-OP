@@ -565,6 +565,12 @@ export function AverageConsumptionChart() {
         });
     }, [startPeriod, endPeriod, selectedBaseProducts, loading, baseProducts, monthlyConsumptions, historicalAverages]);
     
+    // Comparativo em % quando há insumos de unidades diferentes (não dá pra somar mL com g).
+    const comparativeUsePercentage = useMemo(() => {
+        const units = new Set(selectedBaseProducts.map(bpId => baseProducts.find(p => p.id === bpId)?.unit).filter(Boolean));
+        return units.size > 1;
+    }, [selectedBaseProducts, baseProducts]);
+
      const availableBaseProducts = useMemo(() => {
         return baseProducts;
     }, [baseProducts]);
@@ -762,8 +768,14 @@ export function AverageConsumptionChart() {
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" />
                                     <YAxis tickFormatter={(value: number) => value.toLocaleString()} />
-                                    <Tooltip formatter={(value: number) => value.toLocaleString()} />
+                                    <Tooltip formatter={(value: number, name) => [`${value.toLocaleString()}${comparativeUsePercentage ? '%' : ''} (total do mês)`, name]} />
                                     <Legend />
+                                    {/* Linha tracejada = média do período por insumo (só quando mesma unidade) */}
+                                    {!comparativeUsePercentage && selectedBaseProducts.map((bpId, index) => {
+                                        const avg = historicalAverages.get(bpId);
+                                        if (!avg) return null;
+                                        return <ReferenceLine key={`avg-${bpId}`} y={avg} stroke={CHART_COLORS[index % CHART_COLORS.length]} strokeDasharray="4 4" strokeWidth={1.5} />;
+                                    })}
                                     {selectedBaseProducts.map((bpId, index) => {
                                         const bp = baseProducts.find(p => p.id === bpId);
                                         if (!bp) return null;
@@ -776,6 +788,11 @@ export function AverageConsumptionChart() {
                                 <Inbox className="h-12 w-12 mb-2"/>
                                 <p>Selecione um ou mais insumos para visualizar o gráfico comparativo.</p>
                             </div>
+                        )}
+                        {selectedBaseProducts.length > 0 && (
+                            <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                                Cada ponto é o <strong>consumo total do mês</strong>. As linhas <strong>tracejadas</strong> mostram a <strong>média do período</strong> por insumo.
+                            </p>
                         )}
                     </div>
                 )}
