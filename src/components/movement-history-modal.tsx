@@ -212,7 +212,10 @@ export function MovementHistoryModal({
 
   const { totalEntradas, totalSaidas, totalAjustes, totalTransferencias } = useMemo(() => {
     return filteredAndSortedHistory.reduce((acc, item) => {
-        const qty = typeof item.quantityChange === 'number' && !isNaN(item.quantityChange) ? Math.abs(item.quantityChange) : 0;
+        // Registros antigos guardam quantityChange como string; coage para não zerar o total.
+        const rawQty = Number(item.quantityChange);
+        const signedQty = isNaN(rawQty) ? 0 : rawQty;
+        const qty = Math.abs(signedQty);
         const isTransfer = item.type?.includes('TRANSFERENCIA');
         const isAdjustment = item.type?.includes('CORRECAO') || item.type?.includes('Divergência');
 
@@ -221,7 +224,7 @@ export function MovementHistoryModal({
             const isFromThisKiosk = item.fromKioskId === kioskFilter;
 
             if (isAdjustment && (isToThisKiosk || isFromThisKiosk)) {
-                acc.totalAjustes += (item.quantityChange || 0);
+                acc.totalAjustes += signedQty;
             } else if (isTransfer) {
                 if (isToThisKiosk) acc.totalEntradas += qty;
                 else if (isFromThisKiosk) acc.totalSaidas += qty;
@@ -234,7 +237,7 @@ export function MovementHistoryModal({
         } else {
             // Global view logic
             if (isAdjustment) {
-                acc.totalAjustes += (item.quantityChange || 0);
+                acc.totalAjustes += signedQty;
             } else if (isTransfer) {
                 acc.totalTransferencias += qty;
                 // We don't add transfers to global entry/exit totals to avoid duplication
@@ -363,7 +366,7 @@ export function MovementHistoryModal({
                                       )}
                                   </TableCell>
                                   <TableCell className="text-xs">{kioskDisplay}</TableCell>
-                                  <TableCell className="text-right font-bold">{(item.quantityChange ?? 0).toLocaleString('pt-BR')}</TableCell>
+                                  <TableCell className="text-right font-bold">{(Number(item.quantityChange) || 0).toLocaleString('pt-BR')}</TableCell>
                                   <TableCell>{item.username}</TableCell>
                                   <TableCell className="text-xs text-muted-foreground italic">{item.notes}</TableCell>
                               </TableRow>

@@ -110,7 +110,10 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   const addMovementRecord = (batchOrTx: any, record: Omit<MovementRecord, 'id'>) => {
     const movementHistoryRef = doc(collection(db, "movementHistory"));
-    batchOrTx.set(movementHistoryRef, pruneUndefined(record));
+    // quantityChange DEVE ser número. Inputs de contagem/baixa chegam como string;
+    // coage aqui (ponto único) para não gravar texto que zera somatórios depois.
+    const normalized = { ...record, quantityChange: Number(record.quantityChange) || 0 };
+    batchOrTx.set(movementHistoryRef, pruneUndefined(normalized));
   };
 
   const addLot = useCallback(async (lot: Omit<LotEntry, 'id'>, user: User) => {
@@ -348,7 +351,7 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             productName: currentLot.productName,
             lotNumber: currentLot.lotNumber,
             type: params.type,
-            quantityChange: params.quantityToConsume,
+            quantityChange: Number(params.quantityToConsume) || 0,
             fromKioskId: currentLot.kioskId,
             userId: user.id,
             username: user.username,
@@ -457,11 +460,14 @@ const revertMovement = useCallback(async (movement: MovementRecord) => {
         let newMovementType: MovementType | null = null;
         let newMovementNotes = `Estorno do movimento ${movement.id.slice(0, 5)}`;
 
+        // Registros antigos podem ter quantityChange como string — coage antes de operar.
+        const movementQty = Number(movement.quantityChange) || 0;
+
         if (movement.type.startsWith('ENTRADA')) {
-            quantityChange = -movement.quantityChange;
+            quantityChange = -movementQty;
             newMovementType = 'SAIDA_ESTORNO';
         } else if (movement.type.startsWith('SAIDA')) {
-            quantityChange = movement.quantityChange;
+            quantityChange = movementQty;
             newMovementType = 'ENTRADA_ESTORNO';
         } else {
             throw new Error("Only entry or exit movements can be reverted this way.");
