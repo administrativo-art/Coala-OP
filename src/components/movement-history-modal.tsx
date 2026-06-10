@@ -318,10 +318,10 @@ export function MovementHistoryModal({
         </div>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-2xl font-bold">{totalEntradas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-2xl font-bold">{totalSaidas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Ajustes</p><p className={`text-2xl font-bold ${totalAjustes < 0 ? 'text-red-600' : totalAjustes > 0 ? 'text-green-600' : ''}`}>{totalAjustes > 0 ? '+' : ''}{totalAjustes.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Compras (entrada de NF)</p><p className="text-2xl font-bold">{totalEntradas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Movido entre unidades</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Ajustes</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Correções de contagem (±) e estornos</p><p className={`text-2xl font-bold ${totalAjustes < 0 ? 'text-red-600' : totalAjustes > 0 ? 'text-green-600' : ''}`}>{totalAjustes > 0 ? '+' : ''}{totalAjustes.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
+            <Card className="border-red-500/30"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Consumo + Descarte</p><p className="text-2xl font-bold text-red-600">{totalSaidas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
         </div>
         
         <div className="flex-grow min-h-0 overflow-auto border rounded-lg">
