@@ -16,7 +16,7 @@ import { useProducts } from '@/hooks/use-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useAuth } from '@/hooks/use-auth';
-import { getMovementQuantityInBaseUnit, getSignedAdjustmentDelta } from '@/lib/movement-quantity';
+import { getMovementQuantityInBaseUnit } from '@/lib/movement-quantity';
 import { type MovementRecord, type MovementType } from '@/types';
 import { Badge } from './ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
@@ -221,54 +221,44 @@ export function MovementHistoryModal({
     }
   };
 
-  const { totalEntradas, totalSaidas, totalAjustes, totalTransferencias } = useMemo(() => {
+  const { totalEntradas, totalSaidas, totalTransferencias } = useMemo(() => {
+    // Classificação pelo EFEITO no estoque:
+    //  - Entrada: compra, divergência acréscimo (ENTRADA_CORRECAO), estorno de saída (devolve)
+    //  - Saída:   consumo, descarte, divergência decréscimo, correção de saída, estorno de entrada (retira)
+    //  - Transferência: movimento entre unidades (à parte)
+    const classify = (type = ''): 'in' | 'out' | 'transfer' => {
+      if (type.includes('TRANSFERENCIA')) return 'transfer';
+      if (type === 'ENTRADA' || type === 'ENTRADA_CORRECAO' || type === 'SAIDA_ESTORNO') return 'in';
+      return 'out';
+    };
     return filteredAndSortedHistory.reduce((acc, item) => {
-        // Quantidade do movimento. Em modo "insumo específico" (aberto pela Análise),
-        // converte para a unidade-base para os KPIs baterem com a tela de análise.
-        // Caso contrário, usa quantityChange cru (coagido — registros antigos eram string).
+        // Em modo "insumo específico" (aberto pela Análise), converte para a unidade-base.
         const product = productMap.get(item.productId);
         const baseQty = baseProductForTotals && product
             ? getMovementQuantityInBaseUnit(item, product, baseProductForTotals)
             : (isNaN(Number(item.quantityChange)) ? 0 : Number(item.quantityChange));
-        const signedQty = baseQty;
         const qty = Math.abs(baseQty);
-        const isTransfer = item.type?.includes('TRANSFERENCIA');
-        const isAdjustment = item.type?.includes('CORRECAO') || item.type?.includes('Divergência');
-        // Ajuste com sinal correto por tipo (acréscimo/decréscimo) quando em unidade-base.
-        const adjustmentValue = baseProductForTotals
-            ? getSignedAdjustmentDelta(item.type, qty)
-            : signedQty;
+        const kind = classify(item.type);
 
         if (kioskFilter !== 'all') {
             const isToThisKiosk = item.toKioskId === kioskFilter;
             const isFromThisKiosk = item.fromKioskId === kioskFilter;
-
-            if (isAdjustment && (isToThisKiosk || isFromThisKiosk)) {
-                acc.totalAjustes += adjustmentValue;
-            } else if (isTransfer) {
+            if (kind === 'transfer') {
                 if (isToThisKiosk) acc.totalEntradas += qty;
                 else if (isFromThisKiosk) acc.totalSaidas += qty;
                 if (isToThisKiosk || isFromThisKiosk) acc.totalTransferencias += qty;
-            } else if (item.type === 'ENTRADA') {
+            } else if (kind === 'in') {
                 if (isToThisKiosk) acc.totalEntradas += qty;
-            } else if (item.type?.startsWith('SAIDA_') || item.type === 'ENTRADA_ESTORNO') {
+            } else {
                 if (isFromThisKiosk) acc.totalSaidas += qty;
             }
         } else {
-            // Global view logic
-            if (isAdjustment) {
-                acc.totalAjustes += adjustmentValue;
-            } else if (isTransfer) {
-                acc.totalTransferencias += qty;
-                // We don't add transfers to global entry/exit totals to avoid duplication
-            } else if (item.type === 'ENTRADA' || item.type === 'SAIDA_ESTORNO') {
-                acc.totalEntradas += qty;
-            } else if (item.type?.startsWith('SAIDA_') || item.type === 'ENTRADA_ESTORNO') {
-                acc.totalSaidas += qty;
-            }
+            if (kind === 'transfer') acc.totalTransferencias += qty; // à parte, sem duplicar em entrada/saída
+            else if (kind === 'in') acc.totalEntradas += qty;
+            else acc.totalSaidas += qty;
         }
         return acc;
-    }, { totalEntradas: 0, totalSaidas: 0, totalTransferencias: 0, totalAjustes: 0 });
+    }, { totalEntradas: 0, totalSaidas: 0, totalTransferencias: 0 });
   }, [filteredAndSortedHistory, kioskFilter, baseProductForTotals, productMap]);
 
   // Sufixo de unidade nos KPIs quando os totais estão na unidade-base do insumo.
@@ -317,11 +307,10 @@ export function MovementHistoryModal({
             </Select>
         </div>
         
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Compras (entrada de NF)</p><p className="text-2xl font-bold">{totalEntradas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="border-green-500/30"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Compras + Divergência acréscimo + Estorno (devolve)</p><p className="text-2xl font-bold text-green-600">{totalEntradas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
             <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Movido entre unidades</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Ajustes</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Correções de contagem (±) e estornos</p><p className={`text-2xl font-bold ${totalAjustes < 0 ? 'text-red-600' : totalAjustes > 0 ? 'text-green-600' : ''}`}>{totalAjustes > 0 ? '+' : ''}{totalAjustes.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
-            <Card className="border-red-500/30"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Consumo + Descarte</p><p className="text-2xl font-bold text-red-600">{totalSaidas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
+            <Card className="border-red-500/30"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Consumo + Descarte + Divergência decréscimo + Estorno (retira)</p><p className="text-2xl font-bold text-red-600">{totalSaidas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
         </div>
         
         <div className="flex-grow min-h-0 overflow-auto border rounded-lg">
@@ -331,8 +320,8 @@ export function MovementHistoryModal({
                   <Table className="min-w-[820px]">
                       <TableHeader className="sticky top-0 bg-muted z-10">
                       <TableRow>
-                          {['timestamp', 'productName', 'type', 'quantityChange', 'fromKioskId', 'username', 'lotNumber', 'notes'].map(key => {
-                              const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário', notes: 'Observação' };
+                          {['timestamp', 'productName', 'type', 'quantityChange', 'fromKioskId', 'username', 'notes'].map(key => {
+                              const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto / Lote', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário', notes: 'Observação' };
                               return (
                                   <TableHead key={key} className="cursor-pointer whitespace-nowrap hover:bg-muted-foreground/10" onClick={() => handleSort(key as SortKey)}>
                                       <div className="flex items-center gap-2">
@@ -360,8 +349,9 @@ export function MovementHistoryModal({
                                   <TableCell className="text-xs font-semibold whitespace-nowrap">{timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
                                   <TableCell>
                                       <TooltipProvider><Tooltip><TooltipTrigger>
-                                          <p className="font-medium truncate max-w-[220px]">{item.productName}</p>
+                                          <p className="font-medium truncate max-w-[260px] text-left">{item.productName}</p>
                                       </TooltipTrigger><TooltipContent><p>{item.productName}</p></TooltipContent></Tooltip></TooltipProvider>
+                                      <p className="text-[10px] text-muted-foreground">Lote {item.lotNumber || '—'}</p>
                                   </TableCell>
                                   <TableCell className="whitespace-nowrap">
                                       {item.type && MOVEMENT_TYPE_CONFIG[item.type] ? (() => {
@@ -390,12 +380,11 @@ export function MovementHistoryModal({
                                   <TableCell className="text-right font-bold whitespace-nowrap">{(Number(item.quantityChange) || 0).toLocaleString('pt-BR')}</TableCell>
                                   <TableCell className="text-xs whitespace-nowrap">{kioskDisplay}</TableCell>
                                   <TableCell className="whitespace-nowrap">{item.username}</TableCell>
-                                  <TableCell className="whitespace-nowrap">{item.lotNumber}</TableCell>
                                   <TableCell className="text-xs text-muted-foreground italic">{item.notes}</TableCell>
                               </TableRow>
                           )
                       }) : (
-                          <TableRow><TableCell colSpan={8} className="h-24 text-center">Nenhum registro encontrado com os filtros atuais.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={7} className="h-24 text-center">Nenhum registro encontrado com os filtros atuais.</TableCell></TableRow>
                       )}
                       </TableBody>
                   </Table>
