@@ -386,23 +386,25 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               {expanded ? <span>Painel da gestão</span> : null}
             </Link>
 
-            <Link
-              href="/dashboard/collaborator"
-              onClick={() => onOpenChange(false)}
-              className={cn(
-                "flex items-center transition-colors",
-                expanded
-                  ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
-                  : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
-                pathname === "/dashboard/collaborator"
-                  ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
-                  : ""
-              )}
-              title="Painel do colaborador"
-            >
-              <ClipboardCheck className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
-              {expanded ? <span>Painel do colaborador</span> : null}
-            </Link>
+            {(permissions.dashboard?.collaborator ?? permissions.dashboard?.view) ? (
+              <Link
+                href="/dashboard/collaborator"
+                onClick={() => onOpenChange(false)}
+                className={cn(
+                  "flex items-center transition-colors",
+                  expanded
+                    ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
+                    : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
+                  pathname === "/dashboard/collaborator"
+                    ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
+                    : ""
+                )}
+                title="Painel do colaborador"
+              >
+                <ClipboardCheck className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+                {expanded ? <span>Painel do colaborador</span> : null}
+              </Link>
+            ) : null}
           </div>
         </div>
 

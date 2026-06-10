@@ -430,6 +430,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                         <FormField control={form.control} name="permissions.dashboard.operational" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Painel de Operações</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                         <FormField control={form.control} name="permissions.dashboard.audit" render={({ field }) => ( <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3"><div className="space-y-0.5"><FormLabel>Indicadores de Auditoria</FormLabel></div><FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={!dashboardViewWatch} /></FormControl></FormItem> )} />
                                     </div>
+                                    {renderModuleToggle("permissions.dashboard.collaborator" as any, "Painel do Colaborador", "Permite acessar o Painel do Colaborador (rotinas do dia, formulários, contagem, escala e metas).")}
                                 </AccordionContent>
                             </AccordionItem>
 

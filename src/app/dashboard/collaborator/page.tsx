@@ -7,8 +7,9 @@ import { GlassCard } from "@/components/ui/glass-card";
 
 export default function CollaboratorDashboardPage() {
   const { permissions } = useAuth();
+  const canView = permissions.dashboard.collaborator ?? permissions.dashboard.view;
 
-  if (!permissions.dashboard.view) {
+  if (!canView) {
     return (
       <div className="flex h-full items-center justify-center">
         <GlassCard className="w-full max-w-md text-center">

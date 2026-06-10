@@ -566,7 +566,7 @@ export type DailyLog = {
 
 
 export type PermissionSet = {
-  dashboard: { view: boolean; operational: boolean; pricing: boolean; audit: boolean; technicalSheets: boolean; };
+  dashboard: { view: boolean; operational: boolean; pricing: boolean; audit: boolean; technicalSheets: boolean; collaborator?: boolean; };
   registration: { view: boolean; items: { add: boolean; edit: boolean; delete: boolean; }; baseProducts: { add: boolean; edit: boolean; delete: boolean; }; entities: { add: boolean; edit: boolean; delete: boolean; }; };
   stock: {
     view: boolean;
@@ -1644,7 +1644,7 @@ export type PricingParameters = {
 };
 
 export const defaultGuestPermissions: PermissionSet = {
-    dashboard: { view: false, operational: false, pricing: false, audit: false, technicalSheets: false },
+    dashboard: { view: false, operational: false, pricing: false, audit: false, technicalSheets: false, collaborator: false },
     registration: { view: false, items: { add: false, edit: false, delete: false }, baseProducts: { add: false, edit: false, delete: false }, entities: { add: false, edit: false, delete: false } },
     stock: { 
       view: false, 
@@ -1729,7 +1729,7 @@ export const defaultGuestPermissions: PermissionSet = {
 
 
 export const defaultAdminPermissions: PermissionSet = {
-    dashboard: { view: true, operational: true, pricing: true, audit: true, technicalSheets: true },
+    dashboard: { view: true, operational: true, pricing: true, audit: true, technicalSheets: true, collaborator: true },
     registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
     stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true }, predefinedLists: { view: true, manage: true } },
     assets: { view: true, create: true, edit: true, transfer: true, retire: true, printLabels: true, viewHistory: true },
