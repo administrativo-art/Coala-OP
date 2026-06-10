@@ -1,3 +1,5 @@
+import { convertValue } from './conversion.js';
+
 function getEnv(name: string): string {
   const val = process.env[name];
   if (!val) throw new Error(`[PDV Sync] Variável de ambiente ${name} não configurada.`);
@@ -192,11 +194,26 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
 
   const simsSnap = await db.collection('productSimulations').get();
   const simulations = simsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+  // Fichas técnicas (insumos por simulação) + insumos base — para o consumo teórico
+  const simItemsSnap = await db.collection('productSimulationItems').get();
+  const allSimItems = simItemsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+  const bpSnap = await db.collection('baseProducts').get();
+  const baseProducts = bpSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+  const simItemsBySim: Record<string, any[]> = {};
+  for (const si of allSimItems) {
+    (simItemsBySim[si.simulationId] ??= []).push(si);
+  }
+  const baseProductById: Record<string, any> = {};
+  for (const bp of baseProducts) baseProductById[bp.id] = bp;
+
   const date = new Date(dateStr + 'T12:00:00Z');
   const productTotals: Record<string, any> = {};
   const hourlySales: Record<string, number> = {};
   const productHourlySales: Record<string, Record<string, number>> = {};
   const comboCounts: Record<string, number> = {};
+  // Consumo teórico de insumos base (Vendas API), derivado das fichas técnicas
+  const consumptionByBaseProduct: Record<string, { name: string; quantity: number }> = {};
 
   // Revenue tracking for goals
   let dailyRevenue = 0;
@@ -282,6 +299,20 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
       productTotals[sim.id].quantity += qty;
       if (!productHourlySales[sim.id]) productHourlySales[sim.id] = {};
       productHourlySales[sim.id][hour] = (productHourlySales[sim.id][hour] || 0) + qty;
+
+      // Consumo teórico de insumos base: expande a ficha técnica da simulação
+      for (const simItem of simItemsBySim[sim.id] ?? []) {
+        const bp = baseProductById[simItem.baseProductId];
+        if (!bp) continue;
+        try {
+          const valuePerUnit = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
+          const consumed = qty * valuePerUnit;
+          if (!consumptionByBaseProduct[bp.id]) consumptionByBaseProduct[bp.id] = { name: bp.name, quantity: 0 };
+          consumptionByBaseProduct[bp.id].quantity += consumed;
+        } catch {
+          /* unidade incompatível — ignora este insumo */
+        }
+      }
     }
 
     if (validMappedItemsForCombo.length > 0) {
@@ -312,10 +343,21 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
   await db.collection('salesReports').doc(`sales_${reportId}`).set({
     reportName: `Sincronização Automática ${dateStr}`,
     month: date.getMonth() + 1, year: date.getFullYear(), day: date.getDate(), kioskId, createdAt: new Date().toISOString(),
+    consumptionReportId: `cons_${reportId}`,
     items: Object.values(productTotals), hourlySales, productHourlySales,
     combos: Object.entries(comboCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     productQtyByOperator,
     syncDiagnostics: diag,
+  });
+
+  // Relatório de consumo teórico de insumos (Vendas API) — alimenta a Conferência de Estoque.
+  await db.collection('consumptionReports').doc(`cons_${reportId}`).set({
+    reportName: `Sincronização Automática ${dateStr}`,
+    month: date.getMonth() + 1, year: date.getFullYear(), day: date.getDate(), kioskId,
+    createdAt: new Date().toISOString(), status: 'completed',
+    results: Object.entries(consumptionByBaseProduct).map(([id, data]) => ({
+      productId: id, productName: data.name, consumedQuantity: data.quantity, baseProductId: id,
+    })),
   });
 
   // ── Update active goal periods ────────────────────────────────────────────
