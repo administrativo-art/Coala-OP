@@ -10,7 +10,7 @@ import { useProducts } from "@/hooks/use-products";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useValidatedConsumptionData } from "@/hooks/use-validated-consumption-data";
-import { convertValue } from '@/lib/conversion';
+import { getMovementQuantityInBaseUnit, getSignedAdjustmentDelta } from '@/lib/movement-quantity';
 import { MovementHistoryModal } from "./movement-history-modal";
 import { ConsumptionDetailsModal } from "./consumption-details-modal";
 import { type BaseProduct, type MovementRecord, type ConsumptionReport } from "@/types";
@@ -39,53 +39,7 @@ const stdDev = (arr: number[]): number => {
     return Math.sqrt(arr.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / arr.length);
 };
 
-const GENERIC_PACKAGE_UNITS = new Set(['un', 'unidade', 'bag', 'pacote', 'caixa']);
 const AUDIT_ZERO_DATE = '2026-04-01';
-
-function getMovementQuantityInBaseUnit(
-  movement: Pick<MovementRecord, 'quantityChange'>,
-  product: Product,
-  baseProduct: BaseProduct,
-) {
-  const quantity = Number(movement.quantityChange || 0);
-  if (!Number.isFinite(quantity)) return 0;
-
-  try {
-    const fromUnit = (product.unit || 'un').toLowerCase();
-    if (GENERIC_PACKAGE_UNITS.has(fromUnit)) {
-      return quantity * Number(product.packageSize || 1);
-    }
-
-    const valueOfOnePackage = convertValue(
-      Number(product.packageSize || 1),
-      product.unit,
-      baseProduct.unit,
-      product.category,
-    );
-
-    return quantity * valueOfOnePackage;
-  } catch {
-    return quantity * Number(product.packageSize || 1);
-  }
-}
-
-function getSignedAdjustmentDelta(type: string, quantityInBase: number) {
-  if (!quantityInBase) return 0;
-  if (type === 'ENTRADA_CORRECAO' || type === 'ENTRADA_ESTORNO' || type.includes('acréscimo')) {
-    return quantityInBase;
-  }
-
-  if (
-    type === 'SAIDA_CORRECAO' ||
-    type === 'SAIDA_ESTORNO' ||
-    type.includes('decréscimo') ||
-    type.includes('Divergência')
-  ) {
-    return -quantityInBase;
-  }
-
-  return 0;
-}
 
 function getConsumptionReportDate(report: ConsumptionReport) {
   if (typeof report.day === 'number') {

@@ -15,7 +15,9 @@ import { useMovementHistory } from '@/hooks/use-movement-history';
 import { Skeleton } from './ui/skeleton';
 import { useProducts } from '@/hooks/use-products';
 import { useKiosks } from '@/hooks/use-kiosks';
+import { useBaseProducts } from '@/hooks/use-base-products';
 import { useAuth } from '@/hooks/use-auth';
+import { getMovementQuantityInBaseUnit, getSignedAdjustmentDelta } from '@/lib/movement-quantity';
 import { type MovementRecord, type MovementType } from '@/types';
 import { Badge } from './ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
@@ -66,7 +68,17 @@ export function MovementHistoryModal({
   const { history, loading: loadingHistory } = useMovementHistory();
   const { products, getProductFullName, loading: loadingProducts } = useProducts();
   const { kiosks, loading: loadingKiosks } = useKiosks();
+  const { baseProducts } = useBaseProducts();
   const { users } = useAuth();
+
+  // Quando o modal é aberto para um insumo específico (a partir da Análise de
+  // Movimentação), convertemos as quantidades para a unidade-base, de modo que
+  // os KPIs batam exatamente com os números clicados na tela de análise.
+  const baseProductForTotals = useMemo(
+    () => (initialBaseProductId ? baseProducts.find(b => b.id === initialBaseProductId) : undefined),
+    [initialBaseProductId, baseProducts],
+  );
+  const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>(initialDateRange);
   const [typeFilter, setTypeFilter] = useState(initialType || 'all');
@@ -212,19 +224,28 @@ export function MovementHistoryModal({
 
   const { totalEntradas, totalSaidas, totalAjustes, totalTransferencias } = useMemo(() => {
     return filteredAndSortedHistory.reduce((acc, item) => {
-        // Registros antigos guardam quantityChange como string; coage para não zerar o total.
-        const rawQty = Number(item.quantityChange);
-        const signedQty = isNaN(rawQty) ? 0 : rawQty;
-        const qty = Math.abs(signedQty);
+        // Quantidade do movimento. Em modo "insumo específico" (aberto pela Análise),
+        // converte para a unidade-base para os KPIs baterem com a tela de análise.
+        // Caso contrário, usa quantityChange cru (coagido — registros antigos eram string).
+        const product = productMap.get(item.productId);
+        const baseQty = baseProductForTotals && product
+            ? getMovementQuantityInBaseUnit(item, product, baseProductForTotals)
+            : (isNaN(Number(item.quantityChange)) ? 0 : Number(item.quantityChange));
+        const signedQty = baseQty;
+        const qty = Math.abs(baseQty);
         const isTransfer = item.type?.includes('TRANSFERENCIA');
         const isAdjustment = item.type?.includes('CORRECAO') || item.type?.includes('Divergência');
+        // Ajuste com sinal correto por tipo (acréscimo/decréscimo) quando em unidade-base.
+        const adjustmentValue = baseProductForTotals
+            ? getSignedAdjustmentDelta(item.type, qty)
+            : signedQty;
 
         if (kioskFilter !== 'all') {
             const isToThisKiosk = item.toKioskId === kioskFilter;
             const isFromThisKiosk = item.fromKioskId === kioskFilter;
 
             if (isAdjustment && (isToThisKiosk || isFromThisKiosk)) {
-                acc.totalAjustes += signedQty;
+                acc.totalAjustes += adjustmentValue;
             } else if (isTransfer) {
                 if (isToThisKiosk) acc.totalEntradas += qty;
                 else if (isFromThisKiosk) acc.totalSaidas += qty;
@@ -237,7 +258,7 @@ export function MovementHistoryModal({
         } else {
             // Global view logic
             if (isAdjustment) {
-                acc.totalAjustes += signedQty;
+                acc.totalAjustes += adjustmentValue;
             } else if (isTransfer) {
                 acc.totalTransferencias += qty;
                 // We don't add transfers to global entry/exit totals to avoid duplication
@@ -249,7 +270,10 @@ export function MovementHistoryModal({
         }
         return acc;
     }, { totalEntradas: 0, totalSaidas: 0, totalTransferencias: 0, totalAjustes: 0 });
-  }, [filteredAndSortedHistory, kioskFilter]);
+  }, [filteredAndSortedHistory, kioskFilter, baseProductForTotals, productMap]);
+
+  // Sufixo de unidade nos KPIs quando os totais estão na unidade-base do insumo.
+  const unitSuffix = baseProductForTotals ? ` ${baseProductForTotals.unit}` : '';
 
 
   return (
@@ -294,10 +318,11 @@ export function MovementHistoryModal({
             </Select>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-2xl font-bold">{totalEntradas.toLocaleString()}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-2xl font-bold">{totalSaidas.toLocaleString()}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString()}</p></CardContent></Card>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-2xl font-bold">{totalEntradas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-2xl font-bold">{totalSaidas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Ajustes</p><p className={`text-2xl font-bold ${totalAjustes < 0 ? 'text-red-600' : totalAjustes > 0 ? 'text-green-600' : ''}`}>{totalAjustes > 0 ? '+' : ''}{totalAjustes.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
         </div>
         
         <div className="flex-grow overflow-hidden border rounded-lg flex flex-col">
