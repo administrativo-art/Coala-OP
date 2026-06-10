@@ -223,7 +223,7 @@ function RepositionActivityCard({
                 <div className="flex items-center gap-2">
                     <PDFDownloadLink
                         document={<SeparationListDocument activity={activity} products={products} />}
-                        fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
+                        fileName={`${activity.kioskDestinationName || 'Reposição'} | Reposição | ${(activity.updatedAt || activity.createdAt) ? format(parseISO(activity.updatedAt || activity.createdAt), 'dd-MM-yyyy', { locale: ptBR }) : ''}.pdf`}
                     >
                         {(({ loading }: any) => (
                             <Button variant="outline" size="sm" className="relative" disabled={loading}>
@@ -1314,7 +1314,7 @@ export function RepositionHistory() {
                                             <div className="flex gap-2">
                                                 <PDFDownloadLink
                                                     document={<SeparationListDocument activity={activity} products={products} />}
-                                                    fileName={`separacao_reposicao_${activity.id.slice(-6)}.pdf`}
+                                                    fileName={`${activity.kioskDestinationName || 'Reposição'} | Reposição | ${(activity.updatedAt || activity.createdAt) ? format(parseISO(activity.updatedAt || activity.createdAt), 'dd-MM-yyyy', { locale: ptBR }) : ''}.pdf`}
                                                 >
                                                     {(({ loading }: any) => (
                                                         <Button variant="outline" size="sm" disabled={loading}>
