@@ -22,6 +22,14 @@ import { ChangePasswordModal } from './change-password-modal';
 import { storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 
+function getAvatarUploadErrorMessage(error: unknown) {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+  if (code === 'storage/unauthorized') {
+    return 'Seu acesso não tem permissão para gravar neste caminho de avatar.';
+  }
+  return 'Tente novamente.';
+}
+
 export function UserProfile() {
   const { user, logout, updateUser } = useAuth();
   const { kiosks } = useKiosks();
@@ -55,7 +63,7 @@ export function UserProfile() {
       toast({ title: "Foto de perfil atualizada!" });
     } catch (error) {
       console.error(error);
-      toast({ variant: 'destructive', title: 'Erro ao salvar foto.', description: 'Tente novamente.' });
+      toast({ variant: 'destructive', title: 'Erro ao salvar foto.', description: getAvatarUploadErrorMessage(error) });
     } finally {
       setIsUploadingPhoto(false);
     }

@@ -44,6 +44,14 @@ import {
   getVacationCycleHistory,
 } from '@/lib/utils/vacation-logic';
 
+function getAvatarUploadErrorMessage(error: unknown) {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+  if (code === 'storage/unauthorized') {
+    return 'Seu acesso não tem permissão para gravar o avatar deste usuário.';
+  }
+  return 'Tente novamente.';
+}
+
 function timestampToDateInput(ts: Timestamp | undefined): string {
   if (!ts) return '';
   try { return format(ts.toDate(), 'yyyy-MM-dd'); } catch { return ''; }
@@ -768,7 +776,7 @@ export function UserManagement() {
       toast({ title: "Foto atualizada!" });
     } catch (error) {
       console.error(error);
-      toast({ variant: 'destructive', title: 'Erro ao salvar foto.', description: 'Tente novamente.' });
+      toast({ variant: 'destructive', title: 'Erro ao salvar foto.', description: getAvatarUploadErrorMessage(error) });
     } finally {
       setIsUploadingPhoto(false);
     }
