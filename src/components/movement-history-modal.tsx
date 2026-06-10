@@ -277,7 +277,7 @@ export function MovementHistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-7xl h-[90vh] flex flex-col">
+      <DialogContent className="w-[96vw] max-w-7xl sm:max-w-7xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Auditoria de movimentações</DialogTitle>
           <DialogDescription>

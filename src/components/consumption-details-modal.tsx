@@ -36,7 +36,7 @@ export function ConsumptionDetailsModal({ open, onOpenChange, baseProduct, repor
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-3xl h-[80vh] flex flex-col">
+      <DialogContent className="w-[96vw] max-w-5xl sm:max-w-5xl h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Detalhamento de Vendas (API)</DialogTitle>
           <DialogDescription>
