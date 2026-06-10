@@ -42,6 +42,11 @@ import { useKiosks } from "@/hooks/use-kiosks";
 import { useDPStore } from "@/store/use-dp-store";
 import type { DPShift, EmployeeGoal, GoalPeriodDoc, StockAuditItem, StockAuditSession } from "@/types";
 import type { FormExecution } from "@/types/forms";
+import {
+  getEmployeeDistributionDateKeys,
+  loadGoalDistributionSnapshot,
+  type GoalDistributionSnapshot,
+} from "@/lib/goals-distribution";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +63,17 @@ function dateKey(value: Date) {
   return format(value, "yyyy-MM-dd");
 }
 
+function asDate(value: unknown) {
+  if (value && typeof value === "object" && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return new Date();
+}
+
 function money(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -65,6 +81,48 @@ function money(value: number) {
 function percent(value: number, target: number) {
   if (target <= 0) return 0;
   return (value / target) * 100;
+}
+
+function compactUnique(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0)));
+}
+
+function normalizeIdentity(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function mergeEmployeeGoals(goals: EmployeeGoal[]) {
+  const byScope = new Map<string, EmployeeGoal & { originalGoals: EmployeeGoal[] }>();
+
+  for (const goal of goals) {
+    const key = `${goal.periodId}__${goal.kioskId}`;
+    const existing = byScope.get(key);
+    if (!existing) {
+      byScope.set(key, {
+        ...goal,
+        id: key,
+        dailyProgress: { ...(goal.dailyProgress ?? {}) },
+        originalGoals: [goal],
+      });
+      continue;
+    }
+
+    const dailyProgress = { ...(existing.dailyProgress ?? {}) };
+    for (const [day, value] of Object.entries(goal.dailyProgress ?? {})) {
+      dailyProgress[day] = (dailyProgress[day] ?? 0) + value;
+    }
+
+    existing.targetValue += goal.targetValue;
+    existing.currentValue += goal.currentValue;
+    existing.dailyProgress = dailyProgress;
+    existing.originalGoals.push(goal);
+  }
+
+  return Array.from(byScope.values());
 }
 
 function greetingFor(date: Date) {
@@ -131,29 +189,62 @@ function contextLabelOf(execution: FormExecution) {
   return execution.shift_definition_name ?? execution.unit_name ?? execution.unit_id;
 }
 
-function goalRecortes(goal: EmployeeGoal, period: GoalPeriodDoc) {
-  const periodStart = period.startDate?.toDate?.() ?? new Date();
-  const periodEnd = period.endDate?.toDate?.() ?? new Date();
-  const days = eachDayOfInterval({ start: periodStart, end: periodEnd });
-  const today = new Date();
-  const dailyTarget = goal.targetValue / Math.max(days.length, 1);
+function getMergedActiveDateKeys(goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] }, period: GoalPeriodDoc, snapshot?: GoalDistributionSnapshot | null) {
+  if (!goal.originalGoals?.length) {
+    return getEmployeeDistributionDateKeys(goal, period, snapshot);
+  }
 
-  const todayValue = goal.dailyProgress?.[dateKey(today)] ?? 0;
+  const keys = new Set<string>();
+  goal.originalGoals.forEach((originalGoal) => {
+    getEmployeeDistributionDateKeys(originalGoal, period, snapshot).forEach((key) => keys.add(key));
+  });
+  return Array.from(keys).sort();
+}
+
+function goalRecortes(goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] }, period: GoalPeriodDoc, snapshot?: GoalDistributionSnapshot | null) {
+  const periodStart = asDate(period.startDate);
+  const periodEnd = asDate(period.endDate);
+  const allDays = eachDayOfInterval({ start: periodStart, end: periodEnd });
+  const activeKeys = new Set(getMergedActiveDateKeys(goal, period, snapshot));
+  const days = allDays.filter((day) => activeKeys.has(dateKey(day)));
+  const dailyTargets: Record<string, number> = {};
+
+  if (goal.originalGoals?.length) {
+    for (const originalGoal of goal.originalGoals) {
+      const keys = getEmployeeDistributionDateKeys(originalGoal, period, snapshot);
+      const targetPerDay = originalGoal.targetValue / Math.max(keys.length, 1);
+      keys.forEach((key) => {
+        dailyTargets[key] = (dailyTargets[key] ?? 0) + targetPerDay;
+      });
+    }
+  } else {
+    const targetPerDay = goal.targetValue / Math.max(days.length, 1);
+    days.forEach((day) => {
+      dailyTargets[dateKey(day)] = targetPerDay;
+    });
+  }
+
+  const today = new Date();
+  const todayKey = dateKey(today);
+  const todayValue = goal.dailyProgress?.[todayKey] ?? 0;
+  const todayTarget = dailyTargets[todayKey] ?? 0;
 
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
   const weekDays = days.filter((day) => isWithinInterval(day, { start: weekStart, end: weekEnd }));
-  const weekTarget = dailyTarget * weekDays.length;
+  const weekTarget = weekDays.reduce((acc, day) => acc + (dailyTargets[dateKey(day)] ?? 0), 0);
   const weekValue = weekDays
     .filter((day) => day <= today)
     .reduce((acc, day) => acc + (goal.dailyProgress?.[dateKey(day)] ?? 0), 0);
+  const averageDailyTarget = goal.targetValue / Math.max(days.length, 1);
 
   return {
     periodStart,
     periodEnd,
     days,
-    dailyTarget,
-    today: { value: todayValue, target: dailyTarget, pct: percent(todayValue, dailyTarget) },
+    dailyTarget: averageDailyTarget,
+    dailyTargets,
+    today: { value: todayValue, target: todayTarget, pct: percent(todayValue, todayTarget) },
     semana: { value: weekValue, target: weekTarget, pct: percent(weekValue, weekTarget) },
     mes: { value: goal.currentValue, target: goal.targetValue, pct: percent(goal.currentValue, goal.targetValue) },
   };
@@ -601,15 +692,28 @@ function RecorteTile({ label, pct, value, target }: { label: string; pct: number
   );
 }
 
-function GoalProgressRow({ goal, period, unitName }: { goal: EmployeeGoal; period: GoalPeriodDoc; unitName?: string }) {
+function GoalProgressRow({
+  goal,
+  period,
+  unitName,
+  distributionSnapshot,
+}: {
+  goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] };
+  period: GoalPeriodDoc;
+  unitName?: string;
+  distributionSnapshot?: GoalDistributionSnapshot | null;
+}) {
   const pct = percent(goal.currentValue, goal.targetValue);
   const upTarget = goal.targetValue * 1.2;
   const upPct = percent(goal.currentValue, upTarget);
-  const recortes = goalRecortes(goal, period);
-  const { periodStart, periodEnd, days, dailyTarget } = recortes;
+  const recortes = goalRecortes(goal, period, distributionSnapshot);
+  const { periodStart, periodEnd, days, dailyTarget, dailyTargets } = recortes;
   const today = new Date();
   const elapsedDays = days.filter((day) => day <= today);
-  const hitCount = elapsedDays.filter((day) => (goal.dailyProgress?.[dateKey(day)] ?? 0) >= dailyTarget).length;
+  const hitCount = elapsedDays.filter((day) => {
+    const key = dateKey(day);
+    return (goal.dailyProgress?.[key] ?? 0) >= (dailyTargets[key] ?? dailyTarget);
+  }).length;
 
   return (
     <div className="space-y-3 rounded-xl border p-4">
@@ -674,8 +778,9 @@ function GoalProgressRow({ goal, period, unitName }: { goal: EmployeeGoal; perio
         {days.map((day) => {
           const key = dateKey(day);
           const value = goal.dailyProgress?.[key] ?? 0;
+          const dayTarget = dailyTargets[key] ?? dailyTarget;
           const pastOrToday = day <= today;
-          const hit = pastOrToday && value >= dailyTarget;
+          const hit = pastOrToday && value >= dayTarget;
           return (
             <div
               key={key}
@@ -684,7 +789,7 @@ function GoalProgressRow({ goal, period, unitName }: { goal: EmployeeGoal; perio
               }`}
             >
               <span className="font-medium">{format(day, "eee dd/MM", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase())}</span>
-              <span className="text-right text-muted-foreground">{money(dailyTarget)}</span>
+              <span className="text-right text-muted-foreground">{money(dayTarget)}</span>
               <span className={`text-right font-semibold ${value > 0 ? "text-foreground" : "text-muted-foreground"}`}>
                 {pastOrToday ? money(value) : "-"}
               </span>
@@ -804,10 +909,12 @@ function SidebarMetas({
   loading,
   goals,
   periods,
+  distributionSnapshot,
 }: {
   loading: boolean;
-  goals: EmployeeGoal[];
+  goals: Array<EmployeeGoal & { originalGoals?: EmployeeGoal[] }>;
   periods: GoalPeriodDoc[];
+  distributionSnapshot?: GoalDistributionSnapshot | null;
 }) {
   const { kiosks } = useKiosks();
   const kioskName = (id: string) => kiosks.find((kiosk) => kiosk.id === id)?.name ?? id;
@@ -821,7 +928,7 @@ function SidebarMetas({
   );
 
   const primary = goalUnits[0] ?? null;
-  const recortes = primary ? goalRecortes(primary.goal, primary.period) : null;
+  const recortes = primary ? goalRecortes(primary.goal, primary.period, distributionSnapshot) : null;
   const rows = recortes
     ? [
         { label: "Hoje", ...recortes.today },
@@ -897,7 +1004,12 @@ function SidebarMetas({
             Nenhuma meta ativa encontrada para o colaborador ou unidade vinculada.
           </div>
         ) : goalUnits.length === 1 ? (
-          <GoalProgressRow goal={goalUnits[0].goal} period={goalUnits[0].period} unitName={kioskName(goalUnits[0].goal.kioskId)} />
+          <GoalProgressRow
+            goal={goalUnits[0].goal}
+            period={goalUnits[0].period}
+            unitName={kioskName(goalUnits[0].goal.kioskId)}
+            distributionSnapshot={distributionSnapshot}
+          />
         ) : (
           <Tabs defaultValue={goalUnits[0].goal.id} className="space-y-4">
             <TabsList className="flex w-full flex-wrap">
@@ -909,7 +1021,12 @@ function SidebarMetas({
             </TabsList>
             {goalUnits.map((entry) => (
               <TabsContent key={entry.goal.id} value={entry.goal.id}>
-                <GoalProgressRow goal={entry.goal} period={entry.period} unitName={kioskName(entry.goal.kioskId)} />
+                <GoalProgressRow
+                  goal={entry.goal}
+                  period={entry.period}
+                  unitName={kioskName(entry.goal.kioskId)}
+                  distributionSnapshot={distributionSnapshot}
+                />
               </TabsContent>
             ))}
           </Tabs>
@@ -949,6 +1066,7 @@ function SidebarComunicados() {
 function CollaboratorDashboardPanelInner() {
   const { firebaseUser, user } = useAuth();
   const { periods, employeeGoals, loading: goalsLoading } = useGoals();
+  const { kiosks } = useKiosks();
   const { taskNotifications } = useAllTasks();
   const { auditSessions } = useStockAudit();
   const { schedules, units, shiftDefinitions } = useDPStore();
@@ -958,6 +1076,64 @@ function CollaboratorDashboardPanelInner() {
   const [shifts, setShifts] = useState<DPShift[]>([]);
   const [loadingSchedule, setLoadingSchedule] = useState(true);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [distributionSnapshot, setDistributionSnapshot] = useState<GoalDistributionSnapshot | null>(null);
+  const [apiShifts, setApiShifts] = useState<DPShift[] | null>(null);
+  const [apiPeriods, setApiPeriods] = useState<GoalPeriodDoc[] | null>(null);
+  const [apiEmployeeGoals, setApiEmployeeGoals] = useState<EmployeeGoal[] | null>(null);
+  const [loadingCollaboratorData, setLoadingCollaboratorData] = useState(true);
+  const currentUserIds = useMemo(
+    () => compactUnique([firebaseUser?.uid, user?.id, user?.registrationIdBizneo, user?.registrationIdPdv]),
+    [firebaseUser?.uid, user?.id, user?.registrationIdBizneo, user?.registrationIdPdv]
+  );
+  const currentUserNames = useMemo(
+    () => compactUnique([user?.username, firebaseUser?.displayName, firebaseUser?.email]).map(normalizeIdentity),
+    [firebaseUser?.displayName, firebaseUser?.email, user?.username]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!firebaseUser) {
+        setApiShifts([]);
+        setApiPeriods([]);
+        setApiEmployeeGoals([]);
+        setLoadingCollaboratorData(false);
+        return;
+      }
+
+      try {
+        setLoadingCollaboratorData(true);
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch("/api/collaborator/dashboard", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload?.error ?? "Falha ao carregar painel do colaborador.");
+        if (!cancelled) {
+          setApiShifts(Array.isArray(payload.shifts) ? payload.shifts : []);
+          setApiPeriods(Array.isArray(payload.goalPeriods) ? payload.goalPeriods : []);
+          setApiEmployeeGoals(Array.isArray(payload.employeeGoals) ? payload.employeeGoals : []);
+          setDistributionSnapshot(payload.distributionSnapshot ?? null);
+        }
+      } catch (error) {
+        console.warn("[CollaboratorDashboardPanel] API dashboard failed", error);
+        if (!cancelled) {
+          setApiShifts(null);
+          setApiPeriods(null);
+          setApiEmployeeGoals(null);
+        }
+      } finally {
+        if (!cancelled) setLoadingCollaboratorData(false);
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser]);
 
   useEffect(() => {
     let cancelled = false;
@@ -992,7 +1168,7 @@ function CollaboratorDashboardPanelInner() {
     let cancelled = false;
 
     async function run() {
-      if (!firebaseUser) {
+      if (!firebaseUser || currentUserIds.length === 0) {
         setShifts([]);
         setLoadingSchedule(false);
         return;
@@ -1005,15 +1181,45 @@ function CollaboratorDashboardPanelInner() {
       try {
         setLoadingSchedule(true);
         setScheduleError(null);
-        const shiftsQuery = query(
-          collectionGroup(db, "shifts"),
-          where("userId", "==", firebaseUser.uid),
-          where("date", ">=", start),
-          where("date", "<=", end)
+        const snaps = await Promise.all(
+          currentUserIds.map((userId) =>
+            getDocs(
+              query(
+                collectionGroup(db, "shifts"),
+                where("userId", "==", userId),
+                where("date", ">=", start),
+                where("date", "<=", end)
+              )
+            )
+          )
         );
-        const snap = await getDocs(shiftsQuery);
+        let foundShifts: DPShift[] = [];
         if (!cancelled) {
-          setShifts(snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as DPShift)));
+          const byId = new Map<string, DPShift>();
+          snaps.flatMap((snap) => snap.docs).forEach((docSnap) => {
+            byId.set(docSnap.ref.path, { id: docSnap.id, ...docSnap.data() } as DPShift);
+          });
+          foundShifts = Array.from(byId.values());
+          setShifts(foundShifts);
+        }
+
+        if (foundShifts.length === 0) {
+          const currentMonthSchedules = schedules.filter(
+            (schedule) => schedule.month === now.getMonth() + 1 && schedule.year === now.getFullYear()
+          );
+          const nested = await Promise.all(
+            currentMonthSchedules.map(async (schedule) => {
+              const snapshotMatchedUserIds = Object.entries(schedule.snapshot?.users ?? {})
+                .filter(([, snapshotUser]) => currentUserNames.includes(normalizeIdentity(snapshotUser.username)))
+                .map(([userId]) => userId);
+              const acceptedUserIds = new Set([...currentUserIds, ...snapshotMatchedUserIds]);
+              const snap = await getDocs(collection(db, "dp_schedules", schedule.id, "shifts"));
+              return snap.docs
+                .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as DPShift))
+                .filter((shift) => acceptedUserIds.has(shift.userId) && shift.date >= start && shift.date <= end);
+            })
+          );
+          if (!cancelled) setShifts(nested.flat());
         }
       } catch (error) {
         try {
@@ -1022,10 +1228,14 @@ function CollaboratorDashboardPanelInner() {
           );
           const nested = await Promise.all(
             currentMonthSchedules.map(async (schedule) => {
+              const snapshotMatchedUserIds = Object.entries(schedule.snapshot?.users ?? {})
+                .filter(([, snapshotUser]) => currentUserNames.includes(normalizeIdentity(snapshotUser.username)))
+                .map(([userId]) => userId);
+              const acceptedUserIds = new Set([...currentUserIds, ...snapshotMatchedUserIds]);
               const snap = await getDocs(collection(db, "dp_schedules", schedule.id, "shifts"));
               return snap.docs
                 .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as DPShift))
-                .filter((shift) => shift.userId === firebaseUser.uid && shift.date >= start && shift.date <= end);
+                .filter((shift) => acceptedUserIds.has(shift.userId) && shift.date >= start && shift.date <= end);
             })
           );
           if (!cancelled) setShifts(nested.flat());
@@ -1044,17 +1254,20 @@ function CollaboratorDashboardPanelInner() {
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser, schedules]);
+  }, [firebaseUser, currentUserIds, currentUserNames, schedules]);
 
   const today = new Date();
   const todayKey = dateKey(today);
   const nowMinutes = today.getHours() * 60 + today.getMinutes();
   const firstName = (user?.username ?? "Colaborador").split(" ")[0];
   const dateEyebrow = format(today, "EEEE, d 'de' MMMM", { locale: ptBR }).toUpperCase();
+  const effectiveShifts = apiShifts ?? shifts;
+  const effectivePeriods = apiPeriods ?? periods;
+  const effectiveEmployeeGoals = apiEmployeeGoals ?? employeeGoals;
 
   // Today's shift (greeting + timeline markers)
   const todayShift = useMemo(() => {
-    const candidates = shifts
+    const candidates = effectiveShifts
       .filter((shift) => shift.date === todayKey && shift.type !== "day_off")
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
     const shift = candidates[0];
@@ -1070,7 +1283,7 @@ function CollaboratorDashboardPanelInner() {
       time: `${shift.startTime} — ${shift.endTime}`,
       unit: unit?.name ?? shift.unitId,
     };
-  }, [shifts, shiftDefinitions, units, todayKey]);
+  }, [effectiveShifts, shiftDefinitions, units, todayKey]);
 
   // Day form executions (due/scheduled today, fallback to all)
   const dayExecutions = useMemo(() => {
@@ -1207,16 +1420,46 @@ function CollaboratorDashboardPanelInner() {
   }, [dayExecutions, taskNotifications, myOpenCountSessions, todayShift, nowMinutes]);
 
   const userGoalKioskIds = useMemo(() => new Set([...(user?.assignedKioskIds ?? [])]), [user?.assignedKioskIds]);
-  const activePeriods = useMemo(() => periods.filter((period) => period.status === "active"), [periods]);
+  const activePeriods = useMemo(() => effectivePeriods.filter((period) => period.status === "active"), [effectivePeriods]);
+  const kioskNameById = useMemo(
+    () => Object.fromEntries(kiosks.map((kiosk) => [kiosk.id, kiosk.name])),
+    [kiosks]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (apiPeriods !== null || apiEmployeeGoals !== null) return;
+      if (activePeriods.length === 0 || effectiveEmployeeGoals.length === 0) {
+        setDistributionSnapshot(null);
+        return;
+      }
+
+      try {
+        const snapshot = await loadGoalDistributionSnapshot(activePeriods, effectiveEmployeeGoals, kioskNameById);
+        if (!cancelled) setDistributionSnapshot(snapshot);
+      } catch (error) {
+        console.warn("[CollaboratorDashboardPanel] failed to load goal distribution snapshot", error);
+        if (!cancelled) setDistributionSnapshot(null);
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [activePeriods, apiEmployeeGoals, apiPeriods, effectiveEmployeeGoals, kioskNameById]);
+
   const visibleGoals = useMemo(() => {
-    const ownGoals = employeeGoals.filter(
-      (goal) => goal.employeeId === firebaseUser?.uid && activePeriods.some((period) => period.id === goal.periodId)
+    const ownGoals = effectiveEmployeeGoals.filter(
+      (goal) => currentUserIds.includes(goal.employeeId) && activePeriods.some((period) => period.id === goal.periodId)
     );
-    if (ownGoals.length > 0) return ownGoals;
-    return employeeGoals.filter(
+    if (ownGoals.length > 0) return mergeEmployeeGoals(ownGoals);
+    return mergeEmployeeGoals(effectiveEmployeeGoals.filter(
       (goal) => userGoalKioskIds.has(goal.kioskId) && activePeriods.some((period) => period.id === goal.periodId)
-    );
-  }, [activePeriods, employeeGoals, firebaseUser?.uid, userGoalKioskIds]);
+    ));
+  }, [activePeriods, currentUserIds, effectiveEmployeeGoals, userGoalKioskIds]);
 
   return (
     <section id="painel-colaborador" className="scroll-mt-6">
@@ -1307,8 +1550,13 @@ function CollaboratorDashboardPanelInner() {
 
         {/* Right column — sidebar */}
         <aside className="space-y-4">
-          <SidebarEscala shifts={shifts} loading={loadingSchedule} error={scheduleError} />
-          <SidebarMetas loading={goalsLoading} goals={visibleGoals} periods={activePeriods} />
+          <SidebarEscala shifts={effectiveShifts} loading={loadingCollaboratorData && apiShifts === null ? loadingSchedule : false} error={scheduleError} />
+          <SidebarMetas
+            loading={loadingCollaboratorData && apiEmployeeGoals === null ? goalsLoading : false}
+            goals={visibleGoals}
+            periods={activePeriods}
+            distributionSnapshot={distributionSnapshot}
+          />
           <SidebarComunicados />
         </aside>
       </div>

@@ -41,9 +41,9 @@ import { getUserDisplayName, pickUserIdentitySnapshot, type UserIdentityLike } f
 import {
   type GoalDistributionSnapshot,
   getEmployeeDistributionDateKeys,
-  getEmployeeDistributionDayCount,
   getPeriodDistributionDateKeys,
   loadGoalDistributionSnapshot,
+  resolveGoalDistributionMode,
 } from '@/lib/goals-distribution';
 import { z } from 'zod';
 
@@ -200,11 +200,11 @@ function calcEgWeekly(eg: EmployeeGoal, period: GoalPeriodDoc, refDate: Date, pe
   const effectiveStart = weekStart < startOfMonth(refDate) ? startOfMonth(refDate) : weekStart;
   const weekDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
   const value = weekDays.reduce((s, d) => s + (dp[dateKey(d)] ?? 0), 0);
-  const activeDateSet = new Set(getEmployeeDistributionDateKeys(eg, period, distributionSnapshot));
+  const activeDateSet = new Set(getStrictEmployeeDistributionDateKeys(eg, period, distributionSnapshot));
   const activeWeekDays = weekDays.filter(day => activeDateSet.has(dateKey(day)));
   
   // Alvo semanal proporcional
-  const dailyAlvo = eg.targetValue / getEmployeeDistributionDayCount(eg, period, distributionSnapshot);
+  const dailyAlvo = eg.targetValue / Math.max(activeDateSet.size, 1);
   const alvo = dailyAlvo * activeWeekDays.length;
   const p = pct(value, alvo);
   
@@ -341,17 +341,57 @@ function getMergedEmployeeActiveDateKeys(
   originalEgs?: EmployeeGoal[] | null
 ) {
   if (!originalEgs || originalEgs.length <= 1) {
-    return getEmployeeDistributionDateKeys(employeeGoal, period, distributionSnapshot);
+    return getStrictEmployeeDistributionDateKeys(employeeGoal, period, distributionSnapshot);
   }
 
   const mergedKeys = new Set<string>();
   for (const goal of originalEgs) {
-    for (const key of getEmployeeDistributionDateKeys(goal, period, distributionSnapshot)) {
+    for (const key of getStrictEmployeeDistributionDateKeys(goal, period, distributionSnapshot)) {
       mergedKeys.add(key);
     }
   }
 
   return Array.from(mergedKeys).sort();
+}
+
+function getStrictEmployeeDistributionDateKeys(
+  employeeGoal: EmployeeGoal,
+  period: GoalPeriodDoc,
+  distributionSnapshot?: GoalDistributionSnapshot | null
+) {
+  const isScheduled =
+    resolveGoalDistributionMode(employeeGoal) === 'scheduled_days' ||
+    resolveGoalDistributionMode(period) === 'scheduled_days';
+
+  if (!isScheduled) {
+    return getEmployeeDistributionDateKeys(employeeGoal, period, distributionSnapshot);
+  }
+
+  if (!distributionSnapshot) {
+    return getEmployeeDistributionDateKeys(employeeGoal, period, distributionSnapshot);
+  }
+
+  return distributionSnapshot?.employeeDateKeysByGoalId?.[employeeGoal.id] ?? [];
+}
+
+function getEmployeeDailyTargetMap(
+  employeeGoal: EmployeeGoal,
+  period: GoalPeriodDoc,
+  distributionSnapshot?: GoalDistributionSnapshot | null,
+  originalEgs?: EmployeeGoal[] | null
+) {
+  const dailyTargets: Record<string, number> = {};
+  const sourceGoals = originalEgs && originalEgs.length > 0 ? originalEgs : [employeeGoal];
+
+  for (const goal of sourceGoals) {
+    const keys = getStrictEmployeeDistributionDateKeys(goal, period, distributionSnapshot);
+    const targetPerDay = goal.targetValue / Math.max(keys.length, 1);
+    for (const key of keys) {
+      dailyTargets[key] = (dailyTargets[key] ?? 0) + targetPerDay;
+    }
+  }
+
+  return dailyTargets;
 }
 
 function DailyStatusPill({ tone }: { tone: 'ok' | 'zero' | 'miss' | 'na' }) {
@@ -589,16 +629,19 @@ export function EmployeeDailyModal({
   if (!employeeGoal || !period || !userName) return null;
 
   const { refDate, periodEnd } = getPeriodContext(period);
-  const activeDateKeys = getMergedEmployeeActiveDateKeys(employeeGoal, period, distributionSnapshot, originalEgs);
+  const dailyTargets = getEmployeeDailyTargetMap(employeeGoal, period, distributionSnapshot, originalEgs);
+  const activeDateKeys = Object.keys(dailyTargets).sort();
   const activeDateSet = new Set(activeDateKeys);
-  const dailyTarget = employeeGoal.targetValue / Math.max(activeDateKeys.length, 1);
   const upTarget = employeeGoal.targetValue * 1.2;
   const progress = employeeGoal.dailyProgress ?? {};
   const periodStart = period.startDate?.toDate?.() ?? refDate;
   const allPeriodDays = eachDayOfInterval({ start: periodStart, end: periodEnd });
   const elapsedActiveDays = allPeriodDays.filter(day => day <= refDate && activeDateSet.has(dateKey(day)));
   const elapsedCount = elapsedActiveDays.length;
-  const hitCount = elapsedActiveDays.filter(day => (progress[dateKey(day)] ?? 0) >= dailyTarget).length;
+  const hitCount = elapsedActiveDays.filter(day => {
+    const key = dateKey(day);
+    return (progress[key] ?? 0) >= (dailyTargets[key] ?? 0);
+  }).length;
   const averagePerElapsedDay = elapsedCount > 0 ? employeeGoal.currentValue / elapsedCount : 0;
   const currentPace = averagePerElapsedDay;
   const remainingActiveDays = Math.max(activeDateKeys.length - elapsedCount, 0);
@@ -608,14 +651,15 @@ export function EmployeeDailyModal({
   const paceOk = currentPace >= requiredPace;
 
   const allActiveDays = allPeriodDays.filter(day => activeDateSet.has(dateKey(day)));
-  const dailyUpTarget = upTarget / Math.max(activeDateKeys.length, 1);
 
   // Dias trabalhados conforme a escala (se disponível no snapshot)
   const workedDaysFromEscala = distributionSnapshot?.workedDaysByKioskAndUser?.[`${period.kioskId}__${employeeGoal.employeeId}`];
   const workedDaySet = workedDaysFromEscala?.length ? new Set(workedDaysFromEscala) : null;
-  const displayDays = workedDaySet
-    ? allPeriodDays.filter(day => workedDaySet.has(dateKey(day)))
-    : allActiveDays;
+  const displayDays = allActiveDays.length > 0
+    ? allActiveDays
+    : workedDaySet
+      ? allPeriodDays.filter(day => workedDaySet.has(dateKey(day)))
+      : [];
 
   const elapsedDisplayDays = displayDays.filter(day => day <= refDate);
   const noSaleCount = elapsedDisplayDays.filter(day => (progress[dateKey(day)] ?? 0) <= 0).length;
@@ -706,7 +750,7 @@ export function EmployeeDailyModal({
                   for (const og of (originalEgs ?? [])) {
                     const ogLabel = og.shiftId ? period.shifts?.find(s => s.id === og.shiftId)?.label : null;
                     if (!ogLabel) continue;
-                    const ogActiveKeys = getEmployeeDistributionDateKeys(og, period, distributionSnapshot);
+                    const ogActiveKeys = getStrictEmployeeDistributionDateKeys(og, period, distributionSnapshot);
                     for (const k of ogActiveKeys) {
                       const existing = shiftsByDay.get(k);
                       shiftsByDay.set(k, existing ? `${existing} · ${ogLabel}` : ogLabel);
@@ -736,10 +780,12 @@ export function EmployeeDailyModal({
                       const isToday = isSameDay(day, refDate);
                       const isPastOrToday = day <= refDate;
                       const shiftLabel = shiftsByDay.get(key);
+                      const dayTarget = dailyTargets[key] ?? 0;
+                      const dayUpTarget = dayTarget * 1.2;
 
                       let statusLabel = isPastOrToday ? '⚠' : '—';
                       let statusClass = isPastOrToday ? 'bg-zinc-50 border border-zinc-300 text-zinc-400' : 'text-zinc-300';
-                      if (isPastOrToday && value >= dailyTarget) {
+                      if (isPastOrToday && value >= dayTarget) {
                         statusLabel = '✓';
                         statusClass = 'bg-emerald-500 text-white shadow-[0_4px_10px_-6px_rgba(34,197,94,0.8)]';
                       } else if (isPastOrToday && value > 0) {
@@ -762,10 +808,10 @@ export function EmployeeDailyModal({
                             </span>
                           )}
                           <span className="text-right font-medium text-zinc-400">
-                            R$ {fmt(dailyTarget)}
+                            R$ {fmt(dayTarget)}
                           </span>
                           <span className="text-right font-medium text-blue-400">
-                            R$ {fmt(dailyUpTarget)}
+                            R$ {fmt(dayUpTarget)}
                           </span>
                           <span className={`text-right font-bold ${!isPastOrToday ? 'text-zinc-300' : value > 0 ? 'text-zinc-800' : 'text-zinc-300'}`}>
                             {!isPastOrToday ? '—' : `R$ ${fmt(value)}`}
@@ -822,9 +868,9 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
   const initials = getInitials(userName);
   const avatarClass = collaboratorAvatarClass(eg.employeeId);
 
-  const activeDateKeys = getMergedEmployeeActiveDateKeys(eg, period, distributionSnapshot, originalEgs);
+  const dailyTargets = getEmployeeDailyTargetMap(eg, period, distributionSnapshot, originalEgs);
+  const activeDateKeys = Object.keys(dailyTargets).sort();
   const activeDateSet = new Set(activeDateKeys);
-  const dailyTarget = eg.targetValue / Math.max(activeDateKeys.length, 1);
   const periodStart = period.startDate?.toDate?.() ?? refDate;
 
   const monthDays = eachDayOfInterval({ start: periodStart, end: periodEnd });
@@ -933,13 +979,14 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
             const dk = dateKey(day);
             const val = eg.dailyProgress?.[dk] ?? 0;
             const isActive = activeDateSet.has(dk);
+            const dayTarget = dailyTargets[dk] ?? 0;
             const isToday = isSameDay(day, refDate);
             const isPast = day <= refDate;
 
             let dotClass = 'bg-zinc-200';
             let dotTitle = '';
             if (isActive && isPast) {
-              if (val >= dailyTarget) {
+              if (val >= dayTarget) {
                 dotClass = 'bg-emerald-400';
                 dotTitle = `R$ ${fmt(val)} · bateu meta`;
               } else if (val > 0) {
@@ -1035,21 +1082,20 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
       }
       const mergedCurrentValue = goals.reduce((s, g) => s + g.currentValue, 0);
       const mergedTargetValue = goals.reduce((s, g) => s + g.targetValue, 0);
-      const allActiveKeys = new Set<string>();
-      for (const g of goals) {
-        for (const k of getEmployeeDistributionDateKeys(g, mainPeriod, distributionSnapshot)) {
-          allActiveKeys.add(k);
-        }
-      }
-      const employeeActiveDateKeys = Array.from(allActiveKeys);
-      const employeeActiveDateSet = allActiveKeys;
+      const mergedGoalForTargets: EmployeeGoal = { ...goals[0], currentValue: mergedCurrentValue, targetValue: mergedTargetValue, dailyProgress: dp, shiftId: undefined };
+      const employeeDailyTargets = getEmployeeDailyTargetMap(mergedGoalForTargets, mainPeriod, distributionSnapshot, goals);
+      const employeeActiveDateKeys = Object.keys(employeeDailyTargets);
+      const employeeActiveDateSet = new Set(employeeActiveDateKeys);
       const empDailyAlvo = mergedTargetValue / Math.max(employeeActiveDateKeys.length, 1);
       const daysWithSale = monthDays.filter(d => employeeActiveDateSet.has(dateKey(d)) && (dp[dateKey(d)] ?? 0) > 0).length;
-      const daysHit = monthDays.filter(d => employeeActiveDateSet.has(dateKey(d)) && (dp[dateKey(d)] ?? 0) >= empDailyAlvo).length;
+      const daysHit = monthDays.filter(d => {
+        const key = dateKey(d);
+        return employeeActiveDateSet.has(key) && (dp[key] ?? 0) >= (employeeDailyTargets[key] ?? empDailyAlvo);
+      }).length;
       const empPace = elapsedDays > 0 ? mergedCurrentValue / elapsedDays : 0;
       const empPaceNeeded = remainingDays > 0 ? Math.max(mergedTargetValue - mergedCurrentValue, 0) / remainingDays : 0;
       const empPct = pct(mergedCurrentValue, mergedTargetValue);
-      const eg: EmployeeGoal = { ...goals[0], currentValue: mergedCurrentValue, targetValue: mergedTargetValue, dailyProgress: dp, shiftId: undefined };
+      const eg: EmployeeGoal = mergedGoalForTargets;
       return { eg, name, dp, empDailyAlvo, daysWithSale, daysHit, empPace, empPaceNeeded, empPct, employeeActiveDateSet, employeeActiveDateKeys };
     });
   })();
@@ -1380,13 +1426,7 @@ export function GoalsTrackingDashboard() {
   const { kiosks } = useKiosks();
   const { toast } = useToast();
   const [fallbackUsersById, setFallbackUsersById] = useState<Record<string, UserIdentityLike | null>>({});
-  const [distributionSnapshot, setDistributionSnapshot] = useState<GoalDistributionSnapshot>({
-    periodDateKeysById: {},
-    employeeDateKeysByGoalId: {},
-    goalIdsByPeriodShiftAndDate: {},
-    workedDaysByKioskAndUser: {},
-    shiftLabelByKioskUserAndDate: {},
-  });
+  const [distributionSnapshot, setDistributionSnapshot] = useState<GoalDistributionSnapshot | null>(null);
 
   const isManager = (permissions.goals?.manage ?? false) || (permissions.settings?.manageUsers ?? false);
   const isAdmin = permissions.settings?.manageUsers ?? false;
@@ -1578,17 +1618,36 @@ export function GoalsTrackingDashboard() {
     let cancelled = false;
 
     void (async () => {
-      const kioskNameById = Object.fromEntries(kiosks.map(k => [k.id, k.name]));
-      const snapshot = await loadGoalDistributionSnapshot(activePeriods, employeeGoals, kioskNameById);
-      if (!cancelled) {
-        setDistributionSnapshot(snapshot);
+      if (activePeriods.length === 0 || employeeGoals.length === 0) {
+        setDistributionSnapshot({
+          periodDateKeysById: {},
+          employeeDateKeysByGoalId: {},
+          goalIdsByPeriodShiftAndDate: {},
+          workedDaysByKioskAndUser: {},
+          shiftLabelByKioskUserAndDate: {},
+        });
+        return;
+      }
+
+      setDistributionSnapshot(null);
+      try {
+        const kioskNameById = Object.fromEntries(kiosks.map(k => [k.id, k.name]));
+        const snapshot = await loadGoalDistributionSnapshot(activePeriods, employeeGoals, kioskNameById);
+        if (!cancelled) {
+          setDistributionSnapshot(snapshot);
+        }
+      } catch (error) {
+        console.warn('[GoalsTrackingDashboard] failed to load distribution snapshot', error);
+        if (!cancelled) {
+          setDistributionSnapshot(null);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [activePeriods, employeeGoals]);
+  }, [activePeriods, employeeGoals, kiosks]);
 
   // Agrupa períodos por quiosque + mês para exibir em um único card
   const periodGroups = useMemo(() => {
