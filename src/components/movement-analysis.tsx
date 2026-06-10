@@ -959,23 +959,33 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
               <TableHeader className="bg-muted/40">
                 <TableRow className="hover:bg-transparent">
                   <TableHead rowSpan={2} className="min-w-[240px] align-bottom">Insumo Base</TableHead>
-                  <TableHead colSpan={5} className="text-center border-l-2 border-border bg-muted/30 uppercase tracking-wide text-[11px]">Conferência de Estoque</TableHead>
+                  <TableHead colSpan={6} className="text-center border-l-2 border-border bg-muted/30 uppercase tracking-wide text-[11px]">Conferência de Estoque</TableHead>
                   <TableHead colSpan={2} className="text-center border-l-2 border-border bg-blue-500/5 uppercase tracking-wide text-[11px]">Venda × Resultado</TableHead>
                   <TableHead rowSpan={2} className="text-center align-bottom border-l-2 border-border">Status</TableHead>
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="text-right border-l-2 border-border">Inicial</TableHead>
-                  <TableHead className="text-right">Entradas</TableHead>
-                  <TableHead className="text-right">Saídas (Sistema)</TableHead>
-                  <TableHead className="text-right">Ajustes</TableHead>
+                  <TableHead className="text-right border-l-2 border-border align-bottom">Inicial</TableHead>
+                  <TableHead className="text-right align-bottom">Entradas</TableHead>
+                  <TableHead className="text-right">
+                    Ajustes
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Ent. Correção + Saí. Correção + Divergência + Estorno</div>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    Saídas
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Consumo + Descarte + Transf. Saída</div>
+                  </TableHead>
+                  <TableHead className="text-right font-semibold">
+                    Saída Final
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Saídas − Ajustes</div>
+                  </TableHead>
                   <TableHead className="text-right bg-muted/30 font-semibold">
                     Final
-                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Inicial + Entradas − Saídas + Ajustes</div>
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Inicial + Entradas − Saída Final</div>
                   </TableHead>
                   <TableHead className="text-right border-l-2 border-border">Vendas (API)</TableHead>
                   <TableHead className="text-right">
                     Divergência
-                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Vendas (API) − Saídas + Ajustes</div>
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Vendas (API) − Saída Final</div>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -1030,14 +1040,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                           +{formatNumber(row.entradas)}
                         </button>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <button
-                          onClick={() => openHistory(row.baseProductId, 'SAIDA')}
-                          className="text-red-600 underline decoration-dotted underline-offset-4"
-                        >
-                          -{formatNumber(row.saidasReais)}
-                        </button>
-                      </TableCell>
+                      {/* Ajustes (antes das saídas) */}
                       <TableCell className={cn(
                         "text-right",
                         row.ajustes > 0 ? "text-green-600" : row.ajustes < 0 ? "text-red-600" : "text-muted-foreground"
@@ -1049,7 +1052,27 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                           {row.ajustes > 0 ? '+' : ''}{formatNumber(row.ajustes)}
                         </button>
                       </TableCell>
-                      {/* Final: resultado de Inicial + Entradas − Saídas + Ajustes (fórmula no cabeçalho) */}
+                      {/* Saídas operacionais */}
+                      <TableCell className="text-right">
+                        <button
+                          onClick={() => openHistory(row.baseProductId, 'SAIDA')}
+                          className="text-red-600 underline decoration-dotted underline-offset-4"
+                        >
+                          -{formatNumber(row.saidasReais)}
+                        </button>
+                      </TableCell>
+                      {/* Saída Final = Saídas − Ajustes (saída efetiva do estoque) */}
+                      {(() => {
+                        const saidaFinal = row.saidasReais - row.ajustes; // >0 = saiu líquido; <0 = entrou líquido
+                        return (
+                          <TableCell className="text-right whitespace-nowrap font-semibold">
+                            <span className={cn(saidaFinal > 0 ? "text-red-600" : saidaFinal < 0 ? "text-green-600" : "text-muted-foreground")}>
+                              {saidaFinal > 0 ? '-' : saidaFinal < 0 ? '+' : ''}{formatNumber(Math.abs(saidaFinal))}
+                            </span>
+                          </TableCell>
+                        );
+                      })()}
+                      {/* Final: resultado de Inicial + Entradas − Saída Final (fórmula no cabeçalho) */}
                       <TableCell className="text-right whitespace-nowrap bg-muted/30">
                         <button
                           onClick={() => openHistory(row.baseProductId)}
