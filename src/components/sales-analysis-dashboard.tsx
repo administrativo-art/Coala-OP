@@ -791,6 +791,9 @@ function SalesAnalysisDashboardInner() {
       const idToken = await firebaseUser?.getIdToken();
       if (!idToken) throw new Error('Usuário não autenticado.');
 
+      let totalUnmapped = 0;
+      const unmappedSamples = new Set<string>();
+
       for (const day of days) {
         for (const kId of kiosksToSync) {
           if (!KIOSK_MAP[kId]) continue;
@@ -801,18 +804,23 @@ function SalesAnalysisDashboardInner() {
           try {
             const res = await syncDayClient(day, kId, idToken);
             totalItemsCount += (res.count || 0);
+            for (const u of res.unmapped || []) {
+              totalUnmapped++;
+              if (unmappedSamples.size < 5) unmappedSamples.add(`${u.sku} (${u.name})`);
+            }
           } catch (e: any) {
             console.error(`[Sync Fail] ${day} ${kId}:`, e);
             failedDays.push(`${day} (${kId})`);
           }
         }
       }
-      
+
       const successCount = (days.length * kiosksToSync.length) - failedDays.length;
-      
+
       toast({
         title: 'Sincronização concluída!',
-        description: `Sucesso: ${successCount} relatórios. Falhas: ${failedDays.length}. Itens processados: ${totalItemsCount}.`,
+        description: `Sucesso: ${successCount} relatórios. Falhas: ${failedDays.length}. Cupons processados: ${totalItemsCount}.`
+          + (totalUnmapped > 0 ? ` ⚠️ ${totalUnmapped} SKU(s) sem ficha técnica: ${[...unmappedSamples].join(', ')}.` : ''),
         variant: failedDays.length > 0 ? 'destructive' : 'default',
       });
 

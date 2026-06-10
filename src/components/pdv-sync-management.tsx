@@ -13,10 +13,22 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, CheckCircle2, AlertCircle, Calendar as CalendarIcon, Loader2, PlayCircle } from 'lucide-react';
+import { RefreshCw, CheckCircle2, AlertCircle, AlertTriangle, Calendar as CalendarIcon, Loader2, PlayCircle } from 'lucide-react';
 import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { resolvePdvFilialId } from '@/lib/kiosk-identifiers';
+
+type SyncDiagnostics = {
+  couponsReceived: number;
+  couponsCancelled: number;
+  couponsWithoutItems: number;
+  itemsSeen: number;
+  itemsCancelled: number;
+  itemsMapped: number;
+  itemsUnmapped: number;
+  itemsZeroValue: number;
+  unmappedSkus: { sku: string; name: string; count: number }[];
+};
 
 type SyncLog = {
   date: string;
@@ -24,6 +36,9 @@ type SyncLog = {
   status: 'pending' | 'loading' | 'success' | 'error';
   revenue?: number;
   errorMessage?: string;
+  errorCode?: string;
+  diagnostics?: SyncDiagnostics;
+  warnings?: string[];
 };
 
 export function PdvSyncManagement() {
@@ -134,11 +149,15 @@ export function PdvSyncManagement() {
           setLogs(prev => prev.map(l => {
             const resMatch = resultsData.find((r: any) => r.date === l.date && l.kioskName === kiosk.name);
             if (resMatch) {
-              return { 
-                ...l, 
+              const hasWarnings = Array.isArray(resMatch.warnings) && resMatch.warnings.length > 0;
+              return {
+                ...l,
                 status: resMatch.error ? 'error' : 'success',
                 revenue: resMatch.revenue,
-                errorMessage: resMatch.error
+                errorMessage: resMatch.error,
+                errorCode: resMatch.errorCode,
+                diagnostics: resMatch.diagnostics,
+                warnings: hasWarnings ? resMatch.warnings : undefined,
               };
             }
             return l;
@@ -241,24 +260,73 @@ export function PdvSyncManagement() {
               <span>{progress}%</span>
             </div>
             <Progress value={progress} className="h-2" />
-            
+
+            {(() => {
+              const done = logs.filter(l => l.status === 'success' || l.status === 'error');
+              if (done.length === 0) return null;
+              const totalRevenue = done.reduce((s, l) => s + (l.revenue ?? 0), 0);
+              const totalCoupons = done.reduce((s, l) => s + (l.diagnostics?.couponsReceived ?? 0), 0);
+              const totalMapped = done.reduce((s, l) => s + (l.diagnostics?.itemsMapped ?? 0), 0);
+              const totalUnmapped = done.reduce((s, l) => s + (l.diagnostics?.itemsUnmapped ?? 0), 0);
+              const errorDays = done.filter(l => l.status === 'error').length;
+              const warnDays = done.filter(l => !!l.warnings?.length).length;
+              const healthy = errorDays === 0 && warnDays === 0;
+              return (
+                <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border p-2 text-[11px] ${healthy ? 'border-green-500/30 bg-green-500/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
+                  <span className="flex items-center gap-1 font-medium">
+                    {healthy ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                    {healthy ? 'Dados íntegros' : 'Verificar pendências'}
+                  </span>
+                  <span>Faturamento: <strong>R$ {totalRevenue.toFixed(2)}</strong></span>
+                  <span>{totalCoupons} cupons</span>
+                  <span>{totalMapped} itens mapeados</span>
+                  {totalUnmapped > 0 && <span className="text-amber-600">{totalUnmapped} sem ficha técnica</span>}
+                  {errorDays > 0 && <span className="text-destructive">{errorDays} dia(s) com erro</span>}
+                  {warnDays > 0 && <span className="text-amber-600">{warnDays} dia(s) com alerta</span>}
+                </div>
+              );
+            })()}
+
             <ScrollArea className="h-48 rounded-md border border-border/40 bg-muted/20 p-2">
               <div className="space-y-1.5">
-                {logs.slice().reverse().map((log, i) => (
-                  <div key={`${log.kioskName}-${log.date}-${i}`} className="flex items-center justify-between text-[11px] py-1 border-b border-border/10 last:border-0">
-                    <div className="flex items-center gap-2">
-                      {log.status === 'success' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-                      {log.status === 'error' && <AlertCircle className="h-3 w-3 text-destructive" />}
-                      {log.status === 'loading' && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
-                      {log.status === 'pending' && <CalendarIcon className="h-3 w-3 text-muted-foreground" />}
+                {logs.slice().reverse().map((log, i) => {
+                  const hasWarn = !!log.warnings?.length;
+                  const d = log.diagnostics;
+                  return (
+                  <div key={`${log.kioskName}-${log.date}-${i}`} className="flex items-start justify-between text-[11px] py-1 border-b border-border/10 last:border-0">
+                    <div className="flex items-center gap-2 pt-0.5">
+                      {log.status === 'success' && !hasWarn && <CheckCircle2 className="h-3 w-3 shrink-0 text-green-500" />}
+                      {log.status === 'success' && hasWarn && <AlertTriangle className="h-3 w-3 shrink-0 text-amber-500" />}
+                      {log.status === 'error' && <AlertCircle className="h-3 w-3 shrink-0 text-destructive" />}
+                      {log.status === 'loading' && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-blue-500" />}
+                      {log.status === 'pending' && <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground" />}
                       <span className="font-mono text-muted-foreground">{format(new Date(log.date + 'T12:00:00Z'), 'dd/MM')}</span>
                       <span className="font-medium">{log.kioskName}</span>
                     </div>
-                    <div className="flex flex-col items-end gap-0.5 max-w-[180px]">
-                      {log.status === 'success' && <span className="text-green-600 font-bold">R$ {log.revenue?.toFixed(2)}</span>}
+                    <div className="flex flex-col items-end gap-0.5 max-w-[220px]">
+                      {log.status === 'success' && (
+                        <>
+                          <span className={`font-bold ${hasWarn ? 'text-amber-600' : 'text-green-600'}`}>R$ {log.revenue?.toFixed(2) ?? '0.00'}</span>
+                          {d && (
+                            <span className="text-[9px] text-muted-foreground" title={`${d.couponsReceived} cupons recebidos · ${d.itemsMapped} itens mapeados · ${d.itemsUnmapped} sem ficha técnica`}>
+                              {d.couponsReceived}c · {d.itemsMapped}m{d.itemsUnmapped > 0 ? ` · ${d.itemsUnmapped} s/ficha` : ''}
+                            </span>
+                          )}
+                          {hasWarn && (
+                            <span className="text-[9px] text-amber-600/80 text-right" title={log.warnings!.join('\n')}>
+                              {log.warnings![0]}
+                            </span>
+                          )}
+                          {hasWarn && d && d.unmappedSkus.length > 0 && (
+                            <span className="text-[9px] text-amber-600/60 text-right truncate w-full" title={d.unmappedSkus.map(s => `${s.sku} — ${s.name} (${s.count})`).join('\n')}>
+                              SKUs: {d.unmappedSkus.slice(0, 3).map(s => s.sku).join(', ')}{d.unmappedSkus.length > 3 ? '…' : ''}
+                            </span>
+                          )}
+                        </>
+                      )}
                       {log.status === 'error' && (
                         <>
-                          <span className="text-destructive font-bold">Falha</span>
+                          <span className="text-destructive font-bold">Falha{log.errorCode ? ` (${log.errorCode})` : ''}</span>
                           {log.errorMessage && (
                             <span className="text-[9px] text-destructive/70 truncate w-full text-right" title={log.errorMessage}>
                               {log.errorMessage}
@@ -269,7 +337,8 @@ export function PdvSyncManagement() {
                       {log.status === 'loading' && <span className="text-blue-500 animate-pulse">Processando...</span>}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </ScrollArea>
           </div>

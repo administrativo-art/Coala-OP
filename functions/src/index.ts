@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase-admin/app';
+import './app-init.js'; // DEVE vir antes de qualquer re-export que use getFirestore no topo do módulo
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
@@ -16,7 +16,6 @@ export { scheduledDateAlerts, scheduledProfileCompletion } from './rh/automation
 export { onTermination, lgpdScheduledCleanup } from './rh/termination.js';
 export { checkFieldMapConsistency } from './rh/propagation.js';
 
-initializeApp();
 setGlobalOptions({ maxInstances: 10 });
 
 const db = getFirestore('coala');
@@ -656,7 +655,15 @@ export const syncGoalsForRange = onCall(
     const pdvFilialId = pdvFilialIdParam || kioskDoc.data()?.pdvFilialId || FALLBACK_MAP[kioskId];
     if (!pdvFilialId) throw new HttpsError('failed-precondition', 'Quiosque sem pdvFilialId configurado. Informe o ID da filial no PDV Legal.');
 
-    const results: { date: string; revenue?: number; error?: string }[] = [];
+    type DayResult = {
+      date: string;
+      revenue?: number;
+      error?: string;
+      errorCode?: string;
+      diagnostics?: unknown;
+      warnings?: string[];
+    };
+    const results: DayResult[] = [];
     const current = new Date(startDate + 'T12:00:00Z');
     const end = new Date(endDate + 'T12:00:00Z');
 
@@ -664,10 +671,15 @@ export const syncGoalsForRange = onCall(
       const dateStr = current.toISOString().split('T')[0];
       try {
         const result = await syncDayAdmin(dateStr, kioskId, pdvFilialId, db) as any;
-        results.push({ date: dateStr, revenue: result.dailyRevenue });
+        results.push({
+          date: dateStr,
+          revenue: result.dailyRevenue,
+          diagnostics: result.diagnostics,
+          warnings: result.warnings,
+        });
       } catch (e: any) {
         console.error(`[syncGoalsForRange] Erro em ${dateStr}:`, e);
-        results.push({ date: dateStr, error: e.message });
+        results.push({ date: dateStr, error: e.message, errorCode: e.code });
       }
       current.setDate(current.getDate() + 1);
     }

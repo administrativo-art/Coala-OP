@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
             results.push({ day: dayStr, kioskId: kiosk.id, ...res });
           } catch (e: any) {
             console.error(`[Sync API] Erro em ${dayStr} (${kiosk.id}):`, e.message);
-            errors.push({ day: dayStr, kioskId: kiosk.id, error: e.message });
+            errors.push({ day: dayStr, kioskId: kiosk.id, error: e.message, code: e.code });
           }
         }
         current.setUTCDate(current.getUTCDate() + 1);
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
           results.push({ day: targetDate, kioskId: kiosk.id, ...res });
         } catch (e: any) {
           console.error(`[Sync API] Erro em ${targetDate} (${kiosk.id}):`, e.message);
-          errors.push({ day: targetDate, kioskId: kiosk.id, error: e.message });
+          errors.push({ day: targetDate, kioskId: kiosk.id, error: e.message, code: e.code });
         }
       }
     }

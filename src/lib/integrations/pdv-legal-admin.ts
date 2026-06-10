@@ -20,6 +20,53 @@ function getEnv() {
 
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
+/**
+ * Erro estruturado para falhas de comunicação/formato com a API do PDV Legal.
+ * O `code` permite à UI distinguir "sem vendas" de "integração quebrada".
+ */
+export class PdvApiError extends Error {
+  constructor(message: string, public code: string, public detail?: string) {
+    super(message);
+    this.name = 'PdvApiError';
+  }
+}
+
+export type SyncDiagnostics = {
+  couponsReceived: number;
+  couponsCancelled: number;
+  couponsWithoutItems: number;
+  itemsSeen: number;
+  itemsCancelled: number;
+  itemsMapped: number;
+  itemsUnmapped: number;
+  itemsZeroValue: number;
+  unmappedSkus: { sku: string; name: string; count: number }[];
+};
+
+/**
+ * Detecta e valida o formato da resposta de cupons. Array direto, paginado
+ * `{ data }` ou objeto vazio são aceitos; qualquer outro formato lança erro
+ * estrutural em vez de virar silenciosamente uma lista vazia.
+ */
+function parseCouponsResponse(raw: unknown): { coupons: any[]; format: string } {
+  if (Array.isArray(raw)) return { coupons: raw, format: 'array' };
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, any>;
+    if ('data' in obj) {
+      return { coupons: Array.isArray(obj.data) ? obj.data : [], format: 'paginated' };
+    }
+    const apiMsg = obj.Message || obj.message || obj.Error || obj.error;
+    if (apiMsg) {
+      throw new PdvApiError(`API do PDV Legal retornou erro: ${apiMsg}`, 'API_ERROR_PAYLOAD', JSON.stringify(obj).slice(0, 300));
+    }
+    if (Object.keys(obj).length === 0) return { coupons: [], format: 'empty-object' };
+    throw new PdvApiError('Estrutura inesperada na resposta de cupons do PDV Legal.', 'UNEXPECTED_STRUCTURE', JSON.stringify(obj).slice(0, 300));
+  }
+
+  throw new PdvApiError('Resposta de cupons em formato não reconhecido.', 'UNEXPECTED_TYPE', String(raw).slice(0, 100));
+}
+
 export async function getAccessToken() {
   const { COD_EMPRESA, API_TOKEN, USERNAME, PASSWORD } = getEnv();
 
@@ -41,12 +88,20 @@ export async function getAccessToken() {
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Auth failed (${response.status}): ${error}`);
+    const error = await response.text().catch(() => '');
+    throw new PdvApiError(`Falha na autenticação com o PDV Legal (HTTP ${response.status}).`, 'AUTH_FAILED', error.slice(0, 300));
   }
 
-  const data = await response.json();
-  return data.access_token;
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    throw new PdvApiError('Resposta de autenticação do PDV Legal não é JSON válido.', 'AUTH_BAD_JSON');
+  }
+  if (!data?.access_token) {
+    throw new PdvApiError('Token de acesso ausente na resposta do PDV Legal.', 'AUTH_NO_TOKEN');
+  }
+  return data.access_token as string;
 }
 
 /**
@@ -67,16 +122,21 @@ async function fetchAllCouponsForDay(accessToken: string, date: string, filialId
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = await response.text().catch(() => '');
     console.error(`[PDV Legal] Erro na API: ${response.status} - ${errorText}`);
-    return [];
+    // Antes retornava [] silenciosamente → erro de API virava "0 cupons".
+    throw new PdvApiError(`Falha ao buscar cupons da filial ${filialId} (HTTP ${response.status}).`, 'FETCH_FAILED', errorText.slice(0, 300));
   }
 
-  const data = await response.json();
-  const coupons = Array.isArray(data) ? data : (data.links ? data.data : []);
-  
-  console.log(`[PDV Legal] ${date}: Recebidos ${coupons.length} cupons.`);
-  return coupons || [];
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    throw new PdvApiError(`Resposta de cupons (${date}) não é JSON válido.`, 'COUPONS_BAD_JSON');
+  }
+  const { coupons, format } = parseCouponsResponse(raw);
+  console.log(`[PDV Legal] ${date}: Recebidos ${coupons.length} cupons (formato: ${format}).`);
+  return coupons;
 }
 
 function extractPdvTime(dateStr: string): string {
@@ -92,11 +152,21 @@ function extractBrazilHour(dateStr: string): string {
   return extractPdvTime(dateStr).split(':')[0];
 }
 
+function emptyDiagnostics(): SyncDiagnostics {
+  return {
+    couponsReceived: 0, couponsCancelled: 0, couponsWithoutItems: 0,
+    itemsSeen: 0, itemsCancelled: 0, itemsMapped: 0, itemsUnmapped: 0,
+    itemsZeroValue: 0, unmappedSkus: [],
+  };
+}
+
 export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId: string) {
   const token = await getAccessToken();
   const coupons = await fetchAllCouponsForDay(token, dateStr, pdvFilialId);
 
-  if (!coupons || coupons.length === 0) return { success: true, count: 0 };
+  if (!coupons || coupons.length === 0) {
+    return { success: true, count: 0, unmapped: [] as { sku: string; name: string }[], diagnostics: emptyDiagnostics(), warnings: [] as string[] };
+  }
 
   const simsSnap = await dbAdmin.collection('productSimulations').get();
   const simulations = simsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
@@ -117,19 +187,25 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
   const productHourlySales: Record<string, Record<string, number>> = {};
   const consumptionByBaseProduct: Record<string, any> = {};
 
+  // Diagnóstico — saber se a sync trouxe dados reais ou só "sucesso vazio"
+  const diag = emptyDiagnostics();
+  diag.couponsReceived = coupons.length;
+  const unmappedSkuMap: Record<string, { sku: string; name: string; count: number }> = {};
+
   for (const coupon of coupons) {
     const rawItems = coupon.Itens || coupon.itens;
-    if (!rawItems || !Array.isArray(rawItems)) continue;
+    if (!rawItems || !Array.isArray(rawItems)) { diag.couponsWithoutItems++; continue; }
 
     const isCupomCancelado = coupon.iscancelado || coupon.status === 'CANCELADO';
-    
+
     // Verifica se é um "Cancelamento Total Preguiçoso" da API:
     // O cupom está cancelado, mas a API esqueceu de marcar os itens dentro dele como cancelados.
     const hasAnyItemExplicitlyCancelled = rawItems.some(item => item.iscancelado === true);
-    
+
     if (isCupomCancelado && !hasAnyItemExplicitlyCancelled) {
        // Se o cupom está cancelado E NENHUM item dentro dele diz que foi cancelado,
        // assumimos que foi um cancelamento total da venda e ignoramos o cupom inteiro.
+       diag.couponsCancelled++;
        continue;
     }
 
@@ -138,8 +214,9 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     hourlySales[hour] = (hourlySales[hour] || 0) + 1;
 
     for (const item of rawItems) {
+      diag.itemsSeen++;
       // IGNORA O ITEM APENAS SE ELE, INDIVIDUALMENTE, ESTIVER MARCADO COMO CANCELADO
-      if (item.iscancelado) continue;
+      if (item.iscancelado) { diag.itemsCancelled++; continue; }
 
       const possibleSkus = [
           item.codigoVenda,
@@ -150,7 +227,9 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
         ].filter(Boolean).map(c => c.toString().trim());
 
         const qty = item.Quantidade || item.quantidade || 0;
-        
+        const itemTotal = item.valortotal || item.ValorTotal || 0;
+        if (!itemTotal) diag.itemsZeroValue++;
+
         // Busca a simulação (Ficha Técnica) cujo SKU seja um dos códigos do PDV
         const sim = simulations.find(s => {
           const simSku = s.ppo?.sku?.toString().trim();
@@ -160,15 +239,20 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
         const mainSku = possibleSkus[0] || 'SEM_SKU';
 
         if (!sim) {
+          diag.itemsUnmapped++;
+          if (!unmappedSkuMap[mainSku]) {
+            unmappedSkuMap[mainSku] = { sku: mainSku, name: item.Descricao || item.nomeProduto || item.descricao || 'Sem descrição', count: 0 };
+          }
+          unmappedSkuMap[mainSku].count++;
           console.log(`[PDV Legal] ⚠️ SKU não encontrado nas Fichas Técnicas: "${mainSku}" (${item.Descricao || item.nomeProduto || 'Sem descrição'}) - Buscado por: ${possibleSkus.join(', ')}`);
           continue;
         }
+        diag.itemsMapped++;
 
         const sku = sim.ppo?.sku?.toString().trim() || mainSku;
 
         const itTime = coupon.dtrecebimento || coupon.dtabertura || item.dtmovimento;
         const itemTimestamp = extractPdvTime(itTime || '') || `${hour}:00`;
-        const itemTotal = item.valortotal || item.ValorTotal || 0;
         const unitPrice = item.PrecoVenda || item.precoVenda || (qty > 0 ? itemTotal / qty : 0);
 
         if (!productTotals[sim.id]) {
@@ -200,15 +284,31 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     }
 
 }
+  // Amostra dos SKUs sem ficha técnica (top 20 por frequência)
+  diag.unmappedSkus = Object.values(unmappedSkuMap).sort((a, b) => b.count - a.count).slice(0, 20);
+
+  // ── Checagens de integridade — sinalizam quando "sucesso" não trouxe dados ──
+  const warnings: string[] = [];
+  if (diag.couponsReceived > 0 && diag.itemsMapped === 0) {
+    warnings.push('Cupons recebidos, mas nenhum item bateu com as fichas técnicas (SKUs não mapeados).');
+  }
+  if (diag.itemsSeen > 0 && diag.itemsUnmapped / diag.itemsSeen > 0.5) {
+    warnings.push(`Mais da metade dos itens (${diag.itemsUnmapped}/${diag.itemsSeen}) sem ficha técnica.`);
+  }
+  if (warnings.length > 0) {
+    console.warn(`[PDV Legal] ${dateStr} ${kioskId}: ⚠️ ${warnings.join(' | ')}`, JSON.stringify(diag));
+  }
+
   const reportId = `sync_${kioskId}_${dateStr.replace(/-/g, '_')}`;
-  
+
   await dbAdmin.collection('salesReports').doc(`sales_${reportId}`).set({
     reportName: `Sincronização PDV Legal ${dateStr}`,
     month, year, day, kioskId, createdAt: new Date().toISOString(),
     consumptionReportId: `cons_${reportId}`,
     items: Object.values(productTotals),
     hourlySales,
-    productHourlySales
+    productHourlySales,
+    syncDiagnostics: diag,
   });
 
   await dbAdmin.collection('consumptionReports').doc(`cons_${reportId}`).set({
@@ -219,5 +319,5 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     }))
   });
 
-  return { success: true, count: coupons.length };
+  return { success: true, count: coupons.length, unmapped: diag.unmappedSkus.map(u => ({ sku: u.sku, name: u.name })), diagnostics: diag, warnings };
 }

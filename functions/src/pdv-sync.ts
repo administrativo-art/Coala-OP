@@ -6,6 +6,81 @@ function getEnv(name: string): string {
 
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
+/**
+ * Erro estruturado para qualquer falha de comunicação ou formato inesperado
+ * vindo da API do PDV Legal. Carrega um `code` legível para diagnóstico, de
+ * forma que a UI consiga distinguir "não houve venda" de "a integração quebrou".
+ */
+export class PdvApiError extends Error {
+  constructor(message: string, public code: string, public detail?: string) {
+    super(message);
+    this.name = 'PdvApiError';
+  }
+}
+
+/**
+ * Diagnóstico de uma sincronização diária. Permite saber, sem abrir os logs,
+ * se a API respondeu, quantos cupons/itens vieram e quantos bateram com as
+ * fichas técnicas — ou seja, se "não trouxe dados" foi venda zerada ou erro.
+ */
+export type SyncDiagnostics = {
+  couponsReceived: number;
+  couponsCancelled: number;
+  couponsWithoutItems: number;
+  itemsSeen: number;
+  itemsCancelled: number;
+  itemsMapped: number;
+  itemsUnmapped: number;
+  itemsZeroValue: number;
+  /** SKUs vistos no PDV que não casaram com nenhuma ficha técnica (amostra). */
+  unmappedSkus: { sku: string; name: string; count: number }[];
+};
+
+/**
+ * Detecta e valida o formato da resposta de cupons. A API às vezes devolve um
+ * array direto, às vezes um objeto paginado `{ data, links }`, às vezes um
+ * objeto vazio. Qualquer outro formato é tratado como ERRO ESTRUTURAL (lança),
+ * em vez de virar silenciosamente uma lista vazia.
+ */
+function parseCouponsResponse(raw: unknown): { coupons: any[]; format: string } {
+  if (Array.isArray(raw)) return { coupons: raw, format: 'array' };
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, any>;
+
+    // Formato paginado conhecido (mesmo com data: null quando vazio)
+    if ('data' in obj) {
+      return { coupons: Array.isArray(obj.data) ? obj.data : [], format: 'paginated' };
+    }
+
+    // A API sinalizou um erro no corpo da resposta
+    const apiMsg = obj.Message || obj.message || obj.Error || obj.error;
+    if (apiMsg) {
+      throw new PdvApiError(
+        `API do PDV Legal retornou erro: ${apiMsg}`,
+        'API_ERROR_PAYLOAD',
+        JSON.stringify(obj).slice(0, 300),
+      );
+    }
+
+    // Objeto vazio {} → tratamos como "sem cupons"
+    if (Object.keys(obj).length === 0) return { coupons: [], format: 'empty-object' };
+
+    // Qualquer outra estrutura é desconhecida — falha alto para sabermos que quebrou
+    throw new PdvApiError(
+      'Estrutura inesperada na resposta de cupons do PDV Legal.',
+      'UNEXPECTED_STRUCTURE',
+      JSON.stringify(obj).slice(0, 300),
+    );
+  }
+
+  throw new PdvApiError(
+    'Resposta de cupons em formato não reconhecido (esperado array ou objeto).',
+    'UNEXPECTED_TYPE',
+    String(raw).slice(0, 100),
+  );
+}
+
 // Extrai horários de início/fim do label do turno, ex: "Manhã (10:00–16:15)" → {start:"10:00",end:"16:15"}
 function extractShiftTimes(label: string): { start: string; end: string } | null {
   const match = label.match(/\((\d{2}:\d{2})[–\-](\d{2}:\d{2})\)/u);
@@ -44,9 +119,24 @@ export async function getAccessToken() {
     },
     body: params.toString(),
   });
-  if (!response.ok) throw new Error(`Auth failed`);
-  const data = await response.json();
-  return data.access_token;
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new PdvApiError(
+      `Falha na autenticação com o PDV Legal (HTTP ${response.status}).`,
+      'AUTH_FAILED',
+      detail.slice(0, 300),
+    );
+  }
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    throw new PdvApiError('Resposta de autenticação do PDV Legal não é JSON válido.', 'AUTH_BAD_JSON');
+  }
+  if (!data?.access_token) {
+    throw new PdvApiError('Token de acesso ausente na resposta do PDV Legal.', 'AUTH_NO_TOKEN');
+  }
+  return data.access_token as string;
 }
 
 async function fetchAllCouponsForDay(accessToken: string, date: string, filialId: string) {
@@ -56,22 +146,31 @@ async function fetchAllCouponsForDay(accessToken: string, date: string, filialId
     headers: { 'Authorization': `Bearer ${accessToken}`, 'CodEmpresa': COD_EMPRESA, 'Token': API_TOKEN },
   });
   if (!response.ok) {
-    console.error(`[PDV Sync] fetchCoupons ${date} filial ${filialId}: HTTP ${response.status}`);
-    return [];
+    const detail = await response.text().catch(() => '');
+    // Antes retornava [] silenciosamente → erro de API virava "0 cupons".
+    throw new PdvApiError(
+      `Falha ao buscar cupons da filial ${filialId} (HTTP ${response.status}).`,
+      'FETCH_FAILED',
+      detail.slice(0, 300),
+    );
   }
-  const data = await response.json();
-  // A API pode retornar array direto, paginado { data, links } ou objeto vazio
-  let coupons: any[];
-  if (Array.isArray(data)) {
-    coupons = data;
-  } else if (data && Array.isArray(data.data)) {
-    coupons = data.data; // paginado — inclui mesmo quando links é null
-  } else {
-    console.warn(`[PDV Sync] Formato inesperado da resposta para ${date}:`, JSON.stringify(data).slice(0, 200));
-    coupons = [];
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    throw new PdvApiError(`Resposta de cupons (${date}) não é JSON válido.`, 'COUPONS_BAD_JSON');
   }
-  console.log(`[PDV Sync] ${date} filial ${filialId}: ${coupons.length} cupons recebidos`);
+  const { coupons, format } = parseCouponsResponse(raw);
+  console.log(`[PDV Sync] ${date} filial ${filialId}: ${coupons.length} cupons recebidos (formato: ${format})`);
   return coupons;
+}
+
+function emptyDiagnostics(): SyncDiagnostics {
+  return {
+    couponsReceived: 0, couponsCancelled: 0, couponsWithoutItems: 0,
+    itemsSeen: 0, itemsCancelled: 0, itemsMapped: 0, itemsUnmapped: 0,
+    itemsZeroValue: 0, unmappedSkus: [],
+  };
 }
 
 export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId: string, db: FirebaseFirestore.Firestore) {
@@ -79,7 +178,7 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
   const coupons = await fetchAllCouponsForDay(token, dateStr, pdvFilialId);
   if (!coupons || coupons.length === 0) {
     console.log(`[PDV Sync] ${dateStr} ${kioskId}: sem cupons, pulando.`);
-    return { success: true, count: 0 };
+    return { success: true, count: 0, dailyRevenue: 0, diagnostics: emptyDiagnostics(), warnings: [] as string[] };
   }
 
   // Log estrutura do primeiro cupom e primeiro item para diagnóstico
@@ -105,12 +204,17 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
   // Quantity per operator per product (simulationId)
   const productQtyByOperator: Record<string, Record<string, number>> = {};
 
+  // Diagnóstico — contabiliza tudo que entra para sabermos se a sync trouxe dados de verdade
+  const diag = emptyDiagnostics();
+  diag.couponsReceived = coupons.length;
+  const unmappedSkuMap: Record<string, { sku: string; name: string; count: number }> = {};
+
   for (const coupon of coupons) {
     const rawItems = coupon.Itens || coupon.itens;
-    if (!rawItems || !Array.isArray(rawItems)) continue;
+    if (!rawItems || !Array.isArray(rawItems)) { diag.couponsWithoutItems++; continue; }
     const isCupomCancelado = coupon.iscancelado || coupon.status === 'CANCELADO';
     const hasAnyItemExplicitlyCancelled = rawItems.some((item: any) => item.iscancelado === true);
-    if (isCupomCancelado && !hasAnyItemExplicitlyCancelled) continue;
+    if (isCupomCancelado && !hasAnyItemExplicitlyCancelled) { diag.couponsCancelled++; continue; }
     const couponTime = coupon.dtrecebimento || coupon.dtabertura || rawItems.find((i: any) => i.dtmovimento)?.dtmovimento || '';
     const hour = extractBrazilHour(couponTime);
     hourlySales[hour] = (hourlySales[hour] || 0) + 1;
@@ -120,11 +224,13 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     const couponOperatorId = coupon.usuariorecebimento_id ?? null;
 
     for (const item of rawItems) {
-      if (item.iscancelado) continue;
+      diag.itemsSeen++;
+      if (item.iscancelado) { diag.itemsCancelled++; continue; }
       const possibleSkus = [item.codigoVenda, item.codproduto, item.codProdutoExterno, item.CodRef, item.Codigo].filter(Boolean).map(c => c.toString().trim());
       const qty = item.quantidade || item.Quantidade || 0;
       // valortotal já é o total do item (qty × preço − desconto + acréscimo)
       const revenue = item.valortotal || 0;
+      if (!revenue) diag.itemsZeroValue++;
 
       // Accumulate revenue for goals
       dailyRevenue += revenue;
@@ -139,7 +245,16 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
         const simSku = s.ppo?.sku?.toString().trim();
         return simSku && possibleSkus.includes(simSku);
       });
-      if (!sim) continue;
+      if (!sim) {
+        diag.itemsUnmapped++;
+        const key = possibleSkus[0] || 'SEM_SKU';
+        if (!unmappedSkuMap[key]) {
+          unmappedSkuMap[key] = { sku: key, name: item.Descricao || item.nomeProduto || item.descricao || 'Sem descrição', count: 0 };
+        }
+        unmappedSkuMap[key].count++;
+        continue;
+      }
+      diag.itemsMapped++;
 
       // Track quantity per operator per product
       if (operatorId != null) {
@@ -175,6 +290,24 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     }
   }
 
+  // Amostra dos SKUs sem ficha técnica (top 20 por frequência)
+  diag.unmappedSkus = Object.values(unmappedSkuMap).sort((a, b) => b.count - a.count).slice(0, 20);
+
+  // ── Checagens de integridade — sinalizam quando "sucesso" não trouxe dados ──
+  const warnings: string[] = [];
+  if (diag.couponsReceived > 0 && diag.itemsMapped === 0) {
+    warnings.push('Cupons recebidos, mas nenhum item bateu com as fichas técnicas (SKUs não mapeados).');
+  }
+  if (diag.itemsSeen > 0 && diag.itemsUnmapped / diag.itemsSeen > 0.5) {
+    warnings.push(`Mais da metade dos itens (${diag.itemsUnmapped}/${diag.itemsSeen}) sem ficha técnica.`);
+  }
+  if (diag.couponsReceived > 0 && dailyRevenue === 0) {
+    warnings.push('Cupons recebidos, mas faturamento calculado foi R$ 0,00 — verifique o campo valortotal da API.');
+  }
+  if (warnings.length > 0) {
+    console.warn(`[PDV Sync] ${dateStr} ${kioskId}: ⚠️ ${warnings.join(' | ')}`, JSON.stringify(diag));
+  }
+
   const reportId = `sync_${kioskId}_${dateStr.replace(/-/g, '_')}`;
   await db.collection('salesReports').doc(`sales_${reportId}`).set({
     reportName: `Sincronização Automática ${dateStr}`,
@@ -182,6 +315,7 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     items: Object.values(productTotals), hourlySales, productHourlySales,
     combos: Object.entries(comboCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     productQtyByOperator,
+    syncDiagnostics: diag,
   });
 
   // ── Update active goal periods ────────────────────────────────────────────
@@ -190,7 +324,7 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
 
   await syncGoalsForDay(dateStr, kioskId, dailyRevenue, revenueByOperator, db);
 
-  return { success: true, count: coupons.length, dailyRevenue };
+  return { success: true, count: coupons.length, dailyRevenue, diagnostics: diag, warnings };
 }
 
 export async function syncGoalsForDay(
