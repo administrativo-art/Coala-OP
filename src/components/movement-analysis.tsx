@@ -10,7 +10,7 @@ import { useProducts } from "@/hooks/use-products";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useValidatedConsumptionData } from "@/hooks/use-validated-consumption-data";
-import { getMovementQuantityInBaseUnit, getSignedAdjustmentDelta } from '@/lib/movement-quantity';
+import { getMovementQuantityInBaseUnit } from '@/lib/movement-quantity';
 import { MovementHistoryModal } from "./movement-history-modal";
 import { ConsumptionDetailsModal } from "./consumption-details-modal";
 import { type BaseProduct, type MovementRecord, type ConsumptionReport } from "@/types";
@@ -21,7 +21,7 @@ import { Skeleton } from "./ui/skeleton"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "./ui/select"
 import { Input } from "./ui/input"
 import { MultiSelect } from "./ui/multi-select"
-import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, Package, Wrench, ArrowLeftRight, Filter, AlertTriangle } from "lucide-react";
+import { Inbox, Truck, TrendingUp, TrendingDown, Minus, CalendarDays, Package, ArrowLeftRight, Filter, AlertTriangle } from "lucide-react";
 import { LineChart, Line, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -229,7 +229,7 @@ const formatNumber = (value: number) => {
     return value.toLocaleString('pt-BR', options);
 };
 
-type ComparisonFilter = 'all' | 'faltas' | 'sobras' | 'ajustes';
+type ComparisonFilter = 'all' | 'faltas' | 'sobras';
 
 type ComparisonRow = {
   baseProductId: string;
@@ -238,7 +238,6 @@ type ComparisonRow = {
   estoqueInicial: number;
   entradas: number;
   saidasReais: number;
-  ajustes: number;
   vendasTeoricas: number;
   divergence: number;
   estoqueFinal: number;
@@ -385,8 +384,7 @@ function ComparisonRowCard({
 
         <div className="space-y-2">
           <BreakdownLine label="Entradas" value={row.entradas} unit={row.unit} tone="positive" />
-          <BreakdownLine label="Saídas (Sistema)" value={row.saidasReais} unit={row.unit} tone="negative" />
-          <BreakdownLine label="Ajustes" value={row.ajustes} unit={row.unit} tone={row.ajustes >= 0 ? 'positive' : 'negative'} />
+          <BreakdownLine label="Saídas" value={row.saidasReais} unit={row.unit} tone="negative" />
           <BreakdownLine label="Vendas (API)" value={row.vendasTeoricas} unit={row.unit} />
         </div>
 
@@ -753,7 +751,6 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
       const totals = {
           entradas: 0,
           saidas: 0,
-          ajustes: 0, 
       };
 
       movementsInPeriod.forEach(movement => {
@@ -764,37 +761,31 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
 
           const isToKiosk = kioskId === 'all' || movement.toKioskId === kioskId;
           const isFromKiosk = kioskId === 'all' || movement.fromKioskId === kioskId;
-          
+
           if (kioskId === 'all' && movement.type.includes('TRANSFERENCIA')) {
               return;
           }
 
           const type = movement.type;
-          
-          // Entradas: Compras e Transferências de Entrada
-          const isSupply = type === 'ENTRADA' || type === 'TRANSFERENCIA_ENTRADA';
-          
-          // Saídas operacionais: Consumo, Perdas, Descartes e Transferências de Saída
-          const isRealExit = type.startsWith('SAIDA_CONSUMO') || 
-                            type.startsWith('SAIDA_DESCARTE') || 
-                            type === 'TRANSFERENCIA_SAIDA';
 
-          // Ajustes: Correções, Divergências e Estornos
-          const isAdjustment = type.includes('CORRECAO') || type.includes('Divergência') || type.includes('ESTORNO');
+          // Classificação pelo EFEITO no estoque:
+          //  - Entrada: compra, transf. entrada, divergência acréscimo, estorno que devolve
+          //  - Saída:   consumo, descarte, transf. saída, divergência decréscimo, correção de saída, estorno que retira
+          const isInflow = type === 'ENTRADA' || type === 'TRANSFERENCIA_ENTRADA' ||
+                           type === 'ENTRADA_CORRECAO' || type === 'SAIDA_ESTORNO';
+          const isOutflow = type.startsWith('SAIDA_CONSUMO') || type.startsWith('SAIDA_DESCARTE') ||
+                            type === 'TRANSFERENCIA_SAIDA' || type === 'SAIDA_CORRECAO' ||
+                            type.includes('Divergência') || type === 'ENTRADA_ESTORNO';
 
-          if (isAdjustment) {
-              if (isToKiosk || isFromKiosk) {
-                totals.ajustes += getSignedAdjustmentDelta(type, qtyInBase);
-              }
-          } else if (isSupply) {
-              if (isToKiosk) totals.entradas += qtyInBase;
-          } else if (isRealExit) {
+          if (isInflow) {
+              if (isToKiosk) totals.entradas += Math.abs(qtyInBase);
+          } else if (isOutflow) {
               if (isFromKiosk) totals.saidas += Math.abs(qtyInBase);
           }
       });
 
-      const divergence = theoreticalConsumption - totals.saidas + totals.ajustes;
-      const estoqueFinal = (isNaN(estoqueInicial) ? 0 : estoqueInicial) + totals.entradas - totals.saidas + totals.ajustes;
+      const divergence = theoreticalConsumption - totals.saidas;
+      const estoqueFinal = (isNaN(estoqueInicial) ? 0 : estoqueInicial) + totals.entradas - totals.saidas;
 
       return {
         baseProductId: baseProduct.id,
@@ -803,12 +794,11 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
         estoqueInicial,
         entradas: totals.entradas,
         saidasReais: totals.saidas,
-        ajustes: totals.ajustes,
         vendasTeoricas: theoreticalConsumption,
         divergence: divergence,
         estoqueFinal
       };
-    }).filter(d => d.entradas > 0 || d.saidasReais > 0 || d.vendasTeoricas > 0 || Math.abs(d.estoqueInicial) > 0 || Math.abs(d.ajustes) > 0)
+    }).filter(d => d.entradas > 0 || d.saidasReais > 0 || d.vendasTeoricas > 0 || Math.abs(d.estoqueInicial) > 0)
       .sort((a, b) => Math.abs(b.divergence) - Math.abs(a.divergence));
 
     return {
@@ -825,7 +815,6 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
     return comparisonSummary.rows.filter((row): row is ComparisonRow => {
       if (quickFilter === 'faltas') return row.divergence < 0;
       if (quickFilter === 'sobras') return row.divergence > 0;
-      if (quickFilter === 'ajustes') return row.ajustes !== 0;
       return true;
     });
   }, [comparisonSummary.rows, quickFilter]);
@@ -833,7 +822,6 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
   const summaryCards = useMemo(() => {
     const faltas = displayedRows.filter(row => row.divergence < 0);
     const sobras = displayedRows.filter(row => row.divergence > 0);
-    const ajustes = displayedRows.filter(row => row.ajustes !== 0);
     const netDivergence = displayedRows.reduce((total, row) => total + row.divergence, 0);
     const maxDivergence = displayedRows.reduce<ComparisonRow | null>((current, row) => {
       if (!current || Math.abs(row.divergence) > Math.abs(current.divergence)) return row;
@@ -843,7 +831,6 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
     return {
       faltas: faltas.length,
       sobras: sobras.length,
-      ajustes: ajustes.length,
       netDivergence,
       maxDivergence,
     };
@@ -853,27 +840,20 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <SummaryMetricCard
           label="Insumos com falta"
           value={String(summaryCards.faltas)}
-          helper="Itens em que o consumo teórico superou a baixa registrada."
+          helper="Itens em que a baixa registrada superou o consumo teórico (saiu mais do que foi vendido)."
           icon={TrendingDown}
           tone={summaryCards.faltas > 0 ? 'danger' : 'default'}
         />
         <SummaryMetricCard
           label="Insumos com sobra"
           value={String(summaryCards.sobras)}
-          helper="Itens em que a baixa registrada superou o consumo teórico."
+          helper="Itens em que o consumo teórico superou a baixa registrada (saiu menos do que foi vendido)."
           icon={TrendingUp}
           tone={summaryCards.sobras > 0 ? 'success' : 'default'}
-        />
-        <SummaryMetricCard
-          label="Itens com ajuste"
-          value={String(summaryCards.ajustes)}
-          helper="Movimentações com correção, divergência de turno ou estorno no período."
-          icon={Wrench}
-          tone={summaryCards.ajustes > 0 ? 'warning' : 'default'}
         />
         <SummaryMetricCard
           label="Divergência líquida"
@@ -915,7 +895,6 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
               <ToggleGroupItem value="all" className="text-xs">Todos</ToggleGroupItem>
               <ToggleGroupItem value="faltas" className="text-xs">Só faltas</ToggleGroupItem>
               <ToggleGroupItem value="sobras" className="text-xs">Só sobras</ToggleGroupItem>
-              <ToggleGroupItem value="ajustes" className="text-xs">Com ajustes</ToggleGroupItem>
             </ToggleGroup>
           </div>
         </div>
@@ -931,8 +910,14 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
         </Alert>
       )}
 
-      <div className="rounded-xl border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-        Compare as baixas do sistema com o consumo teórico vindo da API. Números sublinhados abrem o histórico ou o detalhamento do consumo do insumo.
+      <div className="rounded-xl border bg-muted/20 px-4 py-3 text-sm text-muted-foreground space-y-2">
+        <p>Compare as baixas do sistema com o consumo teórico vindo da API. Números sublinhados abrem o histórico ou o detalhamento do consumo do insumo.</p>
+        <div className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+          <p><span className="font-semibold text-green-700">Entradas</span> = Compras + Transf. entrada + Divergência acréscimo + Estorno que devolve</p>
+          <p><span className="font-semibold text-red-700">Saídas</span> = Consumo + Descarte + Transf. saída + Divergência decréscimo + Correção de saída + Estorno que retira</p>
+          <p><span className="font-semibold text-blue-700">Vendas (API)</span> = consumo teórico (vendas do PDV × ficha técnica)</p>
+          <p><span className="font-semibold">Divergência</span> = Vendas (API) − Saídas · <span className="font-semibold">Final</span> = Inicial + Entradas − Saídas</p>
+        </div>
       </div>
 
       {displayedRows.length === 0 ? (
@@ -959,33 +944,28 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
               <TableHeader className="bg-muted/40">
                 <TableRow className="hover:bg-transparent">
                   <TableHead rowSpan={2} className="min-w-[240px] align-bottom">Insumo Base</TableHead>
-                  <TableHead colSpan={6} className="text-center border-l-2 border-border bg-muted/30 uppercase tracking-wide text-[11px]">Conferência de Estoque</TableHead>
+                  <TableHead colSpan={4} className="text-center border-l-2 border-border bg-muted/30 uppercase tracking-wide text-[11px]">Conferência de Estoque</TableHead>
                   <TableHead colSpan={2} className="text-center border-l-2 border-border bg-blue-500/5 uppercase tracking-wide text-[11px]">Venda × Resultado</TableHead>
                   <TableHead rowSpan={2} className="text-center align-bottom border-l-2 border-border">Status</TableHead>
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="text-right border-l-2 border-border align-bottom">Inicial</TableHead>
-                  <TableHead className="text-right align-bottom">Entradas</TableHead>
                   <TableHead className="text-right">
-                    Ajustes
-                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Ent. Correção + Saí. Correção + Divergência + Estorno</div>
+                    Entradas
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Compras + Transf. + Div. acréscimo + Estorno</div>
                   </TableHead>
                   <TableHead className="text-right">
                     Saídas
-                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Consumo + Descarte + Transf. Saída</div>
-                  </TableHead>
-                  <TableHead className="text-right font-semibold">
-                    Saída Final
-                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Saídas − Ajustes</div>
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Consumo + Descarte + Transf. + Div. decréscimo + Correção + Estorno</div>
                   </TableHead>
                   <TableHead className="text-right bg-muted/30 font-semibold">
                     Final
-                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Inicial + Entradas − Saída Final</div>
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Inicial + Entradas − Saídas</div>
                   </TableHead>
                   <TableHead className="text-right border-l-2 border-border">Vendas (API)</TableHead>
                   <TableHead className="text-right">
                     Divergência
-                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Vendas (API) − Saída Final</div>
+                    <div className="text-[9px] font-normal normal-case leading-tight text-muted-foreground">Vendas (API) − Saídas</div>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -1040,19 +1020,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                           +{formatNumber(row.entradas)}
                         </button>
                       </TableCell>
-                      {/* Ajustes (antes das saídas) */}
-                      <TableCell className={cn(
-                        "text-right",
-                        row.ajustes > 0 ? "text-green-600" : row.ajustes < 0 ? "text-red-600" : "text-muted-foreground"
-                      )}>
-                        <button
-                          onClick={() => openHistory(row.baseProductId, 'AJUSTE')}
-                          className="underline decoration-dotted underline-offset-4"
-                        >
-                          {row.ajustes > 0 ? '+' : ''}{formatNumber(row.ajustes)}
-                        </button>
-                      </TableCell>
-                      {/* Saídas operacionais */}
+                      {/* Saídas (consumo + descarte + transf. + divergência decréscimo + correção + estorno) */}
                       <TableCell className="text-right">
                         <button
                           onClick={() => openHistory(row.baseProductId, 'SAIDA')}
@@ -1061,18 +1029,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                           -{formatNumber(row.saidasReais)}
                         </button>
                       </TableCell>
-                      {/* Saída Final = Saídas − Ajustes (saída efetiva do estoque) */}
-                      {(() => {
-                        const saidaFinal = row.saidasReais - row.ajustes; // >0 = saiu líquido; <0 = entrou líquido
-                        return (
-                          <TableCell className="text-right whitespace-nowrap font-semibold">
-                            <span className={cn(saidaFinal > 0 ? "text-red-600" : saidaFinal < 0 ? "text-green-600" : "text-muted-foreground")}>
-                              {saidaFinal > 0 ? '-' : saidaFinal < 0 ? '+' : ''}{formatNumber(Math.abs(saidaFinal))}
-                            </span>
-                          </TableCell>
-                        );
-                      })()}
-                      {/* Final: resultado de Inicial + Entradas − Saída Final (fórmula no cabeçalho) */}
+                      {/* Final: resultado de Inicial + Entradas − Saídas (fórmula no cabeçalho) */}
                       <TableCell className="text-right whitespace-nowrap bg-muted/30">
                         <button
                           onClick={() => openHistory(row.baseProductId)}
