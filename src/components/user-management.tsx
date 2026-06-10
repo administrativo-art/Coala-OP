@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -445,6 +446,8 @@ export function UserManagement() {
 
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
+      // Inativos têm tela própria (/dashboard/users/inactive); não aparecem aqui.
+      if (user.isActive === false) return false;
       const term = searchTerm.toLowerCase();
       const searchMatch =
         user.username.toLowerCase().includes(term) ||
@@ -817,7 +820,7 @@ export function UserManagement() {
   const statCards = [
     { label: 'Ativos', value: activeCount, total: users.length, color: 'bg-emerald-500', pct: users.length ? Math.round((activeCount / users.length) * 100) : 0 },
     { label: 'Convites pendentes', value: pendingInvites, total: users.length, color: 'bg-amber-500', pct: users.length ? Math.round((pendingInvites / users.length) * 100) : 0 },
-    { label: 'Inativos', value: inactiveCount, total: users.length, color: 'bg-slate-400', pct: users.length ? Math.round((inactiveCount / users.length) * 100) : 0 },
+    { label: 'Inativos', value: inactiveCount, total: users.length, color: 'bg-slate-400', pct: users.length ? Math.round((inactiveCount / users.length) * 100) : 0, href: '/dashboard/users/inactive' },
     { label: 'Bloqueados', value: blockedCount, total: users.length, color: 'bg-rose-500', pct: users.length ? Math.round((blockedCount / users.length) * 100) : 0 },
   ];
 
@@ -1270,19 +1273,39 @@ export function UserManagement() {
           </div>
 
           <div className="grid gap-3 md:grid-cols-4">
-            {statCards.map((stat) => (
-              <div key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-black uppercase text-slate-500">{stat.label}</p>
-                  <span className={`h-8 w-1 rounded-full ${stat.color}`} />
+            {statCards.map((stat) => {
+              const href = (stat as { href?: string }).href;
+              const clickable = !!href && stat.value > 0;
+              const inner = (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-black uppercase text-slate-500">{stat.label}</p>
+                    <span className={`h-8 w-1 rounded-full ${stat.color}`} />
+                  </div>
+                  <div className="mt-2 flex items-end justify-between gap-3">
+                    <p className="text-3xl font-black text-slate-950">{stat.value}</p>
+                    <p className="text-xs font-black text-slate-500">{stat.pct}%</p>
+                  </div>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">
+                    {clickable ? "Ver inativos →" : `/ ${stat.total}`}
+                  </p>
+                </>
+              );
+              const cardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
+              return clickable ? (
+                <Link
+                  key={stat.label}
+                  href={href!}
+                  className={`${cardClass} block transition-colors hover:border-slate-300 hover:bg-slate-50`}
+                >
+                  {inner}
+                </Link>
+              ) : (
+                <div key={stat.label} className={cardClass}>
+                  {inner}
                 </div>
-                <div className="mt-2 flex items-end justify-between gap-3">
-                  <p className="text-3xl font-black text-slate-950">{stat.value}</p>
-                  <p className="text-xs font-black text-slate-500">{stat.pct}%</p>
-                </div>
-                <p className="mt-1 text-xs font-semibold text-slate-400">/ {stat.total}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center">
