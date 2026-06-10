@@ -259,7 +259,7 @@ function getComparisonStatusMeta(divergence: number) {
       label: 'Sobra',
       textClass: 'text-green-700 dark:text-green-400',
       badgeClass: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-200 dark:border-green-800',
-      helper: 'A venda teórica ficou abaixo da baixa registrada no sistema.',
+      helper: 'A venda teórica superou a baixa registrada — saiu menos do estoque do que foi vendido.',
     };
   }
 
@@ -267,7 +267,7 @@ function getComparisonStatusMeta(divergence: number) {
     label: 'Falta',
     textClass: 'text-rose-700 dark:text-rose-400',
     badgeClass: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800',
-    helper: 'A venda teórica superou a baixa registrada no sistema.',
+    helper: 'A baixa registrada superou a venda teórica — saiu mais do estoque do que foi vendido (perda/baixa a mais).',
   };
 }
 
