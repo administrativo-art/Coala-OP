@@ -51,4 +51,4 @@ firestore-debug.log
 scripts/sa-*.json
 scripts/*firebase-adminsdk*.json
 scripts/dp-collaborator-mapping.json
-scripts/dp-id-map.json
+scripts/dp-id-map.jsonrelatorios/

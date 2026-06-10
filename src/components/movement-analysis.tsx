@@ -886,12 +886,12 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
 
       <div className="rounded-xl border bg-card p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
+          <div className="space-y-2 lg:flex-1 lg:min-w-0">
             <div className="flex items-center gap-2 text-sm font-medium">
               <Package className="h-4 w-4 text-primary" />
               <span>Filtrar por insumo(s)</span>
             </div>
-            <div className="max-w-3xl">
+            <div className="w-full">
               <MultiSelect
                   options={productOptions}
                   selected={selectedBaseIds}
