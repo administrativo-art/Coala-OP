@@ -953,19 +953,18 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead rowSpan={2} className="min-w-[240px]">Insumo Base</TableHead>
-                  <TableHead colSpan={2} className="text-center">Estoque</TableHead>
-                  <TableHead colSpan={3} className="text-center">Movimentação</TableHead>
-                  <TableHead colSpan={2} className="text-center">Venda x Resultado</TableHead>
-                  <TableHead rowSpan={2} className="text-center">Status</TableHead>
+                  <TableHead rowSpan={2} className="min-w-[240px] align-bottom">Insumo Base</TableHead>
+                  <TableHead colSpan={5} className="text-center border-l-2 border-border bg-muted/30 uppercase tracking-wide text-[11px]">Conferência de Estoque</TableHead>
+                  <TableHead colSpan={2} className="text-center border-l-2 border-border bg-blue-500/5 uppercase tracking-wide text-[11px]">Venda × Resultado</TableHead>
+                  <TableHead rowSpan={2} className="text-center align-bottom border-l-2 border-border">Status</TableHead>
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="text-right">Inicial</TableHead>
-                  <TableHead className="text-right">Final</TableHead>
+                  <TableHead className="text-right border-l-2 border-border">Inicial</TableHead>
                   <TableHead className="text-right">Entradas</TableHead>
                   <TableHead className="text-right">Saídas (Sistema)</TableHead>
                   <TableHead className="text-right">Ajustes</TableHead>
-                  <TableHead className="text-right">Vendas (API)</TableHead>
+                  <TableHead className="text-right bg-muted/30 font-semibold">Final</TableHead>
+                  <TableHead className="text-right border-l-2 border-border">Vendas (API)</TableHead>
                   <TableHead className="text-right">Divergência</TableHead>
                 </TableRow>
               </TableHeader>
@@ -997,7 +996,8 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground whitespace-nowrap">
+                      {/* ── Conferência de Estoque ── */}
+                      <TableCell className="text-right text-muted-foreground whitespace-nowrap border-l-2 border-border">
                         {isNaN(row.estoqueInicial) ? (
                           <span className="text-[10px] text-orange-400 italic">Sem histórico</span>
                         ) : row.estoqueInicial === 0 ? (
@@ -1010,14 +1010,6 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                             {formatNumber(row.estoqueInicial)}
                           </button>
                         )}
-                      </TableCell>
-                      <TableCell className="text-right font-bold border-l">
-                        <button
-                          onClick={() => openHistory(row.baseProductId)}
-                          className="font-semibold underline decoration-dotted underline-offset-4"
-                        >
-                          {formatNumber(row.estoqueFinal)} {row.unit}
-                        </button>
                       </TableCell>
                       <TableCell className="text-right">
                         <button
@@ -1046,7 +1038,29 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                           {row.ajustes > 0 ? '+' : ''}{formatNumber(row.ajustes)}
                         </button>
                       </TableCell>
-                      <TableCell className="text-right">
+                      {/* Final: resultado da conta (Inicial + Entradas − Saídas ± Ajustes) */}
+                      <TableCell className="text-right whitespace-nowrap bg-muted/30">
+                        {(() => {
+                          const hasOp = row.entradas !== 0 || row.saidasReais !== 0 || row.ajustes !== 0;
+                          return (
+                            <div className="flex flex-col items-end gap-0.5">
+                              {hasOp && !isNaN(row.estoqueInicial) && (
+                                <span className="text-[10px] text-muted-foreground tabular-nums">
+                                  {formatNumber(row.estoqueInicial)} +{formatNumber(row.entradas)} −{formatNumber(row.saidasReais)} {row.ajustes >= 0 ? '+' : '−'}{formatNumber(Math.abs(row.ajustes))}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => openHistory(row.baseProductId)}
+                                className={cn("font-bold underline decoration-dotted underline-offset-4", row.estoqueFinal < 0 && "text-red-600")}
+                              >
+                                {hasOp ? '= ' : ''}{formatNumber(row.estoqueFinal)} {row.unit}
+                              </button>
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
+                      {/* ── Venda × Resultado ── */}
+                      <TableCell className="text-right border-l-2 border-border">
                         <button
                           onClick={() => openConsumption(row.baseProductId)}
                           className="text-blue-600 font-medium underline decoration-dotted underline-offset-4"
@@ -1057,7 +1071,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
                       <TableCell className={cn("text-right font-bold", status.textClass)}>
                         {row.divergence > 0 ? '+' : ''}{formatNumber(row.divergence)}
                       </TableCell>
-                      <TableCell className="text-center">
+                      <TableCell className="text-center border-l-2 border-border">
                         <div className="flex flex-col items-center gap-2">
                           <Badge className={cn("border", status.badgeClass)}>{status.label}</Badge>
                           <span className="max-w-[170px] text-[11px] leading-relaxed text-muted-foreground">{status.helper}</span>
