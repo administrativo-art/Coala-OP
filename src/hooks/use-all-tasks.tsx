@@ -20,10 +20,29 @@ export interface LegacyTask {
   icon: React.FC<any>;
 }
 
+export interface CompletedReceipt {
+  id: string;
+  title: string;
+  description: string;
+  completedBy: string;
+  completedAt: string; // ISO String
+  hasDivergence: boolean;
+}
+
+export interface PendingReceipt {
+  id: string;
+  activityId: string;
+  title: string;
+  description: string;
+  link: string;
+}
+
 interface AllTasksContextType {
   allTasks: Task[];
   legacyTasks: LegacyTask[];
   taskNotifications: LegacyTask[];
+  pendingReceipts: PendingReceipt[];
+  completedReceipts: CompletedReceipt[];
   pendingTaskCount: number;
   loading: boolean;
 }
@@ -32,6 +51,8 @@ const AllTasksContext = createContext<AllTasksContextType>({
   allTasks: [],
   legacyTasks: [],
   taskNotifications: [],
+  pendingReceipts: [],
+  completedReceipts: [],
   pendingTaskCount: 0,
   loading: true,
 });
@@ -106,6 +127,8 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     }
 
     repositionActivities.forEach((activity: RepositionActivity) => {
+        // Recebimento saiu daqui: virou `pendingReceipts` (abaixo), pois é
+        // responsabilidade do quiosque e tem ação própria de "confirmar" no painel.
         if (
           coveredLegacyOrigins.has(`reposition_activity:${activity.id}`) ||
           (activity.taskId && coveredTaskIds.has(activity.taskId))
@@ -120,16 +143,6 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
                 description: `Reposição de ${activity.kioskOriginName} para ${activity.kioskDestinationName}`,
                 link: '/dashboard/stock/analysis/restock',
                 icon: Truck
-            });
-        }
-        if (activity.status === 'Aguardando recebimento' && activity.kioskDestinationId && user.assignedKioskIds.includes(activity.kioskDestinationId)) {
-             allLegacyTasks.push({
-                id: `receipt-${activity.id}`,
-                type: 'Reposição',
-                title: 'Recebimento Pendente',
-                description: `Itens enviados de ${activity.kioskOriginName} para ${activity.kioskDestinationName}`,
-                link: '/dashboard/stock/analysis/restock',
-                icon: ClipboardCheck
             });
         }
          if ((activity.status === 'Recebido com divergência' || activity.status === 'Recebido sem divergência') && permissions.stock.stockCount.approve) {
@@ -187,14 +200,72 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
     return [...newTaskNotifications, ...legacyTasks];
   }, [allTasks, legacyTasks]);
-  
+
+  const pendingReceipts: PendingReceipt[] = useMemo(() => {
+    if (loading || !user) return [];
+
+    const assignedKioskIds = Array.isArray(user.assignedKioskIds) ? user.assignedKioskIds : [];
+    if (assignedKioskIds.length === 0) return [];
+
+    // Recebimento é responsabilidade do quiosque de destino: aparece para qualquer
+    // atendente dele, mesmo que a Task ligada esteja atribuída a outro usuário.
+    // Só pula se a Task já é deste usuário (ele já a vê no motor novo de tarefas).
+    return repositionActivities
+      .filter((activity: RepositionActivity) => {
+        if (activity.status !== 'Aguardando recebimento') return false;
+        if (!activity.kioskDestinationId || !assignedKioskIds.includes(activity.kioskDestinationId)) return false;
+        const coveringTask = activity.taskId ? tasks.find((task) => task.id === activity.taskId) : undefined;
+        const coveringAssignedToMe = !!coveringTask && (
+          (coveringTask.assigneeType === 'user' && coveringTask.assigneeId === user.id) ||
+          (coveringTask.assigneeType === 'profile' && coveringTask.assigneeId === user.profileId)
+        );
+        return !coveringAssignedToMe;
+      })
+      .map((activity: RepositionActivity) => ({
+        id: `receipt-${activity.id}`,
+        activityId: activity.id,
+        title: 'Recebimento Pendente',
+        description: `Itens enviados de ${activity.kioskOriginName} para ${activity.kioskDestinationName}`,
+        link: `/dashboard/stock/reposition?returnTo=${encodeURIComponent('/dashboard/collaborator')}`,
+      }));
+  }, [loading, user, repositionActivities, tasks]);
+
+  const completedReceipts: CompletedReceipt[] = useMemo(() => {
+    if (loading || !user) return [];
+
+    const assignedKioskIds = Array.isArray(user.assignedKioskIds) ? user.assignedKioskIds : [];
+    if (assignedKioskIds.length === 0) return [];
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    return repositionActivities
+      .filter((activity: RepositionActivity) => {
+        const signedAt = activity.receiptSignature?.signedAt;
+        if (!signedAt) return false;
+        if (!activity.kioskDestinationId || !assignedKioskIds.includes(activity.kioskDestinationId)) return false;
+        return new Date(signedAt).getTime() >= startOfToday.getTime();
+      })
+      .map((activity: RepositionActivity) => ({
+        id: `receipt-done-${activity.id}`,
+        title: 'Recebimento concluído',
+        description: `Itens de ${activity.kioskOriginName} para ${activity.kioskDestinationName}`,
+        completedBy: activity.receiptSignature?.signedBy || 'Colaborador',
+        completedAt: activity.receiptSignature!.signedAt!,
+        hasDivergence: activity.status === 'Recebido com divergência',
+      }))
+      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+  }, [loading, user, repositionActivities]);
+
   const value = useMemo(() => ({
     allTasks,
     legacyTasks,
     taskNotifications,
-    pendingTaskCount: taskNotifications.length,
+    pendingReceipts,
+    completedReceipts,
+    pendingTaskCount: taskNotifications.length + pendingReceipts.length,
     loading
-  }), [allTasks, legacyTasks, taskNotifications, loading]);
+  }), [allTasks, legacyTasks, taskNotifications, pendingReceipts, completedReceipts, loading]);
 
   return <AllTasksContext.Provider value={value}>{children}</AllTasksContext.Provider>;
 };

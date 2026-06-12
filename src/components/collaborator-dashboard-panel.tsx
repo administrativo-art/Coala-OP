@@ -35,12 +35,14 @@ import { fetchMyFormExecutions } from "@/features/forms/lib/client";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useAllTasks } from "@/hooks/use-all-tasks";
+import { useReposition } from "@/hooks/use-reposition";
+import { useToast } from "@/hooks/use-toast";
 import { useGoals } from "@/contexts/goals-context";
 import { GoalsProvider } from "@/components/goals-provider";
 import { useStockAudit } from "@/hooks/use-stock-audit";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useDPStore } from "@/store/use-dp-store";
-import type { DPShift, EmployeeGoal, GoalPeriodDoc, StockAuditItem, StockAuditSession } from "@/types";
+import type { DPShift, EmployeeGoal, GoalPeriodDoc, RepositionActivity, StockAuditItem, StockAuditSession } from "@/types";
 import type { FormExecution } from "@/types/forms";
 import {
   getEmployeeDistributionDateKeys,
@@ -53,6 +55,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -324,6 +327,7 @@ function TimelineItem({
   statusLabel,
   statusClass,
   title,
+  titleHref,
   meta,
   completed,
   action,
@@ -336,6 +340,7 @@ function TimelineItem({
   statusLabel: string;
   statusClass: string;
   title: string;
+  titleHref?: string;
   meta?: string;
   completed?: boolean;
   action: React.ReactNode;
@@ -366,8 +371,17 @@ function TimelineItem({
                 {statusLabel}
               </span>
             </div>
-            <h4 className={`mt-2 font-semibold ${completed ? "text-muted-foreground line-through" : ""}`}>{title}</h4>
-            {meta ? <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p> : null}
+            {titleHref ? (
+              <Link href={titleHref} className="group/title block">
+                <h4 className={`mt-2 font-semibold underline-offset-2 group-hover/title:underline ${completed ? "text-muted-foreground line-through" : ""}`}>{title}</h4>
+                {meta ? <p className="mt-0.5 text-xs text-muted-foreground group-hover/title:text-foreground">{meta}</p> : null}
+              </Link>
+            ) : (
+              <>
+                <h4 className={`mt-2 font-semibold ${completed ? "text-muted-foreground line-through" : ""}`}>{title}</h4>
+                {meta ? <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p> : null}
+              </>
+            )}
           </div>
           <div className="shrink-0">{action}</div>
         </div>
@@ -959,7 +973,7 @@ function SidebarMetas({
                 Carregando...
               </div>
             ) : rows.length === 0 ? (
-              <p className="py-2 text-xs text-muted-foreground">Nenhuma meta ativa vinculada.</p>
+              <p className="py-2 text-xs text-muted-foreground">Nenhuma meta individual cadastrada.</p>
             ) : (
               <div className="space-y-3">
                 {goalUnits.length > 1 ? (
@@ -1001,7 +1015,7 @@ function SidebarMetas({
           </div>
         ) : goalUnits.length === 0 ? (
           <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-            Nenhuma meta ativa encontrada para o colaborador ou unidade vinculada.
+            Nenhuma meta individual cadastrada para este colaborador no período.
           </div>
         ) : goalUnits.length === 1 ? (
           <GoalProgressRow
@@ -1067,8 +1081,12 @@ function CollaboratorDashboardPanelInner() {
   const { firebaseUser, user } = useAuth();
   const { periods, employeeGoals, loading: goalsLoading } = useGoals();
   const { kiosks } = useKiosks();
-  const { taskNotifications } = useAllTasks();
+  const { taskNotifications, pendingReceipts, completedReceipts } = useAllTasks();
+  const { activities: repositionActivities, updateRepositionActivity } = useReposition();
+  const { toast } = useToast();
   const { auditSessions } = useStockAudit();
+  const [confirmingReceipt, setConfirmingReceipt] = useState<{ activityId: string; description: string } | null>(null);
+  const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
   const { schedules, units, shiftDefinitions } = useDPStore();
   const [executions, setExecutions] = useState<FormExecution[]>([]);
   const [loadingForms, setLoadingForms] = useState(true);
@@ -1301,14 +1319,57 @@ function CollaboratorDashboardPanelInner() {
     [auditSessions, firebaseUser?.uid]
   );
 
-  // Routine ring: forms + tasks + counts
+  // Routine ring: forms + tasks + pending receipts + counts
   const completedForms = dayExecutions.filter((execution) => execution.status === "completed").length;
-  const routinesTotal = dayExecutions.length + taskNotifications.length + myOpenCountSessions.length;
+  const routinesTotal = dayExecutions.length + taskNotifications.length + pendingReceipts.length + myOpenCountSessions.length;
   const routinesDone = completedForms;
   const pendingCount = routinesTotal - routinesDone;
   const allDone = routinesTotal > 0 && routinesDone === routinesTotal;
   const nextAction =
     dayExecutions.find((execution) => execution.status === "overdue" || execution.status === "pending" || execution.status === "in_progress") ?? null;
+
+  // "Concluir" no card de recebimento: confirma tudo conforme enviado (sem
+  // divergência) num toque. Divergências são tratadas pela tela de recebimento
+  // (texto do card). Espelha o handleConfirmReceipt da gestão de reposição.
+  const handleQuickConfirmReceipt = async () => {
+    if (!confirmingReceipt) return;
+    const activity = repositionActivities.find((item) => item.id === confirmingReceipt.activityId);
+    if (!activity) {
+      setConfirmingReceipt(null);
+      return;
+    }
+    setIsConfirmingReceipt(true);
+    try {
+      const receivedItems = activity.items.map((item) => ({
+        ...item,
+        receivedLots: item.suggestedLots.map((lot) => ({
+          ...lot,
+          receivedQuantity: lot.quantityToMove,
+        })),
+      }));
+      await updateRepositionActivity(activity.id, {
+        status: "Recebido sem divergência",
+        items: receivedItems,
+        receiptSignature: {
+          signedBy: user?.username ?? user?.email ?? "Colaborador",
+          signedAt: new Date().toISOString(),
+        },
+      });
+      toast({
+        title: "Recebimento confirmado",
+        description: "Tudo recebido conforme enviado. A tarefa foi concluída.",
+      });
+      setConfirmingReceipt(null);
+    } catch (error) {
+      toast({
+        title: "Erro ao confirmar recebimento",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConfirmingReceipt(false);
+    }
+  };
 
   // Build merged timeline descriptors
   const timeline = useMemo(() => {
@@ -1376,6 +1437,60 @@ function CollaboratorDashboardPanelInner() {
       });
     });
 
+    pendingReceipts.forEach((receipt, index) => {
+      items.push({
+        sortMin: nowMinutes + 1,
+        order: 2,
+        key: `pending-receipt-${receipt.id}-${index}`,
+        render: (isLast) => (
+          <TimelineItem
+            type="task"
+            time="—"
+            dot="bg-amber-500"
+            statusLabel="A fazer"
+            statusClass="text-amber-600"
+            title={receipt.title}
+            titleHref={receipt.link}
+            meta={receipt.description}
+            action={
+              <Button
+                size="sm"
+                className="bg-indigo-600 text-white hover:bg-indigo-700"
+                onClick={() => setConfirmingReceipt({ activityId: receipt.activityId, description: receipt.description })}
+              >
+                Concluir
+              </Button>
+            }
+            isLast={isLast}
+          />
+        ),
+      });
+    });
+
+    completedReceipts.forEach((receipt, index) => {
+      const time = format(new Date(receipt.completedAt), "HH:mm");
+      const min = hhmmToMinutes(time) ?? nowMinutes;
+      items.push({
+        sortMin: min,
+        order: 2,
+        key: `receipt-done-${receipt.id}-${index}`,
+        render: (isLast) => (
+          <TimelineItem
+            type="task"
+            time={time}
+            dot="bg-emerald-500"
+            statusLabel={receipt.hasDivergence ? "Concluído com divergência" : "Concluído"}
+            statusClass={receipt.hasDivergence ? "text-amber-600" : "text-emerald-600"}
+            title={receipt.title}
+            meta={`${receipt.description} · Concluído por ${receipt.completedBy}`}
+            completed
+            action={<CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+            isLast={isLast}
+          />
+        ),
+      });
+    });
+
     myOpenCountSessions.forEach((session, index) => {
       items.push({
         sortMin: nowMinutes + 2,
@@ -1417,9 +1532,8 @@ function CollaboratorDashboardPanelInner() {
 
     return items.sort((a, b) => a.sortMin - b.sortMin || a.order - b.order);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayExecutions, taskNotifications, myOpenCountSessions, todayShift, nowMinutes]);
+  }, [dayExecutions, taskNotifications, pendingReceipts, completedReceipts, myOpenCountSessions, todayShift, nowMinutes]);
 
-  const userGoalKioskIds = useMemo(() => new Set([...(user?.assignedKioskIds ?? [])]), [user?.assignedKioskIds]);
   const activePeriods = useMemo(() => effectivePeriods.filter((period) => period.status === "active"), [effectivePeriods]);
   const kioskNameById = useMemo(
     () => Object.fromEntries(kiosks.map((kiosk) => [kiosk.id, kiosk.name])),
@@ -1452,16 +1566,16 @@ function CollaboratorDashboardPanelInner() {
   }, [activePeriods, apiEmployeeGoals, apiPeriods, effectiveEmployeeGoals, kioskNameById]);
 
   const visibleGoals = useMemo(() => {
+    // Apenas a meta INDIVIDUAL do colaborador. Sem fallback para a meta do
+    // quiosque: quem não tem meta individual cadastrada vê o estado "sem meta".
     const ownGoals = effectiveEmployeeGoals.filter(
       (goal) => currentUserIds.includes(goal.employeeId) && activePeriods.some((period) => period.id === goal.periodId)
     );
-    if (ownGoals.length > 0) return mergeEmployeeGoals(ownGoals);
-    return mergeEmployeeGoals(effectiveEmployeeGoals.filter(
-      (goal) => userGoalKioskIds.has(goal.kioskId) && activePeriods.some((period) => period.id === goal.periodId)
-    ));
-  }, [activePeriods, currentUserIds, effectiveEmployeeGoals, userGoalKioskIds]);
+    return mergeEmployeeGoals(ownGoals);
+  }, [activePeriods, currentUserIds, effectiveEmployeeGoals]);
 
   return (
+    <>
     <section id="painel-colaborador" className="scroll-mt-6">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Left column */}
@@ -1561,6 +1675,39 @@ function CollaboratorDashboardPanelInner() {
         </aside>
       </div>
     </section>
+
+    <Dialog
+      open={!!confirmingReceipt}
+      onOpenChange={(open) => {
+        if (!open && !isConfirmingReceipt) setConfirmingReceipt(null);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Confirmar recebimento</DialogTitle>
+          {confirmingReceipt ? (
+            <DialogDescription>{confirmingReceipt.description}</DialogDescription>
+          ) : null}
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Isso registra <strong>tudo recebido conforme enviado</strong>, sem divergência, e conclui a tarefa.
+          Se algo chegou a menos ou a mais, abra a tela de recebimento pelo texto do card para ajustar.
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setConfirmingReceipt(null)} disabled={isConfirmingReceipt}>
+            Cancelar
+          </Button>
+          <Button
+            className="bg-indigo-600 text-white hover:bg-indigo-700"
+            onClick={handleQuickConfirmReceipt}
+            disabled={isConfirmingReceipt}
+          >
+            {isConfirmingReceipt ? "Confirmando..." : "Confirmar recebimento"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

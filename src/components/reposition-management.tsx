@@ -254,19 +254,21 @@ function RepositionActivityCard({
                             Doc. assinado
                         </Button>
                     )}
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onCancel(activity)}>
-                                <Ban className="mr-2 h-4 w-4" />
-                                <span>Cancelar Atividade</span>
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                     {canRevert && (
+                       <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onCancel(activity)}>
+                                  <Ban className="mr-2 h-4 w-4" />
+                                  <span>Cancelar Atividade</span>
+                              </DropdownMenuItem>
+                          </DropdownMenuContent>
+                      </DropdownMenu>
+                     )}
                 </div>
             </CardHeader>
             <CardContent>
@@ -793,7 +795,8 @@ function RepositionActivityCard({
 }
 
 
-export function RepositionManagement() {
+export function RepositionManagement({ returnTo }: { returnTo?: string } = {}) {
+  const router = useRouter();
   const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
   const { permissions, user } = useAuth();
   const { toast } = useToast();
@@ -808,6 +811,18 @@ export function RepositionManagement() {
   const canManagePreparation = permissions.reposition.prepareDispatch || permissions.stock.analysis.restock || permissions.stock.inventoryControl.transfer;
   const canFinalizeStep = permissions.reposition.finalize || permissions.stock.stockCount.approve || permissions.stock.inventoryControl.transfer || permissions.reposition.cancel;
   const canRevertSteps = permissions.reposition.cancel;
+  // Atendente do quiosque (só recebe): tem recebimento mas NENHUMA capacidade de
+  // GESTÃO da reposição (preparar/efetivar/cancelar/analisar). Não usamos
+  // canManagePreparation/canFinalizeStep aqui porque eles incluem permissões
+  // amplas de estoque (ex.: stockCount.approve) que um atendente pode ter sem ser
+  // gestor da reposição. Para ele, a tela mostra apenas atividades NA etapa de
+  // recebimento, e só enquanto estiverem nela.
+  const managesReposition =
+    permissions.reposition.prepareDispatch ||
+    permissions.reposition.finalize ||
+    permissions.reposition.cancel ||
+    permissions.stock.analysis.restock;
+  const isReceiveOnly = permissions.reposition.receive && !managesReposition;
 
   const handleToggleSeparated = async (activity: RepositionActivity) => {
     if (!activity.isSeparated) {
@@ -924,6 +939,12 @@ export function RepositionManagement() {
         ? "A reposição avançou para efetivação com divergência registrada."
         : "A reposição avançou para efetivação sem divergência.",
     });
+
+    // Veio do painel do colaborador (deep-link de recebimento): volta pra lá,
+    // onde a tarefa já aparece como concluída.
+    if (returnTo) {
+      router.push(returnTo);
+    }
   };
 
   if (loading) {
@@ -935,7 +956,11 @@ export function RepositionManagement() {
     )
   }
 
-  const activeActivities = activities.filter((activity: RepositionActivity) => activity.status !== 'Concluído' && activity.status !== 'Cancelada');
+  const activeActivities = activities.filter((activity: RepositionActivity) => {
+    if (activity.status === 'Concluído' || activity.status === 'Cancelada') return false;
+    if (isReceiveOnly && activity.status !== 'Aguardando recebimento') return false;
+    return true;
+  });
 
   if (activeActivities.length === 0) {
     return (

@@ -23,8 +23,18 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
   const [loading, setLoading] = useState(true);
   const { optimisticallyUpdateLots } = useExpiryProducts();
 
+  // Mirror the server's `canView` gate (reposition-activities GET): managers via
+  // analysis.restock, but also attendants/operators via reposition.view/receive/
+  // prepareDispatch. Without this, an attendant (e.g. only reposition.receive) would
+  // never load the activities the server would scope to their assigned kiosks.
+  const canLoadReposition =
+    (permissions?.stock?.analysis?.restock ?? false) ||
+    (permissions?.reposition?.view ?? false) ||
+    (permissions?.reposition?.receive ?? false) ||
+    (permissions?.reposition?.prepareDispatch ?? false);
+
   useEffect(() => {
-    if (!(permissions?.stock?.analysis?.restock ?? false) || !firebaseUser) {
+    if (!canLoadReposition || !firebaseUser) {
       setActivities([]);
       setLoading(false);
       return;
@@ -58,7 +68,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       isMounted = false;
       window.clearInterval(intervalId);
     };
-  }, [permissions?.stock?.analysis?.restock, firebaseUser]);
+  }, [canLoadReposition, firebaseUser]);
 
   const createRepositionActivity = useCallback(
     async (
