@@ -505,8 +505,8 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="!max-w-[1200px] grid h-[min(92vh,1180px)] w-[min(94vw,1200px)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[30px] border border-zinc-200 bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
-        <div className="px-12 pb-7 pt-10">
-          <div className="flex items-start gap-4 pr-12">
+        <div className="px-5 pb-6 pt-8 sm:px-12 sm:pb-7 sm:pt-10">
+          <div className="flex items-start gap-4 pr-4 sm:pr-12">
             <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-pink-500 text-white shadow-[0_10px_24px_-14px_rgba(236,72,153,0.8)]">
               <Flag className="h-5 w-5" />
             </div>
@@ -526,7 +526,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
           </div>
         </div>
 
-        <div className="mx-12 grid grid-cols-4 items-start gap-10 rounded-[20px] border border-zinc-200 px-9 py-7">
+        <div className="mx-4 grid grid-cols-2 items-start gap-5 rounded-[20px] border border-zinc-200 px-5 py-6 sm:mx-12 sm:grid-cols-4 sm:gap-10 sm:px-9 sm:py-7">
           <div className="min-w-0">
             <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Realizado</p>
             <p className="mt-3 whitespace-nowrap text-[clamp(1.25rem,2vw,1.8rem)] font-black leading-none tracking-[-0.02em] text-pink-500">R$ {fmt(totalRealized)}</p>
@@ -551,8 +551,8 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
           </div>
         </div>
 
-        <div className="min-h-0 px-11 py-5">
-          <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="min-h-0 overflow-x-auto px-4 py-5 sm:px-11">
+          <div className="flex h-full min-h-0 flex-col overflow-hidden min-w-[620px]">
             <div className="grid shrink-0 grid-cols-[90px_1fr_1.1fr_2fr_100px_70px] gap-7 border-b border-zinc-200 px-4 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">
               <span>Dia</span>
               <span className="text-right">Alvo</span>
@@ -590,7 +590,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
           </div>
         </div>
 
-        <DialogFooter className="items-center justify-between border-t border-zinc-100 px-11 py-6 sm:justify-between">
+        <DialogFooter className="flex-col items-start gap-4 border-t border-zinc-100 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-11 sm:py-6">
           <div className="flex flex-wrap items-center gap-6 text-sm font-semibold text-zinc-500">
             <span className="inline-flex items-center gap-2"><DailyReferenceStatus tone="ok" /> Bateu</span>
             <span className="inline-flex items-center gap-2"><DailyReferenceStatus tone="miss" /> Faltou</span>
@@ -688,7 +688,7 @@ export function EmployeeDailyModal({
           <div className="space-y-4 px-5 py-4">
 
             {/* KPIs compactos */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {[
                 { label: 'Acumulado', value: `R$ ${fmt(employeeGoal.currentValue)}`, color: 'text-zinc-900' },
                 { label: '% Meta', value: `${currentPct.toFixed(1)}%`, color: currentPct >= 100 ? 'text-emerald-600' : 'text-amber-500' },
@@ -722,7 +722,7 @@ export function EmployeeDailyModal({
                   <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${Math.min(upPct, 100)}%` }} />
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-1 text-[10px] font-semibold text-zinc-500">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-1 text-[10px] font-semibold text-zinc-500">
                 <span>Pace atual: <span className={paceOk ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>R$ {fmt(currentPace)}/dia</span></span>
                 <span>Necessário: R$ {fmt(requiredPace)}/dia</span>
                 <span>Média: R$ {fmt(averagePerElapsedDay)}/dia</span>

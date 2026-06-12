@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RepositionHistory, RepositionManagement } from '@/components/reposition-management';
@@ -195,13 +196,27 @@ export default function RepositionHubPage() {
                                     </div>
 
                                     <div className="flex shrink-0 items-center justify-end gap-2">
-                                        <Button
-                                            variant="ghost"
-                                            disabled={decliningRequestId === request.id}
-                                            onClick={() => handleDeclineRequest(request.id)}
-                                        >
-                                            Recusar
-                                        </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" disabled={decliningRequestId === request.id}>
+                                                    Recusar
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Recusar a solicitação?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        A solicitação de {request.kioskName?.replace(/^Quiosque\s+/i, '') ?? 'unidade'} será recusada e não poderá mais ser revisada. Esta ação não pode ser desfeita.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => handleDeclineRequest(request.id)}>
+                                                        Recusar solicitação
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
                                         <Button
                                             onClick={handleCreateActivity}
                                             disabled={!matriz}

@@ -598,7 +598,7 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
           <CardTitle>Insumos derivados cadastrados</CardTitle>
           <CardDescription>Adicione e edite os itens de estoque derivados dos insumos base.</CardDescription>
         </CardHeader>
-        <CardContent className="p-6 space-y-4">
+        <CardContent className="p-4 sm:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row gap-2">
                 <Button onClick={handleAddNewClick} className="w-full sm:w-auto">
                     <PlusCircle className="mr-2 h-4 w-4" /> Adicionar insumo

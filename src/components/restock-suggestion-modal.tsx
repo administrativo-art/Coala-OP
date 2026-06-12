@@ -12,7 +12,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { ImageIcon, Plus, Trash2 } from 'lucide-react';
 import { convertValue, units, type UnitCategory } from '@/lib/conversion';
 import { Label } from '@/components/ui/label';
@@ -20,7 +19,7 @@ import { Progress } from '@/components/ui/progress';
 
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
-import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, type Product } from '@/types';
+import { type LotEntry, type Kiosk, type BaseProduct, type RepositionItem, type Product, type RepositionRequestedProduct } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
@@ -37,6 +36,7 @@ interface AnalysisResult {
 interface RestockSuggestionModalProps {
   suggestionResult: AnalysisResult;
   targetKiosk: Kiosk;
+  requestedProducts?: RepositionRequestedProduct[];
   onOpenChange: (open: boolean) => void;
   onStage: (item: RepositionItem) => void;
 }
@@ -55,7 +55,7 @@ const formatNumberDisplay = (value: number) => {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 };
 
-export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenChange, onStage }: RestockSuggestionModalProps) {
+export function RestockSuggestionModal({ suggestionResult, targetKiosk, requestedProducts, onOpenChange, onStage }: RestockSuggestionModalProps) {
   const { lots } = useExpiryProducts();
   const { products, getProductFullName } = useProducts();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -199,10 +199,38 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
             </div>
         </div>
 
+        {requestedProducts && requestedProducts.length > 0 && (() => {
+          const withStock = requestedProducts.map((rp) => ({
+            rp,
+            hasStock: lots.some((l) => l.kioskId === 'matriz' && l.productId === rp.productId && (l.quantity - (l.reservedQuantity || 0)) > 0),
+          }));
+          const anyMissing = withStock.some((entry) => !entry.hasStock);
+          return (
+            <div className="border-t px-5 py-3">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Solicitado pela unidade</p>
+              <ul className="space-y-1 text-sm">
+                {withStock.map(({ rp, hasStock }) => (
+                  <li key={rp.productId} className="flex items-center justify-between gap-2">
+                    <span className="truncate">{rp.productName}</span>
+                    <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+                      {rp.packages.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} emb
+                      {!hasStock && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">sem estoque</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {anyMissing && (
+                <p className="mt-1.5 text-xs text-amber-700">
+                  Sem estoque do solicitado — substitua por outro derivado do mesmo insumo base em “Outros lotes disponíveis”.
+                </p>
+              )}
+            </div>
+          );
+        })()}
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
-            <div className="min-h-0 flex-1 overflow-auto px-5 pb-4">
-              <ScrollArea className="h-full">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
                 <div className="space-y-3">
                     {fields.map((field, index) => {
                         const lot = lots.find(l => l.id === field.lotId);
@@ -291,7 +319,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                             const imageUrl = lot.imageUrl || product.imageUrl;
                             return (
                                 <div key={lot.id} className="flex items-center gap-3 rounded-xl border bg-muted/20 p-2">
-                                    <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-background">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-background">
                                         {imageUrl ? (
                                             <img src={imageUrl} alt={getProductFullName(product)} className="h-full w-full object-cover" />
                                         ) : (
@@ -304,7 +332,7 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                                             Lote {lot.lotNumber || "-"} · {lot.expiryDate ? format(new Date(lot.expiryDate), 'dd/MM/yyyy') : 'validade indefinida'} · {lot.quantity - (lot.reservedQuantity || 0)} {product.packageType || 'un'} disponíveis
                                         </p>
                                     </div>
-                                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => append({lotId: lot.id, quantityInBaseUnit: 0})}>
+                                    <Button type="button" size="sm" variant="outline" className="h-8 shrink-0" onClick={() => append({lotId: lot.id, quantityInBaseUnit: 0})}>
                                         <Plus className="mr-1 h-3.5 w-3.5" />
                                         Adicionar
                                     </Button>
@@ -314,7 +342,6 @@ export function RestockSuggestionModal({ suggestionResult, targetKiosk, onOpenCh
                     </div>
                   </div>
                 )}
-              </ScrollArea>
             </div>
             <DialogFooter className="shrink-0 border-t bg-muted/20 px-5 py-4">
               <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

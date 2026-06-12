@@ -157,9 +157,9 @@ function OperationalCadastrosPanel() {
   return (
     <Tabs defaultValue="items" className="w-full space-y-4">
       <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl border bg-background p-1 shadow-sm">
-        <TabsTrigger value="base-products" className="rounded-xl px-4 py-2 text-sm font-medium">Insumo base</TabsTrigger>
-        <TabsTrigger value="items" className="rounded-xl px-4 py-2 text-sm font-medium">Insumo derivado</TabsTrigger>
-        <TabsTrigger value="entities" className="rounded-xl px-4 py-2 text-sm font-medium">Pessoas e empresas</TabsTrigger>
+        <TabsTrigger value="base-products" className="rounded-xl px-2 py-2 text-center text-xs font-medium leading-tight whitespace-normal sm:px-4 sm:text-sm">Insumo base</TabsTrigger>
+        <TabsTrigger value="items" className="rounded-xl px-2 py-2 text-center text-xs font-medium leading-tight whitespace-normal sm:px-4 sm:text-sm">Insumo derivado</TabsTrigger>
+        <TabsTrigger value="entities" className="rounded-xl px-2 py-2 text-center text-xs font-medium leading-tight whitespace-normal sm:px-4 sm:text-sm">Pessoas e empresas</TabsTrigger>
       </TabsList>
       <TabsContent value="base-products">
         <BaseProductManagement />
@@ -681,18 +681,18 @@ export default function SettingsPage() {
   return (
     <PermissionGuard allowed={permissions.settings.view}>
       <div className="w-full space-y-6">
-        <div className="flex items-center gap-4 mb-2">
+        <div className="flex items-center gap-2 sm:gap-4 mb-2">
           <Button
             onClick={() => router.back()}
             variant="ghost"
-            className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
+            className="p-2 rounded-full h-auto w-auto shrink-0 text-muted-foreground transition-colors hover:bg-muted"
             aria-label="Voltar"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Configurações</h1>
-            <p className="text-sm text-muted-foreground">Gerencie as configurações de cada departamento.</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold">Configurações</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">Gerencie as configurações de cada departamento.</p>
           </div>
         </div>
 

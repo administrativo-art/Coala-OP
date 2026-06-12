@@ -1543,11 +1543,21 @@ export type RepositionPartialFulfillmentReason =
   | "Item incluído pelo CD"
   | "Outro";
 
+// Insumo derivado escolhido pelo solicitante (com a quantidade em embalagens e o equivalente na unidade base).
+export type RepositionRequestedProduct = {
+  productId: string;
+  productName: string;
+  packages: number;
+  quantityBase: number;
+};
+
 export type RepositionItem = {
   baseProductId: string;
   productName: string;
   quantityNeeded: number;
   suggestedLots: RepositionSuggestedLot[];
+  // Preenchido apenas durante a montagem da solicitação (não usado na atividade).
+  requestedProducts?: RepositionRequestedProduct[];
   fulfillmentDivergence?: {
     requestedQuantity: number;
     fulfilledQuantity: number;
@@ -1567,6 +1577,8 @@ export type RepositionRequestItem = {
   currentStock: number;
   minimumStock: number;
   requestedQuantity: number;
+  // Insumos derivados (tamanhos) escolhidos pelo solicitante para este insumo base.
+  requestedProducts?: RepositionRequestedProduct[];
   notes?: string;
 };
 

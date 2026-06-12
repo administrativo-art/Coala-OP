@@ -784,7 +784,7 @@ export function PricingSimulator() {
                                     <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
                                 </div>
                                 <div className="flex items-center justify-between px-4 py-3">
-                                    <div className="flex-1 flex justify-around gap-2 overflow-hidden">
+                                    <div className="flex-1 flex justify-around gap-2 overflow-x-auto">
                                         <TooltipProvider>
                                             {ALL_COLS.filter(c => visibleColumns.has(c.id)).map(col => (
                                                 <Tooltip key={col.id}>
@@ -972,7 +972,7 @@ export function PricingSimulator() {
                                                 <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
                                             </div>
                                             <div className="flex items-center px-4 py-3">
-                                                <div className="flex-1 flex justify-around gap-2">
+                                                <div className="flex-1 flex justify-around gap-2 overflow-x-auto">
                                                     <TooltipProvider>
                                                         {ALL_COLS.filter(c => visibleColumns.has(c.id)).map(col => (
                                                             <div key={col.id} className="text-center min-w-[60px]">
