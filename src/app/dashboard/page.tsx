@@ -632,7 +632,7 @@ function ManagementDashboard() {
             ) : criticalRestockItems.length === 0 ? (
               <EmptyState>Nenhum item crítico encontrado para {cdKiosk.name}.</EmptyState>
             ) : (
-              <div className="max-h-[410px] space-y-3 overflow-y-auto pr-1">
+              <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
                 {criticalRestockItems.map(({ base, current, minimum, leadTime, ruptureDate, orderLimitDate }) => (
                   <div key={base.id} className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50/50 p-4 text-sm">
                     <div className="min-w-0">
