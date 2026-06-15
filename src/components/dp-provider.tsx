@@ -84,6 +84,7 @@ function getDPScope(pathname: string | null): DPScope {
   if (pathname.startsWith('/dashboard/dp')) return 'dashboard';
   if (pathname.startsWith('/dashboard/collaborator')) return 'goals';
   if (pathname.startsWith('/dashboard/goals')) return 'goals';
+  if (pathname === '/dashboard') return 'dashboard';
   return 'inactive';
 }
 
