@@ -39,7 +39,7 @@ import { useFinancialCollection } from "@/features/financial/hooks/use-financial
 import { formatCurrency, toDate } from "@/features/financial/lib/utils"
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions"
 import { cn } from "@/lib/utils"
-import type { DPSchedule, DPShift, GoalPeriodDoc, Kiosk, SalesReport } from "@/types"
+import type { DPSchedule, DPShift, GoalPeriodDoc, Kiosk, SalesReport, User } from "@/types"
 
 const numberFormatter = new Intl.NumberFormat("pt-BR")
 function isSameOrBefore(left: Date, right: Date) {
@@ -117,8 +117,8 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   )
 }
 
-function getShiftUserName(schedule: DPSchedule | undefined, shift: DPShift) {
-  return schedule?.snapshot?.users?.[shift.userId]?.username ?? shift.userId
+function getShiftUserName(schedule: DPSchedule | undefined, shift: DPShift, users: User[]) {
+  return schedule?.snapshot?.users?.[shift.userId]?.username ?? users.find((user) => user.id === shift.userId)?.username ?? shift.userId
 }
 
 function getShiftLabel(shift: DPShift) {
@@ -181,7 +181,7 @@ function getReportDateKey(report: { year: number; month: number; day?: number })
 }
 
 function ManagementDashboard() {
-  const { user, permissions } = useAuth()
+  const { user, users, permissions } = useAuth()
   const router = useRouter()
   const canViewManagementDashboard = permissions.dashboard.view
   const canViewCollaboratorDashboard = permissions.dashboard.collaborator ?? permissions.dashboard.view
@@ -515,7 +515,7 @@ function ManagementDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
         {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
           <DashboardCard title="Metas e faturamento" description="Meta geral, realizado e metas atuais por quiosque." href="/dashboard/goals/tracking" icon={Target} className="order-1" hideDetailsLink>
             <div className="grid gap-3 md:grid-cols-3">
@@ -786,7 +786,7 @@ function ManagementDashboard() {
                         <div className="mt-2 space-y-1.5">
                           {dayShifts.map((shift) => (
                             <div key={shift.id} className="rounded-md bg-zinc-50 px-2 py-1.5">
-                              <p className="truncate text-xs font-black text-zinc-700">{getShiftUserName(selectedWeeklySchedule, shift)}</p>
+                              <p className="truncate text-xs font-black text-zinc-700">{getShiftUserName(selectedWeeklySchedule, shift, users)}</p>
                               <p className="text-[10px] font-semibold text-zinc-400">{getShiftLabel(shift)}</p>
                             </div>
                           ))}
@@ -1152,7 +1152,7 @@ function ManagementDashboard() {
                         <div className="flex flex-wrap gap-3">
                           {dayShifts.map((shift) => (
                             <div key={shift.id} className="flex min-w-[140px] items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-2">
-                              <span className="truncate text-sm font-black text-zinc-800">{getShiftUserName(selectedMonthlySchedule, shift)}</span>
+                              <span className="truncate text-sm font-black text-zinc-800">{getShiftUserName(selectedMonthlySchedule, shift, users)}</span>
                               <span className="text-xs font-bold text-zinc-400">{getShiftLabel(shift)}</span>
                             </div>
                           ))}
