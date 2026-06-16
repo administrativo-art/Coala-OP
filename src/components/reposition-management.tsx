@@ -583,7 +583,7 @@ function RepositionActivityCard({
                                 {receiptHasDivergence && <Badge variant="secondary" className="bg-red-50 text-red-600">Divergência</Badge>}
                             </div>
                         </div>
-                        <div className="space-y-3 p-5">
+                        <div className="space-y-3 p-4 sm:p-5">
                             {receiptSummary.map(({ key, item, lot, receivedQuantity, difference, notes }) => {
                                 const lotImage = getLotImage(lot);
 
@@ -591,12 +591,12 @@ function RepositionActivityCard({
                                     <div
                                         key={`receipt-${key}`}
                                         className={cn(
-                                            "rounded-xl border bg-card p-3",
+                                            "min-w-0 rounded-xl border bg-card p-4",
                                             difference !== 0 && "border-red-200 bg-red-50/50"
                                         )}
                                     >
-                                        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_minmax(220px,320px)] lg:items-center">
-                                            <div className="flex items-center gap-3">
+                                        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(260px,1fr)_180px_minmax(220px,320px)] lg:items-center">
+                                            <div className="flex min-w-0 items-center gap-3 sm:col-span-2 lg:col-span-1">
                                                 <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
                                                     {lotImage ? (
                                                         <img src={lotImage} alt={lot.productName} className="h-full w-full object-cover" />
@@ -610,18 +610,18 @@ function RepositionActivityCard({
                                                     <div className="mt-0.5 text-xs text-muted-foreground">Lote {lot.lotNumber || "-"}</div>
                                                 </div>
                                             </div>
-                                            <div className="rounded-lg border bg-background px-3 py-2">
+                                            <div className="min-w-0 rounded-lg border bg-background px-3 py-2">
                                                 <div className="text-[11px] font-semibold uppercase text-muted-foreground">Enviado</div>
                                                 <div className="text-lg font-bold tabular-nums">{lot.quantityToMove}</div>
                                             </div>
-                                            <div>
+                                            <div className="min-w-0">
                                                 <Label className="text-[11px] font-semibold uppercase text-muted-foreground">Recebido</Label>
                                                 <Input
                                                     type="number"
                                                     min={0}
                                                     value={Number.isFinite(receivedQuantity) ? receivedQuantity : 0}
                                                     disabled={!canEditStep(3)}
-                                                    className="mt-1 h-10 text-right font-semibold"
+                                                    className="mt-1 h-10 w-full min-w-0 text-right font-semibold"
                                                     onChange={(event) => {
                                                         const value = Number(event.target.value);
                                                         setReceiptRows((current) => ({
@@ -638,8 +638,8 @@ function RepositionActivityCard({
                                         <Textarea
                                             value={notes}
                                             disabled={!canEditStep(3)}
-                                            rows={1}
-                                            className="mt-3"
+                                            rows={3}
+                                            className="mt-3 min-h-[92px] w-full min-w-0 resize-y"
                                             placeholder={difference === 0 ? "Observação opcional" : "Observação obrigatória para divergência"}
                                             onChange={(event) => {
                                                 setReceiptRows((current) => ({
@@ -655,11 +655,12 @@ function RepositionActivityCard({
                                 );
                             })}
                         </div>
-                        <div className="flex items-center justify-between border-t px-5 py-4">
+                        <div className="flex flex-col gap-3 border-t px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                             <div className={cn("text-sm font-medium", receiptHasDivergence ? "text-red-600" : "text-muted-foreground")}>
                                 {receiptHasDivergence ? "Recebimento com divergência" : "Recebimento sem divergência"}
                             </div>
                             <Button
+                                className="w-full sm:w-auto"
                                 disabled={!canEditStep(3) || receiptHasMissingDivergenceNotes}
                                 onClick={() => {
                                     if (receiptHasMissingDivergenceNotes) {
