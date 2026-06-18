@@ -176,6 +176,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const packageTypeWatch = form.watch('packageType');
     const packageSizeWatch = form.watch('packageSize');
     const unitWatch = form.watch('unit');
+    const logisticsMultipleWatch = form.watch('multiplo_caixa');
+    const logisticsLabelWatch = form.watch('rotulo_caixa');
     const countingUnitWatch = form.watch('defaultCountingUnit') || 'package';
     const isApparel = categoryWatch === 'Vestimenta';
 
@@ -688,7 +690,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             <Card className="space-y-4 border-amber-200 bg-amber-50/60 p-4 dark:bg-amber-900/20">
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div>
-                                                        <h4 className="font-medium">Embalagem &amp; conversão</h4>
+                                                        <h4 className="font-medium">Embalagem e conversão</h4>
                                                         <p className="text-sm text-muted-foreground">O item físico que você compra. Define a conversão para a unidade do estoque.</p>
                                                     </div>
                                                     {linkedBaseProduct && baseConversion && (
@@ -700,7 +702,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                                                     <FormField control={form.control} name="packageType" render={({ field }) => (
                                                         <FormItem>
-                                                            <FormLabel>Tipo de embalagem <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormLabel className="flex min-h-10 items-end">Tipo de embalagem <span className="text-rose-500">*</span></FormLabel>
                                                             <Select onValueChange={field.onChange} value={field.value}>
                                                                 <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                                                                 <SelectContent>{packageTypes.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
@@ -710,7 +712,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     )}/>
                                                     <FormField control={form.control} name="category" render={({ field }) => (
                                                         <FormItem>
-                                                            <FormLabel>Categoria da unidade <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormLabel className="flex min-h-10 items-end">Categoria da unidade <span className="text-rose-500">*</span></FormLabel>
                                                             <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value}>
                                                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                                                 <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
@@ -720,14 +722,14 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     )}/>
                                                     <FormField control={form.control} name="packageSize" render={({ field }) => (
                                                         <FormItem>
-                                                            <FormLabel>Qtd. embalagem <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormLabel className="flex min-h-10 items-end">Qtd. embalagem <span className="text-rose-500">*</span></FormLabel>
                                                             <FormControl><Input type="number" step="any" placeholder="ex: 144" {...field} value={field.value ?? ''} /></FormControl>
                                                             <FormMessage />
                                                         </FormItem>
                                                     )}/>
                                                     <FormField control={form.control} name="unit" render={({ field }) => (
                                                         <FormItem>
-                                                            <FormLabel>Unidade <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormLabel className="flex min-h-10 items-end">Unidade <span className="text-rose-500">*</span></FormLabel>
                                                             <Select onValueChange={field.onChange} value={field.value}>
                                                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                                                 <SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
@@ -772,35 +774,59 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 <div className="flex items-center justify-between">
                                                     <div className="space-y-0.5">
                                                         <FormLabel className="text-base">Embalagem de agrupamento</FormLabel>
-                                                        <FormDescription>Quando o fornecedor entrega em caixas que agrupam várias unidades.</FormDescription>
+                                                        <FormDescription>
+                                                            Use quando o fornecedor agrupa várias embalagens menores em uma caixa, fardo, pallet ou tambor.
+                                                        </FormDescription>
                                                     </div>
                                                     <FormField control={form.control} name="enableLogistics" render={({ field }) => (<FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>)} />
                                                 </div>
                                                 {enableLogisticsWatch ? (
-                                                    <div className="mt-4 grid grid-cols-2 gap-4 border-t pt-4">
-                                                        <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>Quantidade</FormLabel>
-                                                                <FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl>
-                                                                <FormDescription className="text-xs">Quantas unidades de compra cabem na embalagem de agrupamento (ex: 10 bags por caixa → 10).</FormDescription>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
-                                                        <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>Tipo de agrupamento</FormLabel>
-                                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                                                    <SelectContent>
-                                                                        <SelectItem value="Caixa">Caixa</SelectItem>
-                                                                        <SelectItem value="Fardo">Fardo</SelectItem>
-                                                                        <SelectItem value="Pallet">Pallet</SelectItem>
-                                                                        <SelectItem value="Tambor">Tambor</SelectItem>
-                                                                    </SelectContent>
-                                                                </Select>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
+                                                    <div className="mt-4 space-y-4 border-t pt-4">
+                                                        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+                                                            Informe quantas <strong>{packageTypeWatch || 'embalagens menores'}</strong> existem em cada agrupamento.
+                                                            Não informe a quantidade de {unitWatch || 'unidades'}.
+                                                        </div>
+                                                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                                            <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel>
+                                                                        Quantas {packageTypeWatch ? `${packageTypeWatch.toLowerCase()}s` : 'embalagens menores'} por agrupamento?
+                                                                    </FormLabel>
+                                                                    <FormControl><Input type="number" step="1" placeholder="Ex: 6" {...field} value={field.value ?? ''} /></FormControl>
+                                                                    <FormDescription className="text-xs">
+                                                                        Exemplo: se uma caixa master contém 6 {packageTypeWatch ? `${packageTypeWatch.toLowerCase()}s` : 'embalagens'}, informe 6 — não 1.800 unidades.
+                                                                    </FormDescription>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}/>
+                                                            <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel>Qual é o tipo do agrupamento?</FormLabel>
+                                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="Caixa">Caixa</SelectItem>
+                                                                            <SelectItem value="Fardo">Fardo</SelectItem>
+                                                                            <SelectItem value="Pallet">Pallet</SelectItem>
+                                                                            <SelectItem value="Tambor">Tambor</SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <FormDescription className="text-xs">
+                                                                        Selecione como o fornecedor chama a embalagem externa.
+                                                                    </FormDescription>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}/>
+                                                        </div>
+                                                        {logisticsMultipleWatch && logisticsMultipleWatch > 0 && logisticsLabelWatch && (
+                                                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+                                                                <strong>Conversão:</strong> 1 {logisticsLabelWatch} = {logisticsMultipleWatch}{' '}
+                                                                {packageTypeWatch ? `${packageTypeWatch}(s)` : 'embalagens menores'}
+                                                                {packageSizeWatch && unitWatch
+                                                                    ? ` = ${Number(logisticsMultipleWatch) * Number(packageSizeWatch)} ${unitWatch}`
+                                                                    : ''}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <p className="mt-3 text-xs text-muted-foreground">Desligado — este insumo é comprado por {packageTypeWatch ? packageTypeWatch.toLowerCase() : 'unidade'} avulso.</p>
