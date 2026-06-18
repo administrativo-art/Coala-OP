@@ -5,13 +5,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ChevronRight, Group, Menu, Settings2, SlidersHorizontal, Users2 } from "lucide-react";
+import { ArrowLeft, Box, ChevronRight, Group, Menu, Package, Settings2, SlidersHorizontal, Users2, UsersRound } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { ChartLineUp, Storefront, Users, Wallet } from "@phosphor-icons/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useBaseProducts } from "@/hooks/use-base-products";
+import { useEntities } from "@/hooks/use-entities";
+import { useProducts } from "@/hooks/use-products";
 
 const UserManagement = dynamic(
   () => import("@/components/user-management").then((m) => m.UserManagement),
@@ -154,12 +157,53 @@ function EmptySection({ label }: { label: string }) {
 }
 
 function OperationalCadastrosPanel() {
+  const { baseProducts } = useBaseProducts();
+  const { products } = useProducts();
+  const { entities } = useEntities();
+
+  const catalogTabs = [
+    {
+      value: "base-products",
+      label: "Insumo base",
+      count: baseProducts.filter((product) => !product.isArchived).length,
+      icon: Box,
+    },
+    {
+      value: "items",
+      label: "Insumo derivado",
+      count: products.filter((product) => !product.isArchived).length,
+      icon: Package,
+    },
+    {
+      value: "entities",
+      label: "Pessoas e empresas",
+      count: entities.length,
+      icon: UsersRound,
+    },
+  ];
+
   return (
-    <Tabs defaultValue="items" className="w-full space-y-4">
-      <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl border bg-background p-1 shadow-sm">
-        <TabsTrigger value="base-products" className="rounded-xl px-2 py-2 text-center text-xs font-medium leading-tight whitespace-normal sm:px-4 sm:text-sm">Insumo base</TabsTrigger>
-        <TabsTrigger value="items" className="rounded-xl px-2 py-2 text-center text-xs font-medium leading-tight whitespace-normal sm:px-4 sm:text-sm">Insumo derivado</TabsTrigger>
-        <TabsTrigger value="entities" className="rounded-xl px-2 py-2 text-center text-xs font-medium leading-tight whitespace-normal sm:px-4 sm:text-sm">Pessoas e empresas</TabsTrigger>
+    <Tabs defaultValue="items" className="w-full space-y-8">
+      <TabsList className="grid h-auto w-full grid-cols-3 rounded-none border-0 border-b border-[#ded3c5] bg-transparent p-0 shadow-none">
+        {catalogTabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              className="group relative min-h-20 rounded-none border-0 bg-transparent px-3 py-4 text-[#746961] shadow-none transition-colors data-[state=active]:bg-transparent data-[state=active]:text-[#211814] data-[state=active]:shadow-none"
+            >
+              <span className="flex items-center justify-center gap-3">
+                <Icon className="h-5 w-5 text-[#a79c93] group-data-[state=active]:text-[#a6325b]" />
+                <span className="text-sm font-bold sm:text-base">{tab.label}</span>
+                <span className="rounded-full bg-[#e6e0d8] px-2.5 py-1 text-xs font-bold text-[#746961] group-data-[state=active]:bg-[#a6325b] group-data-[state=active]:text-white">
+                  {tab.count}
+                </span>
+              </span>
+              <span className="absolute inset-x-4 -bottom-px hidden h-1 rounded-full bg-[#a6325b] group-data-[state=active]:block" />
+            </TabsTrigger>
+          );
+        })}
       </TabsList>
       <TabsContent value="base-products">
         <BaseProductManagement />
