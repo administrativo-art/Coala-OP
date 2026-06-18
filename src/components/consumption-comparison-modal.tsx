@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { type BaseProduct, type ConsumptionReport, type MovementRecord } from '@/types';
@@ -28,7 +28,11 @@ const formatNumber = (value: number, unit: string) => {
 };
 
 export function ConsumptionComparisonModal({ open, onOpenChange, baseProduct, kioskId, startPeriod, endPeriod }: ConsumptionComparisonModalProps) {
-  const { history: movementHistory, loading: historyLoading } = useMovementHistory();
+  const { history: movementHistory, loading: historyLoading, loaded: historyLoaded, loadHistory } = useMovementHistory();
+
+  useEffect(() => {
+    if (open && !historyLoaded) loadHistory();
+  }, [open, historyLoaded, loadHistory]);
   const { reports: consumptionReports, isLoading: consumptionLoading } = useValidatedConsumptionData();
   const { products } = useProducts();
 

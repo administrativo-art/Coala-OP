@@ -86,7 +86,9 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         }
 
         load();
-        const intervalId = window.setInterval(load, 30000);
+        const intervalId = window.setInterval(() => {
+            if (document.visibilityState === 'visible') void load();
+        }, 60000);
 
         return () => {
             isMounted = false;

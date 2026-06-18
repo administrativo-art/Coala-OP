@@ -8,6 +8,45 @@ import { type RepositionActivity } from "@/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const ACTIVE_REPOSITION_STATUSES: RepositionActivity["status"][] = [
+  "Aguardando despacho",
+  "Aguardando recebimento",
+  "Recebido com divergência",
+  "Recebido sem divergência",
+];
+
+function toSummary(activity: RepositionActivity): RepositionActivity {
+  const stripEmbeddedSignature = (signature?: RepositionActivity["receiptSignature"]) => {
+    if (!signature) return undefined;
+    const { dataUrl: _dataUrl, ...metadata } = signature;
+    return metadata;
+  };
+
+  return {
+    ...activity,
+    items: ACTIVE_REPOSITION_STATUSES.includes(activity.status) ? activity.items : [],
+    transportSignature: stripEmbeddedSignature(activity.transportSignature),
+    receiptSignature: stripEmbeddedSignature(activity.receiptSignature),
+    separationSignature: stripEmbeddedSignature(activity.separationSignature),
+    separationChecklist: undefined,
+  };
+}
+
+function toFullListItem(activity: RepositionActivity): RepositionActivity {
+  if (ACTIVE_REPOSITION_STATUSES.includes(activity.status)) return activity;
+  const stripEmbeddedSignature = (signature?: RepositionActivity["receiptSignature"]) => {
+    if (!signature) return undefined;
+    const { dataUrl: _dataUrl, ...metadata } = signature;
+    return metadata;
+  };
+  return {
+    ...activity,
+    transportSignature: stripEmbeddedSignature(activity.transportSignature),
+    receiptSignature: stripEmbeddedSignature(activity.receiptSignature),
+    separationSignature: stripEmbeddedSignature(activity.separationSignature),
+  };
+}
+
 function canManage(context: Awaited<ReturnType<typeof requireUser>>) {
   return context.isDefaultAdmin || !!context.permissions?.reposition?.prepareDispatch || !!context.permissions?.stock?.analysis?.restock;
 }
@@ -34,6 +73,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const detail = request.nextUrl.searchParams.get("detail") === "full" ? "full" : "summary";
     const snap = await dbAdmin.collection("repositionActivities").get();
     const activities = snap.docs
       .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<RepositionActivity, "id">) }))
@@ -45,9 +85,18 @@ export async function GET(request: NextRequest) {
         const unitIds = context.userDoc.unitIds ?? [];
         return assignedKioskIds.includes(activity.kioskDestinationId) || unitIds.includes(activity.kioskDestinationId);
       })
+      .map((activity) => detail === "full" ? toFullListItem(activity) : toSummary(activity))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
-    return NextResponse.json({ activities });
+    return NextResponse.json(
+      { activities },
+      {
+        headers: {
+          "Cache-Control": "private, no-store",
+          "X-Reposition-Detail": detail,
+        },
+      }
+    );
   } catch (error) {
     return NextResponse.json(
       {

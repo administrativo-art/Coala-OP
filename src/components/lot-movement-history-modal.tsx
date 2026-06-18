@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -33,7 +33,11 @@ interface LotMovementHistoryModalProps {
 }
 
 export function LotMovementHistoryModal({ lot, onOpenChange }: LotMovementHistoryModalProps) {
-  const { history, loading } = useMovementHistory();
+  const { history, loading, loaded, loadHistory } = useMovementHistory();
+
+  useEffect(() => {
+    if (!loaded) loadHistory();
+  }, [loaded, loadHistory]);
   const { permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { toast } = useToast();

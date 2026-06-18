@@ -56,10 +56,14 @@ async function authedFetch(
   });
 }
 
-export async function fetchRepositionActivities(firebaseUser: FirebaseUserLike) {
+export async function fetchRepositionActivities(
+  firebaseUser: FirebaseUserLike,
+  options: { detail?: "summary" | "full" } = {}
+) {
+  const detail = options.detail ?? "summary";
   const response = await authedFetch(
     firebaseUser,
-    "/api/stock/reposition-activities",
+    `/api/stock/reposition-activities?detail=${detail}`,
     {
       method: "GET",
     }

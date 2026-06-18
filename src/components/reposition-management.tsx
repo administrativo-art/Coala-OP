@@ -13,6 +13,8 @@ import { type RepositionActivity, type RepositionItem, type RepositionSuggestedL
 import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
 import SignatureCanvas from "react-signature-canvas";
+import { getDownloadURL, ref, uploadString } from "firebase/storage";
+import { storage } from "@/lib/firebase";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -878,6 +880,16 @@ export function RepositionManagement({ returnTo }: { returnTo?: string } = {}) {
     transporterName: string,
     signatureDataUrl: string
   ) => {
+    let signatureUrl = signatureDataUrl;
+    if (signatureDataUrl.startsWith("data:")) {
+      const signatureRef = ref(
+        storage,
+        `reposition_signatures/${activity.id}/transport-${Date.now()}.png`
+      );
+      const snapshot = await uploadString(signatureRef, signatureDataUrl, "data_url");
+      signatureUrl = await getDownloadURL(snapshot.ref);
+    }
+
     await updateRepositionActivity(activity.id, {
       status: "Aguardando recebimento",
       separationSignature: activity.separationSignature ?? {
@@ -887,7 +899,7 @@ export function RepositionManagement({ returnTo }: { returnTo?: string } = {}) {
       transportSignature: {
         signedBy: transporterName,
         signedAt: new Date().toISOString(),
-        dataUrl: signatureDataUrl,
+        dataUrl: signatureUrl,
       },
     });
     toast({
