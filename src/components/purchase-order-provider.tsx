@@ -44,6 +44,7 @@ export interface CreatePurchasePayload {
   paymentDueDate: string;
   paymentCondition?: PurchaseOrder['paymentCondition'];
   installmentsCount?: number;
+  installmentDueDates?: string[];
   estimatedReceiptDate: string;
   accountPlanId?: string;
   accountPlanName?: string;
@@ -88,6 +89,7 @@ export type OrderEdits = {
   paymentDueDate?: string;
   paymentCondition?: PurchaseOrder['paymentCondition'];
   installmentsCount?: number;
+  installmentDueDates?: string[];
   estimatedReceiptDate?: string;
   accountPlanId?: string;
   accountPlanName?: string;

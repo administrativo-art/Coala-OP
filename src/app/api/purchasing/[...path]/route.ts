@@ -60,17 +60,26 @@ async function nextAssetCode() {
   return `PAT-${String(next).padStart(6, '0')}`;
 }
 
-function buildExpenseInstallments(totalValue: number, count: number, firstDueDateIso: string) {
+function buildExpenseInstallments(
+  totalValue: number,
+  count: number,
+  firstDueDateIso: string,
+  installmentDueDates?: string[],
+) {
   const safeCount = Math.max(2, count);
   const baseValue = Number.parseFloat((totalValue / safeCount).toFixed(2));
   const diff = Number.parseFloat((totalValue - baseValue * safeCount).toFixed(2));
   const firstDueDate = new Date(firstDueDateIso);
+  const customDates =
+    installmentDueDates?.length === safeCount
+      ? installmentDueDates.map((date) => new Date(date))
+      : null;
 
   return Array.from({ length: safeCount }, (_, index) => {
     const value = index === safeCount - 1 ? Number.parseFloat((baseValue + diff).toFixed(2)) : baseValue;
     return {
       number: index + 1,
-      dueDate: Timestamp.fromDate(addMonths(firstDueDate, index)),
+      dueDate: Timestamp.fromDate(customDates?.[index] ?? addMonths(firstDueDate, index)),
       value,
       status: 'pending',
     };
@@ -241,7 +250,12 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     paymentMethod: orderData.paymentCondition === 'installments' ? 'installments' : 'single',
     installments:
       orderData.paymentCondition === 'installments'
-        ? buildExpenseInstallments(totalValue, Number(orderData.installmentsCount ?? 2), orderData.paymentDueDate)
+          ? buildExpenseInstallments(
+              totalValue,
+              Number(orderData.installmentsCount ?? 2),
+              orderData.paymentDueDate,
+              orderData.installmentDueDates,
+            )
         : null,
     installmentType: orderData.paymentCondition === 'installments' ? 'equal' : null,
     installmentPeriodicity: orderData.paymentCondition === 'installments' ? 'monthly' : null,
@@ -513,6 +527,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       paymentMethodId: body.paymentMethodId ?? null,
       paymentMethodLabel: body.paymentMethodLabel ?? null,
       installmentsCount: Number(body.installmentsCount ?? 1),
+      installmentDueDates: Array.isArray(body.installmentDueDates) ? body.installmentDueDates : null,
       accountPlanId: body.accountPlanId ?? null,
       accountPlanName: body.accountPlanName ?? null,
       freightAccountPlanId: body.freightAccountPlanId ?? null,
@@ -1382,7 +1397,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       paymentMethod: order.paymentCondition === 'installments' ? 'installments' : 'single',
       installments:
         order.paymentCondition === 'installments'
-          ? buildExpenseInstallments(totalValue, Number(order.installmentsCount ?? 2), order.paymentDueDate)
+          ? buildExpenseInstallments(
+              totalValue,
+              Number(order.installmentsCount ?? 2),
+              order.paymentDueDate,
+              order.installmentDueDates,
+            )
           : null,
       installmentType: order.paymentCondition === 'installments' ? 'equal' : null,
       installmentPeriodicity: order.paymentCondition === 'installments' ? 'monthly' : null,
@@ -1583,6 +1603,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
               paymentMethodLabel: rest.paymentMethodLabel ?? currentOrder.paymentMethodLabel ?? null,
               paymentCondition: rest.paymentCondition ?? currentOrder.paymentCondition ?? null,
               installmentsCount: rest.installmentsCount ?? currentOrder.installmentsCount ?? null,
+              installmentDueDates: rest.installmentDueDates ?? currentOrder.installmentDueDates ?? null,
               paymentDueDate: rest.paymentDueDate ?? currentOrder.paymentDueDate ?? null,
               updatedAt: now,
             },

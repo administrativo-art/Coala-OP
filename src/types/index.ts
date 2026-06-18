@@ -1272,6 +1272,7 @@ export type PurchaseOrder = {
   paymentMethodLabel?: string | null;
   paymentCondition?: PurchasePaymentCondition;
   installmentsCount?: number;
+  installmentDueDates?: string[];
   purchaseDate?: string;
   invoiceNumber?: string;
   invoiceAccessKey?: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { format, parseISO } from 'date-fns';
+import { addMonths, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Image from 'next/image';
 import { BackButton } from '@/components/navigation/back-button';
@@ -56,6 +56,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { AccountPlanTreeSelect } from '@/components/purchasing/account-plan-tree-select';
+import { InstallmentPlanDialog } from '@/components/purchasing/installment-plan-dialog';
 import { ManageOrderItemsModal } from '@/components/purchasing/manage-order-items-modal';
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -123,6 +124,7 @@ type EditForm = {
   paymentMethod: PaymentMethod;
   paymentCondition: PurchasePaymentCondition;
   installmentsCount: number;
+  installmentDueDates: string[];
   paymentDueDate: string;
   estimatedReceiptDate: string;
   deliveryFee: number;
@@ -150,6 +152,14 @@ function getOrderSupplierName(order?: { supplierName?: string; fiscal?: { issuer
 
 function getPaymentCardKey(accountId?: string | null, methodId?: string | null) {
   return accountId && methodId ? `${accountId}::${methodId}` : '';
+}
+
+function buildMonthlyInstallmentDates(firstDueDate: string, count: number) {
+  const parsed = parseISO(firstDueDate);
+  if (Number.isNaN(parsed.getTime())) return [];
+  return Array.from({ length: Math.max(2, count) }, (_, index) =>
+    format(addMonths(parsed, index), 'yyyy-MM-dd'),
+  );
 }
 
 export default function PurchaseOrderPage() {
@@ -180,6 +190,7 @@ export default function PurchaseOrderPage() {
   const [receivedElsewhereNotes, setReceivedElsewhereNotes] = useState('');
   const [markingPaid, setMarkingPaid] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [installmentPlanOpen, setInstallmentPlanOpen] = useState(false);
   const [itemsEditOpen, setItemsEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
@@ -332,10 +343,16 @@ export default function PurchaseOrderPage() {
 
   const openEdit = () => {
     if (!order) return;
+    const installmentsCount = order.installmentsCount ?? 2;
+    const installmentDueDates =
+      order.installmentDueDates?.length === installmentsCount
+        ? order.installmentDueDates
+        : buildMonthlyInstallmentDates(order.paymentDueDate.slice(0, 10), installmentsCount);
     setEditForm({
       paymentMethod: order.paymentMethod,
       paymentCondition: order.paymentCondition ?? 'cash',
-      installmentsCount: order.installmentsCount ?? 2,
+      installmentsCount,
+      installmentDueDates,
       paymentDueDate: order.paymentDueDate.slice(0, 10),
       estimatedReceiptDate: order.estimatedReceiptDate.slice(0, 10),
       deliveryFee: order.deliveryFee ?? 0,
@@ -368,7 +385,11 @@ export default function PurchaseOrderPage() {
         paymentMethodLabel: isCardPayment(editForm.paymentMethod) ? selectedPaymentCard?.methodLabel ?? null : null,
         paymentCondition: editForm.paymentCondition,
         installmentsCount: editForm.paymentCondition === 'installments' ? editForm.installmentsCount : undefined,
-        paymentDueDate: editForm.paymentDueDate,
+        installmentDueDates: editForm.paymentCondition === 'installments' ? editForm.installmentDueDates : [],
+        paymentDueDate:
+          editForm.paymentCondition === 'installments'
+            ? editForm.installmentDueDates[0]
+            : editForm.paymentDueDate,
         estimatedReceiptDate: order.receiptMode === 'future_delivery' ? editForm.estimatedReceiptDate : undefined,
         deliveryFee: editForm.deliveryFee,
         accountPlanId: editForm.accountPlanId,
@@ -762,10 +783,26 @@ export default function PurchaseOrderPage() {
                       <span>{order.paymentMethodLabel || order.paymentAccountName || 'Não vinculado'}</span>
                     </div>
                   )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{getPaymentDateLabel(order.paymentMethod)}</span>
-                  <span>{format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}</span>
-                </div>
+                {order.paymentCondition === 'installments' ? (
+                  <div className="space-y-1.5">
+                    <span className="text-muted-foreground">Vencimentos</span>
+                    <div className="space-y-1 text-right">
+                      {(order.installmentDueDates?.length
+                        ? order.installmentDueDates
+                        : buildMonthlyInstallmentDates(order.paymentDueDate, order.installmentsCount ?? 2)
+                      ).map((date, index) => (
+                        <p key={`${date}-${index}`}>
+                          {index + 1}ª · {format(parseISO(date), 'dd/MM/yyyy')}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{getPaymentDateLabel(order.paymentMethod)}</span>
+                    <span>{format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Valor previsto</span>
                   <span>{fmt(effectiveOrderTotal)}</span>
@@ -899,6 +936,13 @@ export default function PurchaseOrderPage() {
                                 paymentCondition: value as PurchasePaymentCondition,
                                 installmentsCount:
                                   value === 'installments' ? Math.max(2, current.installmentsCount) : current.installmentsCount,
+                                installmentDueDates:
+                                  value === 'installments' && current.installmentDueDates.length < 2
+                                    ? buildMonthlyInstallmentDates(
+                                        current.paymentDueDate,
+                                        Math.max(2, current.installmentsCount),
+                                      )
+                                    : current.installmentDueDates,
                               }
                             : current,
                         )
@@ -914,14 +958,30 @@ export default function PurchaseOrderPage() {
                     </Select>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label>{getPaymentDateLabel(editForm.paymentMethod)}</Label>
-                    <Input
-                      type="date"
-                      value={editForm.paymentDueDate}
-                      onChange={(event) => setEditForm((current) => current && { ...current, paymentDueDate: event.target.value })}
-                    />
-                  </div>
+                  {editForm.paymentCondition === 'installments' ? (
+                    <div className="space-y-1.5">
+                      <Label>Parcelamento</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-start font-normal"
+                        onClick={() => setInstallmentPlanOpen(true)}
+                      >
+                        {editForm.installmentDueDates.length >= 2
+                          ? `${editForm.installmentDueDates.length}x · ${format(parseISO(editForm.installmentDueDates[0]), 'dd/MM/yyyy')} a ${format(parseISO(editForm.installmentDueDates[editForm.installmentDueDates.length - 1]), 'dd/MM/yyyy')}`
+                          : 'Definir parcelas e vencimentos'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label>{getPaymentDateLabel(editForm.paymentMethod)}</Label>
+                      <Input
+                        type="date"
+                        value={editForm.paymentDueDate}
+                        onChange={(event) => setEditForm((current) => current && { ...current, paymentDueDate: event.target.value })}
+                      />
+                    </div>
+                  )}
 
                   {isCardPayment(editForm.paymentMethod) && (
                     <div className="space-y-1.5 sm:col-span-2">
@@ -942,24 +1002,6 @@ export default function PurchaseOrderPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-                  )}
-
-                  {editForm.paymentCondition === 'installments' && (
-                    <div className="space-y-1.5">
-                      <Label>Parcelas para análise</Label>
-                      <Input
-                        type="number"
-                        min={2}
-                        value={editForm.installmentsCount}
-                        onChange={(event) =>
-                          setEditForm((current) =>
-                            current
-                              ? { ...current, installmentsCount: Math.max(2, Number(event.target.value || 2)) }
-                              : current,
-                          )
-                        }
-                      />
                     </div>
                   )}
 
@@ -1090,6 +1132,7 @@ export default function PurchaseOrderPage() {
                   disabled={
                     saving ||
                     !editForm.paymentDueDate ||
+                    (editForm.paymentCondition === 'installments' && editForm.installmentDueDates.length < 2) ||
                     (isCardPayment(editForm.paymentMethod) && !editForm.paymentCardKey) ||
                     !editForm.accountPlanId ||
                     !editForm.resultCenterId ||
@@ -1102,6 +1145,27 @@ export default function PurchaseOrderPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+        )}
+
+        {editForm && (
+          <InstallmentPlanDialog
+            open={installmentPlanOpen}
+            onOpenChange={setInstallmentPlanOpen}
+            dueDates={editForm.installmentDueDates}
+            fallbackStartDate={editForm.paymentDueDate}
+            onSave={(dueDates) =>
+              setEditForm((current) =>
+                current
+                  ? {
+                      ...current,
+                      installmentsCount: dueDates.length,
+                      installmentDueDates: dueDates,
+                      paymentDueDate: dueDates[0],
+                    }
+                  : current,
+              )
+            }
+          />
         )}
 
         <ManageOrderItemsModal

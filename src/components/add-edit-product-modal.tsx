@@ -178,6 +178,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const unitWatch = form.watch('unit');
     const logisticsMultipleWatch = form.watch('multiplo_caixa');
     const logisticsLabelWatch = form.watch('rotulo_caixa');
+    const logisticsLabelDisplay =
+        packageTypeWatch === 'Caixa' && logisticsLabelWatch === 'Caixa'
+            ? 'Caixa mestra'
+            : logisticsLabelWatch;
     const countingUnitWatch = form.watch('defaultCountingUnit') || 'package';
     const isApparel = categoryWatch === 'Vestimenta';
 
@@ -794,7 +798,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                     </FormLabel>
                                                                     <FormControl><Input type="number" step="1" placeholder="Ex: 6" {...field} value={field.value ?? ''} /></FormControl>
                                                                     <FormDescription className="text-xs">
-                                                                        Exemplo: se uma caixa master contém 6 {packageTypeWatch ? `${packageTypeWatch.toLowerCase()}s` : 'embalagens'}, informe 6 — não 1.800 unidades.
+                                                                        Exemplo: se uma caixa mestra contém 6 {packageTypeWatch ? `${packageTypeWatch.toLowerCase()}s` : 'embalagens'}, informe 6 — não 1.800 unidades.
                                                                     </FormDescription>
                                                                     <FormMessage />
                                                                 </FormItem>
@@ -805,7 +809,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                     <Select onValueChange={field.onChange} value={field.value}>
                                                                         <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
                                                                         <SelectContent>
-                                                                            <SelectItem value="Caixa">Caixa</SelectItem>
+                                                                            <SelectItem value="Caixa">
+                                                                                {packageTypeWatch === 'Caixa' ? 'Caixa mestra' : 'Caixa'}
+                                                                            </SelectItem>
                                                                             <SelectItem value="Fardo">Fardo</SelectItem>
                                                                             <SelectItem value="Pallet">Pallet</SelectItem>
                                                                             <SelectItem value="Tambor">Tambor</SelectItem>
@@ -820,7 +826,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                         </div>
                                                         {logisticsMultipleWatch && logisticsMultipleWatch > 0 && logisticsLabelWatch && (
                                                             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-                                                                <strong>Conversão:</strong> 1 {logisticsLabelWatch} = {logisticsMultipleWatch}{' '}
+                                                                <strong>Conversão:</strong> 1 {logisticsLabelDisplay} = {logisticsMultipleWatch}{' '}
                                                                 {packageTypeWatch ? `${packageTypeWatch}(s)` : 'embalagens menores'}
                                                                 {packageSizeWatch && unitWatch
                                                                     ? ` = ${Number(logisticsMultipleWatch) * Number(packageSizeWatch)} ${unitWatch}`
