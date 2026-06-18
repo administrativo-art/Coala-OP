@@ -136,6 +136,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
   const [cdLotPickerLine, setCdLotPickerLine] = useState<CdReviewLine | null>(null);
   const [cdExpandedLineId, setCdExpandedLineId] = useState<string | null>(null);
   const [cdOutroLotesId, setCdOutroLotesId] = useState<string | null>(null);
+  const [matrixLotesId, setMatrixLotesId] = useState<string | null>(null);
   const [requestLotesId, setRequestLotesId] = useState<string | null>(null);
 
   const { kiosks, loading: kiosksLoading } = useKiosks();
@@ -1018,6 +1019,10 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
            const displayPercentage = reviewLine
              ? (reviewLine.minimumStock > 0 ? (reviewLine.currentStock / reviewLine.minimumStock) * 100 : null)
              : result.stockPercentage;
+           const matrixLots = isMatriz && !cdReview
+             ? getAvailableMatrixLotsForBase(result.baseProduct.id)
+             : [];
+           const matrixLotsOpen = matrixLotesId === result.baseProduct.id;
 
           return (
             <Card key={result.baseProduct.id} className={cn(
@@ -1088,6 +1093,42 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                       </p>
                   )}
                 </div>
+                )}
+                {matrixLots.length > 0 && (
+                  <div className="rounded-md border">
+                    <button
+                      type="button"
+                      onClick={() => setMatrixLotesId(matrixLotsOpen ? null : result.baseProduct.id)}
+                      className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/40"
+                      aria-expanded={matrixLotsOpen}
+                    >
+                      <span>Estoque por lote ({matrixLots.length})</span>
+                      <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", matrixLotsOpen && "rotate-180")} />
+                    </button>
+                    {matrixLotsOpen && (
+                      <div className="space-y-1 border-t p-2">
+                        {matrixLots.map((item) => (
+                          <div key={item.lot.id} className="rounded bg-muted/40 px-2 py-1.5 text-[11px]">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate font-semibold">
+                                {item.lotNumber ? `Lote ${item.lotNumber}` : "Sem lote"}
+                              </span>
+                              <span className="shrink-0 font-medium">
+                                {formatNumberDisplay(item.availablePackages, item.packageType)}
+                              </span>
+                            </div>
+                            <p className="truncate text-muted-foreground">{item.productName}</p>
+                            <div className="flex items-center justify-between gap-2 text-muted-foreground">
+                              <span>{item.expiryDate ? `vence ${format(parseISO(item.expiryDate), "dd/MM/yy")}` : "sem validade"}</span>
+                              <span className="shrink-0">
+                                = {formatNumberDisplay(item.availablePackages * item.unitsPerPackage, result.baseProduct.unit)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </CardContent>
               <CardFooter className="pt-2">
@@ -1254,54 +1295,102 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                 {analysisResults.map(result => {
                     const statusStyle = getCardStatus(result);
                     const percentage = result.stockPercentage ?? 0;
+                    const matrixLots = isMatriz ? getAvailableMatrixLotsForBase(result.baseProduct.id) : [];
+                    const matrixLotsOpen = matrixLotesId === result.baseProduct.id;
                     
                     return (
-                        <TableRow key={result.baseProduct.id} className="group h-12">
-                            <TableCell className="pr-0">
-                                <div className={cn("w-2 h-2 rounded-full", statusStyle.rowDot)} />
-                            </TableCell>
-                            <TableCell className="py-2">
-                                <p className="font-semibold text-sm leading-tight">{result.baseProduct.name}</p>
-                                <p className="text-[10px] text-muted-foreground uppercase">{result.baseProduct.unit}</p>
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                                {formatNumberDisplay(result.currentStock, '')}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                                {formatNumberDisplay(result.minimumStock, '')}
-                            </TableCell>
-                            <TableCell className={cn("text-right font-bold", result.restockNeeded > 0 ? "text-destructive" : "text-muted-foreground/30")}>
-                                {result.restockNeeded > 0 ? formatNumberDisplay(result.restockNeeded, '') : '-'}
-                            </TableCell>
-                            <TableCell className="text-center">
-                                {result.stockPercentage !== null ? (
-                                    <Badge variant="outline" className={cn(
-                                        "text-[10px] font-bold",
-                                        percentage <= 25 ? "border-destructive text-destructive bg-destructive/5" :
-                                        percentage < 100 ? "border-orange-500 text-orange-600 bg-orange-500/5" :
-                                        "border-green-600 text-green-600 bg-green-500/5"
-                                    )}>
-                                        {percentage.toFixed(0)}%
-                                    </Badge>
-                                ) : '-'}
-                            </TableCell>
-                            {!isMatriz && (() => {
-                                const itemCount = countCartItemsForBase(result.baseProduct.id);
-                                return (
-                                    <TableCell className="text-right">
-                                        <Button
-                                            variant={itemCount > 0 ? 'secondary' : 'ghost'}
-                                            size="sm"
-                                            className="h-8 gap-1.5"
-                                            onClick={() => setCardModalBaseId(result.baseProduct.id)}
-                                        >
-                                            <PlusCircle className="h-4 w-4" />
-                                            {itemCount > 0 ? itemCount : null}
-                                        </Button>
+                        <React.Fragment key={result.baseProduct.id}>
+                            <TableRow className="group h-12">
+                                <TableCell className="pr-0">
+                                    <div className="flex items-center gap-2">
+                                        <div className={cn("h-2 w-2 shrink-0 rounded-full", statusStyle.rowDot)} />
+                                        {matrixLots.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setMatrixLotesId(matrixLotsOpen ? null : result.baseProduct.id)}
+                                                className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                aria-label={`${matrixLotsOpen ? "Ocultar" : "Mostrar"} estoque por lote de ${result.baseProduct.name}`}
+                                                aria-expanded={matrixLotsOpen}
+                                            >
+                                                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", matrixLotsOpen && "rotate-180")} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </TableCell>
+                                <TableCell className="py-2">
+                                    <button
+                                        type="button"
+                                        disabled={matrixLots.length === 0}
+                                        onClick={() => setMatrixLotesId(matrixLotsOpen ? null : result.baseProduct.id)}
+                                        className="text-left disabled:cursor-default"
+                                    >
+                                        <p className="font-semibold text-sm leading-tight">{result.baseProduct.name}</p>
+                                        <p className="text-[10px] text-muted-foreground uppercase">
+                                            {result.baseProduct.unit}
+                                            {matrixLots.length > 0 ? ` · ${matrixLots.length} lote${matrixLots.length === 1 ? "" : "s"}` : ""}
+                                        </p>
+                                    </button>
+                                </TableCell>
+                                <TableCell className="text-right font-medium">
+                                    {formatNumberDisplay(result.currentStock, '')}
+                                </TableCell>
+                                <TableCell className="text-right text-muted-foreground">
+                                    {formatNumberDisplay(result.minimumStock, '')}
+                                </TableCell>
+                                <TableCell className={cn("text-right font-bold", result.restockNeeded > 0 ? "text-destructive" : "text-muted-foreground/30")}>
+                                    {result.restockNeeded > 0 ? formatNumberDisplay(result.restockNeeded, '') : '-'}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    {result.stockPercentage !== null ? (
+                                        <Badge variant="outline" className={cn(
+                                            "text-[10px] font-bold",
+                                            percentage <= 25 ? "border-destructive text-destructive bg-destructive/5" :
+                                            percentage < 100 ? "border-orange-500 text-orange-600 bg-orange-500/5" :
+                                            "border-green-600 text-green-600 bg-green-500/5"
+                                        )}>
+                                            {percentage.toFixed(0)}%
+                                        </Badge>
+                                    ) : '-'}
+                                </TableCell>
+                                {!isMatriz && (() => {
+                                    const itemCount = countCartItemsForBase(result.baseProduct.id);
+                                    return (
+                                        <TableCell className="text-right">
+                                            <Button
+                                                variant={itemCount > 0 ? 'secondary' : 'ghost'}
+                                                size="sm"
+                                                className="h-8 gap-1.5"
+                                                onClick={() => setCardModalBaseId(result.baseProduct.id)}
+                                            >
+                                                <PlusCircle className="h-4 w-4" />
+                                                {itemCount > 0 ? itemCount : null}
+                                            </Button>
+                                        </TableCell>
+                                    );
+                                })()}
+                            </TableRow>
+                            {matrixLotsOpen && matrixLots.length > 0 && (
+                                <TableRow className="bg-muted/10 hover:bg-muted/10">
+                                    <TableCell colSpan={6} className="px-6 py-3">
+                                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                            {matrixLots.map((item) => (
+                                                <div key={item.lot.id} className="rounded-md border bg-background px-3 py-2 text-xs">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <span className="truncate font-semibold">{item.lotNumber ? `Lote ${item.lotNumber}` : "Sem lote"}</span>
+                                                        <span className="shrink-0 font-medium">{formatNumberDisplay(item.availablePackages, item.packageType)}</span>
+                                                    </div>
+                                                    <p className="mt-0.5 truncate text-muted-foreground">{item.productName}</p>
+                                                    <div className="mt-1 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                                                        <span>{item.expiryDate ? `vence ${format(parseISO(item.expiryDate), "dd/MM/yy")}` : "sem validade"}</span>
+                                                        <span className="shrink-0">= {formatNumberDisplay(item.availablePackages * item.unitsPerPackage, result.baseProduct.unit)}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </TableCell>
-                                );
-                            })()}
-                        </TableRow>
+                                </TableRow>
+                            )}
+                        </React.Fragment>
                     );
                 })}
             </TableBody>
