@@ -11,7 +11,7 @@ import { useEntities } from '@/hooks/use-entities';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit, Building, User, Phone, Mail, MapPin, Search, Eraser, Upload, Check, ChevronLeft, ChevronRight, MapPinned } from 'lucide-react';
+import { Plus, Trash2, Edit, Building, User, Phone, Mail, MapPin, Search, Eraser, Upload, Check, ChevronLeft, ChevronRight, MapPinned, MoreHorizontal, Tags } from 'lucide-react';
 import { type Entity } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Skeleton } from './ui/skeleton';
@@ -24,6 +24,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { cn } from '@/lib/utils';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 
 const entitySchema = z.object({
   type: z.enum(['pessoa_fisica', 'pessoa_juridica']),
@@ -490,7 +491,9 @@ export function EntityManagement() {
       const searchMatch = entity.name.toLowerCase().includes(search) ||
                           (entity.fantasyName && entity.fantasyName.toLowerCase().includes(search)) ||
                           (entity.nickname && entity.nickname.toLowerCase().includes(search)) ||
-                          (entity.document ?? '').includes(search);
+                          (entity.document ?? '').includes(search) ||
+                          (entity.contact?.email ?? '').toLowerCase().includes(search) ||
+                          (entity.contact?.phone ?? '').includes(search);
       
       return typeMatch && searchMatch;
     });
@@ -519,28 +522,46 @@ export function EntityManagement() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Pessoas e empresas</CardTitle>
-          <CardDescription>Gerencie seus contatos, clientes e fornecedores.</CardDescription>
+      <Card className="border-0 bg-transparent shadow-none">
+        <CardHeader className="px-0 pb-6 pt-0">
+          <CardTitle className="text-3xl font-black tracking-[-0.035em] text-[#281f1a] sm:text-4xl">
+            Pessoas e empresas
+          </CardTitle>
+          <CardDescription className="text-base text-[#756a62] sm:text-lg">
+            Colaboradores, fornecedores, sócios e clientes do sistema.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-           <Button onClick={handleAddNew} className="w-full">
-                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo cadastro
-           </Button>
+        <CardContent className="space-y-5 px-0">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 rounded-2xl border-[#dccbb8] bg-[#fffdf9] px-6 text-[#281f1a] hover:bg-white"
+                >
+                  <Tags className="mr-2 h-4 w-4" /> Categorias de cadastro
+                </Button>
+                <Button onClick={handleAddNew} className="h-12 rounded-2xl bg-[#a6325b] px-6 text-white hover:bg-[#8e294d]">
+                  <Plus className="mr-2 h-5 w-5" /> Adicionar cadastro
+                </Button>
+              </div>
+              <p className="text-sm text-[#756a62]">
+                <strong className="text-[#281f1a]">{filteredEntities.length}</strong> de {entities.length}
+              </p>
+            </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-2 mt-4 p-3 border rounded-lg bg-muted/50">
-                <div className="relative flex-grow w-full">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative w-full">
+                    <Search className="absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#9e938b]" />
                     <Input
-                        placeholder="Buscar por nome, fantasia ou documento..."
+                        placeholder="Buscar por nome, CPF/CNPJ, e-mail..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 w-full"
+                        className="h-16 w-full rounded-2xl border-[#dccbb8] bg-[#fffdf9] pl-14 text-base shadow-none placeholder:text-[#8f847b]"
                     />
-                </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="w-full sm:w-[220px]">
+                    <SelectTrigger className="h-11 w-full rounded-full border-[#dccbb8] bg-[#fffdf9] sm:w-[220px]">
                         <SelectValue placeholder="Filtrar por tipo" />
                     </SelectTrigger>
                     <SelectContent>
@@ -549,21 +570,21 @@ export function EntityManagement() {
                         <SelectItem value="pessoa_juridica">Pessoa jurídica</SelectItem>
                     </SelectContent>
                 </Select>
-                <Button variant="ghost" onClick={() => { setSearchTerm(''); setTypeFilter('all'); }}>
+                <Button className="h-11 rounded-full text-[#756a62]" variant="ghost" onClick={() => { setSearchTerm(''); setTypeFilter('all'); }}>
                     <Eraser className="mr-2 h-4 w-4" />
                     Limpar
                 </Button>
             </div>
            
-            <div className="rounded-md border">
+            <div className="overflow-x-auto rounded-[26px] border border-[#dccbb8] bg-[#fffdf9]">
                 <Table>
                     <TableHeader>
-                        <TableRow>
-                            <TableHead>Nome / Razão social</TableHead>
-                            <TableHead>Tipo</TableHead>
-                            <TableHead>Documento</TableHead>
-                            <TableHead>Contato</TableHead>
-                            <TableHead>Cidade/UF</TableHead>
+                        <TableRow className="border-[#e6ddd3] hover:bg-transparent">
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Nome / Razão social</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Tipo</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Documento</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Contato</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Cidade/UF</TableHead>
                             <TableHead className="w-24 text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -576,14 +597,24 @@ export function EntityManagement() {
                             ))
                         ) : filteredEntities.length > 0 ? (
                             filteredEntities.map(entity => (
-                                <TableRow key={entity.id}>
+                                <TableRow key={entity.id} className="h-24 border-[#e6ddd3] hover:bg-[#faf6f0]">
                                     <TableCell>
                                         <div className="flex items-center gap-3">
-                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
-                                                {entity.type === 'pessoa_juridica' ? <Building className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                                            <div className={cn(
+                                              'flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-black text-white',
+                                              entity.type === 'pessoa_juridica'
+                                                ? 'bg-gradient-to-br from-orange-500 to-amber-500'
+                                                : 'bg-gradient-to-br from-violet-500 to-blue-500',
+                                            )}>
+                                                {(entity.fantasyName || entity.name)
+                                                  .split(/\s+/)
+                                                  .slice(0, 2)
+                                                  .map((part) => part.slice(0, 1))
+                                                  .join('')
+                                                  .toUpperCase()}
                                             </div>
                                             <div>
-                                                <p className="font-semibold">{entity.fantasyName || entity.name}</p>
+                                                <p className="max-w-64 truncate font-bold text-[#281f1a]">{entity.fantasyName || entity.name}</p>
                                                 {entity.fantasyName ? <p className="text-xs text-muted-foreground">{entity.name}</p> : null}
                                                 {entity.nickname ? (
                                                     <Badge variant="secondary" className="mt-1 rounded-md px-1.5 py-0 text-[10px] font-medium">
@@ -594,9 +625,15 @@ export function EntityManagement() {
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-sm">
-                                        {entity.type === 'pessoa_juridica' ? 'Pessoa jurídica' : 'Pessoa física'}
+                                        <span className={cn(
+                                          'inline-flex items-center gap-2 font-medium',
+                                          entity.type === 'pessoa_juridica' ? 'text-orange-500' : 'text-indigo-500',
+                                        )}>
+                                          <span className="h-2 w-2 rounded-full bg-current" />
+                                          {entity.type === 'pessoa_juridica' ? 'Empresa' : 'Pessoa física'}
+                                        </span>
                                     </TableCell>
-                                    <TableCell className="font-mono text-xs">{entity.document}</TableCell>
+                                    <TableCell className="font-mono text-sm text-[#756a62]">{entity.document}</TableCell>
                                     <TableCell>
                                         <div className="space-y-1 text-xs text-muted-foreground">
                                             {entity.contact?.email ? <p className="flex items-center gap-1"><Mail className="h-3 w-3" />{entity.contact.email}</p> : null}
@@ -613,8 +650,22 @@ export function EntityManagement() {
                                         ) : '-'}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(entity)}><Edit className="h-4 w-4" /></Button>
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(entity)}><Trash2 className="h-4 w-4" /></Button>
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="text-[#9e938b]">
+                                              <MoreHorizontal className="h-4 w-4" />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onSelect={() => handleEdit(entity)}>
+                                              <Edit className="mr-2 h-4 w-4" /> Editar
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => handleDeleteClick(entity)}>
+                                              <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </TableCell>
                                 </TableRow>
                             ))

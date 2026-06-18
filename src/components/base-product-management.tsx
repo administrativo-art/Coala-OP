@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit, Settings, Search, MoreHorizontal, Inbox, Box, DollarSign, FileText } from 'lucide-react';
+import { Plus, Trash2, Edit, Tags, Search, MoreHorizontal, Inbox, FileText, Link2 } from 'lucide-react';
 import { type BaseProduct } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Skeleton } from './ui/skeleton';
@@ -234,39 +234,53 @@ export function BaseProductManagement() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Gerenciar produtos base</CardTitle>
-          <CardDescription>Produtos base agrupam insumos e definem metas de estoque por quiosque.</CardDescription>
+      <Card className="border-0 bg-transparent shadow-none">
+        <CardHeader className="px-0 pb-6 pt-0">
+          <CardTitle className="text-3xl font-black tracking-[-0.035em] text-[#281f1a] sm:text-4xl">
+            Insumos base cadastrados
+          </CardTitle>
+          <CardDescription className="text-base text-[#756a62] sm:text-lg">
+            Catálogo mestre de produtos-tipo que originam os itens de estoque.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-           <div className="flex flex-col sm:flex-row gap-2">
-             <Button onClick={handleAddNew} className="w-full sm:w-auto">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo produto base
-             </Button>
-              <Button variant="outline" onClick={() => setIsClassificationModalOpen(true)} className="w-full sm:w-auto">
-                <Settings className="mr-2 h-4 w-4" /> Gerenciar classificações
-             </Button>
-              <div className="relative flex-grow">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <CardContent className="space-y-5 px-0">
+           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+             <div className="flex flex-col gap-3 sm:flex-row">
+               <Button
+                 variant="outline"
+                 onClick={() => setIsClassificationModalOpen(true)}
+                 className="h-12 rounded-2xl border-[#dccbb8] bg-[#fffdf9] px-6 text-[#281f1a] hover:bg-white"
+               >
+                 <Tags className="mr-2 h-4 w-4" /> Categorias de item
+               </Button>
+               <Button onClick={handleAddNew} className="h-12 rounded-2xl bg-[#a6325b] px-6 text-white hover:bg-[#8e294d]">
+                 <Plus className="mr-2 h-5 w-5" /> Adicionar insumo base
+               </Button>
+             </div>
+             <p className="text-sm text-[#756a62]">
+               <strong className="text-[#281f1a]">{activeFiltered.length}</strong> de {baseProducts.filter((product) => !product.isArchived).length}
+             </p>
+           </div>
+           <div className="relative">
+                <Search className="absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#9e938b]" />
                 <Input
-                  placeholder="Buscar produto base ou classificação..."
+                  placeholder="Buscar por nome, código, categoria..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="h-16 rounded-2xl border-[#dccbb8] bg-[#fffdf9] pl-14 text-base shadow-none placeholder:text-[#8f847b]"
                 />
-              </div>
            </div>
-           <div className="flex flex-wrap gap-2">
+           <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
               {classificationFilters.map(filter => {
                 const isSelected = selectedClassificationFilter === filter.id;
                 return (
                   <Button
                     key={filter.id}
                     type="button"
-                    variant={isSelected ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-8 rounded-full px-3"
+                    variant="outline"
+                    className={isSelected
+                      ? 'h-11 shrink-0 rounded-full border-[#281f1a] bg-[#281f1a] px-5 text-white hover:bg-[#281f1a]/90'
+                      : 'h-11 shrink-0 rounded-full border-[#dccbb8] bg-[#fffdf9] px-5 text-[#756a62] hover:bg-white'}
                     onClick={() => {
                       setSelectedClassificationFilter(filter.id);
                       setSelectedProducts(new Set());
@@ -276,8 +290,8 @@ export function BaseProductManagement() {
                     <span
                       className={
                         isSelected
-                          ? 'ml-2 rounded-full bg-primary-foreground/20 px-1.5 text-xs'
-                          : 'ml-2 rounded-full bg-muted px-1.5 text-xs text-muted-foreground'
+                          ? 'ml-2 text-xs text-white/70'
+                          : 'ml-2 text-xs text-[#9e938b]'
                       }
                     >
                       {filter.count}
@@ -288,10 +302,10 @@ export function BaseProductManagement() {
            </div>
            
             {/* Tabela de Ativos */}
-            <div className="rounded-md border">
+            <div className="overflow-hidden rounded-[26px] border border-[#dccbb8] bg-[#fffdf9]">
                 <Table>
                     <TableHeader>
-                        <TableRow>
+                        <TableRow className="border-[#e6ddd3] hover:bg-transparent">
                             <TableHead className="w-10">
                                 <Checkbox
                                     checked={allActiveSelected}
@@ -299,11 +313,12 @@ export function BaseProductManagement() {
                                     aria-label="Selecionar todos os ativos"
                                 />
                             </TableHead>
-                            <TableHead>Produto Base</TableHead>
-                            <TableHead>Classificação</TableHead>
-                            <TableHead>Unidade Padrão</TableHead>
-                            <TableHead>Valor</TableHead>
-                            <TableHead className="w-20 text-center">Ativo</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Insumo base</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Categoria</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Unidade</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Custo médio</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Derivados</TableHead>
+                            <TableHead className="w-24 font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Status</TableHead>
                             <TableHead className="w-16 text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -311,30 +326,53 @@ export function BaseProductManagement() {
                         {loading ? (
                             [...Array(5)].map((_, i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={7}><Skeleton className="h-10 w-full" /></TableCell>
+                                <TableCell colSpan={8}><Skeleton className="h-10 w-full" /></TableCell>
                                 </TableRow>
                             ))
                         ) : activeFiltered.length > 0 ? (
                             activeFiltered.map(product => {
                                 const effectivePrice = product.lastEffectivePrice?.pricePerUnit ?? product.initialCostPerUnit ?? 0;
                                 return (
-                                    <TableRow key={product.id}>
+                                    <TableRow key={product.id} className="h-24 border-[#e6ddd3] hover:bg-[#faf6f0]">
                                         <TableCell>
                                             <Checkbox
                                                 checked={selectedProducts.has(product.id)}
                                                 onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
                                             />
                                         </TableCell>
-                                        <TableCell className="font-semibold">{product.name}</TableCell>
-                                        <TableCell>{product.classification ? (classificationMap.get(product.classification) || '-') : '-'}</TableCell>
+                                        <TableCell>
+                                          <div className="flex items-center gap-3">
+                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#ffd4bd] bg-[#fff7ef] text-lg font-black text-[#f97316] shadow-[inset_0_-4px_0_#f97316]">
+                                              {product.name.slice(0, 1).toUpperCase()}
+                                            </div>
+                                            <div className="min-w-0">
+                                              <p className="max-w-64 truncate font-bold text-[#281f1a]">{product.name}</p>
+                                              <p className="font-mono text-xs uppercase text-[#756a62]">{product.id.slice(0, 8)}</p>
+                                            </div>
+                                          </div>
+                                        </TableCell>
+                                        <TableCell>
+                                          <span className="inline-flex rounded-full border border-[#ffd1b3] bg-[#fff8f1] px-3 py-1 text-sm font-medium text-[#f97316]">
+                                            {product.classification ? (classificationMap.get(product.classification) || '-') : 'Sem categoria'}
+                                          </span>
+                                        </TableCell>
                                         <TableCell>{product.unit}</TableCell>
                                         <TableCell className="font-mono text-sm">{formatCurrency(effectivePrice)}</TableCell>
-                                        <TableCell className="text-center">
-                                            <Switch
-                                                checked={true}
-                                                onCheckedChange={(checked) => handleToggleActive(product, checked)}
-                                                aria-label="Desativar insumo base"
-                                            />
+                                        <TableCell>
+                                          <span className="inline-flex items-center gap-1 text-[#756a62]">
+                                            <Link2 className="h-4 w-4" />
+                                            {products.filter((derived) => derived.baseProductId === product.id).length}
+                                          </span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleToggleActive(product, false)}
+                                              className="inline-flex items-center gap-2 font-medium text-[#756a62]"
+                                            >
+                                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                                              Ativo
+                                            </button>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <DropdownMenu>
@@ -358,7 +396,7 @@ export function BaseProductManagement() {
                             })
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                                     <div className="flex flex-col items-center gap-2">
                                         <Inbox className="h-8 w-8" />
                                         <span>Nenhum produto base ativo.</span>

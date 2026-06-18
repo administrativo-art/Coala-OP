@@ -1,14 +1,5 @@
-"use client";
-
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { RegistrationCatalog } from '@/components/registration/registration-catalog';
 
 export default function RegistrationPage() {
-    const router = useRouter();
-
-    useEffect(() => {
-        router.replace('/dashboard/settings?department=operacional&tab=cadastros');
-    }, [router]);
-
-    return null;
+  return <RegistrationCatalog defaultTab="base" />;
 }
