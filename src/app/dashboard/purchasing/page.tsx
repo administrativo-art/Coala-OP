@@ -81,6 +81,7 @@ export default function PurchasingHubPage() {
       quotationId: q.id,
       href: `/dashboard/purchasing/quotations/${q.id}`,
       code: codeFromId(q.id),
+      date: q.createdAt,
       title: `Cotação ${q.mode === 'remote' ? 'remota' : 'in loco'}`,
       tone: (q.status === 'partially_converted' ? 'purple' : 'blue') as PurchasingTone,
       status: q.status === 'partially_converted' ? 'Cotação parcial' : 'Solicit.',
@@ -106,6 +107,7 @@ export default function PurchasingHubPage() {
           orderId: o.id,
           href: `/dashboard/purchasing/orders/${o.id}`,
           code: codeFromId(o.id),
+          date: o.createdAt,
           title: o.supplierName || (o.origin === 'direct' ? 'Compra direta' : 'Pedido via cotação'),
           tone,
           status: isReview ? 'Aprov.' : 'Pedido',
@@ -128,6 +130,7 @@ export default function PurchasingHubPage() {
       orderId: o.id,
       href: `/dashboard/purchasing/orders/${o.id}`,
       code: codeFromId(o.id),
+      date: o.createdAt,
       title: o.supplierName || 'Compra concluída',
       tone: 'green' as PurchasingTone,
       status: 'Concluída',
@@ -248,7 +251,8 @@ export default function PurchasingHubPage() {
                     <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
                       {columnCards.map((card) => (
                         <Link key={`${card.kind}-${card.id}`} href={card.href} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
-                          <div className="flex items-center justify-between gap-2">
+                          <span className="block text-[10px] font-bold uppercase tracking-wide text-zinc-400">{new Date(card.date).toLocaleDateString('pt-BR')}</span>
+                          <div className="mt-0.5 flex items-center justify-between gap-2">
                             <span className="font-mono text-[11px] font-black text-zinc-500">{card.code}</span>
                             <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                           </div>
