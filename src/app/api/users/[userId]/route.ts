@@ -5,13 +5,16 @@ import { dbAdmin } from "@/lib/firebase-admin";
 
 const MANAGE_USERS_ONLY_FIELDS = new Set([
   "profileId",
-  "isDefaultAdmin",
   "isActive",
   "inactivationType",
   "terminationReason",
   "terminationCause",
   "terminationNotes",
   "terminationDate",
+]);
+
+const DEFAULT_ADMIN_ONLY_FIELDS = new Set([
+  "isDefaultAdmin",
 ]);
 
 const SERVER_ONLY_FIELDS = new Set([
@@ -69,12 +72,48 @@ export async function PATCH(
     const restrictedFields = Object.keys(payload).filter((field) =>
       MANAGE_USERS_ONLY_FIELDS.has(field)
     );
+    const defaultAdminOnlyFields = Object.keys(payload).filter((field) =>
+      DEFAULT_ADMIN_ONLY_FIELDS.has(field)
+    );
+
+    if (defaultAdminOnlyFields.length > 0 && !actor.isDefaultAdmin) {
+      return NextResponse.json(
+        { error: "Somente o administrador padrão pode alterar privilégios administrativos." },
+        { status: 403 }
+      );
+    }
 
     if (restrictedFields.length > 0 && !canManageUsers) {
       return NextResponse.json(
         { error: "Sem permissão para alterar acesso, perfil ou desligamento." },
         { status: 403 }
       );
+    }
+
+    if (
+      !actor.isDefaultAdmin &&
+      typeof payload.profileId === "string" &&
+      payload.profileId.trim()
+    ) {
+      if (userId === actor.decoded.uid) {
+        return NextResponse.json(
+          { error: "Somente o administrador padrão pode alterar o próprio perfil de acesso." },
+          { status: 403 }
+        );
+      }
+      const targetProfile = await dbAdmin
+        .collection("profiles")
+        .doc(payload.profileId.trim())
+        .get();
+      if (!targetProfile.exists) {
+        return NextResponse.json({ error: "Perfil não encontrado." }, { status: 400 });
+      }
+      if (targetProfile.data()?.isDefaultAdmin === true) {
+        return NextResponse.json(
+          { error: "Somente o administrador padrão pode atribuir o perfil administrativo." },
+          { status: 403 }
+        );
+      }
     }
 
     await dbAdmin.collection("users").doc(userId).set(payload, { merge: true });

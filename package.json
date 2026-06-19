@@ -9,14 +9,28 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:security:rules": "firebase emulators:exec --project demo-coala-security --only firestore,storage \"node --test tests/security/rules.test.mjs\"",
     "mcp": "node server.js",
     "migrate:dp": "node scripts/migrate-dp.mjs",
     "migrate:financial": "node scripts/migrate-financial.mjs",
     "reprocess:goals": "node scripts/reprocess-goals-pdv.mjs"
   },
   "overrides": {
+    "@grpc/grpc-js": "1.14.4",
+    "@types/request": {
+      "form-data": "2.5.6"
+    },
+    "axios": {
+      "form-data": "4.0.6"
+    },
+    "fast-uri": "3.1.2",
+    "fast-xml-builder": "1.2.0",
     "fast-xml-parser": "^5.7.0",
-    "minimatch": "10.2.4"
+    "minimatch": "10.2.4",
+    "postcss": "$postcss",
+    "protobufjs": "7.6.3",
+    "qs": "6.15.2",
+    "ws": "8.21.0"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -52,7 +66,7 @@
     "@react-pdf/renderer": "^4.3.2",
     "@tabler/icons-react": "^3.12.0",
     "@tanstack/react-virtual": "^3.5.0",
-    "axios": "^1.13.5",
+    "axios": "^1.18.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
@@ -62,16 +76,16 @@
     "firebase-admin": "^13.7.0",
     "genkit": "^1.0.0",
     "glob": "^13.0.6",
-    "hono": "^4.12.3",
+    "hono": "^4.12.25",
     "html5-qrcode": "^2.3.8",
     "immer": "^10.1.1",
     "lucide-react": "^0.475.0",
-    "next": "^15.5.12",
+    "next": "^15.5.18",
     "next-themes": "^0.3.0",
     "papaparse": "^5.4.1",
     "process": "^0.11.10",
     "qrcode": "^1.5.3",
-    "qs": "^6.15.0",
+    "qs": "6.15.2",
     "react": "^18",
     "react-day-picker": "8.10.1",
     "react-dom": "^18",
@@ -86,6 +100,7 @@
     "zustand": "^4.5.4"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@types/node": "^20.14.9",
     "@types/papaparse": "^5.3.14",
     "@types/qrcode": "^1.5.5",
@@ -95,7 +110,7 @@
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.4",
     "genkit-cli": "^1.0.0",
-    "postcss": "^8.4.38",
+    "postcss": "8.5.15",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.2"
   },

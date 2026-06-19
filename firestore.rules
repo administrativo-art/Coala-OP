@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -12,7 +11,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuth() && (
-        request.auth.token.isDefaultAdmin == true ||
+        request.auth.token.get('isDefaultAdmin', false) == true ||
         get(/databases/$(database)/documents/profiles/$(getProfileId())).data.isDefaultAdmin == true
       );
     }
@@ -80,16 +79,18 @@ service cloud.firestore {
         );
     }
 
-    // --- FUNÇÕES DE VALIDAÇÃO DE SCHEMA ---
-
-    function isValidUser(data) {
-      return data.keys().hasAll(['username', 'email', 'profileId', 'assignedKioskIds'])
-        && data.username is string
-        && data.username.size() >= 3
-        && data.email is string
-        && data.profileId is string
-        && data.assignedKioskIds is list;
+    function canRecordMovement() {
+      return isAdmin()
+        || getPerms().stock.inventoryControl.addLot == true
+        || getPerms().stock.inventoryControl.editLot == true
+        || getPerms().stock.inventoryControl.writeDown == true
+        || getPerms().stock.inventoryControl.transfer == true
+        || getPerms().stock.stockCount.perform == true
+        || getPerms().stock.stockCount.approve == true
+        || canReceivePurchase();
     }
+
+    // --- FUNÇÕES DE VALIDAÇÃO DE SCHEMA ---
 
     function isValidLot(data) {
       return data.keys().hasAll(['kioskId', 'productId', 'quantity'])
@@ -137,7 +138,9 @@ service cloud.firestore {
     function isValidMovement(data) {
       return data.keys().hasAll(['type', 'userId', 'timestamp'])
         && data.type is string
-        && data.userId is string;
+        && data.userId is string
+        && data.userId == request.auth.uid
+        && data.timestamp is string;
     }
 
     // --- REGRAS POR COLEÇÃO ---
@@ -149,14 +152,34 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2
         && request.resource.data.keys().hasAll(['name', 'permissions'])
-        && request.resource.data.permissions is map;
+        && request.resource.data.permissions is map
+        && (
+          isAdmin() ||
+          (
+            request.resource.data.get('isDefaultAdmin', false) == false
+            && request.resource.data.permissions.get('settings', {}).get('manageUsers', false) == false
+            && request.resource.data.permissions.get('settings', {}).get('manageProfiles', false) == false
+          )
+        );
       allow update: if isAuth() && (isAdmin() || getPerms().settings.manageProfiles == true)
-        && request.resource.data.name is string;
-      allow delete: if isAuth() && profileId != 'admin'
+        && request.resource.data.name is string
+        && (
+          isAdmin() ||
+          (
+            resource.data.get('isDefaultAdmin', false) == false
+            && request.resource.data.get('isDefaultAdmin', false) == false
+            && request.resource.data.permissions.get('settings', {}).get('manageUsers', false)
+              == resource.data.permissions.get('settings', {}).get('manageUsers', false)
+            && request.resource.data.permissions.get('settings', {}).get('manageProfiles', false)
+              == resource.data.permissions.get('settings', {}).get('manageProfiles', false)
+          )
+        );
+      allow delete: if isAuth()
+        && resource.data.get('isDefaultAdmin', false) == false
         && (isAdmin() || getPerms().settings.manageProfiles == true);
     }
 
-    // Usuários - Somente leitura via SDK, escrita via API
+    // Usuários: escrita somente via APIs/Cloud Functions.
     match /users/{userId} {
       allow read: if isAuth() && (request.auth.uid == userId || canReadUsersDirectory());
       allow write: if false;
@@ -165,271 +188,623 @@ service cloud.firestore {
     // Quiosques
     match /kiosks/{kioskId} {
       allow read: if isAuth();
-      allow write: if false;
+      allow create, update: if isAuth() && (isAdmin() || getPerms().settings.manageKiosks == true)
+        && request.resource.data.keys().hasAll(['name'])
+        && request.resource.data.name is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().settings.manageKiosks == true);
     }
 
-    // Produtos - Somente leitura via SDK
+    // Produtos
     match /products/{productId} {
       allow read: if isAuth();
-      allow write: if false;
+      allow create: if isAuth() && (isAdmin() || getPerms().registration.items.add == true)
+        && isValidProduct(request.resource.data);
+      allow update: if isAuth() && (isAdmin() || getPerms().registration.items.edit == true)
+        && request.resource.data.baseName is string
+        && request.resource.data.baseName.size() >= 2;
+      allow delete: if isAuth() && (isAdmin() || getPerms().registration.items.delete == true);
     }
 
     // Produtos base
     match /baseProducts/{baseProductId} {
       allow read: if isAuth();
-      allow write: if false;
+      allow create: if isAuth() && (
+        isAdmin() ||
+        getPerms().registration.baseProducts.add == true ||
+        purchasingPerm('manageBaseItems')
+      ) && isValidBaseProduct(request.resource.data);
+      allow update: if isAuth() && (
+        isAdmin() ||
+        getPerms().registration.baseProducts.edit == true ||
+        purchasingPerm('manageBaseItems') ||
+        purchasingPerm('receivePurchase')
+      ) && request.resource.data.name is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().registration.baseProducts.delete == true);
     }
 
-    // Entidades
+    // Entidades (clientes/fornecedores)
     match /entities/{entityId} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read: if isAuth() && (
+        isAdmin() ||
+        getPerms().registration.view == true ||
+        canViewPurchasing()
+      );
+      allow create: if isAuth() && (isAdmin() || getPerms().registration.entities.add == true)
+        && request.resource.data.keys().hasAll(['name'])
+        && request.resource.data.name is string;
+      allow update: if isAuth() && (isAdmin() || getPerms().registration.entities.edit == true)
+        && request.resource.data.name is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().registration.entities.delete == true);
     }
 
-    // Lotes de estoque - Escrita restrita à API
+    // Lotes de estoque
     match /lots/{lotId} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.inventoryControl.view == true ||
+        getPerms().stock.stockCount.perform == true ||
+        getPerms().stock.stockCount.approve == true ||
+        canViewPurchasing()
+      );
+      allow create: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.inventoryControl.addLot == true ||
+        canReceivePurchase()
+      ) && isValidLot(request.resource.data);
+      allow update: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.inventoryControl.editLot == true ||
+        getPerms().stock.inventoryControl.transfer == true ||
+        getPerms().stock.stockCount.approve == true ||
+        canReceivePurchase()
+      ) && request.resource.data.quantity is number
+        && request.resource.data.quantity >= 0;
+      allow delete: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.writeDown == true);
     }
 
-    // Histórico de movimentos
+    // Histórico de movimentos (imutável exceto admin)
     match /movementHistory/{moveId} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.inventoryControl.viewHistory == true ||
+        purchasingPerm('view')
+      );
+      allow create: if isAuth()
+        && canRecordMovement()
+        && isValidMovement(request.resource.data);
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
-    // Patrimônio - escrita via API
+    // Patrimônio: leitura segue a permissão; toda escrita passa pelas APIs.
     match /assets/{assetId} {
-      allow read: if isAuth();
+      allow read: if isAuth() && (isAdmin() || getPerms().assets.view == true);
       allow write: if false;
     }
 
     match /assetMovements/{movementId} {
-      allow read: if isAuth();
+      allow read: if isAuth() && (isAdmin() || getPerms().assets.viewHistory == true);
       allow write: if false;
     }
 
     match /assetCategories/{categoryId} {
-      allow read: if isAuth();
+      allow read: if isAuth() && (isAdmin() || getPerms().assets.view == true);
       allow write: if false;
     }
 
-    // Eventos documentais de uniformes - escrita via fluxos de estoque/API
+    // Evento imutável criado na mesma transação da movimentação de uniforme.
     match /uniformEvents/{eventId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
+      allow read: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.inventoryControl.viewHistory == true ||
+        getPerms().dp.collaborators.view == true
+      );
+      allow create: if isAuth()
+        && canRecordMovement()
+        && request.resource.data.registeredByUserId == request.auth.uid
+        && request.resource.data.movementId is string
+        && existsAfter(
+          /databases/$(database)/documents/movementHistory/$(request.resource.data.movementId)
+        )
+        && getAfter(
+          /databases/$(database)/documents/movementHistory/$(request.resource.data.movementId)
+        ).data.userId == request.auth.uid;
       allow update, delete: if false;
     }
 
     // Sessões de contagem de estoque
     match /stockAuditSessions/{sessionId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.stockCount.view == true);
+      allow create, update: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.stockCount.perform == true ||
+        getPerms().stock.stockCount.approve == true
+      ) && isValidStockCount(request.resource.data);
+      allow delete: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.stockCount.perform == true ||
+        getPerms().stock.stockCount.approve == true
+      );
+    }
+
+    // Contagens avulsas (stockCounts)
+    match /stockCounts/{countId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.stockCount.view == true);
+      allow create, update: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.stockCount.perform == true ||
+        getPerms().stock.stockCount.approve == true
+      );
+      allow delete: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.stockCount.perform == true ||
+        getPerms().stock.stockCount.approve == true
+      );
+    }
+
+    // Solicitações de adição de item
+    match /itemAdditionRequests/{reqId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().itemRequests.approve == true || getPerms().stock.stockCount.perform == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().itemRequests.add == true || getPerms().stock.stockCount.perform == true);
+      allow update: if isAuth() && (isAdmin() || getPerms().itemRequests.approve == true);
+      allow delete: if isAdmin();
+    }
+
+    // Atividades de reposição
+    match /repositionActivities/{activityId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.analysis.restock == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().stock.analysis.restock == true)
+        && request.resource.data.keys().hasAll(['status'])
+        && request.resource.data.status is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().reposition.cancel == true);
+    }
+
+    // Relatórios de consumo
+    match /consumptionReports/{reportId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.analysis.consumption == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().stock.analysis.consumption == true);
+      allow delete: if isAdmin();
+    }
+
+    // Relatórios de vendas
+    match /salesReports/{reportId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.analysis.consumption == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().stock.analysis.consumption == true);
+      allow delete: if isAdmin();
+    }
+
+    // Sessões de compra
+    match /purchaseSessions/{sessionId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.purchasing.view == true);
+      allow create, update: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.purchasing.suggest == true ||
+        getPerms().stock.purchasing.approve == true
+      ) && isValidPurchaseSession(request.resource.data);
+      allow delete: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.purchasing.suggest == true ||
+        getPerms().stock.purchasing.approve == true
+      );
+    }
+
+    // Itens de compra
+    match /purchaseItems/{itemId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.purchasing.view == true);
+      allow create, update: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.purchasing.suggest == true ||
+        getPerms().stock.purchasing.approve == true
+      ) && request.resource.data.keys().hasAll(['sessionId'])
+        && request.resource.data.sessionId is string;
+      allow delete: if isAuth() && (
+        isAdmin() ||
+        getPerms().stock.purchasing.suggest == true ||
+        getPerms().stock.purchasing.approve == true
+      );
+    }
+
+    // Solicitações de devolução
+    match /returnRequests/{reqId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.returns.view == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().stock.returns.add == true)
+        && isValidReturnRequest(request.resource.data);
+      allow update: if isAuth() && (isAdmin() || getPerms().stock.returns.updateStatus == true)
+        && request.resource.data.status is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().stock.returns.delete == true);
+    }
+
+    // Tarefas
+    match /tasks/{taskId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().tasks.view == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().tasks.manage == true)
+        && isValidTask(request.resource.data);
+      allow delete: if isAuth() && (isAdmin() || getPerms().tasks.manage == true);
+    }
+
+    // Simulações de preço
+    match /productSimulations/{simId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().pricing.view == true || getPerms().dashboard.technicalSheets == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true)
+        && request.resource.data.keys().hasAll(['name'])
+        && request.resource.data.name is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true);
+    }
+
+    match /productSimulationItems/{itemId} {
       allow read: if isAuth();
+      allow create, update: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true)
+        && request.resource.data.keys().hasAll(['simulationId'])
+        && request.resource.data.simulationId is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true);
+    }
+
+    match /productSimulationCategories/{catId} {
+      allow read: if isAuth();
+      allow create, update: if isAuth() && (isAdmin() || getPerms().pricing.manageParameters == true)
+        && request.resource.data.name is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().pricing.manageParameters == true);
+    }
+
+    // Histórico de preços
+    match /priceHistory/{historyId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().pricing.view == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true)
+        && request.resource.data.keys().hasAll(['productId', 'price'])
+        && request.resource.data.price is number
+        && request.resource.data.price >= 0;
+      allow update, delete: if isAuth() && (isAdmin() || getPerms().stock.purchasing.deleteHistory == true);
+    }
+
+    match /simulationPriceHistory/{historyId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().pricing.view == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true)
+        && request.resource.data.keys().hasAll(['simulationId'])
+        && request.resource.data.simulationId is string;
+      allow update, delete: if false;
+    }
+
+    match /channels/{channelId} {
+      allow read: if isAuth();
+      allow create, update: if isAuth() && (isAdmin() || getPerms().pricing.manageParameters == true)
+        && request.resource.data.keys().hasAll(['name', 'type', 'active'])
+        && request.resource.data.name is string
+        && request.resource.data.type is string
+        && request.resource.data.active is bool
+        && (
+          request.resource.data.defaultPriceRule == null ||
+          (
+            request.resource.data.defaultPriceRule.mode is string &&
+            request.resource.data.defaultPriceRule.value is number
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /priceOverrides/{overrideId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().pricing.view == true || getPerms().dashboard.technicalSheets == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true)
+        && request.resource.data.keys().hasAll(['simulationId', 'unitId', 'channelId', 'finalPrice', 'available'])
+        && request.resource.data.simulationId is string
+        && !(request.resource.data.unitId == null && request.resource.data.channelId == null)
+        && request.resource.data.available is bool
+        && (request.resource.data.finalPrice == null || request.resource.data.finalPrice is number)
+        && (!request.resource.data.available || (request.resource.data.finalPrice is number && request.resource.data.finalPrice > 0));
+      allow delete: if isAuth() && (isAdmin() || getPerms().pricing.simulate == true);
+    }
+
+    // --- COLEÇÕES AUXILIARES / CONFIGURAÇÕES ---
+
+    match /classifications/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /locations/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /settings/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /formTemplates/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /predefinedLists/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().stock.predefinedLists.view == true);
+      allow write: if isAuth() && (isAdmin() || getPerms().stock.predefinedLists.manage == true);
+    }
+
+    match /userProfiles/{id} {
+      allow read: if isAuth();
+      allow write: if isAuth() && (isAdmin() || getPerms().settings.manageUsers == true);
+    }
+
+    match /counters/{id} {
+      allow read: if isAuth();
+      allow write: if isAuth() && isAdmin();
+    }
+
+    // --- COLEÇÕES DE CONCORRENTES ---
+
+    match /competitorGroups/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /concorrentes/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /concorrente_precos/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /concorrente_produtos/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /competitorProducts/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // Metas
+    match /goalTemplates/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+      allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+    }
+
+    match /goalPeriods/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+      allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+    }
+
+    match /employeeGoals/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+      allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+    }
+
+    // Presença de usuários
+    match /userPresence/{userId} {
+      allow read: if isAuth();
+      allow write: if isAuth() && request.auth.uid == userId;
+    }
+
+    // --- DEPARTAMENTO PESSOAL ---
+
+    // Unidades
+    match /dp_units/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        getPerms().dp.view == true ||
+        canViewCollaboratorPanel()
+      );
+      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true);
+    }
+
+    // Grupos de unidades
+    match /dp_unitGroups/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.view == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true);
+    }
+
+    // Definições de turno
+    match /dp_shiftDefinitions/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        getPerms().dp.view == true ||
+        canViewCollaboratorPanel()
+      );
+      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageShifts == true)
+        && request.resource.data.keys().hasAll(['code', 'name', 'startTime', 'endTime'])
+        && request.resource.data.name is string
+        && request.resource.data.code is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageShifts == true);
+    }
+
+    // Escalas
+    match /dp_schedules/{scheduleId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.schedules.view == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().dp.schedules.create == true)
+        && request.resource.data.keys().hasAll(['name', 'month', 'year'])
+        && request.resource.data.name is string
+        && request.resource.data.month is int
+        && request.resource.data.year is int;
+      allow update: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
+        && request.resource.data.name is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.schedules.delete == true);
+
+      // Turnos (subcoleção)
+      match /shifts/{shiftId} {
+        allow read: if isAuth() && (
+          isAdmin() ||
+          getPerms().dp.schedules.view == true ||
+          isOwnShift(resource.data)
+        );
+        allow create: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
+          && request.resource.data.keys().hasAll(['userId', 'date', 'startTime', 'endTime'])
+          && request.resource.data.userId is string
+          && request.resource.data.date is string;
+        allow update: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
+          && request.resource.data.userId is string;
+        allow delete: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true);
+      }
+    }
+
+    match /{path=**}/shifts/{shiftId} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        getPerms().dp.schedules.view == true ||
+        isOwnShift(resource.data)
+      );
       allow write: if false;
     }
 
-    // Compras v2 - Bloqueio total de escrita direta
+    // Férias
+    match /dp_vacations/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.vacation.viewAll == true);
+      allow create: if isAuth() && (isAdmin() || getPerms().dp.vacation.request == true)
+        && request.resource.data.keys().hasAll(['userId', 'cycleId', 'recordType', 'days', 'status'])
+        && request.resource.data.userId is string
+        && request.resource.data.days is int
+        && request.resource.data.days > 0;
+      allow update: if isAuth() && (
+        isAdmin() ||
+        getPerms().dp.vacation.approve == true ||
+        getPerms().dp.vacation.request == true
+      ) && request.resource.data.userId is string;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.vacation.approve == true);
+    }
+
+    // Calendários de feriados
+    match /dp_calendars/{calendarId} {
+      allow read: if isAuth() && (isAdmin() || getPerms().dp.view == true);
+      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageCalendars == true)
+        && request.resource.data.keys().hasAll(['name', 'year'])
+        && request.resource.data.name is string
+        && request.resource.data.year is int;
+      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageCalendars == true);
+
+      // Feriados (subcoleção)
+      match /holidays/{holidayId} {
+        allow read: if isAuth() && (isAdmin() || getPerms().dp.view == true);
+        allow create: if isAuth() && (isAdmin() || getPerms().dp.settings.manageCalendars == true)
+          && request.resource.data.keys().hasAll(['name', 'date', 'type'])
+          && request.resource.data.name is string;
+        allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageCalendars == true);
+        allow update: if false;
+      }
+    }
+
+    // --- COMPRAS v2 ---
+
+    // Cotações
     match /quotations/{quotationId} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read: if isAuth() && (isAdmin() || canViewPurchasing());
+      allow create: if isAuth() && (isAdmin() || canCreateQuotation())
+        && request.resource.data.keys().hasAll(['workspaceId', 'supplierId', 'status', 'createdAt'])
+        && request.resource.data.status is string
+        && request.resource.data.workspaceId is string;
+      allow update: if isAuth() && (
+        isAdmin() ||
+        canCreateQuotation() ||
+        purchasingPerm('finalizeQuotation')
+      ) && request.resource.data.workspaceId == resource.data.workspaceId;
+      allow delete: if isAdmin();
+
+      // Itens de cotação (subcoleção)
       match /items/{itemId} {
-        allow read: if isAuth();
-        allow write: if false;
+        allow read: if isAuth() && (isAdmin() || canViewPurchasing());
+        allow create, update: if isAuth() && (isAdmin() || canCreateQuotation());
+        allow delete: if isAuth() && (isAdmin() || canCreateQuotation());
       }
     }
 
+    // Pedidos de compra
     match /purchase_orders/{orderId} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read: if isAuth() && (isAdmin() || canViewPurchasing());
+      allow create: if isAuth() && (isAdmin() || canCreatePurchase())
+        && request.resource.data.keys().hasAll(['workspaceId', 'supplierId', 'status', 'createdAt'])
+        && request.resource.data.status is string
+        && request.resource.data.workspaceId is string;
+      allow update: if isAuth() && (
+        isAdmin() ||
+        canCreatePurchase() ||
+        purchasingPerm('cancelPurchase') ||
+        canReceivePurchase()
+      ) && request.resource.data.workspaceId == resource.data.workspaceId;
+      allow delete: if isAdmin();
+
+      // Itens do pedido (subcoleção)
       match /items/{itemId} {
-        allow read: if isAuth();
-        allow write: if false;
+        allow read: if isAuth() && (isAdmin() || canViewPurchasing());
+        allow create, update: if isAuth() && (isAdmin() || canCreatePurchase());
+        allow delete: if isAdmin();
       }
     }
 
+    // Recebimentos de compra
     match /purchase_receipts/{receiptId} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read: if isAuth() && (isAdmin() || canViewPurchasing());
+      allow create: if isAuth() && (isAdmin() || canCreatePurchase())
+        && request.resource.data.keys().hasAll(['workspaceId', 'purchaseOrderId', 'status'])
+        && request.resource.data.status is string
+        && request.resource.data.workspaceId is string;
+      allow update: if isAuth() && (
+        isAdmin() ||
+        canReceivePurchase() ||
+        canCreatePurchase()
+      ) && request.resource.data.workspaceId == resource.data.workspaceId;
+      allow delete: if isAdmin();
+
+      // Itens do recebimento (subcoleção)
       match /items/{itemId} {
-        allow read: if isAuth();
-        allow write: if false;
+        allow read: if isAuth() && (isAdmin() || canViewPurchasing());
+        allow create, update: if isAuth() && (
+          isAdmin() ||
+          canReceivePurchase() ||
+          canCreatePurchase()
+        );
+        allow delete: if isAdmin();
+
+        // Lotes (sub-subcoleção)
         match /lots/{lotId} {
-          allow read: if isAuth();
-          allow write: if false;
+          allow read: if isAuth() && (isAdmin() || canViewPurchasing());
+          allow create: if isAuth() && (isAdmin() || canReceivePurchase());
+          allow update, delete: if isAdmin();
         }
       }
     }
 
-    match /{path=**}/items/{itemId} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-
+    // Financeiro de compras
     match /purchase_financials/{financialId} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read: if isAuth() && (
+        isAdmin() ||
+        canViewPurchasing() ||
+        purchasingPerm('manageFinancialLink')
+      );
+      allow create: if isAuth() && (isAdmin() || canCreatePurchase())
+        && request.resource.data.keys().hasAll(['workspaceId', 'purchaseOrderId', 'status', 'paymentDueDate'])
+        && request.resource.data.status is string
+        && request.resource.data.workspaceId is string;
+      allow update: if isAuth() && (
+        isAdmin() ||
+        purchasingPerm('manageFinancialLink') ||
+        canReceivePurchase()
+      ) && request.resource.data.workspaceId == resource.data.workspaceId;
+      allow delete: if isAdmin();
     }
 
+    // Histórico de custo efetivo (imutável)
     match /effective_cost_history/{entryId} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read: if isAuth() && (isAdmin() || canViewPurchasing());
+      allow create: if isAuth() && (isAdmin() || canReceivePurchase())
+        && request.resource.data.keys().hasAll(['workspaceId', 'baseItemId', 'supplierId', 'unitCost', 'occurredAt'])
+        && request.resource.data.unitCost is number
+        && request.resource.data.unitCost >= 0
+        && request.resource.data.workspaceId is string;
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
-    // Tarefas e Formulários
-    match /tasks/{taskId} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /task_projects/{projectId} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /executions/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /forms/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-
-    // Cadastros e configurações lidos pelo cliente. Escritas seguem via APIs/Admin SDK.
-    match /channels/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /classifications/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /operationalItemCategories/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /competitorGroups/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /concorrentes/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /concorrente_produtos/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /concorrente_precos/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /consumptionReports/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /dp_units/{id} {
-      allow read: if isAuth() && (canReadUsersDirectory() || canViewCollaboratorPanel());
-      allow write: if false;
-    }
-    match /dp_unitGroups/{id} {
-      allow read: if isAuth() && canReadUsersDirectory();
-      allow write: if false;
-    }
-    match /dp_shiftDefinitions/{id} {
-      allow read: if isAuth() && (canReadUsersDirectory() || canViewCollaboratorPanel());
-      allow write: if false;
-    }
-    match /dp_schedules/{id} {
-      allow read: if isAuth() && canReadUsersDirectory();
-      allow write: if false;
-      match /shifts/{shiftId} {
-        allow read: if isAuth() && (canReadUsersDirectory() || isOwnShift(resource.data));
-        allow write: if false;
-      }
-    }
-    match /{path=**}/shifts/{shiftId} {
-      allow read: if isAuth() && (canReadUsersDirectory() || isOwnShift(resource.data));
-      allow write: if false;
-    }
-    match /dp_calendars/{id} {
-      allow read: if isAuth() && canReadUsersDirectory();
-      allow write: if false;
-      match /holidays/{holidayId} {
-        allow read: if isAuth() && canReadUsersDirectory();
-        allow write: if false;
-      }
-    }
-    match /dp_vacations/{id} {
-      allow read: if isAuth() && canReadUsersDirectory();
-      allow write: if false;
-    }
-    match /employeeGoals/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /goalPeriods/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /goalTemplates/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /locations/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /predefinedLists/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /priceHistory/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /priceOverrides/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /productSimulationCategories/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /productSimulationItems/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /productSimulations/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /purchaseItems/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /purchaseSessions/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /salesReports/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /settings/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /simulationPriceHistory/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-    match /userPresence/{id} {
-      allow read: if isAuth();
-      allow write: if false;
-    }
-
-    // CATCH-ALL
+    // --- CATCH-ALL: bloqueia tudo não mapeado ---
     match /{document=**} {
-      allow read: if false;
-      allow write: if false;
+      allow read, write: if false;
     }
   }
 }

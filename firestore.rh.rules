@@ -10,7 +10,7 @@ service cloud.firestore {
     }
 
     function isDefaultAdmin() {
-      return isAuth() && request.auth.token.isDefaultAdmin == true;
+      return isAuth() && request.auth.token.get('isDefaultAdmin', false) == true;
     }
 
     // Busca o cache de acesso RH do usuário logado.
@@ -116,7 +116,19 @@ service cloud.firestore {
     // Imutável: managers leem (filtrado por equipe no app), admins leem tudo.
     // Criação somente via CF onFieldUpdate.
     match /audit_log/{logId} {
-      allow read:   if isManager();
+      allow read:   if isAdmin()
+                    || (
+                      rhRole() == 'manager'
+                      && resource.data.employee_id is string
+                      && exists(
+                        /databases/$(database)/documents/employees/$(resource.data.employee_id)
+                      )
+                      && isSameUnit(
+                        get(
+                          /databases/$(database)/documents/employees/$(resource.data.employee_id)
+                        ).data.get('unit_id', '')
+                      )
+                    );
       allow create: if false;
       allow update: if false;
       allow delete: if false;
@@ -134,10 +146,9 @@ service cloud.firestore {
       allow write:  if false;  // somente CF syncFromBizneo
     }
 
-    // ─── candidates / applications / jobOpenings (coleções de recrutamento) ──
-    // Mantidas pelo sistema existente de recrutamento.
-    match /candidates/{id}        { allow read, write: if isAuth() && (isManager() || isDefaultAdmin()); }
-    match /applications/{id}      { allow read, write: if isAuth() && (isManager() || isDefaultAdmin()); }
-    match /jobOpenings/{id}       { allow read: if true; allow write: if isAdmin(); }
+    // Recrutamento é acessado exclusivamente pelas APIs autenticadas.
+    match /candidates/{id}   { allow read, write: if false; }
+    match /applications/{id} { allow read, write: if false; }
+    match /jobOpenings/{id}  { allow read, write: if false; }
   }
 }

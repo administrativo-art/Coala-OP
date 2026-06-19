@@ -6,14 +6,13 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Box, Briefcase, Check, ChevronRight, ChevronsUpDown, Coins, FileText, Grid2X2, History, ImageIcon, MapPin, MoveRight, Plus, Printer, QrCode, Rows3, Search, Table2, Tags, Upload, Wrench } from 'lucide-react';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useSearchParams } from 'next/navigation';
 
 import { useAssets } from '@/hooks/use-assets';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { storage } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { useFinancialCollection } from '@/features/financial/hooks/use-financial-collection';
 import { financialCollection } from '@/features/financial/lib/repositories';
 import type { Asset, AssetCategory, AssetMovement, AssetStatus } from '@/types';
@@ -125,25 +124,25 @@ function assetQrPayload(asset: Asset) {
   return `${window.location.origin}/patrimonio/${encodeURIComponent(asset.code)}`;
 }
 
-async function uploadAssetImage(file: File, assetId: string) {
-  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-  const storageRef = ref(storage, `assets/${assetId}/${Date.now()}.${extension}`);
-  const snapshot = await uploadBytes(storageRef, file);
-  return getDownloadURL(snapshot.ref);
-}
+async function uploadAssetFile(file: File, assetId: string, kind: 'image' | 'fiscal') {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error('Usuário não autenticado.');
 
-async function uploadAssetFiscalDocument(file: File, assetId: string) {
-  const extension = file.name.split('.').pop()?.toLowerCase() || 'pdf';
-  const safeName = file.name
-    .replace(/\.[^/.]+$/, '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || 'nota-fiscal';
-  const storageRef = ref(storage, `assets/${assetId}/fiscal/${Date.now()}-${safeName}.${extension}`);
-  const snapshot = await uploadBytes(storageRef, file);
-  return getDownloadURL(snapshot.ref);
+  const formData = new FormData();
+  formData.set('file', file);
+  formData.set('assetId', assetId);
+  formData.set('kind', kind);
+
+  const response = await fetch('/api/assets/upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || typeof payload.url !== 'string') {
+    throw new Error(payload.error || 'Falha ao enviar arquivo do patrimônio.');
+  }
+  return payload.url;
 }
 
 const FORM_PAYMENTS = ['PIX', 'Boleto', 'Cartão de crédito', 'Transferência / TED', 'Dinheiro', 'Cartão BNDES'];
@@ -274,7 +273,7 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
     if (!file) return;
     setUploadingImage(true);
     try {
-      const url = await uploadAssetImage(file, '_pending');
+      const url = await uploadAssetFile(file, '_pending', 'image');
       form.setValue('imageUrl', url, { shouldDirty: true });
       toast({ title: 'Foto adicionada.' });
     } catch (error) {
@@ -762,7 +761,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     if (!asset || !file) return;
     setUploadingImage(true);
     try {
-      const url = await uploadAssetImage(file, asset.id);
+      const url = await uploadAssetFile(file, asset.id, 'image');
       form.setValue('imageUrl', url, { shouldDirty: true, shouldValidate: true });
       toast({ title: 'Foto adicionada.' });
     } catch (error) {
@@ -781,7 +780,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     if (!asset || !file) return;
     setUploadingFiscalDocument(true);
     try {
-      const url = await uploadAssetFiscalDocument(file, asset.id);
+      const url = await uploadAssetFile(file, asset.id, 'fiscal');
       form.setValue('documentUrl', url, { shouldDirty: true, shouldValidate: true });
       toast({ title: 'Nota fiscal anexada.' });
     } catch (error) {
