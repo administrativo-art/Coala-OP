@@ -566,6 +566,7 @@ export const syncBizneoUsersMonthly = onSchedule({
   timeZone: BRT,
   retryCount: 2,
   memory: '512MiB',
+  secrets: ['BIZNEO_TOKEN'],
 }, async () => {
   console.log('[syncBizneoUsersMonthly] Iniciando sincronização mensal Bizneo.');
   const result = await syncBizneoUsersIntoCoala('monthly-schedule');

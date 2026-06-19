@@ -306,7 +306,7 @@ async function runSync(source: 'scheduled' | 'manual'): Promise<{
 }
 
 export const syncFromBizneo = onSchedule(
-  { schedule: '0 3 * * *', timeZone: BRT },
+  { schedule: '0 3 * * *', timeZone: BRT, secrets: ['BIZNEO_TOKEN'] },
   async () => {
     const result = await runSync('scheduled');
     console.log(`[syncFromBizneo] ${result.employee_count} usuários · ${result.updated_count} atualizados · ${result.error_count} erros`);
@@ -314,7 +314,7 @@ export const syncFromBizneo = onSchedule(
 );
 
 export const manualSyncFromBizneo = onCall(
-  { cors: internalAppCors },
+  { cors: internalAppCors, secrets: ['BIZNEO_TOKEN'] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
 

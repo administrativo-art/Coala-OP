@@ -5,3 +5,15 @@ runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
+
+env:
+  - variable: BIZNEO_TOKEN
+    secret: BIZNEO_TOKEN
+  - variable: PDVLEGAL_COD_EMPRESA
+    secret: PDVLEGAL_COD_EMPRESA
+  - variable: PDVLEGAL_TOKEN
+    secret: PDVLEGAL_TOKEN
+  - variable: PDVLEGAL_USERNAME
+    secret: PDVLEGAL_USERNAME
+  - variable: PDVLEGAL_PASSWORD
+    secret: PDVLEGAL_PASSWORD
