@@ -119,25 +119,11 @@
       ]
     },
     {
-      "collectionGroup": "sync_log",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "started_at", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "field_values",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "field_key",   "order": "ASCENDING" },
         { "fieldPath": "updated_at",  "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "rh_access_cache",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "bizneo_employee_id", "order": "ASCENDING" }
       ]
     }
   ],
