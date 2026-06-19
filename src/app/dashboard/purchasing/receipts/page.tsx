@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PermissionGuard } from '@/components/permission-guard';
 import { PurchasingItemsPreview } from '@/components/purchasing/purchasing-items-preview';
 import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
+import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useAuth } from '@/hooks/use-auth';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
 import { type PurchaseReceipt } from '@/types';
@@ -62,6 +63,11 @@ function receiptDisplayTotal(receipt: PurchaseReceipt) {
 export default function ReceiptsPage() {
   const { permissions } = useAuth();
   const { receipts, loading } = usePurchaseReceipts();
+  const { orders } = usePurchaseOrders();
+  const purchaseDateById = useMemo(
+    () => new Map(orders.map((order) => [order.id, order.createdAt])),
+    [orders],
+  );
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'waiting' | 'partial' | 'conference' | 'delayed' | 'done'>('all');
   const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
@@ -178,7 +184,11 @@ export default function ReceiptsPage() {
                     <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
                       {columnCards.map(({ receipt }) => (
                         <Link key={receipt.id} href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
-                          <span className="font-mono text-[11px] font-black text-zinc-500">{receiptCode(receipt.purchaseOrderId)}</span>
+                          <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
+                            <span>Compra {new Date(purchaseDateById.get(receipt.purchaseOrderId) ?? receipt.createdAt).toLocaleDateString('pt-BR')}</span>
+                            {receipt.expectedDate && <span>Receb. prev. {new Date(receipt.expectedDate).toLocaleDateString('pt-BR')}</span>}
+                          </div>
+                          <span className="mt-0.5 block font-mono text-[11px] font-black text-zinc-500">{receiptCode(receipt.purchaseOrderId)}</span>
                           <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{receipt.supplierName || 'Recebimento de compra'}</p>
                           <PurchasingItemsPreview receiptId={receipt.id} />
                           <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
