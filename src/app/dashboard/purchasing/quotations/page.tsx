@@ -213,7 +213,8 @@ export default function QuotationsPage() {
                     <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
                       {columnCards.map(({ quotation, cfg, supplier }) => (
                         <Link key={quotation.id} href={`/dashboard/purchasing/quotations/${quotation.id}`} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
-                          <div className="flex items-center justify-between gap-2">
+                          <span className="block text-[10px] font-bold uppercase tracking-wide text-zinc-400">{new Date(quotation.createdAt).toLocaleDateString('pt-BR')}</span>
+                          <div className="mt-0.5 flex items-center justify-between gap-2">
                             <span className="font-mono text-[11px] font-black text-zinc-500">{quotationCode(quotation.id)}</span>
                             <PurchasingStatusBadge label={cfg.label} tone={cfg.tone} />
                           </div>

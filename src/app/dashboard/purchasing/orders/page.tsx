@@ -180,7 +180,8 @@ export default function PurchaseOrdersPage() {
                     <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
                       {columnCards.map(({ order, supplier }) => (
                         <Link key={order.id} href={`/dashboard/purchasing/orders/${order.id}`} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
-                          <span className="font-mono text-[11px] font-black text-zinc-500">{orderCode(order.id)}</span>
+                          <span className="block text-[10px] font-bold uppercase tracking-wide text-zinc-400">{new Date(order.createdAt).toLocaleDateString('pt-BR')}</span>
+                          <span className="mt-0.5 block font-mono text-[11px] font-black text-zinc-500">{orderCode(order.id)}</span>
                           <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{supplier}</p>
                           <PurchasingItemsPreview orderId={order.id} />
                           <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
