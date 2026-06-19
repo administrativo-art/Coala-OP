@@ -827,7 +827,7 @@ function CollaboratorRow({ user, onEdit, onTerminate, canEdit, canTerminate, shi
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPCollaboratorsManager() {
-  const { activeUsers, permissions, updateUser } = useAuth();
+  const { activeUsers, permissions, updateUser, firebaseUser } = useAuth();
   const { shiftDefinitions, shiftDefsLoading, shiftDefsError } = useDP();
   const { roles, functions, loading: hrLoading, error: hrError } = useHrBootstrap();
   const { toast } = useToast();
@@ -842,8 +842,13 @@ export function DPCollaboratorsManager() {
   async function handleBizneoSync() {
     setSyncing(true);
     try {
+      const token = await firebaseUser?.getIdToken();
+      if (!token) throw new Error('Usuário não autenticado.');
+
       // 1. Busca usuários do Bizneo via rota server-side (que tem o token da API)
-      const res = await fetch('/api/integrations/bizneo/sync-users');
+      const res = await fetch('/api/integrations/bizneo/sync-users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       if (!data.success) throw new Error(data.error ?? 'Erro ao buscar usuários do Bizneo.');
 

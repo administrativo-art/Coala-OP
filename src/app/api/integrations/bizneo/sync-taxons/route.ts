@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertBizneoAccess, BizneoAccessError } from '@/lib/integrations/bizneo-access';
 
 const BASE_URL = 'https://coala.bizneohr.com/api/v1';
 
@@ -9,8 +10,9 @@ export type BizneoTaxon = {
   taxonomy_id: number;
 };
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
+    await assertBizneoAccess(req, 'schedules');
     const token = process.env.BIZNEO_TOKEN;
     if (!token) throw new Error('BIZNEO_TOKEN não configurado.');
 
@@ -33,6 +35,8 @@ export async function GET(_req: NextRequest) {
 
     return NextResponse.json({ success: true, taxons: all });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    const message = e instanceof Error ? e.message : 'Falha ao carregar locais do Bizneo.';
+    const status = e instanceof BizneoAccessError ? e.status : 500;
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

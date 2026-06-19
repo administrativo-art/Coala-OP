@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pushShiftToBizneo, type BizneoTimeRange } from '@/lib/integrations/bizneo-admin';
+import { assertBizneoAccess, BizneoAccessError } from '@/lib/integrations/bizneo-access';
 
 /**
  * Recebe os turnos já resolvidos do cliente e envia para o Bizneo.
@@ -7,6 +8,8 @@ import { pushShiftToBizneo, type BizneoTimeRange } from '@/lib/integrations/bizn
  */
 export async function POST(req: NextRequest) {
   try {
+    await assertBizneoAccess(req, 'schedules');
+
     const { shifts } = await req.json() as {
       shifts: {
         bizneoUserId: number;
@@ -38,7 +41,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, ok, errors, results });
   } catch (e: any) {
-    console.error('[Bizneo push-schedule]', e);
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    if (!(e instanceof BizneoAccessError)) {
+      console.error('[Bizneo push-schedule]', e);
+    }
+    const message = e instanceof Error ? e.message : 'Falha ao enviar escalas ao Bizneo.';
+    const status = e instanceof BizneoAccessError ? e.status : 500;
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

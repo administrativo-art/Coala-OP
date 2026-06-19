@@ -17,9 +17,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { ScrollArea } from './ui/scroll-area';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { Badge } from './ui/badge';
-import { storage } from '@/lib/firebase';
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
+import {
+    dataUrlToFile,
+    uploadOperationalFile,
+} from '@/lib/operational-upload-client';
 
 interface DispatchModalProps {
   activity: RepositionActivity;
@@ -28,7 +30,7 @@ interface DispatchModalProps {
 
 export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
     const { updateRepositionActivity } = useReposition();
-    const { user } = useAuth();
+    const { user, firebaseUser } = useAuth();
     const { lots } = useExpiryProducts();
     const { toast } = useToast();
     
@@ -55,12 +57,20 @@ export function DispatchModal({ activity, onOpenChange }: DispatchModalProps) {
             const mimeTypeMatch = physicalCopyUrl.match(/data:(.*);base64,/);
             const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'application/octet-stream';
             const extension = mimeType.split('/')[1] || 'bin';
-            const storageRef = ref(storage, `dispatch_documents/${activity.id}/${new Date().getTime()}.${extension}`);
             
             try {
-                // uploadString is efficient for data URLs
-                const snapshot = await uploadString(storageRef, physicalCopyUrl, 'data_url');
-                finalPhysicalCopyUrl = await getDownloadURL(snapshot.ref);
+                if (!firebaseUser) throw new Error('Usuário não autenticado.');
+                const file = await dataUrlToFile(
+                    physicalCopyUrl,
+                    `documento-despacho-${activity.id}.${extension}`,
+                );
+                const uploaded = await uploadOperationalFile({
+                    user: firebaseUser,
+                    kind: 'dispatch-document',
+                    targetId: activity.id,
+                    file,
+                });
+                finalPhysicalCopyUrl = uploaded.url;
             } catch (error) {
                 console.error("Error uploading dispatch document:", error);
                 toast({

@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAccessToken } from '@/lib/integrations/pdv-legal-admin';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { requireUser } from '@/lib/auth-server';
 
 const BASE_URL = 'https://api.tabletcloud.com.br';
 
 export async function GET(req: NextRequest) {
+  const context = await requireUser(req).catch(() => null);
+  if (!context) {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+  }
+  if (!context.isDefaultAdmin) {
+    return NextResponse.json({ error: 'Diagnóstico restrito ao administrador.' }, { status: 403 });
+  }
+
   const { searchParams } = new URL(req.url);
   const date = searchParams.get('date') ?? new Date().toISOString().split('T')[0];
   const filialId = searchParams.get('filial') ?? '17343';

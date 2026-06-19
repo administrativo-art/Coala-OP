@@ -13,8 +13,10 @@ import { type RepositionActivity, type RepositionItem, type RepositionSuggestedL
 import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
 import SignatureCanvas from "react-signature-canvas";
-import { getDownloadURL, ref, uploadString } from "firebase/storage";
-import { storage } from "@/lib/firebase";
+import {
+  dataUrlToFile,
+  uploadOperationalFile,
+} from "@/lib/operational-upload-client";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -801,7 +803,7 @@ function RepositionActivityCard({
 export function RepositionManagement({ returnTo }: { returnTo?: string } = {}) {
   const router = useRouter();
   const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
-  const { permissions, user } = useAuth();
+  const { permissions, user, firebaseUser } = useAuth();
   const { toast } = useToast();
   const { products } = useProducts();
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
@@ -882,12 +884,18 @@ export function RepositionManagement({ returnTo }: { returnTo?: string } = {}) {
   ) => {
     let signatureUrl = signatureDataUrl;
     if (signatureDataUrl.startsWith("data:")) {
-      const signatureRef = ref(
-        storage,
-        `reposition_signatures/${activity.id}/transport-${Date.now()}.png`
+      if (!firebaseUser) throw new Error("Usuário não autenticado.");
+      const signatureFile = await dataUrlToFile(
+        signatureDataUrl,
+        `assinatura-transporte-${activity.id}.png`
       );
-      const snapshot = await uploadString(signatureRef, signatureDataUrl, "data_url");
-      signatureUrl = await getDownloadURL(snapshot.ref);
+      const uploaded = await uploadOperationalFile({
+        user: firebaseUser,
+        kind: "reposition-signature",
+        targetId: activity.id,
+        file: signatureFile,
+      });
+      signatureUrl = uploaded.url;
     }
 
     await updateRepositionActivity(activity.id, {

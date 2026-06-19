@@ -3,9 +3,9 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type BaseProduct, type UnitCategory, unitCategories } from '@/types';
+import { type BaseProduct } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, serverTimestamp, deleteField } from 'firebase/firestore';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 
 export interface BaseProductsContextType {
@@ -21,7 +21,7 @@ export interface BaseProductsContextType {
 export const BaseProductsContext = createContext<BaseProductsContextType | undefined>(undefined);
 
 export function BaseProductsProvider({ children }: { children: React.ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, firebaseUser, loading: authLoading } = useAuth();
   const [baseProducts, setBaseProducts] = useState<BaseProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -56,63 +56,60 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
   }, [authLoading, user]);
 
   const addBaseProduct = useCallback(async (product: Omit<BaseProduct, 'id'>) => {
-    try {
-        await addDoc(collection(db, "baseProducts"), product);
-    } catch(error) {
-        console.error("Error adding base product:", error);
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch('/api/registry/base-products', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(product),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'Falha ao adicionar produto base.');
     }
-  }, []);
+  }, [firebaseUser]);
 
   const updateBaseProduct = useCallback(async (product: BaseProduct) => {
-    const productRef = doc(db, "baseProducts", product.id);
     const { id, ...dataToUpdate } = product;
-
-    try {
-        await updateDoc(productRef, dataToUpdate as any);
-    } catch (error) {
-        console.error("Error updating base product:", error);
-        throw error;
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/registry/base-products/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(dataToUpdate),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'Falha ao atualizar produto base.');
     }
-  }, []);
+  }, [firebaseUser]);
   
   const updateMultipleBaseProducts = useCallback(async (productsToUpdate: BaseProduct[]) => {
-    const batch = writeBatch(db);
-    productsToUpdate.forEach(product => {
-      if(product.id) {
-        const productRef = doc(db, "baseProducts", product.id);
-        const { id, ...dataToUpdate } = product;
-        batch.update(productRef, dataToUpdate as any);
-      }
-    });
-    try {
-      await batch.commit();
-    } catch(error) {
-      console.error("Error updating multiple base products:", error);
-      throw error;
-    }
-  }, []);
+    await Promise.all(productsToUpdate.map((product) => updateBaseProduct(product)));
+  }, [updateBaseProduct]);
 
   const deleteBaseProduct = useCallback(async (productId: string) => {
-    try {
-        await deleteDoc(doc(db, "baseProducts", productId));
-    } catch (error) {
-        console.error("Error deleting base product:", error);
-        throw error;
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/registry/base-products/${productId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'Falha ao excluir produto base.');
     }
-  }, []);
+  }, [firebaseUser]);
 
   const deleteMultipleBaseProducts = useCallback(async (productIds: string[]) => {
-    const batch = writeBatch(db);
-    productIds.forEach(id => {
-        batch.delete(doc(db, "baseProducts", id));
-    });
-    try {
-        await batch.commit();
-    } catch (error) {
-        console.error("Error deleting multiple base products:", error);
-        throw error;
-    }
-  }, []);
+    await Promise.all(productIds.map((id) => deleteBaseProduct(id)));
+  }, [deleteBaseProduct]);
   
   const value: BaseProductsContextType = useMemo(() => ({
     baseProducts,

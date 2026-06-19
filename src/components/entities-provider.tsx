@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type Entity } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
 
@@ -19,7 +19,7 @@ export interface EntitiesContextType {
 export const EntitiesContext = createContext<EntitiesContextType | undefined>(undefined);
 
 export function EntitiesProvider({ children }: { children: React.ReactNode }) {
-  const { user, permissions, loading: authLoading } = useAuth();
+  const { user, firebaseUser, permissions, loading: authLoading } = useAuth();
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const canRead =
@@ -52,32 +52,52 @@ export function EntitiesProvider({ children }: { children: React.ReactNode }) {
   }, [authLoading, canRead, user]);
 
   const addEntity = useCallback(async (entity: Omit<Entity, 'id'>) => {
-    try {
-        await addDoc(collection(db, "entities"), entity);
-    } catch(error) {
-        console.error("Error adding entity:", error);
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch('/api/registry/entities', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(entity),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'Falha ao adicionar pessoa ou empresa.');
     }
-  }, []);
+  }, [firebaseUser]);
 
   const updateEntity = useCallback(async (entity: Entity) => {
-    const entityRef = doc(db, "entities", entity.id);
     const { id, ...dataToUpdate } = entity;
-    try {
-        await updateDoc(entityRef, dataToUpdate);
-    } catch (error) {
-        console.error("Error updating entity:", error);
-        throw error;
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/registry/entities/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(dataToUpdate),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'Falha ao atualizar pessoa ou empresa.');
     }
-  }, []);
+  }, [firebaseUser]);
 
   const deleteEntity = useCallback(async (entityId: string) => {
-    try {
-        await deleteDoc(doc(db, "entities", entityId));
-    } catch (error) {
-        console.error("Error deleting entity:", error);
-        throw error;
+    if (!firebaseUser) throw new Error('Usuário não autenticado.');
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/registry/entities/${entityId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'Falha ao excluir pessoa ou empresa.');
     }
-  }, []);
+  }, [firebaseUser]);
   
   const value: EntitiesContextType = useMemo(() => ({
     entities,

@@ -4,8 +4,17 @@ import { addMonths } from 'date-fns';
 
 import { dbAdmin } from '@/lib/firebase-admin';
 import { financialDbAdmin } from '@/lib/firebase-financial-admin';
-import { verifyAuth } from '@/lib/verify-auth';
+import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { PURCHASING_COLLECTIONS } from '@/lib/purchasing-constants';
+import {
+  canCancelPurchase,
+  canCreatePurchase,
+  canCreateQuotation,
+  canFinalizeQuotation,
+  canManagePurchaseFinancials,
+  canReceivePurchase,
+  canViewPurchasing,
+} from '@/lib/purchasing-permissions';
 import {
   calculatePricePerBaseUnit,
   calculateStockQuantityFromPurchase,
@@ -33,12 +42,63 @@ function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-async function assertAuth(request: NextRequest) {
+async function getUserContext(request: NextRequest) {
   try {
-    return await verifyAuth(request);
+    return await requireUser(request);
   } catch {
     return null;
   }
+}
+
+function isAllowed(
+  context: ServerUserContext,
+  check: (permissions: ServerUserContext['permissions']) => boolean,
+) {
+  return context.isDefaultAdmin || check(context.permissions);
+}
+
+function canPostPath(context: ServerUserContext, path: string[]) {
+  const [resource, id, child] = path;
+  if (resource === 'barcode' && id === 'lookup') {
+    return isAllowed(context, (permissions) =>
+      canCreateQuotation(permissions) || canCreatePurchase(permissions));
+  }
+  if (resource === 'quotations' && !id) {
+    return isAllowed(context, canCreateQuotation);
+  }
+  if (resource === 'quotations' && child === 'items') {
+    return isAllowed(context, canCreateQuotation);
+  }
+  if (resource === 'quotations' && child === 'finalize') {
+    return isAllowed(context, canFinalizeQuotation);
+  }
+  if (resource === 'quotations' && child === 'cancel') {
+    return isAllowed(context, (permissions) =>
+      canCreateQuotation(permissions) || canFinalizeQuotation(permissions));
+  }
+  if (resource === 'orders' && !id) {
+    return isAllowed(context, canCreatePurchase);
+  }
+  if (resource === 'orders' && child === 'confirm') {
+    return isAllowed(context, canCreatePurchase);
+  }
+  if (resource === 'orders' && child === 'cancel') {
+    return isAllowed(context, canCancelPurchase);
+  }
+  if (resource === 'orders' && child === 'mark-received-elsewhere') {
+    return isAllowed(context, canReceivePurchase);
+  }
+  if (resource === 'orders' && child === 'sync-expense') {
+    return isAllowed(context, canManagePurchaseFinancials);
+  }
+  if (resource === 'receipts') {
+    return isAllowed(context, canReceivePurchase);
+  }
+  return null;
+}
+
+function permissionError() {
+  return jsonError('Sem permissão para esta operação de compras.', 403);
 }
 
 function docData(doc: FirebaseFirestore.DocumentSnapshot) {
@@ -300,11 +360,11 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
   const [resource, id, child, childId] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  if (!isAllowed(userContext, canViewPurchasing)) return permissionError();
 
   if (resource === 'barcode' && id === 'lookup') {
     return lookupBarcode(request.nextUrl.searchParams.get('barcode'));
@@ -373,11 +433,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
-  const [resource, id, child, childId, action] = path;
+  const [resource, id, child] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  const canPost = canPostPath(userContext, path);
+  if (canPost === false) return permissionError();
+  const decoded = userContext.decoded;
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
 
@@ -1453,11 +1515,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
   const [resource, id, child, childId] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  const canPatch =
+    resource === 'quotations'
+      ? isAllowed(userContext, canCreateQuotation)
+      : resource === 'orders'
+        ? isAllowed(userContext, canCreatePurchase)
+        : null;
+  if (canPatch === false) return permissionError();
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
 
@@ -1619,11 +1687,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
   const [resource, id, child, childId] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  if (resource === 'quotations' && !isAllowed(userContext, canCreateQuotation)) {
+    return permissionError();
+  }
 
   if (resource === 'quotations' && id && child === 'items' && childId) {
     await dbAdmin.collection('quotations').doc(id).collection('items').doc(childId).delete();

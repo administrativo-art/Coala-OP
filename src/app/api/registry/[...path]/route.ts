@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { verifyAuth } from '@/lib/verify-auth';
+import { requireUser, type ServerUserContext } from '@/lib/auth-server';
+import { canViewPurchasing } from '@/lib/purchasing-permissions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,20 +12,114 @@ function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-async function assertAuth(request: NextRequest) {
+async function getUserContext(request: NextRequest) {
   try {
-    return await verifyAuth(request);
+    return await requireUser(request);
   } catch {
     return null;
   }
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
+type RegistryAction = 'read' | 'create' | 'update' | 'delete';
 
+function canUseRegistryResource(
+  context: ServerUserContext,
+  resource: string | undefined,
+  action: RegistryAction,
+) {
+  if (context.isDefaultAdmin) return true;
+  const permissions = context.permissions;
+
+  if (resource === 'products') {
+    if (action === 'read') {
+      return permissions.registration.view ||
+        permissions.stock.inventoryControl.view ||
+        canViewPurchasing(permissions) ||
+        permissions.commercial.technicalSheets.view;
+    }
+    if (action === 'create') {
+      return permissions.registration.items.add ||
+        permissions.purchasing.manageBaseItems ||
+        permissions.commercial.technicalSheets.create;
+    }
+    if (action === 'update') {
+      return permissions.registration.items.edit ||
+        permissions.purchasing.manageBaseItems ||
+        permissions.commercial.technicalSheets.edit;
+    }
+    return permissions.registration.items.delete ||
+      permissions.commercial.technicalSheets.delete;
+  }
+
+  if (resource === 'base-products') {
+    if (action === 'read') {
+      return permissions.registration.view ||
+        permissions.stock.view ||
+        canViewPurchasing(permissions) ||
+        permissions.pricing.view ||
+        permissions.commercial.technicalSheets.view;
+    }
+    if (action === 'create') {
+      return permissions.registration.baseProducts.add ||
+        permissions.purchasing.manageBaseItems ||
+        permissions.commercial.technicalSheets.create;
+    }
+    if (action === 'update') {
+      return permissions.registration.baseProducts.edit ||
+        permissions.purchasing.manageBaseItems ||
+        permissions.commercial.technicalSheets.edit;
+    }
+    return permissions.registration.baseProducts.delete ||
+      permissions.commercial.technicalSheets.delete;
+  }
+
+  if (resource === 'entities') {
+    if (action === 'read') {
+      return permissions.registration.view || canViewPurchasing(permissions);
+    }
+    if (action === 'create') return permissions.registration.entities.add;
+    if (action === 'update') return permissions.registration.entities.edit;
+    return permissions.registration.entities.delete;
+  }
+
+  if (resource === 'stock-audit') {
+    if (action === 'read') {
+      return permissions.stock.stockCount.view || permissions.stock.audit.view;
+    }
+    if (action === 'create') {
+      return permissions.stock.stockCount.perform || permissions.stock.audit.start;
+    }
+    if (action === 'update') {
+      return permissions.stock.stockCount.perform ||
+        permissions.stock.stockCount.approve ||
+        permissions.stock.audit.approve;
+    }
+    return permissions.stock.stockCount.approve || permissions.stock.audit.approve;
+  }
+
+  if (resource === 'competitors') {
+    return permissions.pricing.view;
+  }
+
+  if (resource === 'operational-categories') {
+    return action === 'read'
+      ? canViewPurchasing(permissions)
+      : permissions.purchasing.manageBaseItems;
+  }
+
+  return false;
+}
+
+function permissionError() {
+  return jsonError('Sem permissão para esta operação.', 403);
+}
+
+export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
   const path = (await context.params).path ?? [];
   const [resource, id] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  if (!canUseRegistryResource(userContext, resource, 'read')) return permissionError();
 
   const collectionMap: Record<string, string> = {
     'products': 'products',
@@ -50,11 +145,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
   const [resource] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  if (!canUseRegistryResource(userContext, resource, 'create')) return permissionError();
   const body = await request.json().catch(() => ({}));
 
   const collectionMap: Record<string, string> = {
@@ -73,18 +168,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     ...body,
     workspaceId: WORKSPACE_ID,
     createdAt: new Date().toISOString(),
-    createdBy: decoded.uid,
+    createdBy: userContext.decoded.uid,
   });
 
   return NextResponse.json({ id: ref.id }, { status: 201 });
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
   const [resource, id] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  if (!canUseRegistryResource(userContext, resource, 'update')) return permissionError();
   const body = await request.json().catch(() => ({}));
 
   const collectionMap: Record<string, string> = {
@@ -110,7 +205,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
         ...updatePayload,
         workspaceId: WORKSPACE_ID,
         createdAt: body.createdAt ?? new Date().toISOString(),
-        createdBy: body.createdBy ?? decoded.uid,
+        createdBy: body.createdBy ?? userContext.decoded.uid,
       },
       { merge: true },
     );
@@ -122,11 +217,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
   const [resource, id] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  if (!canUseRegistryResource(userContext, resource, 'delete')) return permissionError();
 
   const collectionMap: Record<string, string> = {
     'products': 'products',

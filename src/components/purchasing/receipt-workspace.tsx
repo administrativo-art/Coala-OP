@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, Info, ShoppingCart, ReceiptText, Scale, Truck, Building2, Check } from 'lucide-react';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -32,7 +31,7 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { useAuth } from '@/hooks/use-auth';
 import { canReceivePurchase } from '@/lib/purchasing-permissions';
-import { storage } from '@/lib/firebase';
+import { uploadOperationalFile } from '@/lib/operational-upload-client';
 import { calculateStockQuantityFromPurchase } from '@/lib/purchasing-units';
 import {
   getPurchaseItemTreatmentLabel,
@@ -213,7 +212,7 @@ interface Props {
 
 export function ReceiptWorkspace({ receipt }: Props) {
   const router = useRouter();
-  const { permissions } = useAuth();
+  const { permissions, firebaseUser } = useAuth();
   const { fetchReceiptItems, startConference, saveConference, startStockEntry, confirmStockEntry } = usePurchaseReceipts();
   const { orders } = usePurchaseOrders();
   const { financials } = usePurchaseFinancials();
@@ -514,13 +513,14 @@ export function ReceiptWorkspace({ receipt }: Props) {
     try {
       let receiptProofUrl: string | undefined;
       if (proofFile) {
-        const extension = proofFile.name.split('.').pop() || 'bin';
-        const storageRef = ref(
-          storage,
-          `purchase_receipts/${receipt.id}/${Date.now()}.${extension}`,
-        );
-        const snapshot = await uploadBytes(storageRef, proofFile);
-        receiptProofUrl = await getDownloadURL(snapshot.ref);
+        if (!firebaseUser) throw new Error('Usuário não autenticado.');
+        const uploaded = await uploadOperationalFile({
+          user: firebaseUser,
+          kind: 'purchase-receipt',
+          targetId: receipt.id,
+          file: proofFile,
+        });
+        receiptProofUrl = uploaded.url;
       }
       await saveConference(receipt.id, {
         notes,
@@ -566,13 +566,14 @@ export function ReceiptWorkspace({ receipt }: Props) {
     try {
       let receiptProofUrl: string | undefined;
       if (proofFile) {
-        const extension = proofFile.name.split('.').pop() || 'bin';
-        const storageRef = ref(
-          storage,
-          `purchase_receipts/${receipt.id}/${Date.now()}.${extension}`,
-        );
-        const snapshot = await uploadBytes(storageRef, proofFile);
-        receiptProofUrl = await getDownloadURL(snapshot.ref);
+        if (!firebaseUser) throw new Error('Usuário não autenticado.');
+        const uploaded = await uploadOperationalFile({
+          user: firebaseUser,
+          kind: 'purchase-receipt',
+          targetId: receipt.id,
+          file: proofFile,
+        });
+        receiptProofUrl = uploaded.url;
       }
       await confirmStockEntry(receipt.id, {
         destinationKioskId,
