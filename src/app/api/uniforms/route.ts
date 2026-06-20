@@ -52,7 +52,11 @@ export async function GET(request: NextRequest) {
     const rawLots = lotsSnap
       ? lotsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LotEntry))
       : [];
-    const productIds = Array.from(new Set(rawLots.map((lot) => lot.productId).filter(Boolean)));
+    const productIds = Array.from(new Set([
+      ...rawLots.map((lot) => lot.productId),
+      ...assignments.map((assignment) => assignment.productId),
+      ...events.map((event) => event.productId),
+    ].filter(Boolean)));
     const productSnaps = await Promise.all(
       productIds.map((productId) => dbAdmin.collection("products").doc(productId).get()),
     );
@@ -69,14 +73,35 @@ export async function GET(request: NextRequest) {
         apparelType: lot.apparelType ?? product?.apparelType,
         apparelSize: lot.apparelSize ?? product?.apparelSize,
         apparelColor: lot.apparelColor ?? product?.apparelColor,
+        imageUrl: lot.imageUrl ?? product?.imageUrl,
+      };
+    });
+    const enrichedAssignments = assignments.map((assignment) => {
+      const product = productMap.get(assignment.productId);
+      return {
+        ...assignment,
+        apparelType: assignment.apparelType ?? product?.apparelType,
+        apparelSize: assignment.apparelSize ?? product?.apparelSize,
+        apparelColor: assignment.apparelColor ?? product?.apparelColor,
+        imageUrl: assignment.imageUrl ?? product?.imageUrl,
+      };
+    });
+    const enrichedEvents = events.map((event) => {
+      const product = productMap.get(event.productId);
+      return {
+        ...event,
+        apparelType: event.apparelType ?? product?.apparelType,
+        apparelSize: event.apparelSize ?? product?.apparelSize,
+        apparelColor: event.apparelColor ?? product?.apparelColor,
+        imageUrl: event.imageUrl ?? product?.imageUrl,
       };
     });
 
     return NextResponse.json(
       {
         lots,
-        assignments,
-        events,
+        assignments: enrichedAssignments,
+        events: enrichedEvents,
       },
       { headers: { "Cache-Control": "private, no-store" } },
     );

@@ -318,6 +318,7 @@ export type UniformEvent = {
   apparelType?: string;
   apparelSize?: string;
   apparelColor?: string;
+  imageUrl?: string;
   createdAt: string;
   updatedAt: string;
   workspaceId?: string;
@@ -346,6 +347,7 @@ export type UniformAssignment = {
   apparelType?: string;
   apparelSize?: string;
   apparelColor?: string;
+  imageUrl?: string;
   createdAt: string;
   updatedAt: string;
 };

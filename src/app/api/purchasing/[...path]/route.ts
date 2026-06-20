@@ -1372,6 +1372,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
                       apparelType: product.apparelType ?? null,
                       apparelSize: product.apparelSize ?? null,
                       apparelColor: product.apparelColor ?? null,
+                      imageUrl: product.imageUrl ?? null,
                     }
                   : {}),
                 updatedAt: Timestamp.now(),

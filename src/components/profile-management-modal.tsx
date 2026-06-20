@@ -20,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useAuth } from '@/hooks/use-auth';
@@ -454,18 +454,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                         </div>
                                     </div>
 
-                                    {/* Uniformes */}
-                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                        <h4 className="font-semibold text-md mb-2">Controle de uniformes</h4>
-                                        {renderPermissionSwitch("permissions.stock.uniforms.view" as any, "Visualizar Uniformes", "Permite consultar estoque, posse e histórico de uniformes.", !stockViewWatch)}
-                                        <div className="pl-6 space-y-2">
-                                            {renderPermissionSwitch("permissions.stock.uniforms.deliver" as any, "Entregar Uniformes", "Permite retirar uma peça do estoque e vinculá-la a um colaborador.", !uniformsViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.uniforms.return" as any, "Registrar Devoluções", "Permite receber peças devolvidas por colaboradores.", !uniformsViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.uniforms.dispose" as any, "Descartar Uniformes", "Permite registrar descarte na devolução.", !uniformsViewWatch, true)}
-                                            {renderPermissionSwitch("permissions.stock.uniforms.manageEvaluation" as any, "Gerenciar Avaliação", "Permite reter e tratar peças que precisam de avaliação.", !uniformsViewWatch, true)}
-                                        </div>
-                                    </div>
-
                                     {/* Contagem de Estoque */}
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                         <h4 className="font-semibold text-md mb-2">Contagem de estoque</h4>
@@ -794,6 +782,18 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.dp.collaborators.add" as any, "Adicionar Colaboradores", "Permite cadastrar novos colaboradores.", !dpCollaboratorsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.collaborators.edit" as any, "Editar Colaboradores", "Permite editar dados de colaboradores existentes.", !dpCollaboratorsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.collaborators.terminate" as any, "Desligar Colaboradores", "Permite registrar o desligamento de um colaborador.", !dpCollaboratorsViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                {/* Uniformes */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Shirt className="h-4 w-4" /> Controle de uniformes</h4>
+                                  {renderPermissionSwitch("permissions.stock.uniforms.view" as any, "Visualizar Uniformes", "Permite consultar estoque, posse e histórico de uniformes.", false)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.stock.uniforms.deliver" as any, "Entregar Uniformes", "Permite retirar uma peça do estoque e vinculá-la a um colaborador.", !uniformsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.stock.uniforms.return" as any, "Registrar Devoluções", "Permite receber peças devolvidas por colaboradores.", !uniformsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.stock.uniforms.dispose" as any, "Descartar Uniformes", "Permite registrar descarte na devolução.", !uniformsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.stock.uniforms.manageEvaluation" as any, "Gerenciar Avaliação", "Permite reter e tratar peças que precisam de avaliação.", !uniformsViewWatch, true)}
                                   </div>
                                 </div>
 

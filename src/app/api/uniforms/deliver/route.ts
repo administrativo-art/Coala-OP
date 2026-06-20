@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
         apparelType: product.apparelType,
         apparelSize: product.apparelSize,
         apparelColor: product.apparelColor,
+        imageUrl: product.imageUrl,
         registeredByUserId: context.userDoc.id,
         registeredByUserName: context.userDoc.username,
         notes,
@@ -155,6 +156,7 @@ export async function POST(request: NextRequest) {
         apparelType: product.apparelType,
         apparelSize: product.apparelSize,
         apparelColor: product.apparelColor,
+        imageUrl: product.imageUrl,
         createdAt: now,
         updatedAt: now,
       };

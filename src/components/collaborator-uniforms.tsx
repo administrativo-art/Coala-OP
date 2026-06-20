@@ -64,6 +64,25 @@ function uniformDetails(item: { apparelType?: string | null; apparelColor?: stri
     .join(" · ");
 }
 
+function ItemPhoto({ item }: { item: { imageUrl?: string | null; productName?: string | null } }) {
+  if (item.imageUrl) {
+    return (
+      <img
+        src={item.imageUrl}
+        alt={item.productName ?? "Uniforme"}
+        className="h-12 w-12 rounded-xl border bg-white object-cover"
+        loading="lazy"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-12 w-12 items-center justify-center rounded-xl border bg-white text-amber-700">
+      <Shirt className="h-5 w-5" />
+    </div>
+  );
+}
+
 export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
@@ -203,15 +222,18 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
           {possession.map((assignment) => (
             <div key={assignment.id} className="rounded-2xl border border-amber-100 bg-[#fffaf0] p-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black text-[#25231f]">{assignment.productName}</p>
-                  {uniformDetails(assignment) ? (
-                    <p className="mt-1 text-[11px] font-semibold text-amber-700">{uniformDetails(assignment)}</p>
-                  ) : null}
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge variant="secondary">{conditionLabel(assignment.issuedCondition)}</Badge>
-                    <Badge variant="outline">{assignment.quantityInPossession} em posse</Badge>
-                    <Badge variant="outline">Entregue em {formatDate(assignment.deliveredAt)}</Badge>
+                <div className="flex min-w-0 gap-3">
+                  <ItemPhoto item={assignment} />
+                  <div>
+                    <p className="text-xs font-black text-[#25231f]">{assignment.productName}</p>
+                    {uniformDetails(assignment) ? (
+                      <p className="mt-1 text-[11px] font-semibold text-amber-700">{uniformDetails(assignment)}</p>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Badge variant="secondary">{conditionLabel(assignment.issuedCondition)}</Badge>
+                      <Badge variant="outline">{assignment.quantityInPossession} em posse</Badge>
+                      <Badge variant="outline">Entregue em {formatDate(assignment.deliveredAt)}</Badge>
+                    </div>
                   </div>
                 </div>
                 {canReturn ? (
@@ -241,14 +263,17 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
             {overview.events.slice(0, 12).map((event) => (
               <div key={event.id} className="rounded-xl bg-slate-50 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-black">{event.productName}</p>
-                    <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                      {event.eventType === "UNIFORME_ENTREGA" ? "Entrega" : "Devolução"} · {event.quantity} un · {formatDate(event.occurredAt)}
-                    </p>
-                    {uniformDetails(event) ? (
-                      <p className="mt-1 text-[11px] font-semibold text-slate-400">{uniformDetails(event)}</p>
-                    ) : null}
+                  <div className="flex min-w-0 gap-3">
+                    <ItemPhoto item={event} />
+                    <div>
+                      <p className="text-xs font-black">{event.productName}</p>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                        {event.eventType === "UNIFORME_ENTREGA" ? "Entrega" : "Devolução"} · {event.quantity} un · {formatDate(event.occurredAt)}
+                      </p>
+                      {uniformDetails(event) ? (
+                        <p className="mt-1 text-[11px] font-semibold text-slate-400">{uniformDetails(event)}</p>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     {event.issuedCondition ? <Badge variant="secondary">{conditionLabel(event.issuedCondition)}</Badge> : null}

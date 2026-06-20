@@ -30,6 +30,25 @@ function uniformDetails(item: { apparelType?: string | null; apparelColor?: stri
   return [item.apparelType, item.apparelColor].filter(Boolean).join(" · ");
 }
 
+function ItemPhoto({ item }: { item: { imageUrl?: string | null; productName?: string | null } }) {
+  if (item.imageUrl) {
+    return (
+      <img
+        src={item.imageUrl}
+        alt={item.productName ?? "Uniforme"}
+        className="h-11 w-11 rounded-xl border bg-muted object-cover"
+        loading="lazy"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-11 w-11 items-center justify-center rounded-xl border bg-muted text-muted-foreground">
+      <Shirt className="h-5 w-5" />
+    </div>
+  );
+}
+
 function formatEventDate(value: string) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const [year, month, day] = value.split("-");
@@ -175,8 +194,13 @@ export function UniformManagement() {
                   {overview.lots.map((lot) => (
                     <TableRow key={lot.id}>
                       <TableCell>
-                        <p className="font-medium">{lot.productName}</p>
-                        {uniformDetails(lot) ? <p className="text-xs text-muted-foreground">{uniformDetails(lot)}</p> : null}
+                        <div className="flex items-center gap-3">
+                          <ItemPhoto item={lot} />
+                          <div>
+                            <p className="font-medium">{lot.productName}</p>
+                            {uniformDetails(lot) ? <p className="text-xs text-muted-foreground">{uniformDetails(lot)}</p> : null}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell><Badge variant="outline">{sizeLabel(lot.apparelSize)}</Badge></TableCell>
                       <TableCell><Badge variant="secondary">{conditionLabel(lot.condition)}</Badge></TableCell>
@@ -202,8 +226,13 @@ export function UniformManagement() {
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.collaboratorName}</TableCell>
                       <TableCell>
-                        <p>{item.productName}</p>
-                        {uniformDetails(item) ? <p className="text-xs text-muted-foreground">{uniformDetails(item)}</p> : null}
+                        <div className="flex items-center gap-3">
+                          <ItemPhoto item={item} />
+                          <div>
+                            <p>{item.productName}</p>
+                            {uniformDetails(item) ? <p className="text-xs text-muted-foreground">{uniformDetails(item)}</p> : null}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell><Badge variant="outline">{sizeLabel(item.apparelSize)}</Badge></TableCell>
                       <TableCell><Badge variant="secondary">{conditionLabel(item.issuedCondition)}</Badge></TableCell>
@@ -228,8 +257,13 @@ export function UniformManagement() {
                       <TableCell>{formatEventDate(event.occurredAt)}</TableCell>
                       <TableCell>{event.collaboratorName}</TableCell>
                       <TableCell>
-                        <p>{event.productName}</p>
-                        {uniformDetails(event) ? <p className="text-xs text-muted-foreground">{uniformDetails(event)}</p> : null}
+                        <div className="flex items-center gap-3">
+                          <ItemPhoto item={event} />
+                          <div>
+                            <p>{event.productName}</p>
+                            {uniformDetails(event) ? <p className="text-xs text-muted-foreground">{uniformDetails(event)}</p> : null}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell><Badge variant="outline">{sizeLabel(event.apparelSize)}</Badge></TableCell>
                       <TableCell className="capitalize">{eventLabel(event.eventType)}</TableCell>

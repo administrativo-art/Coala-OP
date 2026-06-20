@@ -120,6 +120,7 @@ for (const sourceDoc of sourceLots) {
       apparelType: product.apparelType ?? null,
       apparelSize: product.apparelSize ?? null,
       apparelColor: product.apparelColor ?? null,
+      imageUrl: product.imageUrl ?? null,
       updatedAt: new Date().toISOString(),
     }, { merge: true });
     tx.update(sourceDoc.ref, {

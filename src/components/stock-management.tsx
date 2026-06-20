@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Truck, Repeat, Shirt } from 'lucide-react';
+import { ArrowRight, BarChart3, ClipboardCheck, ShoppingCart, ShieldAlert, ListOrdered, Truck, Repeat } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from './ui/skeleton';
 
@@ -19,7 +19,6 @@ export function StockManagement() {
     }
     
     const canViewInventoryControl = permissions.stock.inventoryControl.view;
-    const canViewUniforms = permissions.stock.uniforms?.view;
     const canViewStockCount = permissions.stock.stockCount.view;
     const canViewAnalysis = permissions.stock.analysis.view;
     const canViewPurchasing = permissions.stock.purchasing.view || permissions.purchasing?.view;
@@ -46,23 +45,6 @@ export function StockManagement() {
                         <Link href="/dashboard/inventory-control" className="w-full">
                             <Button className="w-full text-lg py-6">
                                 Acessar controle <ArrowRight className="ml-2" />
-                            </Button>
-                        </Link>
-                    </CardContent>
-                </Card>}
-
-                {canViewUniforms && <Card className="flex flex-col text-center items-center p-6 border-2 border-transparent hover:border-primary hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="p-0 items-center">
-                        <div className="p-4 bg-primary/10 rounded-full mb-4">
-                            <Shirt className="h-10 w-10 text-primary" />
-                        </div>
-                        <CardTitle className="text-2xl mb-2">Controle de uniformes</CardTitle>
-                        <CardDescription>Acompanhe peças novas, usadas, em avaliação e em posse dos colaboradores.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
-                        <Link href="/dashboard/stock/uniforms" className="w-full">
-                            <Button className="w-full text-lg py-6">
-                                Acessar uniformes <ArrowRight className="ml-2" />
                             </Button>
                         </Link>
                     </CardContent>
