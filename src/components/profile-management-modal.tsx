@@ -791,9 +791,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                   {renderPermissionSwitch("permissions.stock.uniforms.view" as any, "Visualizar Uniformes", "Permite consultar estoque, posse e histórico de uniformes.", false)}
                                   <div className="pl-6 space-y-2">
                                     {renderPermissionSwitch("permissions.stock.uniforms.deliver" as any, "Entregar Uniformes", "Permite retirar uma peça do estoque e vinculá-la a um colaborador.", !uniformsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.stock.uniforms.return" as any, "Registrar Devoluções", "Permite receber peças devolvidas por colaboradores.", !uniformsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.stock.uniforms.dispose" as any, "Descartar Uniformes", "Permite registrar descarte na devolução.", !uniformsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.stock.uniforms.manageEvaluation" as any, "Gerenciar Avaliação", "Permite reter e tratar peças que precisam de avaliação.", !uniformsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.stock.uniforms.return" as any, "Registrar Devoluções", "Permite avaliar a peça devolvida e decidir se retorna ao estoque ou será descartada.", !uniformsViewWatch, true)}
                                   </div>
                                 </div>
 

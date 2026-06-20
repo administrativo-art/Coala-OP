@@ -72,8 +72,8 @@ const profileChanges = profilesSnap.docs.map((doc) => {
       view: isAdmin || inventory.view === true || collaborators.view === true,
       deliver: isAdmin || inventory.writeDown === true || collaborators.edit === true,
       return: isAdmin || inventory.writeDown === true || collaborators.edit === true,
-      dispose: isAdmin || inventory.writeDown === true,
-      manageEvaluation: isAdmin || inventory.editLot === true,
+      dispose: false,
+      manageEvaluation: false,
     },
   };
 });

@@ -28,7 +28,6 @@ const RETURNED_CONDITIONS: UniformReturnedCondition[] = [
 const STOCK_DISPOSITIONS: UniformStockDisposition[] = [
   "retorna_estoque",
   "descartar",
-  "reter_avaliacao",
 ];
 
 function canReturn(context: Awaited<ReturnType<typeof requireUser>>) {
@@ -72,20 +71,8 @@ export async function POST(request: NextRequest) {
       (returnedCondition === "danificado" || returnedCondition === "inutilizavel")
     ) {
       return NextResponse.json(
-        { error: "Peças danificadas ou inutilizáveis devem ser avaliadas ou descartadas." },
+        { error: "Peças danificadas ou inutilizáveis devem ser descartadas." },
         { status: 400 },
-      );
-    }
-    if (stockDisposition === "descartar" && !context.isDefaultAdmin && context.permissions.stock.uniforms?.dispose !== true) {
-      return NextResponse.json(
-        { error: "Sem permissão para descartar uniformes." },
-        { status: 403 },
-      );
-    }
-    if (stockDisposition === "reter_avaliacao" && !context.isDefaultAdmin && context.permissions.stock.uniforms?.manageEvaluation !== true) {
-      return NextResponse.json(
-        { error: "Sem permissão para reter uniformes para avaliação." },
-        { status: 403 },
       );
     }
 
@@ -107,9 +94,7 @@ export async function POST(request: NextRequest) {
       }
 
       const shouldReenter = stockDisposition !== "descartar";
-      const stockStatus = stockDisposition === "reter_avaliacao"
-        ? "em_avaliacao" as const
-        : "disponivel" as const;
+      const stockStatus = "disponivel" as const;
       const returnLotRef = shouldReenter
         ? dbAdmin.collection("lots").doc(uniformLotId({
             productId: current.productId,

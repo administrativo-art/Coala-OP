@@ -22,7 +22,7 @@ export default function UniformsPage() {
             <h1 className="text-3xl font-bold">Controle de Uniformes</h1>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Consulte peças novas, usadas, em avaliação e em posse dos colaboradores.
+            Consulte peças novas, usadas, entregas, devoluções e peças em posse dos colaboradores.
           </p>
         </div>
       </div>

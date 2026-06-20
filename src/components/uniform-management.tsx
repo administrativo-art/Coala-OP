@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, ClipboardList, Loader2, Shirt, Users } from "lucide-react";
+import { Boxes, Loader2, Shirt, Users } from "lucide-react";
 
 import { fetchUniformOverview, type UniformOverview } from "@/features/uniforms/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -94,14 +94,11 @@ export function UniformManagement() {
     const usedItems = overview.lots
       .filter((lot) => lot.condition === "usado" && (lot.uniformStockStatus ?? "disponivel") === "disponivel")
       .reduce((sum, lot) => sum + Number(lot.quantity ?? 0), 0);
-    const evaluation = overview.lots
-      .filter((lot) => lot.uniformStockStatus === "em_avaliacao")
-      .reduce((sum, lot) => sum + Number(lot.quantity ?? 0), 0);
     const inPossession = overview.assignments.reduce(
       (sum, assignment) => sum + assignment.quantityInPossession,
       0,
     );
-    return { available, newItems, usedItems, evaluation, inPossession };
+    return { available, newItems, usedItems, inPossession };
   }, [overview]);
 
   const sizeSummary = useMemo(() => {
@@ -138,12 +135,11 @@ export function UniformManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: "Disponíveis", value: stats.available, icon: Boxes },
           { label: "Novos", value: stats.newItems, icon: Shirt },
           { label: "Usados", value: stats.usedItems, icon: Shirt },
-          { label: "Em avaliação", value: stats.evaluation, icon: ClipboardList },
           { label: "Em posse", value: stats.inPossession, icon: Users },
         ].map(({ label, value, icon: Icon }) => (
           <Card key={label}>
@@ -204,7 +200,7 @@ export function UniformManagement() {
                       </TableCell>
                       <TableCell><Badge variant="outline">{sizeLabel(lot.apparelSize)}</Badge></TableCell>
                       <TableCell><Badge variant="secondary">{conditionLabel(lot.condition)}</Badge></TableCell>
-                      <TableCell>{lot.uniformStockStatus === "em_avaliacao" ? "Em avaliação" : "Disponível"}</TableCell>
+                      <TableCell>{lot.uniformStockStatus === "disponivel" || !lot.uniformStockStatus ? "Disponível" : "Indisponível"}</TableCell>
                       <TableCell className="text-right font-bold">{lot.quantity}</TableCell>
                     </TableRow>
                   ))}
