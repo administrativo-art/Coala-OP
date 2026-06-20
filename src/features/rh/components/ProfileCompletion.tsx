@@ -13,7 +13,7 @@ function sectionPct(
   fieldValues: Record<string, EmployeeFieldValue>
 ): number {
   const entries = Object.entries(fieldMap.fields).filter(
-    ([, entry]) => entry.section === sectionName
+    ([key, entry]) => entry.section === sectionName && !isLegacyUniformField(key, entry.section)
   );
   if (!entries.length) return 100;
 
@@ -47,11 +47,19 @@ const SECTION_LABELS: Record<string, string> = {
   diversity:       'Diversidade',
 };
 
+function isLegacyUniformField(key: string, section: string) {
+  return key.startsWith('employee.uniform_') || section.toLowerCase() === 'uniforme';
+}
+
 export function ProfileCompletion({ pct, fieldMap, fieldValues }: Props) {
   const { label, color } = getProfileCompletionBadge(pct);
 
   const sections = [
-    ...new Set(Object.values(fieldMap.fields).map((f) => f.section)),
+    ...new Set(
+      Object.entries(fieldMap.fields)
+        .filter(([key, field]) => !isLegacyUniformField(key, field.section))
+        .map(([, field]) => field.section),
+    ),
   ];
 
   return (

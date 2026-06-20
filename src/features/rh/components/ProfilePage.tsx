@@ -36,6 +36,10 @@ const TABS: { id: Tab; label: string }[] = [
 
 type Props = { bizneoEmployeeId: string };
 
+function isLegacyUniformField(key: string, entry: FieldMapEntry) {
+  return key.startsWith('employee.uniform_') || entry.section.toLowerCase() === 'uniforme';
+}
+
 function Skeleton({ className }: { className: string }) {
   return <div className={`animate-pulse bg-gray-100 rounded-lg ${className}`} />;
 }
@@ -102,7 +106,11 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
   const role = cache.rh_role as RhRole;
 
   // Group fields by section
-  const sections = Object.entries(fieldMap.fields).reduce<
+  const visibleProfileFields = Object.entries(fieldMap.fields).filter(
+    ([key, entry]) => !isLegacyUniformField(key, entry),
+  );
+
+  const sections = visibleProfileFields.reduce<
     Record<string, Array<{ key: string; entry: FieldMapEntry; fv?: EmployeeFieldValue }>>
   >((acc, [key, entry]) => {
     const sec = entry.section;
