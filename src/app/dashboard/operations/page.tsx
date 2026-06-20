@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
+import { useProducts } from "@/hooks/use-products";
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData";
 import { useStockAudit } from "@/hooks/use-stock-audit";
 
@@ -125,13 +126,20 @@ function ExpiringQuickView({ lots, loading }: { lots: any[]; loading: boolean })
 export default function OperationsPage() {
   const { user, permissions } = useAuth();
   const { lots, loading: lotsLoading } = useExpiryProducts();
+  const { products } = useProducts();
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
-    if (user.username === "Tiago Brasil") return lots;
-    return lots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
-  }, [lots, user, lotsLoading]);
+    const uniformProductIds = new Set(
+      products
+        .filter((product) => product.operationalDestination === "uniform" || product.category === "Vestimenta")
+        .map((product) => product.id),
+    );
+    const commonLots = lots.filter((lot) => !uniformProductIds.has(lot.productId));
+    if (user.username === "Tiago Brasil") return commonLots;
+    return commonLots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
+  }, [lots, products, user, lotsLoading]);
 
   const expiringSoonCount = useMemo(() => {
     if (lotsLoading) return 0;

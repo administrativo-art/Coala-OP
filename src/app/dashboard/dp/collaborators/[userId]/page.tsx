@@ -19,14 +19,13 @@ import {
   UserRound,
   UserX,
 } from "lucide-react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useToast } from "@/hooks/use-toast";
 import { createAuditLog } from "@/features/audit/client";
-import { db } from "@/lib/firebase";
-import type { DPVacationRecord, UniformEvent, User } from "@/types";
+import type { DPVacationRecord, User } from "@/types";
+import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
 import { useEmployeeProfile } from "@/features/rh/hooks/useEmployeeProfile";
 import { ProfileCompletion } from "@/features/rh/components/ProfileCompletion";
 import { SectionEditModal } from "@/features/rh/components/SectionEditModal";
@@ -551,7 +550,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const { shiftDefinitions, units, vacations } = useDPBootstrap();
   const { toast } = useToast();
   const [resettingPassword, setResettingPassword] = useState(false);
-  const [uniformEvents, setUniformEvents] = useState<UniformEvent[]>([]);
   const [activeSection, setActiveSection] = useState("overview");
 
   const allUsers: User[] = [...activeUsers, ...terminatedUsers];
@@ -574,22 +572,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
       console.warn("[CollaboratorProfilePage] Falha ao registrar auditoria.", error);
     });
   }, [firebaseUser, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setUniformEvents([]);
-      return;
-    }
-    const q = query(collection(db, "uniformEvents"), where("collaboratorUserId", "==", user.id));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      setUniformEvents(
-        snap.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() } as UniformEvent))
-          .sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt))),
-      );
-    });
-    return unsubscribe;
-  }, [user]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -930,31 +912,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
 
           <div id="uniforms" className="scroll-mt-24">
           <Panel title="Uniformes" icon={Shirt}>
-            {uniformEvents.length === 0 ? (
-              <p className="rounded-2xl bg-[#eee5d1] p-4 text-sm font-semibold text-[#817762]">Nenhum uniforme documentado para este colaborador.</p>
-            ) : (
-              <div className="space-y-2">
-                {uniformEvents.slice(0, 8).map((event) => (
-                  <div key={event.id} className="rounded-2xl bg-[#fffaf0] p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-black text-[#25231f]">{event.productName}</p>
-                        {(event.apparelSize || event.apparelColor || event.apparelType) && (
-                          <p className="text-[11px] font-semibold text-amber-700">
-                            {[event.apparelType, event.apparelColor, event.apparelSize && `Tam. ${event.apparelSize}`].filter(Boolean).join(' · ')}
-                          </p>
-                        )}
-                        <p className="mt-1 text-[11px] font-semibold text-[#817762]">
-                          {event.eventType.replace("UNIFORME_", "").toLowerCase()} · {event.quantity} un · {fmtDate(event.occurredAt)} · {event.kioskName ?? event.kioskId}
-                        </p>
-                        {event.notes ? <p className="mt-1 text-[11px] font-medium text-slate-500">{event.notes}</p> : null}
-                      </div>
-                      {event.chargeStatus ? <Chip tone="warn">{event.chargeStatus}</Chip> : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <CollaboratorUniforms collaborator={user} />
           </Panel>
           </div>
 

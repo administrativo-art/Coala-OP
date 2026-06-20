@@ -137,7 +137,12 @@ export function StockTransfer() {
   const availableProducts = useMemo(() => {
     if (!originKioskId) return [];
     const productIdsInOrigin = new Set(lots.filter(lot => lot.kioskId === originKioskId).map(lot => lot.productId));
-    return products.filter(p => productIdsInOrigin.has(p.id) && !p.isArchived)
+    return products.filter(p =>
+      productIdsInOrigin.has(p.id) &&
+      !p.isArchived &&
+      p.operationalDestination !== 'uniform' &&
+      p.category !== 'Vestimenta'
+    )
         .sort((a,b) => getProductFullName(a).localeCompare(getProductFullName(b)));
   }, [originKioskId, lots, products, getProductFullName]);
   

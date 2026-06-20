@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
     const filtered = movementSnapshot.docs
       .map((doc) => ({ id: doc.id, ...doc.data() } as MovementRecord))
       .filter((record) => {
+        if (record.itemClass === "uniform") return false;
         if (allowedProductIds && !allowedProductIds.has(record.productId)) return false;
         if (kioskId !== "all" && record.fromKioskId !== kioskId && record.toKioskId !== kioskId) return false;
         if (!matchesType(record, typeFilter, kioskId)) return false;

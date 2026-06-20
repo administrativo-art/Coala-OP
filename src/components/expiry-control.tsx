@@ -37,6 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickProjectionModal } from './quick-projection-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useReposition } from '@/hooks/use-reposition';
+import { UNIFORM_STOCK_ID } from '@/lib/uniform';
 import { ToastAction } from './ui/toast';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -173,9 +174,17 @@ function ExpiryControlContent() {
 
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
-    if (user.username === 'Tiago Brasil' || (permissions.stock.inventoryControl.editLot && permissions.stock.inventoryControl.writeDown)) return lots;
-    return lots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
-  }, [lots, user, loading, permissions]);
+    const uniformProductIds = new Set(
+      products
+        .filter((product) => product.operationalDestination === 'uniform' || product.category === 'Vestimenta')
+        .map((product) => product.id),
+    );
+    const commonStockLots = lots.filter(
+      (lot) => lot.kioskId !== UNIFORM_STOCK_ID && !uniformProductIds.has(lot.productId),
+    );
+    if (user.username === 'Tiago Brasil' || (permissions.stock.inventoryControl.editLot && permissions.stock.inventoryControl.writeDown)) return commonStockLots;
+    return commonStockLots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
+  }, [lots, products, user, loading, permissions]);
 
   const sortedKiosks = useMemo(() => {
     return [...kiosks].sort((a,b) => {

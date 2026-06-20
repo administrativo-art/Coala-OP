@@ -37,6 +37,7 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useItemAddition } from '@/hooks/use-item-addition';
+import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from '@/lib/stock-expiry-alert';
 
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
@@ -79,6 +80,24 @@ const auditFormSchema = z.object({
 });
 
 type AuditFormValues = z.infer<typeof auditFormSchema>;
+
+function expiryAlertClass(level: StockExpiryAlertLevel) {
+  switch (level) {
+    case 'expired':
+    case 'today':
+    case 'invalid':
+      return 'border-red-200 bg-red-50 text-red-700';
+    case 'urgent':
+      return 'border-orange-200 bg-orange-50 text-orange-700';
+    case 'warning':
+      return 'border-amber-200 bg-amber-50 text-amber-700';
+    case 'ok':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    case 'none':
+    default:
+      return 'border-slate-200 bg-slate-50 text-slate-600';
+  }
+}
 
 function JustificationSection({ itemIndex, control, type, unit }: { itemIndex: number, control: any, type: 'divergence' | 'adjustment', unit: string }) {
   const name = type === 'divergence' ? `items.${itemIndex}.divergences` : `items.${itemIndex}.adjustments`;
@@ -169,6 +188,7 @@ function AuditForm({
 
   const { fields } = useFieldArray({ control: form.control, name: 'items' });
   const watchedItems = useWatch({ control: form.control, name: 'items' });
+  const expirySummary = useMemo(() => getStockExpirySummary(session.items), [session.items]);
 
   const getUpdatedItems = (values: AuditFormValues): StockAuditItem[] => {
     return session.items.map((originalItem, index) => {
@@ -232,11 +252,32 @@ function AuditForm({
         </CardHeader>
           <Form {...form}><form>
               <CardContent>
+                  {expirySummary.attention > 0 ? (
+                    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                        <span className="font-semibold">Atenção de validade</span>
+                        {expirySummary.expired > 0 ? <Badge variant="outline" className={expiryAlertClass('expired')}>{expirySummary.expired} vencido(s)</Badge> : null}
+                        {expirySummary.today > 0 ? <Badge variant="outline" className={expiryAlertClass('today')}>{expirySummary.today} vence(m) hoje</Badge> : null}
+                        {expirySummary.urgent > 0 ? <Badge variant="outline" className={expiryAlertClass('urgent')}>{expirySummary.urgent} em até 7 dias</Badge> : null}
+                        {expirySummary.warning > 0 ? <Badge variant="outline" className={expiryAlertClass('warning')}>{expirySummary.warning} em até 30 dias</Badge> : null}
+                        {expirySummary.invalid > 0 ? <Badge variant="outline" className={expiryAlertClass('invalid')}>{expirySummary.invalid} data(s) inválida(s)</Badge> : null}
+                      </div>
+                      <p className="mt-1 text-xs text-amber-800/80">
+                        Esse aviso é apenas visual; a contagem e os ajustes continuam seguindo a quantidade informada.
+                      </p>
+                    </div>
+                  ) : null}
                   <ScrollArea className="h-[calc(80vh-280px)] pr-2">
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           {fields.map((field, index) => {
                               const item = session.items[index];
                               const product = products.find(p => p.id === item.productId);
+                              const expiryAlert = getStockExpiryAlert(
+                                item.expiryDate,
+                                product?.urgentThreshold ?? 7,
+                                product?.alertThreshold ?? 30,
+                              );
                               
                               const formItem = watchedItems?.[index];
                               const totalDivergence = (formItem?.divergences || []).reduce((sum, d) => sum + (Number(d.quantity) || 0), 0);
@@ -258,7 +299,12 @@ function AuditForm({
                                           <div className="space-y-1">
                                               <p className="font-semibold leading-tight">{product ? getProductFullName(product) : item.productName}</p>
                                               <p className="text-sm text-muted-foreground">Lote: {item.lotNumber}</p>
-                                              <p className="text-sm text-muted-foreground">Val: {item.expiryDate ? format(parseISO(item.expiryDate), 'dd/MM/yyyy') : 'N/A'}</p>
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <p className="text-sm text-muted-foreground">Val: {formatStockExpiryDate(item.expiryDate)}</p>
+                                                <Badge variant="outline" className={cn('w-fit', expiryAlertClass(expiryAlert.level))}>
+                                                  {expiryAlert.label}
+                                                </Badge>
+                                              </div>
                                           </div>
                                       </div>
                                       <Separator />
@@ -366,16 +412,18 @@ interface StockSessionManagementProps {
 
 export function StockSessionManagement({ showExportButton = false }: StockSessionManagementProps) {
   const { user, permissions } = useAuth();
-  const { kiosks } = useKiosks();
-  const { lots } = useExpiryProducts();
-  const { products, getProductFullName } = useProducts();
-  const { baseProducts } = useBaseProducts();
-  const { auditSessions, activeSession, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession, loading } = useStockAudit();
+  const { kiosks, loading: kiosksLoading } = useKiosks();
+  const { lots, loading: lotsLoading } = useExpiryProducts();
+  const { products, getProductFullName, loading: productsLoading } = useProducts();
+  const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
+  const { auditSessions, activeSession, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession, loading: auditLoading } = useStockAudit();
   const { adjustLotQuantity } = useExpiryProducts();
   const { requests: itemAdditionRequests } = useItemAddition();
   const { toast } = useToast();
 
   const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
+  const stockDataLoading = kiosksLoading || lotsLoading || productsLoading || baseProductsLoading;
+  const loading = auditLoading || stockDataLoading;
 
   const isAdmin = permissions.settings.manageUsers; // admin vê tudo
   const pendingAudits = useMemo(() => auditSessions.filter(s =>
@@ -394,6 +442,13 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   
   const handleStartSession = async (kioskId: string) => {
     if (!user) return;
+    if (stockDataLoading) {
+        toast({
+            title: "Carregando estoque",
+            description: "Aguarde produtos e lotes carregarem antes de iniciar a contagem.",
+        });
+        return;
+    }
 
     const kiosk = kiosks.find(k => k.id === kioskId);
     if (!kiosk) return;
@@ -406,7 +461,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
 
     activeLots.forEach(lot => {
         const product = productMap.get(lot.productId);
-        if (!product || product.isArchived) return;
+        if (!product || product.isArchived || product.operationalDestination === 'uniform' || product.category === 'Vestimenta') return;
 
         const uniqueKey = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}`;
         
@@ -521,8 +576,9 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
               <Button onClick={handleExport} variant="outline"><Download className="mr-2 h-4 w-4" /> Exportar</Button>
             )}
             {canPerform && (
-              <Button onClick={() => setIsKioskSelectionOpen(true)} className="bg-indigo-500 hover:bg-indigo-600">
-                <PlusCircle className="mr-2 h-4 w-4" /> Realizar contagem
+              <Button onClick={() => setIsKioskSelectionOpen(true)} className="bg-indigo-500 hover:bg-indigo-600" disabled={stockDataLoading}>
+                {stockDataLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                {stockDataLoading ? 'Carregando estoque' : 'Realizar contagem'}
               </Button>
             )}
           </div>
@@ -594,8 +650,9 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
               <h3 className="flex items-center gap-2 font-semibold"><PlusCircle className="h-4 w-4" /> Nova contagem</h3>
               <p className="mt-1 text-sm text-muted-foreground">Escolha um quiosque e o sistema lista todos os lotes em estoque para conferência.</p>
               {canPerform && (
-                <Button onClick={() => setIsKioskSelectionOpen(true)} variant="outline" className="mt-3 w-full">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Iniciar contagem
+                <Button onClick={() => setIsKioskSelectionOpen(true)} variant="outline" className="mt-3 w-full" disabled={stockDataLoading}>
+                  {stockDataLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                  {stockDataLoading ? 'Carregando estoque' : 'Iniciar contagem'}
                 </Button>
               )}
             </Card>

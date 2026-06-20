@@ -39,6 +39,7 @@ import {
   inferPurchaseItemTreatment,
   purchaseTreatmentCreatesAsset,
   purchaseTreatmentCreatesStock,
+  purchaseTreatmentRequiresKioskDestination,
   purchaseTreatmentSkipsOperationalEntry,
 } from '@/lib/purchasing-item-treatment';
 import {
@@ -428,7 +429,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
         (d) =>
           d.selectedForReceipt &&
           d.quantityReceived > 0 &&
-          !purchaseTreatmentSkipsOperationalEntry(d.itemTreatment),
+          purchaseTreatmentRequiresKioskDestination(d.itemTreatment),
       ),
     [drafts],
   );
@@ -576,8 +577,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
         receiptProofUrl = uploaded.url;
       }
       await confirmStockEntry(receipt.id, {
-        destinationKioskId,
-        destinationKioskName: selectedDestinationKiosk?.name ?? destinationKioskId,
+        destinationKioskId: destinationKioskId || undefined,
+        destinationKioskName: (selectedDestinationKiosk?.name ?? destinationKioskId) || undefined,
         notes,
         receiptProofUrl,
         receiptProofDescription: proofDescription || undefined,

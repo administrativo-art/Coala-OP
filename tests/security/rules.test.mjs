@@ -152,6 +152,12 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
           productId: "product-1",
           quantity: 10,
         }),
+        setDoc(doc(db, "lots/uniform-lot"), {
+          kioskId: "__uniform_stock__",
+          productId: "uniform-product",
+          quantity: 5,
+          condition: "novo",
+        }),
       ]);
 
       const storage = context.storage();
@@ -171,6 +177,13 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
     await assertFails(getDoc(doc(basic.firestore(), "users/other-user")));
     await assertFails(setDoc(doc(basic.firestore(), "users/basic-user"), { profileId: "profile-manager" }, { merge: true }));
     await assertSucceeds(getDoc(doc(stockOperator.firestore(), "lots/lot-1")));
+    await assertFails(updateDoc(doc(stockOperator.firestore(), "lots/uniform-lot"), {
+      quantity: 4,
+    }));
+    await assertFails(setDoc(doc(stockOperator.firestore(), "uniformAssignments/forged"), {
+      collaboratorUserId: "other-user",
+      quantityInPossession: 1,
+    }));
 
     await assertFails(updateDoc(doc(manager.firestore(), "profiles/profile-manager"), {
       isDefaultAdmin: true,
@@ -212,7 +225,7 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
       registeredByUserId: "stock-operator",
       collaboratorUserId: "other-user",
     });
-    await assertSucceeds(batch.commit());
+    await assertFails(batch.commit());
 
     await assertFails(getDoc(doc(basic.firestore(), "assets/asset-1")));
     await assertSucceeds(getDoc(doc(assetViewer.firestore(), "assets/asset-1")));

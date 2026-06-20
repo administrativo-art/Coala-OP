@@ -51,7 +51,9 @@ export function MovementHistoryProvider({ children }: { children: React.ReactNod
     setLoading(true);
     const q = query(collection(db, "movementHistory"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const historyData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MovementRecord));
+      const historyData = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as MovementRecord))
+        .filter((movement) => movement.itemClass !== 'uniform');
       setHistory(historyData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
       setLoading(false);
       setLoaded(true);

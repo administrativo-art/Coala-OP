@@ -34,6 +34,8 @@ export type Classification = {
 };
 
 export type OperationalItemDestination = 'stock' | 'uniform' | 'asset';
+export type UniformCondition = 'novo' | 'usado';
+export type UniformStockStatus = 'disponivel' | 'em_avaliacao';
 
 export type OperationalItemCategory = {
   id: string;
@@ -103,6 +105,12 @@ export type LotEntry = {
   kioskId: string;
   quantity: number;
   reservedQuantity?: number;
+  condition?: UniformCondition;
+  uniformStockStatus?: UniformStockStatus;
+  workspaceId?: string;
+  apparelType?: string;
+  apparelSize?: string;
+  apparelColor?: string;
   imageUrl?: string;
   locationId?: string | null;
   locationName?: string | null;
@@ -121,6 +129,8 @@ export type MovementType =
     | 'SAIDA_DESCARTE_OUTROS'
     | 'SAIDA_CORRECAO'
     | 'ENTRADA_CORRECAO'
+    | 'ENTRADA_DEVOLUCAO_UNIFORME'
+    | 'MIGRACAO_ESTOQUE_UNIFORME'
     | 'TRANSFERENCIA_SAIDA' 
     | 'TRANSFERENCIA_ENTRADA' 
     | 'ENTRADA_ESTORNO' 
@@ -153,6 +163,7 @@ export type MovementRecord = {
   deliveredToUserId?: string;
   deliveredToUserName?: string;
   deliveredAt?: string;
+  itemClass?: 'uniform';
 };
 
 export type AssetStatus =
@@ -304,6 +315,34 @@ export type UniformEvent = {
   chargeAmount?: number;
   chargeReason?: string;
   chargeStatus?: UniformChargeStatus;
+  apparelType?: string;
+  apparelSize?: string;
+  apparelColor?: string;
+  createdAt: string;
+  updatedAt: string;
+  workspaceId?: string;
+  assignmentId?: string;
+  sourceDeliveryEventId?: string;
+  issuedCondition?: UniformCondition;
+};
+
+export type UniformAssignmentStatus = 'em_posse' | 'devolvido_parcial' | 'devolvido';
+
+export type UniformAssignment = {
+  id: string;
+  workspaceId: string;
+  deliveryEventId: string;
+  sourceLotId: string;
+  productId: string;
+  productName: string;
+  collaboratorUserId: string;
+  collaboratorName: string;
+  issuedCondition: UniformCondition;
+  quantityDelivered: number;
+  quantityReturned: number;
+  quantityInPossession: number;
+  status: UniformAssignmentStatus;
+  deliveredAt: string;
   apparelType?: string;
   apparelSize?: string;
   apparelColor?: string;
@@ -571,6 +610,7 @@ export type PermissionSet = {
   stock: {
     view: boolean;
     inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; };
+    uniforms: { view: boolean; deliver: boolean; return: boolean; dispose: boolean; manageEvaluation: boolean; };
     // `audit` permissions are now synced with `stockCount` for backward compatibility with Firestore rules, but UI uses `stockCount`.
     stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; };
     audit: { view: boolean; start: boolean; approve: boolean; };
@@ -1662,6 +1702,7 @@ export const defaultGuestPermissions: PermissionSet = {
     stock: { 
       view: false, 
       inventoryControl: { view: false, addLot: false, editLot: false, writeDown: false, transfer: false, viewHistory: false }, 
+      uniforms: { view: false, deliver: false, return: false, dispose: false, manageEvaluation: false },
       // `audit` permissions are now synced with `stockCount` for backward compatibility with Firestore rules, but UI uses `stockCount`.
       stockCount: { view: false, perform: false, approve: false, requestItem: false }, 
       audit: { view: false, start: false, approve: false }, 
@@ -1744,7 +1785,7 @@ export const defaultGuestPermissions: PermissionSet = {
 export const defaultAdminPermissions: PermissionSet = {
     dashboard: { view: true, operational: true, pricing: true, audit: true, technicalSheets: true, collaborator: true },
     registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
-    stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true }, predefinedLists: { view: true, manage: true } },
+    stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, uniforms: { view: true, deliver: true, return: true, dispose: true, manageEvaluation: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true }, predefinedLists: { view: true, manage: true } },
     assets: { view: true, create: true, edit: true, transfer: true, retire: true, printLabels: true, viewHistory: true },
     pricing: { view: true, simulate: true, manageParameters: true },
     commercial: {

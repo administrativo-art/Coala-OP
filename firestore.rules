@@ -36,6 +36,14 @@ service cloud.firestore {
       return getPerms().get('stock', {}).get('stockCount', {}).get(key, false) == true;
     }
 
+    function uniformPerm(key) {
+      return getPerms().get('stock', {}).get('uniforms', {}).get(key, false) == true;
+    }
+
+    function dpCollaboratorPerm(key) {
+      return getPerms().get('dp', {}).get('collaborators', {}).get(key, false) == true;
+    }
+
     function legacyStockPurchasingPerm(key) {
       return getPerms().get('stock', {}).get('purchasing', {}).get(key, false) == true;
     }
@@ -262,16 +270,21 @@ service cloud.firestore {
         isAdmin() ||
         stockInventoryPerm('addLot') ||
         canReceivePurchase()
-      ) && isValidLot(request.resource.data);
+      ) && request.resource.data.kioskId != '__uniform_stock__'
+        && isValidLot(request.resource.data);
       allow update: if isAuth() && (
         isAdmin() ||
         stockInventoryPerm('editLot') ||
         stockInventoryPerm('transfer') ||
         stockCountPerm('approve') ||
         canReceivePurchase()
-      ) && request.resource.data.quantity is number
+      ) && resource.data.kioskId != '__uniform_stock__'
+        && request.resource.data.kioskId != '__uniform_stock__'
+        && request.resource.data.quantity is number
         && request.resource.data.quantity >= 0;
-      allow delete: if isAuth() && (isAdmin() || stockInventoryPerm('writeDown'));
+      allow delete: if isAuth()
+        && resource.data.kioskId != '__uniform_stock__'
+        && (isAdmin() || stockInventoryPerm('writeDown'));
     }
 
     // Histórico de movimentos (imutável exceto admin)
@@ -308,20 +321,20 @@ service cloud.firestore {
     match /uniformEvents/{eventId} {
       allow read: if isAuth() && (
         isAdmin() ||
+        uniformPerm('view') ||
         getPerms().stock.inventoryControl.viewHistory == true ||
-        getPerms().dp.collaborators.view == true
+        dpCollaboratorPerm('view')
       );
-      allow create: if isAuth()
-        && canRecordMovement()
-        && request.resource.data.registeredByUserId == request.auth.uid
-        && request.resource.data.movementId is string
-        && existsAfter(
-          /databases/$(database)/documents/movementHistory/$(request.resource.data.movementId)
-        )
-        && getAfter(
-          /databases/$(database)/documents/movementHistory/$(request.resource.data.movementId)
-        ).data.userId == request.auth.uid;
-      allow update, delete: if false;
+      allow write: if false;
+    }
+
+    match /uniformAssignments/{assignmentId} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        uniformPerm('view') ||
+        dpCollaboratorPerm('view')
+      );
+      allow write: if false;
     }
 
     // Sessões de contagem de estoque

@@ -27,6 +27,11 @@ import {
   purchaseTreatmentSkipsOperationalEntry,
 } from '@/lib/purchasing-item-treatment';
 import {
+  UNIFORM_STOCK_ID,
+  UNIFORM_STOCK_NAME,
+  uniformLotId,
+} from '@/lib/uniform';
+import {
   type Product,
   type BaseProduct,
   type PurchaseItemTreatment,
@@ -1071,6 +1076,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const entryType = getTreatmentEntryType(treatmentFields.itemTreatment);
         const skipsOperationalEntry = purchaseTreatmentSkipsOperationalEntry(treatmentFields.itemTreatment);
         const createsAsset = purchaseTreatmentCreatesAsset(treatmentFields.itemTreatment);
+        const destinationKioskId = entryType === 'uniform'
+          ? UNIFORM_STOCK_ID
+          : String(body.destinationKioskId ?? '').trim();
+        const destinationKioskName = entryType === 'uniform'
+          ? UNIFORM_STOCK_NAME
+          : String(body.destinationKioskName ?? '').trim();
+
+        if (!skipsOperationalEntry && entryType !== 'uniform' && !destinationKioskId) {
+          return jsonError('Defina o quiosque de destino para os itens de estoque ou patrimônio.');
+        }
 
         const baseProductDoc = item.baseItemId
           ? await dbAdmin.collection('baseProducts').doc(item.baseItemId).get()
@@ -1197,8 +1212,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               code,
               name: assetName,
               category: 'Patrimônio',
-              currentKioskId: body.destinationKioskId,
-              currentKioskName: body.destinationKioskName,
+              currentKioskId: destinationKioskId,
+              currentKioskName: destinationKioskName,
               status: 'ativo',
               purchaseDate: order.purchaseDate ?? order.fiscal?.issuedAt?.slice?.(0, 10) ?? order.createdAt?.slice?.(0, 10) ?? null,
               purchaseValue: confirmedUnitPrice,
@@ -1222,8 +1237,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               assetCode: code,
               assetName,
               type: 'CRIACAO',
-              toKioskId: body.destinationKioskId,
-              toKioskName: body.destinationKioskName,
+              toKioskId: destinationKioskId,
+              toKioskName: destinationKioskName,
               toStatus: 'ativo',
               userId: decoded.uid,
               username: body.username ?? 'Sistema',
@@ -1331,25 +1346,38 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               },
             });
 
-            const lotKey = `${item.productId}_${body.destinationKioskId}_${lot.lotCode}_${
-              lot.expiryDate ?? 'noval'
-            }`;
+            const lotKey = entryType === 'uniform'
+              ? uniformLotId({
+                  productId: item.productId,
+                  condition: 'novo',
+                  status: 'disponivel',
+                  lotNumber: lot.lotCode,
+                })
+              : `${item.productId}_${destinationKioskId}_${lot.lotCode}_${lot.expiryDate ?? 'noval'}`;
             const stockLotRef = dbAdmin.collection('lots').doc(lotKey);
             batch.set(
               stockLotRef,
               {
+                workspaceId: WORKSPACE_ID,
                 productId: item.productId,
                 productName: item.productName ?? item.baseItemId,
                 lotNumber: lot.lotCode,
                 expiryDate: lot.expiryDate ?? null,
-                kioskId: body.destinationKioskId,
-                quantity: Timestamp.fromMillis(stockConversion.stockQuantity), // increment hack? no, use FieldValue
+                kioskId: destinationKioskId,
+                quantity: FieldValue.increment(stockConversion.stockQuantity),
+                ...(entryType === 'uniform'
+                  ? {
+                      condition: 'novo',
+                      uniformStockStatus: 'disponivel',
+                      apparelType: product.apparelType ?? null,
+                      apparelSize: product.apparelSize ?? null,
+                      apparelColor: product.apparelColor ?? null,
+                    }
+                  : {}),
                 updatedAt: Timestamp.now(),
               },
               { merge: true },
             );
-            // Need to fix increment logic for Admin SDK:
-            batch.update(stockLotRef, { quantity: FieldValue.increment(stockConversion.stockQuantity) });
 
             const movRef = dbAdmin.collection('movementHistory').doc();
             batch.set(movRef, {
@@ -1359,8 +1387,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               lotNumber: lot.lotCode,
               type: 'ENTRADA',
               quantityChange: stockConversion.stockQuantity,
-              toKioskId: body.destinationKioskId,
-              toKioskName: body.destinationKioskName,
+              toKioskId: destinationKioskId,
+              toKioskName: destinationKioskName,
               userId: decoded.uid,
               username: body.username ?? 'Sistema',
               timestamp: now,

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  AlertTriangle,
   Bell,
   CalendarDays,
   CheckCircle2,
@@ -49,6 +50,7 @@ import {
   loadGoalDistributionSnapshot,
   type GoalDistributionSnapshot,
 } from "@/lib/goals-distribution";
+import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from "@/lib/stock-expiry-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -88,6 +90,24 @@ function percent(value: number, target: number) {
 
 function compactUnique(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0)));
+}
+
+function stockExpiryBadgeClass(level: StockExpiryAlertLevel) {
+  switch (level) {
+    case "expired":
+    case "today":
+    case "invalid":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "urgent":
+      return "border-orange-200 bg-orange-50 text-orange-700";
+    case "warning":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "ok":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "none":
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-600";
+  }
 }
 
 function normalizeIdentity(value: string | null | undefined) {
@@ -471,6 +491,7 @@ function CountSummary({ session }: { session: StockAuditSession }) {
   const total = session.items.length;
   const counted = touched.size;
   const canSubmit = total > 0 && counted === total && !saving;
+  const expirySummary = useMemo(() => getStockExpirySummary(session.items), [session.items]);
 
   const adjust = (item: StockAuditItem, delta: number) => {
     const key = itemKey(item);
@@ -507,10 +528,25 @@ function CountSummary({ session }: { session: StockAuditSession }) {
         </span>
       </div>
 
+      {expirySummary.attention > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="flex flex-wrap items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+            <span className="font-semibold">Atenção de validade</span>
+            {expirySummary.expired > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("expired")}>{expirySummary.expired} vencido(s)</Badge> : null}
+            {expirySummary.today > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("today")}>{expirySummary.today} vence(m) hoje</Badge> : null}
+            {expirySummary.urgent > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("urgent")}>{expirySummary.urgent} em até 7 dias</Badge> : null}
+            {expirySummary.warning > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("warning")}>{expirySummary.warning} em até 30 dias</Badge> : null}
+          </div>
+          <p className="mt-1 text-xs text-amber-800/80">Aviso apenas visual; não altera a quantidade contada.</p>
+        </div>
+      ) : null}
+
       <div className="space-y-2">
         {session.items.map((item) => {
           const key = itemKey(item);
           const isTouched = touched.has(key);
+          const expiryAlert = getStockExpiryAlert(item.expiryDate);
           return (
             <div
               key={key}
@@ -518,7 +554,10 @@ function CountSummary({ session }: { session: StockAuditSession }) {
             >
               <div className="min-w-0">
                 <p className="truncate font-medium">{item.productName}</p>
-                <p className="text-xs text-muted-foreground">{item.displayUnit}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-muted-foreground">{item.displayUnit} · Val: {formatStockExpiryDate(item.expiryDate)}</p>
+                  <Badge variant="outline" className={stockExpiryBadgeClass(expiryAlert.level)}>{expiryAlert.label}</Badge>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <button

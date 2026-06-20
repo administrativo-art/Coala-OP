@@ -350,6 +350,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
   const dashboardViewWatch = form.watch('permissions.dashboard.view' as any);
   const stockViewWatch = form.watch('permissions.stock.view' as any);
+  const uniformsViewWatch = form.watch('permissions.stock.uniforms.view' as any);
   const stockCountViewWatch = form.watch('permissions.stock.stockCount.view' as any);
   const analysisViewWatch = form.watch('permissions.stock.analysis.view' as any);
   const purchasingViewWatch = form.watch('permissions.stock.purchasing.view' as any);
@@ -450,6 +451,18 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                             {renderPermissionSwitch("permissions.stock.inventoryControl.writeDown" as any, "Dar Baixa em Lotes", "Permite registrar saídas por consumo ou descarte.", !stockViewWatch, true)}
                                             {renderPermissionSwitch("permissions.stock.inventoryControl.transfer" as any, "Transferir Lotes", "Permite mover estoque entre quiosques.", !stockViewWatch, true)}
                                             {renderPermissionSwitch("permissions.stock.inventoryControl.viewHistory" as any, "Ver Histórico de Lotes", "Permite ver o histórico de movimentações de um lote.", !stockViewWatch, true)}
+                                        </div>
+                                    </div>
+
+                                    {/* Uniformes */}
+                                    <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                        <h4 className="font-semibold text-md mb-2">Controle de uniformes</h4>
+                                        {renderPermissionSwitch("permissions.stock.uniforms.view" as any, "Visualizar Uniformes", "Permite consultar estoque, posse e histórico de uniformes.", !stockViewWatch)}
+                                        <div className="pl-6 space-y-2">
+                                            {renderPermissionSwitch("permissions.stock.uniforms.deliver" as any, "Entregar Uniformes", "Permite retirar uma peça do estoque e vinculá-la a um colaborador.", !uniformsViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.uniforms.return" as any, "Registrar Devoluções", "Permite receber peças devolvidas por colaboradores.", !uniformsViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.uniforms.dispose" as any, "Descartar Uniformes", "Permite registrar descarte na devolução.", !uniformsViewWatch, true)}
+                                            {renderPermissionSwitch("permissions.stock.uniforms.manageEvaluation" as any, "Gerenciar Avaliação", "Permite reter e tratar peças que precisam de avaliação.", !uniformsViewWatch, true)}
                                         </div>
                                     </div>
 

@@ -15,7 +15,7 @@ import {
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck,
-  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat
+  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -107,6 +107,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package, show: permissions.stock.view,
             children: [
               { label: "Controle de estoque", href: "/dashboard/inventory-control", icon: ClipboardCheck, show: permissions.stock.inventoryControl.view },
+              { label: "Controle de uniformes", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
               { label: "Contagem de estoque", href: "/dashboard/stock/count", icon: ListOrdered, show: permissions.stock.stockCount.view },
               { label: "Reposição", href: "/dashboard/stock/analysis", icon: Truck, show: permissions.reposition.view || permissions.stock.analysis.restock },
               {

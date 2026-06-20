@@ -84,8 +84,8 @@ export interface SaveConferencePayload {
 }
 
 export interface ConfirmStockEntryPayload {
-  destinationKioskId: string;
-  destinationKioskName: string;
+  destinationKioskId?: string;
+  destinationKioskName?: string;
   items: StockEntryItemInput[];
   notes?: string;
   receiptProofUrl?: string;
