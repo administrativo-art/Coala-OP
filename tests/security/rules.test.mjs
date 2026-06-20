@@ -126,14 +126,18 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
   try {
     await env.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
+      const {
+        isDefaultAdmin: _legacyAdminFlag,
+        ...legacyStockProfile
+      } = profile({
+        stock: { inventoryControl: { view: true, writeDown: true } },
+      });
       await Promise.all([
         setDoc(doc(db, "profiles/basic"), profile()),
         setDoc(doc(db, "profiles/profile-manager"), profile({
           settings: { manageProfiles: true },
         })),
-        setDoc(doc(db, "profiles/stock-operator"), profile({
-          stock: { inventoryControl: { writeDown: true } },
-        })),
+        setDoc(doc(db, "profiles/stock-operator"), legacyStockProfile),
         setDoc(doc(db, "profiles/asset-viewer"), profile({
           assets: { view: true, viewHistory: true },
         })),
@@ -143,6 +147,11 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
         setDoc(doc(db, "users/asset-viewer"), { profileId: "asset-viewer" }),
         setDoc(doc(db, "users/other-user"), { profileId: "basic" }),
         setDoc(doc(db, "assets/asset-1"), { name: "Notebook" }),
+        setDoc(doc(db, "lots/lot-1"), {
+          kioskId: "kiosk-1",
+          productId: "product-1",
+          quantity: 10,
+        }),
       ]);
 
       const storage = context.storage();
@@ -161,6 +170,7 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
 
     await assertFails(getDoc(doc(basic.firestore(), "users/other-user")));
     await assertFails(setDoc(doc(basic.firestore(), "users/basic-user"), { profileId: "profile-manager" }, { merge: true }));
+    await assertSucceeds(getDoc(doc(stockOperator.firestore(), "lots/lot-1")));
 
     await assertFails(updateDoc(doc(manager.firestore(), "profiles/profile-manager"), {
       isDefaultAdmin: true,

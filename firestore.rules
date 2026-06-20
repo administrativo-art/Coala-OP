@@ -12,7 +12,7 @@ service cloud.firestore {
     function isAdmin() {
       return isAuth() && (
         request.auth.token.get('isDefaultAdmin', false) == true ||
-        get(/databases/$(database)/documents/profiles/$(getProfileId())).data.isDefaultAdmin == true
+        get(/databases/$(database)/documents/profiles/$(getProfileId())).data.get('isDefaultAdmin', false) == true
       );
     }
 
@@ -25,7 +25,19 @@ service cloud.firestore {
 
     function getPerms() {
       let profileId = getProfileId();
-      return get(/databases/$(database)/documents/profiles/$(profileId)).data.permissions;
+      return get(/databases/$(database)/documents/profiles/$(profileId)).data.get('permissions', {});
+    }
+
+    function stockInventoryPerm(key) {
+      return getPerms().get('stock', {}).get('inventoryControl', {}).get(key, false) == true;
+    }
+
+    function stockCountPerm(key) {
+      return getPerms().get('stock', {}).get('stockCount', {}).get(key, false) == true;
+    }
+
+    function legacyStockPurchasingPerm(key) {
+      return getPerms().get('stock', {}).get('purchasing', {}).get(key, false) == true;
     }
 
     // Acesso seguro ao domínio purchasing (perfis sem a chave retornam false)
@@ -34,19 +46,19 @@ service cloud.firestore {
     }
 
     function canViewPurchasing() {
-      return purchasingPerm('view') || getPerms().stock.purchasing.view == true;
+      return purchasingPerm('view') || legacyStockPurchasingPerm('view');
     }
 
     function canCreateQuotation() {
-      return purchasingPerm('createQuotation') || getPerms().stock.purchasing.suggest == true;
+      return purchasingPerm('createQuotation') || legacyStockPurchasingPerm('suggest');
     }
 
     function canCreatePurchase() {
-      return purchasingPerm('createPurchase') || getPerms().stock.purchasing.approve == true;
+      return purchasingPerm('createPurchase') || legacyStockPurchasingPerm('approve');
     }
 
     function canReceivePurchase() {
-      return purchasingPerm('receivePurchase') || getPerms().stock.purchasing.approve == true;
+      return purchasingPerm('receivePurchase') || legacyStockPurchasingPerm('approve');
     }
 
     function canReadUsersDirectory() {
@@ -81,12 +93,12 @@ service cloud.firestore {
 
     function canRecordMovement() {
       return isAdmin()
-        || getPerms().stock.inventoryControl.addLot == true
-        || getPerms().stock.inventoryControl.editLot == true
-        || getPerms().stock.inventoryControl.writeDown == true
-        || getPerms().stock.inventoryControl.transfer == true
-        || getPerms().stock.stockCount.perform == true
-        || getPerms().stock.stockCount.approve == true
+        || stockInventoryPerm('addLot')
+        || stockInventoryPerm('editLot')
+        || stockInventoryPerm('writeDown')
+        || stockInventoryPerm('transfer')
+        || stockCountPerm('perform')
+        || stockCountPerm('approve')
         || canReceivePurchase();
     }
 
@@ -241,25 +253,25 @@ service cloud.firestore {
     match /lots/{lotId} {
       allow read: if isAuth() && (
         isAdmin() ||
-        getPerms().stock.inventoryControl.view == true ||
-        getPerms().stock.stockCount.perform == true ||
-        getPerms().stock.stockCount.approve == true ||
+        stockInventoryPerm('view') ||
+        stockCountPerm('perform') ||
+        stockCountPerm('approve') ||
         canViewPurchasing()
       );
       allow create: if isAuth() && (
         isAdmin() ||
-        getPerms().stock.inventoryControl.addLot == true ||
+        stockInventoryPerm('addLot') ||
         canReceivePurchase()
       ) && isValidLot(request.resource.data);
       allow update: if isAuth() && (
         isAdmin() ||
-        getPerms().stock.inventoryControl.editLot == true ||
-        getPerms().stock.inventoryControl.transfer == true ||
-        getPerms().stock.stockCount.approve == true ||
+        stockInventoryPerm('editLot') ||
+        stockInventoryPerm('transfer') ||
+        stockCountPerm('approve') ||
         canReceivePurchase()
       ) && request.resource.data.quantity is number
         && request.resource.data.quantity >= 0;
-      allow delete: if isAuth() && (isAdmin() || getPerms().stock.inventoryControl.writeDown == true);
+      allow delete: if isAuth() && (isAdmin() || stockInventoryPerm('writeDown'));
     }
 
     // Histórico de movimentos (imutável exceto admin)
