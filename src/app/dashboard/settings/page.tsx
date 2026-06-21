@@ -439,13 +439,6 @@ export default function SettingsPage() {
       content: <KioskManagement compact />,
     },
     {
-      value: "asset-labels",
-      label: "Patrimônio",
-      title: "Etiquetas patrimoniais",
-      description: "Gere e exporte placas patrimoniais com logo, numeração fixa e código de barras.",
-      content: <AssetBarcodeLabelsPanel />,
-    },
-    {
       value: "pdv-sync",
       label: "Sincronizar",
       title: "Sincronização PDV",
@@ -461,7 +454,6 @@ export default function SettingsPage() {
     },
   ].filter((tab) => {
     if (tab.value === "cadastros") return !!permissions.registration.view;
-    if (tab.value === "asset-labels") return !!permissions.assets?.printLabels;
     return true;
   });
 
@@ -674,7 +666,17 @@ export default function SettingsPage() {
         <ImportAliasesManagement canManage={permissions.financial?.settings?.manageImportAliases} />
       ),
     },
-  ].filter(() => !!permissions.financial?.settings?.view);
+    {
+      value: "asset-labels",
+      label: "Patrimônio",
+      title: "Etiquetas patrimoniais",
+      description: "Gere e exporte placas patrimoniais com logo, numeração fixa e código de barras.",
+      content: <AssetBarcodeLabelsPanel />,
+    },
+  ].filter((tab) => {
+    if (tab.value === "asset-labels") return !!permissions.assets?.printLabels;
+    return !!permissions.financial?.settings?.view;
+  });
 
   const departmentTabs: DepartmentTab[] = [
     {

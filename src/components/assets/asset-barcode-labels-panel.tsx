@@ -11,6 +11,17 @@ import type { Asset } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const DEFAULT_GENERATED_UNTIL = 1000;
 const GENERATE_INCREMENT = 100;
@@ -280,10 +291,28 @@ export function AssetBarcodeLabelsPanel() {
               className="max-w-md"
             />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={handleGenerateMore} disabled={saving}>
-                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                Gerar +100
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" variant="outline" disabled={saving}>
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                    Gerar +100
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Gerar mais 100 etiquetas?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Isso vai liberar a próxima sequência de placas patrimoniais, de {makeAssetCode(settings.generatedUntil + 1)} até {makeAssetCode(settings.generatedUntil + GENERATE_INCREMENT)}. Após gerar, essas numerações passam a poder ser vinculadas a novos patrimônios.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleGenerateMore} disabled={saving}>
+                      Confirmar geração
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
               <Button type="button" onClick={() => window.print()}>
                 <Printer className="mr-2 h-4 w-4" />
                 Exportar PDF
