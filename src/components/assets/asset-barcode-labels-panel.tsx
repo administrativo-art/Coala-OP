@@ -32,6 +32,7 @@ function makeAssetCode(sequence: number) {
 
 function normalizeAssetCode(value?: string | null) {
   const raw = String(value ?? "").trim().toUpperCase().replace(/\s+/g, "");
+  if (raw.startsWith("PEND-")) return raw;
   const match = raw.match(/^PAT[-_]?(\d+)$/);
   if (match) return makeAssetCode(Number(match[1]));
   const digits = raw.replace(/\D/g, "");

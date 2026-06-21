@@ -114,17 +114,6 @@ function collectionData(snapshot: FirebaseFirestore.QuerySnapshot) {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
-async function nextAssetCode() {
-  const counterRef = dbAdmin.collection('counters').doc('assets');
-  const next = await dbAdmin.runTransaction(async (tx) => {
-    const snap = await tx.get(counterRef);
-    const current = Number(snap.data()?.next ?? 1);
-    tx.set(counterRef, { next: current + 1, updatedAt: new Date().toISOString() }, { merge: true });
-    return current;
-  });
-  return `PAT-${String(next).padStart(6, '0')}`;
-}
-
 function buildExpenseInstallments(
   totalValue: number,
   count: number,
@@ -1204,8 +1193,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
             : null;
           const assetsToCreate = Math.max(0, assetCount - (existingAssetsSnap?.size ?? 0));
           for (let index = 0; index < assetsToCreate; index += 1) {
-            const code = await nextAssetCode();
             const assetRef = dbAdmin.collection('assets').doc();
+            const code = `PEND-${assetRef.id.slice(0, 8).toUpperCase()}`;
             const assetName = item.itemName || existingReceiptItem?.itemName || orderItem?.itemName || baseProduct?.name || item.baseItemId || 'Patrimônio';
             batch.set(assetRef, {
               workspaceId: WORKSPACE_ID,
@@ -1225,6 +1214,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               accountingAccount: order.accountPlanId ?? null,
               documentUrl: order.documentUrl ?? order.fiscal?.documentUrl ?? null,
               sourceType: 'purchase_receipt',
+              plateStatus: 'pendente',
               purchaseOrderId: receipt.purchaseOrderId,
               purchaseReceiptId: id,
               purchaseReceiptItemId: item.receiptItemId,
@@ -1243,7 +1233,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               userId: decoded.uid,
               username: body.username ?? 'Sistema',
               occurredAt: now,
-              notes: 'Entrada via recebimento de compra.',
+              notes: 'Entrada via recebimento de compra. Placa patrimonial pendente de vinculação.',
               sourceType: 'purchase_receipt',
               sourceId: id,
             });

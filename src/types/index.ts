@@ -242,6 +242,9 @@ export type Asset = {
   imageUrl?: string;
   notes?: string;
   sourceType?: 'manual' | 'purchase_receipt';
+  plateStatus?: 'vinculada' | 'pendente';
+  plateLinkedAt?: string;
+  plateLinkedBy?: string;
   purchaseOrderId?: string;
   purchaseReceiptId?: string;
   purchaseReceiptItemId?: string;
