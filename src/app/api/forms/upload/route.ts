@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { adminApp } from "@/lib/firebase-admin";
 import { requireUser } from "@/lib/auth-server";
+import { getFormExecutionById } from "@/features/forms/lib/server";
+import { assertFormExecutionAccess } from "@/features/forms/lib/server-access";
 import {
   buildFormStoragePath,
   detectFileMetadata,
@@ -19,20 +21,70 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const kindSchema = z.enum(["photo", "signature", "file"]);
+const scopeSchema = z.enum(["item", "section"]);
+
+async function loadAndAuthorizeExecution(params: {
+  executionId: string;
+  context: Awaited<ReturnType<typeof requireUser>>;
+  scope: "item" | "section";
+  targetId: string;
+}) {
+  const payload = await getFormExecutionById(params.executionId, params.context.workspace_id);
+  if (!payload) {
+    throw new Error("Execução não encontrada.");
+  }
+
+  assertFormExecutionAccess({
+    permissions: params.context.permissions,
+    isDefaultAdmin: params.context.isDefaultAdmin,
+    userId: params.context.userDoc.id,
+    userDoc: params.context.userDoc as unknown as Record<string, unknown>,
+    workspaceId: params.context.workspace_id,
+    execution: payload.execution,
+    level: "operate",
+  });
+
+  const targetExists = params.scope === "item"
+    ? (payload.execution.items ?? []).some((item) => item.id === params.targetId)
+    : payload.execution.sections.some((section) => section.id === params.targetId);
+
+  if (!targetExists) {
+    throw new Error("Item ou seção da evidência não encontrado.");
+  }
+
+  return payload.execution;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request);
+    const context = await requireUser(request);
 
     const formData = await request.formData();
     const file = formData.get("file");
     const rawKind = formData.get("kind");
+    const rawExecutionId = formData.get("executionId");
+    const rawScope = formData.get("scope");
+    const rawTargetId = formData.get("targetId");
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Arquivo ausente." }, { status: 400 });
     }
 
     const kind = kindSchema.parse(rawKind);
+    const executionId = typeof rawExecutionId === "string" ? rawExecutionId.trim() : "";
+    const scope = scopeSchema.parse(rawScope);
+    const targetId = typeof rawTargetId === "string" ? rawTargetId.trim() : "";
+    if (!executionId || !targetId) {
+      return NextResponse.json({ error: "Execução e destino da evidência são obrigatórios." }, { status: 400 });
+    }
+
+    await loadAndAuthorizeExecution({
+      executionId,
+      context,
+      scope,
+      targetId,
+    });
+
     const maxBytes =
       kind === "signature"
         ? FORMS_SIGNATURE_MAX_BYTES
@@ -67,6 +119,7 @@ export async function POST(request: NextRequest) {
 
     const { downloadToken, objectPath } = buildFormStoragePath({
       kind,
+      executionId,
       originalName:
         file.name && file.name.includes(".")
           ? file.name
@@ -83,6 +136,9 @@ export async function POST(request: NextRequest) {
         metadata: {
           firebaseStorageDownloadTokens: downloadToken,
           formsAssetKind: kind,
+          formsExecutionId: executionId,
+          formsEvidenceScope: scope,
+          formsEvidenceTargetId: targetId,
         },
       },
     });
@@ -109,20 +165,41 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    await requireUser(request);
+    const context = await requireUser(request);
     const body = (await request.json().catch(() => null)) as
-      | { action?: string; assetPath?: string }
+      | { action?: string; assetPath?: string; executionId?: string; scope?: string; targetId?: string }
       | null;
 
-    if (body?.action !== "delete" || !body.assetPath?.trim()) {
+    if (
+      body?.action !== "delete" ||
+      !body.assetPath?.trim() ||
+      !body.executionId?.trim() ||
+      !body.targetId?.trim()
+    ) {
       return NextResponse.json(
         { error: "Payload inválido para remoção do arquivo." },
         { status: 400 }
       );
     }
 
+    const scope = scopeSchema.parse(body.scope);
+    await loadAndAuthorizeExecution({
+      executionId: body.executionId.trim(),
+      context,
+      scope,
+      targetId: body.targetId.trim(),
+    });
+
+    const assetPath = body.assetPath.trim();
+    if (!assetPath.startsWith(`forms/${body.executionId.trim()}/`)) {
+      return NextResponse.json(
+        { error: "Arquivo não pertence à execução informada." },
+        { status: 403 }
+      );
+    }
+
     const bucket = getStorage(adminApp).bucket(FORMS_STORAGE_BUCKET);
-    await bucket.file(body.assetPath.trim()).delete({ ignoreNotFound: true });
+    await bucket.file(assetPath).delete({ ignoreNotFound: true });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

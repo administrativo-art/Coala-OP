@@ -46,16 +46,20 @@ export function detectFormImage(buffer: Buffer) {
 export function buildFormStoragePath(params: {
   kind: "photo" | "signature" | "file";
   originalName: string;
+  executionId?: string;
 }) {
   const token = randomUUID();
   const date = new Date();
   const year = String(date.getUTCFullYear());
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const baseName = sanitizeFormAssetName(params.originalName || params.kind);
+  const executionSegment = params.executionId
+    ? `${sanitizeFormAssetName(params.executionId)}/`
+    : "";
 
   return {
     downloadToken: token,
-    objectPath: `forms/${params.kind}/${year}/${month}/${Date.now()}-${token}-${baseName}`,
+    objectPath: `forms/${executionSegment}${params.kind}/${year}/${month}/${Date.now()}-${token}-${baseName}`,
   };
 }
 
@@ -65,8 +69,23 @@ export function getFormAssetUrl(assetPath: string, downloadToken: string) {
 
 export function detectFileMetadata(file: File, fallbackKind: "file" | "photo" | "signature") {
   const extension = extname(file.name || "").replace(".", "").toLowerCase() || fallbackKind;
+  const allowed: Record<string, string> = {
+    pdf: "application/pdf",
+    txt: "text/plain",
+    csv: "text/csv",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+  };
+  if (!allowed[extension]) return null;
+
   return {
     extension,
-    contentType: file.type || "application/octet-stream",
+    contentType: allowed[extension] || file.type || "application/octet-stream",
   };
 }

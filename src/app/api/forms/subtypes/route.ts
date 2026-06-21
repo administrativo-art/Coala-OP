@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { listFormSubtypes, serializeFormValue } from "@/features/forms/lib/server";
+import { getFormProjectById, listFormSubtypes, serializeFormValue } from "@/features/forms/lib/server";
 import { formSubtypeSchema } from "@/features/forms/lib/schemas";
 import { assertFormPermission } from "@/features/forms/lib/server-access";
 import { requireUser } from "@/lib/auth-server";
@@ -52,6 +52,10 @@ export async function POST(request: NextRequest) {
   try {
     const context = await requireUser(request);
     const parsed = formSubtypeSchema.parse(await request.json());
+    const project = await getFormProjectById(parsed.form_project_id, context.workspace_id);
+    if (!project) {
+      return NextResponse.json({ error: "Projeto não encontrado neste workspace." }, { status: 404 });
+    }
     assertFormPermission(
       context.permissions,
       context.isDefaultAdmin,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  getFormProjectById,
   getFormTypeById,
   serializeFormValue,
 } from "@/features/forms/lib/server";
@@ -20,7 +21,7 @@ export async function GET(
   try {
     const context = await requireUser(request);
     const { typeId } = await contextArg.params;
-    const type = await getFormTypeById(typeId);
+    const type = await getFormTypeById(typeId, context.workspace_id);
     if (!type) {
       return NextResponse.json({ error: "Tipo não encontrado." }, { status: 404 });
     }
@@ -52,8 +53,15 @@ export async function PATCH(
     if (!existing.exists) {
       return NextResponse.json({ error: "Tipo não encontrado." }, { status: 404 });
     }
+    if (existing.data()?.workspace_id !== context.workspace_id) {
+      return NextResponse.json({ error: "Tipo não encontrado neste workspace." }, { status: 404 });
+    }
 
     const parsed = formTypeSchema.parse(await request.json());
+    const project = await getFormProjectById(parsed.form_project_id, context.workspace_id);
+    if (!project) {
+      return NextResponse.json({ error: "Projeto não encontrado neste workspace." }, { status: 404 });
+    }
     assertFormPermission(
       context.permissions,
       context.isDefaultAdmin,

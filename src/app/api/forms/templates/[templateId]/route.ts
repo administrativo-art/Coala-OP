@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { mirrorTemplateToLegacy } from "@/features/forms/lib/legacy-bridge";
 import { buildFormTemplatePayload } from "@/features/forms/lib/service";
+import { getFormProjectById } from "@/features/forms/lib/server";
 import { formTemplateSchema } from "@/features/forms/lib/schemas";
 import { assertFormPermission } from "@/features/forms/lib/server-access";
 import { requireUser } from "@/lib/auth-server";
@@ -21,6 +22,7 @@ export async function GET(
     const { templateId } = await context.params;
     const payload = await buildFormTemplatePayload({
       templateId,
+      workspaceId: user.workspace_id,
       permissions: user.permissions,
       isDefaultAdmin: user.isDefaultAdmin,
     });
@@ -54,7 +56,15 @@ export async function PATCH(
     }
 
     const currentData = (existing.data() ?? {}) as Record<string, unknown>;
+    if (currentData.workspace_id !== user.workspace_id) {
+      return NextResponse.json({ error: "Template não encontrado neste workspace." }, { status: 404 });
+    }
+
     const parsed = formTemplateSchema.parse(await request.json());
+    const project = await getFormProjectById(parsed.form_project_id, user.workspace_id);
+    if (!project) {
+      return NextResponse.json({ error: "Projeto não encontrado neste workspace." }, { status: 404 });
+    }
     assertFormPermission(
       user.permissions,
       user.isDefaultAdmin,

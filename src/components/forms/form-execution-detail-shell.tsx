@@ -533,7 +533,10 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
     };
   }, [firebaseUser, executionId]);
 
-  const canEdit = execution?.status === "in_progress" || execution?.status === "pending";
+  const canEdit =
+    execution?.status === "in_progress" ||
+    execution?.status === "pending" ||
+    execution?.status === "overdue";
 
   const executionView = useMemo(() => {
     if (!execution) return null;
@@ -595,7 +598,13 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
           ? `${target.itemId}:${target.kind}`
           : `${target.sectionId}:section:${target.kind}`
       );
-      const uploaded = await uploadFormAsset(firebaseUser, { file, kind: target.kind });
+      const uploaded = await uploadFormAsset(firebaseUser, {
+        file,
+        kind: target.kind,
+        executionId: execution.id,
+        scope: target.scope,
+        targetId: target.scope === "item" ? target.itemId : target.sectionId,
+      });
 
       if (target.scope === "item") {
         const item = (execution.items ?? []).find((entry) => entry.id === target.itemId);
@@ -651,7 +660,12 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
       );
       const assetPath = extractAssetPathFromUrl(targetUrl);
       if (assetPath) {
-        await deleteFormAsset(firebaseUser, assetPath);
+        await deleteFormAsset(firebaseUser, {
+          assetPath,
+          executionId: execution.id,
+          scope: target.scope,
+          targetId: target.scope === "item" ? target.itemId : target.sectionId,
+        });
       }
 
       if (target.scope === "item") {

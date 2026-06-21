@@ -25,6 +25,7 @@ export async function buildFormsBootstrap(params: {
   workspaceId: string;
   permissions: PermissionSet;
   isDefaultAdmin: boolean;
+  userId?: string;
 }) {
   const flags = await getFeatureFlags(params.workspaceId);
   if (flags.kill_forms_module) {
@@ -33,10 +34,6 @@ export async function buildFormsBootstrap(params: {
 
   if (!flags.forms_new_engine_enabled && !flags.forms_navigation_api_enabled) {
     throw new Error("O novo motor de formulários ainda não foi liberado.");
-  }
-
-  if (!canAccessFormsModule(params.permissions, params.isDefaultAdmin)) {
-    throw new Error("Sem permissão para acessar formulários.");
   }
 
   const [projects, templates, executions, types] = await Promise.all([
@@ -62,20 +59,28 @@ export async function buildFormsBootstrap(params: {
   });
 
   const visibleProjects = mergedProjects.filter((project) => {
-    try {
-      assertFormPermission(
-        params.permissions,
-        params.isDefaultAdmin,
-        project.id,
-        "view"
-      );
-      return true;
-    } catch {
+      try {
+        assertFormPermission(
+          params.permissions,
+          params.isDefaultAdmin,
+          project.id,
+          "view",
+          { userId: params.userId, project: project as any }
+        );
+        return true;
+      } catch {
       return false;
     }
   });
 
   const visibleProjectIds = new Set(visibleProjects.map((project) => project.id));
+
+  if (
+    visibleProjects.length === 0 &&
+    !canAccessFormsModule(params.permissions, params.isDefaultAdmin)
+  ) {
+    throw new Error("Sem permissão para acessar formulários.");
+  }
 
   return {
     flags,
@@ -105,11 +110,12 @@ export async function buildFormsBootstrap(params: {
 
 export async function buildFormTemplatePayload(params: {
   templateId: string;
+  workspaceId: string;
   permissions: PermissionSet;
   isDefaultAdmin: boolean;
 }) {
   const template =
-    (await getFormTemplateById(params.templateId)) ??
+    (await getFormTemplateById(params.templateId, params.workspaceId)) ??
     (await getLegacyFormTemplateBySyntheticId(params.templateId));
   if (!template) {
     throw new Error("Template não encontrado.");
@@ -127,22 +133,16 @@ export async function buildFormTemplatePayload(params: {
 
 export async function buildFormExecutionPayload(params: {
   executionId: string;
+  workspaceId: string;
   permissions: PermissionSet;
   isDefaultAdmin: boolean;
 }) {
   const payload =
-    (await getFormExecutionById(params.executionId)) ??
+    (await getFormExecutionById(params.executionId, params.workspaceId)) ??
     (await getLegacyFormExecutionBySyntheticId(params.executionId));
   if (!payload) {
     throw new Error("Execução não encontrada.");
   }
-
-  assertFormPermission(
-    params.permissions,
-    params.isDefaultAdmin,
-    payload.execution.form_project_id,
-    "view"
-  );
 
   return payload;
 }

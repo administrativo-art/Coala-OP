@@ -2,6 +2,7 @@ import type {
   FormExecution,
   FormAssignment,
   FormModel,
+  FormProjectMember,
   FormProject,
   FormSubtype,
   FormTemplate,
@@ -42,6 +43,19 @@ export async function listFormAssignments(params: {
     id: doc.id,
     ...((serializeFormValue(doc.data()) as Record<string, unknown>) ?? {}),
   })) as FormAssignment[];
+}
+
+export async function getFormProjectById(projectId: string, workspaceId?: string) {
+  const snap = await checklistDbAdmin.collection("form_projects").doc(projectId).get();
+  if (!snap.exists) return null;
+
+  const project = {
+    id: snap.id,
+    ...((serializeFormValue(snap.data()) as Record<string, unknown>) ?? {}),
+  } as FormProject;
+
+  if (workspaceId && project.workspace_id !== workspaceId) return null;
+  return project;
 }
 
 export async function getActiveFormAssignment(params: {
@@ -183,50 +197,112 @@ export async function listFormExecutions(params: {
   );
 }
 
-export async function getFormTemplateById(templateId: string) {
+export async function listFormExecutionsForAssignee(params: {
+  workspaceId: string;
+  userId: string;
+  unitIds: string[];
+  statuses?: string[];
+  limit?: number;
+}) {
+  const limit = Math.min(Math.max(params.limit ?? 100, 1), 300);
+  const snap = await collectionWithWorkspace("form_executions", params.workspaceId)
+    .limit(limit)
+    .get();
+
+  const allowedUnitIds = new Set(params.unitIds.filter(Boolean));
+  const allowedStatuses = new Set(params.statuses ?? ["pending", "in_progress", "overdue"]);
+
+  const executions = snap.docs.map((doc) => ({
+    id: doc.id,
+    ...((serializeFormValue(doc.data()) as Record<string, unknown>) ?? {}),
+  })) as FormExecution[];
+
+  return executions
+    .filter((execution) => {
+      if (allowedStatuses.size > 0 && !allowedStatuses.has(execution.status)) return false;
+      if (execution.assigned_user_id === params.userId) return true;
+      if (execution.collaborator_user_ids?.includes(params.userId)) return true;
+      const assignedToUnitPool =
+        execution.assigned_user_id === "__unit_pool__" ||
+        execution.assigned_user_id === "unit_pool" ||
+        execution.assigned_user_id === "";
+      return assignedToUnitPool && allowedUnitIds.has(execution.unit_id);
+    })
+    .sort((left, right) =>
+      String(left.due_at ?? left.scheduled_for ?? left.created_at ?? "").localeCompare(
+        String(right.due_at ?? right.scheduled_for ?? right.created_at ?? "")
+      )
+    )
+    .slice(0, limit);
+}
+
+export async function getFormTemplateById(templateId: string, workspaceId?: string) {
   const snap = await checklistDbAdmin.collection("form_templates").doc(templateId).get();
   if (!snap.exists) return null;
 
-  return {
+  const template = {
     id: snap.id,
     ...((serializeFormValue(snap.data()) as Record<string, unknown>) ?? {}),
   } as FormTemplate;
+
+  if (workspaceId && template.workspace_id !== workspaceId) return null;
+  return template;
 }
 
-export async function getFormTypeById(typeId: string) {
+export async function getFormTypeById(typeId: string, workspaceId?: string) {
   const snap = await checklistDbAdmin.collection("form_types").doc(typeId).get();
   if (!snap.exists) return null;
 
-  return {
+  const type = {
     id: snap.id,
     ...((serializeFormValue(snap.data()) as Record<string, unknown>) ?? {}),
   } as FormType;
+
+  if (workspaceId && type.workspace_id !== workspaceId) return null;
+  return type;
 }
 
-export async function getFormSubtypeById(subtypeId: string) {
+export async function getFormSubtypeById(subtypeId: string, workspaceId?: string) {
   const snap = await checklistDbAdmin.collection("form_subtypes").doc(subtypeId).get();
   if (!snap.exists) return null;
 
-  return {
+  const subtype = {
     id: snap.id,
     ...((serializeFormValue(snap.data()) as Record<string, unknown>) ?? {}),
   } as FormSubtype;
+
+  if (workspaceId && subtype.workspace_id !== workspaceId) return null;
+  return subtype;
 }
 
-export async function getFormExecutionById(executionId: string) {
+export async function getFormExecutionById(executionId: string, workspaceId?: string) {
   const snap = await checklistDbAdmin.collection("form_executions").doc(executionId).get();
   if (!snap.exists) return null;
+
+  const execution = {
+    id: snap.id,
+    ...((serializeFormValue(snap.data()) as Record<string, unknown>) ?? {}),
+  } as FormExecution;
+
+  if (workspaceId && execution.workspace_id !== workspaceId) return null;
 
   const eventsSnap = await snap.ref.collection("events").orderBy("timestamp", "desc").limit(20).get();
 
   return {
-    execution: {
-      id: snap.id,
-      ...((serializeFormValue(snap.data()) as Record<string, unknown>) ?? {}),
-    } as FormExecution,
+    execution,
     events: eventsSnap.docs.map((doc) => ({
       id: doc.id,
       ...((serializeFormValue(doc.data()) as Record<string, unknown>) ?? {}),
     })),
+  };
+}
+
+export function projectMemberPermission(member?: FormProjectMember | null) {
+  const role = member?.role;
+  const custom = member?.custom_permissions ?? {};
+  return {
+    view: custom.view ?? (role === "viewer" || role === "operator" || role === "manager"),
+    operate: custom.operate ?? (role === "operator" || role === "manager"),
+    manage: custom.manage ?? role === "manager",
   };
 }

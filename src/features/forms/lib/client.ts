@@ -200,6 +200,25 @@ export async function fetchFormModels(firebaseUser: FirebaseUserLike) {
   );
 }
 
+export async function runFormsScheduler(
+  firebaseUser: FirebaseUserLike,
+  body: { fromDate?: string; toDate?: string; dryRun?: boolean } = {}
+) {
+  return authorizedJsonRequest<{
+    created_count: number;
+    skipped_count: number;
+    overdue_updated: number;
+    created: FormExecution[];
+    skipped: Array<{ id: string; reason: string }>;
+  }>(
+    "/api/forms/scheduler",
+    firebaseUser,
+    "POST",
+    body,
+    "Falha ao gerar execuções recorrentes."
+  );
+}
+
 export async function createFormModel(
   firebaseUser: FirebaseUserLike,
   body: Record<string, unknown>
@@ -391,12 +410,18 @@ export async function uploadFormAsset(
   params: {
     file: File;
     kind: "photo" | "signature" | "file";
+    executionId: string;
+    scope: "item" | "section";
+    targetId: string;
   }
 ) {
   const token = await firebaseUser.getIdToken();
   const formData = new FormData();
   formData.append("file", params.file);
   formData.append("kind", params.kind);
+  formData.append("executionId", params.executionId);
+  formData.append("scope", params.scope);
+  formData.append("targetId", params.targetId);
 
   const response = await fetchWithTimeout(
     "/api/forms/upload",
@@ -426,13 +451,18 @@ export async function uploadFormAsset(
 
 export async function deleteFormAsset(
   firebaseUser: FirebaseUserLike,
-  assetPath: string
+  input: {
+    assetPath: string;
+    executionId: string;
+    scope: "item" | "section";
+    targetId: string;
+  }
 ) {
   return authorizedJsonRequest<{ ok: true }>(
     "/api/forms/upload",
     firebaseUser,
     "PATCH",
-    { action: "delete", assetPath },
+    { action: "delete", ...input },
     "Falha ao remover arquivo."
   );
 }

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { mirrorExecutionToLegacy } from "@/features/forms/lib/legacy-bridge";
 import { buildFormExecutionPayload } from "@/features/forms/lib/service";
 import { formExecutionUpdateSchema } from "@/features/forms/lib/schemas";
+import { assertFormExecutionAccess } from "@/features/forms/lib/server-access";
 import { ensureTaskFromOrigin } from "@/features/tasks/lib/server";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
@@ -29,8 +30,19 @@ export async function GET(
     const { executionId } = await context.params;
     const payload = await buildFormExecutionPayload({
       executionId,
+      workspaceId: user.workspace_id,
       permissions: user.permissions,
       isDefaultAdmin: user.isDefaultAdmin,
+    });
+
+    assertFormExecutionAccess({
+      permissions: user.permissions,
+      isDefaultAdmin: user.isDefaultAdmin,
+      userId: user.userDoc.id,
+      userDoc: user.userDoc as unknown as Record<string, unknown>,
+      workspaceId: user.workspace_id,
+      execution: payload.execution,
+      level: "view",
     });
 
     return NextResponse.json(payload);
@@ -387,6 +399,17 @@ export async function PATCH(
       }
 
       const data = (snap.data() ?? {}) as Record<string, unknown>;
+      const executionForAccess = { id: snap.id, ...data } as unknown as FormExecution;
+      assertFormExecutionAccess({
+        permissions: user.permissions,
+        isDefaultAdmin: user.isDefaultAdmin,
+        userId: user.userDoc.id,
+        userDoc: user.userDoc as unknown as Record<string, unknown>,
+        workspaceId: user.workspace_id,
+        execution: executionForAccess,
+        level: parsed.action === "reopen" || parsed.action === "cancel" ? "manage" : "operate",
+      });
+
       const currentItems = Array.isArray(data.items)
         ? (data.items as Record<string, unknown>[])
         : [];
@@ -450,13 +473,21 @@ export async function PATCH(
             ? "in_progress"
             : parsed.action === "cancel"
               ? "canceled"
-              : (typeof data.status === "string" && data.status) || "in_progress";
+              : data.status === "pending"
+                ? "in_progress"
+                : (typeof data.status === "string" && data.status) || "in_progress";
+      const shouldAutoClaim =
+        (parsed.action === "save" || parsed.action === "complete") &&
+        !(typeof data.claimed_by_user_id === "string" && data.claimed_by_user_id);
 
       const next = {
         ...data,
         sections,
         items: nextItems,
         status: nextStatus,
+        claimed_by_user_id: shouldAutoClaim ? user.userDoc.id : data.claimed_by_user_id ?? null,
+        claimed_by_username: shouldAutoClaim ? user.userDoc.username : data.claimed_by_username ?? null,
+        claimed_at: shouldAutoClaim ? nowIso : data.claimed_at ?? null,
         sections_summary: buildSectionsSummary(visibleContext.visibleItems),
         score: buildExecutionScore(visibleContext.visibleItems),
         updated_at: now,
@@ -509,14 +540,20 @@ export async function PATCH(
       for (let index = 0; index < nextItems.length; index += 1) {
         const item = nextItems[index];
         const templateItem = templateItemsById.get(String(item.template_item_id));
-        if (!templateItem || !shouldCreateTaskForItem(item)) continue;
+        if (!templateItem) continue;
 
         const triggers = Array.isArray(templateItem.task_triggers)
           ? (templateItem.task_triggers as FormTaskTrigger[])
           : [];
+        if (triggers.length === 0) continue;
+
+        const defaultItemTriggerMatched = shouldCreateTaskForItem(item);
 
         for (const trigger of triggers) {
-          if (!evaluateCondition(trigger.condition, itemsByTemplateId)) continue;
+          const triggerMatched = trigger.condition
+            ? evaluateCondition(trigger.condition, itemsByTemplateId)
+            : defaultItemTriggerMatched;
+          if (!triggerMatched) continue;
 
           const dueDate =
             typeof trigger.sla_hours === "number"
@@ -535,6 +572,20 @@ export async function PATCH(
               execution_id: executionId,
               template_item_id: String(item.template_item_id),
               template_section_id: String(item.template_section_id ?? item.section_id),
+              details: {
+                template_id: String(result.template_id ?? ""),
+                template_name: String(result.template_name ?? ""),
+                form_project_id: String(result.form_project_id ?? ""),
+                unit_id: String(result.unit_id ?? ""),
+                unit_name: String(result.unit_name ?? ""),
+                occurred_at: now.toISOString(),
+                answered_by_user_id: user.userDoc.id,
+                answered_by_username: user.userDoc.username,
+                item_title: templateItem.title,
+                section_title:
+                  typeof item.section_title === "string" ? item.section_title : "",
+                answer: getExecutionItemAnswer(item),
+              },
             },
             title: renderTemplateString(trigger.title_template, {
               executionId,
@@ -549,7 +600,14 @@ export async function PATCH(
                   item,
                   templateItem,
                 })
-              : undefined,
+              : [
+                  `Formulário: ${String(result.template_name ?? "")}`,
+                  `Unidade: ${String(result.unit_name ?? result.unit_id ?? "")}`,
+                  `Pergunta: ${templateItem.title}`,
+                  `Resposta: ${String(getExecutionItemAnswer(item) ?? "")}`,
+                  `Respondido por: ${user.userDoc.username}`,
+                  `Execução: /dashboard/forms/${executionId}/view`,
+                ].join("\n"),
             dueDate,
           });
 

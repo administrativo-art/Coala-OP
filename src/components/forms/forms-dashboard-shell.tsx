@@ -33,6 +33,7 @@ import {
   deleteFormProject,
   fetchFormModels,
   fetchFormsBootstrap,
+  runFormsScheduler,
   updateFormTemplateApplication,
   updateFormProject,
 } from "@/features/forms/lib/client";
@@ -374,7 +375,7 @@ export function FormsDashboardShell() {
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
   const [projectsInitialized, setProjectsInitialized] = useState(false);
   const [editingProject, setEditingProject] = useState<FormProject | null>(null);
-  const [saving, setSaving] = useState<"project" | "template" | "deleteProject" | null>(null);
+  const [saving, setSaving] = useState<"project" | "template" | "deleteProject" | "scheduler" | null>(null);
   const [projectForm, setProjectForm] = useState({
     name: "",
     description: "",
@@ -945,6 +946,31 @@ export function FormsDashboardShell() {
     }
   }
 
+  async function handleRunScheduler() {
+    if (!firebaseUser) return;
+
+    try {
+      setSaving("scheduler");
+      const today = new Date().toISOString().slice(0, 10);
+      const result = await runFormsScheduler(firebaseUser, {
+        fromDate: today,
+        toDate: today,
+      });
+      await reloadBootstrap();
+      toast({
+        title: "Pendências geradas",
+        description: `${result.created_count} formulário(s) criado(s); ${result.skipped_count} ignorado(s); ${result.overdue_updated} marcado(s) como atrasado(s).`,
+      });
+    } catch (schedulerError) {
+      toast({
+        variant: "destructive",
+        title: schedulerError instanceof Error ? schedulerError.message : "Falha ao gerar pendências.",
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
   if (loading) {
     return <Skeleton className="h-80 w-full" />;
   }
@@ -977,6 +1003,16 @@ export function FormsDashboardShell() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canManageTemplates ? (
+            <Button
+              variant="outline"
+              onClick={() => void handleRunScheduler()}
+              disabled={saving === "scheduler"}
+            >
+              <CalendarClock className="mr-2 h-4 w-4" />
+              {saving === "scheduler" ? "Gerando..." : "Gerar pendentes de hoje"}
+            </Button>
+          ) : null}
           {canCreateProjects ? (
             <Button variant="outline" onClick={openCreateProjectDialog}>
               <Plus className="mr-2 h-4 w-4" />

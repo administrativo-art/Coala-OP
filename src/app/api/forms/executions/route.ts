@@ -2,8 +2,16 @@ import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 
 import { mirrorExecutionToLegacy } from "@/features/forms/lib/legacy-bridge";
-import { listFormExecutions, getFormTemplateById } from "@/features/forms/lib/server";
-import { assertFormPermission } from "@/features/forms/lib/server-access";
+import {
+  listFormExecutions,
+  listFormExecutionsForAssignee,
+  getFormTemplateById,
+} from "@/features/forms/lib/server";
+import {
+  assertFormExecutionAccess,
+  assertFormPermission,
+  getUserFormUnitIds,
+} from "@/features/forms/lib/server-access";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
@@ -115,6 +123,16 @@ export async function GET(request: NextRequest) {
     const assignedToMe = searchParams.get("assignedToMe") === "true";
     const limit = Number(searchParams.get("limit") ?? "50");
 
+    if (assignedToMe) {
+      const executions = await listFormExecutionsForAssignee({
+        workspaceId: context.workspace_id,
+        userId: context.userDoc.id,
+        unitIds: getUserFormUnitIds(context.userDoc as unknown as Record<string, unknown>),
+        limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 100,
+      });
+      return NextResponse.json({ executions });
+    }
+
     if (formProjectId) {
       assertFormPermission(
         context.permissions,
@@ -128,11 +146,28 @@ export async function GET(request: NextRequest) {
       workspaceId: context.workspace_id,
       formProjectId,
       status,
-      assignedUserId: assignedToMe ? context.userDoc.id : null,
+      assignedUserId: null,
       limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 50,
     });
 
-    return NextResponse.json({ executions });
+    const visibleExecutions = executions.filter((execution) => {
+      try {
+        assertFormExecutionAccess({
+          permissions: context.permissions,
+          isDefaultAdmin: context.isDefaultAdmin,
+          userId: context.userDoc.id,
+          userDoc: context.userDoc as unknown as Record<string, unknown>,
+          workspaceId: context.workspace_id,
+          execution,
+          level: "view",
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    });
+
+    return NextResponse.json({ executions: visibleExecutions });
   } catch (error) {
     return NextResponse.json(
       {
@@ -151,7 +186,7 @@ export async function POST(request: NextRequest) {
     const user = await requireUser(request);
     const body = createExecutionSchema.parse(await request.json());
 
-    const template = await getFormTemplateById(body.template_id);
+    const template = await getFormTemplateById(body.template_id, user.workspace_id);
     if (!template) {
       return NextResponse.json({ error: "Template não encontrado." }, { status: 404 });
     }

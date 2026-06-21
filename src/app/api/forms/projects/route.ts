@@ -14,7 +14,21 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireUser(request);
     const projects = await listFormProjects(user.workspace_id);
-    return NextResponse.json({ projects });
+    const visibleProjects = projects.filter((project) => {
+      try {
+        assertFormPermission(
+          user.permissions,
+          user.isDefaultAdmin,
+          project.id,
+          "view",
+          { userId: user.userDoc.id, project }
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return NextResponse.json({ projects: visibleProjects });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Falha ao listar projetos." },

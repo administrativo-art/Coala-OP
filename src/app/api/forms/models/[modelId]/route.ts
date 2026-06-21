@@ -33,6 +33,9 @@ export async function PATCH(
     if (!existing.exists) {
       return NextResponse.json({ error: "Modelo não encontrado." }, { status: 404 });
     }
+    if (existing.data()?.workspace_id !== user.workspace_id) {
+      return NextResponse.json({ error: "Modelo não encontrado neste workspace." }, { status: 404 });
+    }
 
     const patch = {
       ...parsed,
@@ -86,6 +89,9 @@ export async function DELETE(
     const existing = await ref.get();
     if (!existing.exists) {
       return NextResponse.json({ error: "Modelo não encontrado." }, { status: 404 });
+    }
+    if (existing.data()?.workspace_id !== user.workspace_id) {
+      return NextResponse.json({ error: "Modelo não encontrado neste workspace." }, { status: 404 });
     }
 
     await ref.update({

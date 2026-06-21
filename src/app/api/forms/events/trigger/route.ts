@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { listFormTemplates } from "@/features/forms/lib/server";
@@ -19,6 +20,20 @@ const triggerSchema = z.object({
   assigned_username: z.string().trim().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
+
+function deterministicEventExecutionId(parts: string[]) {
+  return createHash("sha256").update(parts.join("::")).digest("hex");
+}
+
+function templateEventKey(template: FormTemplate) {
+  const record = template as unknown as Record<string, unknown>;
+  return String(
+    record.event_key ??
+      record.trigger_event_key ??
+      record.application_event_key ??
+      ""
+  ).trim();
+}
 
 function buildSections(template: FormTemplate) {
   return template.sections.map((section, index) => ({
@@ -91,6 +106,7 @@ export async function POST(request: NextRequest) {
     const eventTemplates = templates.filter(
       (template) =>
         template.application_mode === "event" &&
+        templateEventKey(template) === body.event_key &&
         (template.unit_ids?.length ? template.unit_ids.includes(body.unit_id) : true)
     );
 
@@ -99,7 +115,21 @@ export async function POST(request: NextRequest) {
 
     for (const template of eventTemplates) {
       assertFormPermission(user.permissions, user.isDefaultAdmin, template.form_project_id, "operate");
-      const ref = checklistDbAdmin.collection("form_executions").doc();
+      const dedupeKey = String(
+        body.metadata?.dedupe_key ??
+          body.metadata?.event_id ??
+          `${now.slice(0, 10)}:${body.unit_id}`
+      );
+      const executionId = deterministicEventExecutionId([
+        user.workspace_id,
+        template.id,
+        body.event_key,
+        body.unit_id,
+        dedupeKey,
+      ]);
+      const ref = checklistDbAdmin.collection("form_executions").doc(executionId);
+      const existing = await ref.get();
+      if (existing.exists) continue;
       const execution: Omit<FormExecution, "id"> = {
         workspace_id: user.workspace_id,
         form_project_id: template.form_project_id,

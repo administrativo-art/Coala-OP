@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { mirrorExecutionToLegacy } from "@/features/forms/lib/legacy-bridge";
+import { assertFormExecutionAccess } from "@/features/forms/lib/server-access";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
@@ -25,6 +26,16 @@ export async function POST(
       }
 
       const data = (snap.data() ?? {}) as Record<string, unknown>;
+      assertFormExecutionAccess({
+        permissions: user.permissions,
+        isDefaultAdmin: user.isDefaultAdmin,
+        userId: user.userDoc.id,
+        userDoc: user.userDoc as unknown as Record<string, unknown>,
+        workspaceId: user.workspace_id,
+        execution: { id: snap.id, ...data } as unknown as FormExecution,
+        level: "operate",
+      });
+
       if (data.status === "completed") {
         throw new Error("Essa execução já foi concluída.");
       }
