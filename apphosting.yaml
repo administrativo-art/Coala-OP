@@ -17,3 +17,7 @@ env:
     secret: PDVLEGAL_USERNAME
   - variable: PDVLEGAL_PASSWORD
     secret: PDVLEGAL_PASSWORD
+  - variable: FORMS_SCHEDULER_SECRET
+    secret: FORMS_SCHEDULER_SECRET
+  - variable: FORMS_SCHEDULER_WORKSPACE_ID
+    value: coala
