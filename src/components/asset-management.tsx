@@ -26,9 +26,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { BarcodeScannerModal } from '@/components/barcode-scanner-modal';
 import { cn } from '@/lib/utils';
 
 const assetSchema = z.object({
+  code: z.string().optional(),
   name: z.string().min(2, 'Informe o nome.'),
   category: z.string().optional(),
   subcategory: z.string().optional(),
@@ -122,6 +124,39 @@ const ASSET_STEPS: { id: AssetStep; label: string }[] = [
 function assetQrPayload(asset: Asset) {
   if (typeof window === 'undefined') return asset.code;
   return `${window.location.origin}/patrimonio/${encodeURIComponent(asset.code)}`;
+}
+
+function normalizeAssetCodeInput(value: string) {
+  const raw = value.trim();
+  if (!raw) return '';
+
+  let candidate = raw;
+  try {
+    const url = new URL(raw);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const patrimonioIndex = parts.findIndex((part) => part.toLowerCase() === 'patrimonio');
+    if (patrimonioIndex >= 0 && parts[patrimonioIndex + 1]) {
+      candidate = decodeURIComponent(parts[patrimonioIndex + 1]);
+    }
+  } catch {
+    const match = raw.match(/\/patrimonio\/([^/?#]+)/i);
+    if (match?.[1]) {
+      candidate = decodeURIComponent(match[1]);
+    }
+  }
+
+  const normalized = candidate.toUpperCase().replace(/\s+/g, '');
+  const patMatch = normalized.match(/^PAT[-_]?(\d+)$/);
+  if (patMatch) {
+    return `PAT-${patMatch[1].padStart(6, '0')}`;
+  }
+
+  const digits = normalized.replace(/\D/g, '');
+  if (digits) {
+    return `PAT-${digits.padStart(6, '0')}`;
+  }
+
+  return normalized;
 }
 
 async function uploadAssetFile(file: File, assetId: string, kind: 'image' | 'fiscal') {
@@ -255,7 +290,7 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetSchema),
-    defaultValues: { name: '', category: 'Patrimônio', subcategory: '', brand: '', model: '', serialNumber: '', imageUrl: '', currentKioskId: '', purchaseDate: '', supplierName: '', invoiceNumber: '', paymentMethod: '', warrantyEndsAt: '', exactLocation: '', responsibleName: '', notes: '' },
+    defaultValues: { code: '', name: '', category: 'Patrimônio', subcategory: '', brand: '', model: '', serialNumber: '', imageUrl: '', currentKioskId: '', purchaseDate: '', supplierName: '', invoiceNumber: '', paymentMethod: '', warrantyEndsAt: '', exactLocation: '', responsibleName: '', notes: '' },
   });
   const v = form.watch();
   const imageUrl = v.imageUrl;
@@ -354,6 +389,13 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                           <FieldLabel required>Nome do patrimônio</FieldLabel>
                           <FormControl><input className={FORM_INPUT} placeholder="Ex: Máquina de sorvete italiana" {...field} /></FormControl>
                           <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="code" render={({ field }) => (
+                        <FormItem>
+                          <FieldLabel>Código da placa</FieldLabel>
+                          <FormControl><input className={cn(FORM_INPUT, 'font-mono uppercase')} placeholder="Ex: PAT-000123 ou 123" {...field} value={field.value ?? ''} /></FormControl>
+                          <p className="mt-1 text-[10px] leading-tight text-muted-foreground">Opcional. Se vazio, usa a próxima etiqueta livre já gerada.</p>
                         </FormItem>
                       )} />
                       <FormField control={form.control} name="subcategory" render={({ field }) => (
@@ -1728,6 +1770,90 @@ function FilterPill({ label, active, onClick, count, tone }: { label: string; ac
   );
 }
 
+function AssetCodeReaderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { toast } = useToast();
+  const [rawCode, setRawCode] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const normalizedCode = normalizeAssetCodeInput(rawCode);
+
+  const openAsset = (value = rawCode) => {
+    const code = normalizeAssetCodeInput(value);
+    if (!/^PAT-\d+$/.test(code)) {
+      toast({
+        variant: 'destructive',
+        title: 'Código inválido',
+        description: 'Informe um código no formato PAT-000123 ou apenas o número do patrimônio.',
+      });
+      return;
+    }
+
+    onOpenChange(false);
+    setScannerOpen(false);
+    setRawCode('');
+    window.location.href = `/patrimonio/${encodeURIComponent(code)}`;
+  };
+
+  const handleScanSuccess = (decodedText: string) => {
+    const code = normalizeAssetCodeInput(decodedText);
+    setRawCode(code);
+    openAsset(code);
+  };
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ler patrimônio por código</DialogTitle>
+            <DialogDescription>
+              Teste a abertura da consulta pelo número patrimonial. Você pode informar PAT-000123, apenas 123, ou escanear o QR/barcode atual.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Código do patrimônio</label>
+              <Input
+                autoFocus
+                value={rawCode}
+                onChange={(event) => setRawCode(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') openAsset();
+                }}
+                placeholder="Ex: PAT-000123 ou 123"
+                className="font-mono uppercase"
+              />
+              <p className="text-xs text-muted-foreground">
+                Normalizado: <span className="font-mono font-semibold text-foreground">{normalizedCode || '—'}</span>
+              </p>
+            </div>
+
+            <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+              Esta versão de teste não faz OCR de texto impresso pela câmera. A câmera lê QR/barcode; para texto PAT impresso, use o campo acima ou um leitor físico que envie o código como teclado.
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setScannerOpen(true)}>
+                <QrCode className="mr-2 h-4 w-4" />
+                Escanear QR/barcode
+              </Button>
+              <Button type="button" onClick={() => openAsset()} disabled={!normalizedCode}>
+                Abrir consulta
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onScanSuccess={handleScanSuccess}
+      />
+    </>
+  );
+}
+
 export function AssetManagement() {
   const { assets, loading } = useAssets();
   const { permissions } = useAuth();
@@ -1735,6 +1861,7 @@ export function AssetManagement() {
   const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
   const [showNew, setShowNew] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
+  const [showCodeReader, setShowCodeReader] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
   const [statusFilter, setStatusFilter] = useState<'todos' | AssetStatus>('todos');
   const [categoryFilter, setCategoryFilter] = useState('todas');
@@ -1812,6 +1939,10 @@ export function AssetManagement() {
           <p className="text-sm text-muted-foreground">Máquinas, equipamentos e mobiliário rastreados por código interno e QR Code.</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setShowCodeReader(true)}>
+            <QrCode className="mr-2 h-4 w-4" />
+            Ler código
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowCategories(true)} disabled={!permissions.assets?.create && !permissions.assets?.edit}><Tags className="mr-2 h-4 w-4" />Categorias</Button>
           <Button size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700" onClick={() => setShowNew(true)} disabled={!permissions.assets?.create}><Plus className="mr-2 h-4 w-4" />Novo patrimônio</Button>
         </div>
@@ -1919,6 +2050,7 @@ export function AssetManagement() {
 
       <AssetFormSheet open={showNew} onOpenChange={setShowNew} />
       <AssetCategoryDialog open={showCategories} onOpenChange={setShowCategories} />
+      <AssetCodeReaderDialog open={showCodeReader} onOpenChange={setShowCodeReader} />
       <AssetDetailDialog asset={selected} onOpenChange={(open) => !open && setSelected(null)} />
     </div>
   );

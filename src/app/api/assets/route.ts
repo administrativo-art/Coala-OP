@@ -8,6 +8,9 @@ import type { Asset, AssetMovement, AssetStatus } from '@/types';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const BARCODE_SETTINGS_DOC_ID = 'barcode-labels';
+const DEFAULT_GENERATED_LABELS_UNTIL = 1000;
+
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
@@ -18,13 +21,83 @@ function canManageAsset(permissions: Awaited<ReturnType<typeof requireUser>>['pe
 
 async function nextAssetCode() {
   const counterRef = dbAdmin.collection('counters').doc('assets');
+  const settingsRef = dbAdmin.collection('assetSettings').doc(BARCODE_SETTINGS_DOC_ID);
   const next = await dbAdmin.runTransaction(async (tx) => {
     const snap = await tx.get(counterRef);
-    const current = Number(snap.data()?.next ?? 1);
-    tx.set(counterRef, { next: current + 1, updatedAt: new Date().toISOString() }, { merge: true });
-    return current;
+    const settingsSnap = await tx.get(settingsRef);
+    const settings = settingsSnap.data() ?? {};
+    const generatedUntil = Math.max(
+      DEFAULT_GENERATED_LABELS_UNTIL,
+      settings.workspaceId === WORKSPACE_ID ? Number(settings.generatedUntil ?? 0) || 0 : 0
+    );
+    let current = Number(snap.data()?.next ?? 1) || 1;
+
+    for (let attempts = 0; attempts < 10000; attempts += 1) {
+      if (current > generatedUntil) {
+        throw new Error(
+          `Limite de etiquetas patrimoniais atingido. Gere mais 100 etiquetas antes de cadastrar o próximo patrimônio. Última etiqueta liberada: PAT-${String(generatedUntil).padStart(6, '0')}.`
+        );
+      }
+
+      const code = `PAT-${String(current).padStart(6, '0')}`;
+      const existing = await tx.get(
+        dbAdmin
+          .collection('assets')
+          .where('workspaceId', '==', WORKSPACE_ID)
+          .where('code', '==', code)
+          .limit(1)
+      );
+      if (existing.empty) {
+        tx.set(counterRef, { next: current + 1, updatedAt: new Date().toISOString() }, { merge: true });
+        return current;
+      }
+      current += 1;
+    }
+
+    throw new Error('Não foi possível localizar uma etiqueta patrimonial livre.');
   });
   return `PAT-${String(next).padStart(6, '0')}`;
+}
+
+function normalizeAssetCodeInput(value: unknown) {
+  const raw = String(value ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!raw) return '';
+  const patMatch = raw.match(/^PAT[-_]?(\d+)$/);
+  if (patMatch) return `PAT-${String(Number(patMatch[1])).padStart(6, '0')}`;
+  const digits = raw.replace(/\D/g, '');
+  return digits ? `PAT-${String(Number(digits)).padStart(6, '0')}` : raw;
+}
+
+async function assertAssetCodeCanBeUsed(code: string) {
+  const match = code.match(/^PAT-(\d+)$/);
+  if (!match) throw new Error('Código patrimonial inválido. Use o formato PAT-000001.');
+
+  const sequence = Number(match[1]);
+  if (!Number.isFinite(sequence) || sequence < 1) {
+    throw new Error('Código patrimonial inválido. Use uma sequência a partir de PAT-000001.');
+  }
+  const settingsSnap = await dbAdmin.collection('assetSettings').doc(BARCODE_SETTINGS_DOC_ID).get();
+  const settings = settingsSnap.data() ?? {};
+  const generatedUntil = Math.max(
+    DEFAULT_GENERATED_LABELS_UNTIL,
+    settings.workspaceId === WORKSPACE_ID ? Number(settings.generatedUntil ?? 0) || 0 : 0
+  );
+
+  if (sequence > generatedUntil) {
+    throw new Error(
+      `A etiqueta ${code} ainda não foi gerada. Gere mais etiquetas antes de usar esta numeração. Última etiqueta liberada: PAT-${String(generatedUntil).padStart(6, '0')}.`
+    );
+  }
+
+  const existing = await dbAdmin
+    .collection('assets')
+    .where('workspaceId', '==', WORKSPACE_ID)
+    .where('code', '==', code)
+    .limit(1)
+    .get();
+  if (!existing.empty) {
+    throw new Error(`A etiqueta ${code} já está vinculada a outro patrimônio.`);
+  }
 }
 
 async function addMovement(input: Omit<AssetMovement, 'id'>) {
@@ -53,7 +126,16 @@ export async function POST(request: NextRequest) {
   if (!name || !currentKioskId) return jsonError('Nome e unidade atual são obrigatórios.');
 
   const now = new Date().toISOString();
-  const code = await nextAssetCode();
+  const requestedCode = normalizeAssetCodeInput(body.code);
+  let code: string;
+  try {
+    if (requestedCode) {
+      await assertAssetCodeCanBeUsed(requestedCode);
+    }
+    code = requestedCode || await nextAssetCode();
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : 'Falha ao reservar etiqueta patrimonial.');
+  }
   const assetRef = dbAdmin.collection('assets').doc();
   const asset: Asset & { workspaceId: string } = {
     id: assetRef.id,

@@ -136,6 +136,10 @@ const FieldConfigPage = dynamic(
   () => import("@/features/rh/components/FieldConfigPage").then((m) => m.FieldConfigPage),
   { ssr: false }
 );
+const AssetBarcodeLabelsPanel = dynamic(
+  () => import("@/components/assets/asset-barcode-labels-panel").then((m) => m.AssetBarcodeLabelsPanel),
+  { ssr: false }
+);
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -435,6 +439,13 @@ export default function SettingsPage() {
       content: <KioskManagement compact />,
     },
     {
+      value: "asset-labels",
+      label: "Patrimônio",
+      title: "Etiquetas patrimoniais",
+      description: "Gere e exporte placas patrimoniais com logo, numeração fixa e código de barras.",
+      content: <AssetBarcodeLabelsPanel />,
+    },
+    {
       value: "pdv-sync",
       label: "Sincronizar",
       title: "Sincronização PDV",
@@ -450,6 +461,7 @@ export default function SettingsPage() {
     },
   ].filter((tab) => {
     if (tab.value === "cadastros") return !!permissions.registration.view;
+    if (tab.value === "asset-labels") return !!permissions.assets?.printLabels;
     return true;
   });
 

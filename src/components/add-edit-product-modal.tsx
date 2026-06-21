@@ -114,6 +114,8 @@ const WIZARD_STEPS = [
     { id: 4, label: 'Nutricional', icon: ImageIcon, description: 'Opcional — fotografe a embalagem; o assistente transcreve quando solicitado.' },
 ] as const;
 
+const APPAREL_SIZE_OPTIONS = ['Tamanho único', 'P', 'M', 'G', 'GG'] as const;
+
 export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
     const { baseProducts } = useBaseProducts();
@@ -183,7 +185,18 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             ? 'Caixa mestra'
             : logisticsLabelWatch;
     const countingUnitWatch = form.watch('defaultCountingUnit') || 'package';
-    const isApparel = categoryWatch === 'Vestimenta';
+    const selectedOperationalCategory = useMemo(
+        () => activeCategories.find((category) => category.id === operationalCategoryIdWatch),
+        [activeCategories, operationalCategoryIdWatch],
+    );
+    const isApparel = categoryWatch === 'Vestimenta' || selectedOperationalCategory?.destination === 'uniform';
+    const showNutritionStep = selectedOperationalCategory?.slug === 'insumo' || selectedOperationalCategory?.id === 'insumo';
+    const wizardSteps = useMemo(
+        () => showNutritionStep ? [...WIZARD_STEPS] : WIZARD_STEPS.filter((step) => step.id !== 4),
+        [showNutritionStep],
+    );
+    const currentStepMeta = wizardSteps.find((step) => step.id === currentStep) ?? wizardSteps[0];
+    const currentStepPosition = Math.max(0, wizardSteps.findIndex((step) => step.id === currentStep));
 
     const linkedBaseProduct = useMemo(
         () => baseProducts.find((bp) => bp.id === baseProductIdWatch),
@@ -214,9 +227,24 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             form.setValue('packageType', 'Unidade', { shouldDirty: true, shouldValidate: true });
             form.setValue('packageSize', 1, { shouldDirty: true, shouldValidate: true });
             form.setValue('defaultCountingUnit', 'package', { shouldDirty: true, shouldValidate: true });
+            form.setValue('apparelSize', form.getValues('apparelSize') || 'Tamanho único', { shouldDirty: true });
             form.setValue('enableLogistics', false, { shouldDirty: true });
         }
     };
+
+    const handleOperationalCategoryChange = (value: string, onChange: (value: string) => void) => {
+        onChange(value);
+        const selectedCategory = activeCategories.find((category) => category.id === value);
+        if (selectedCategory?.destination === 'uniform') {
+            handleCategoryChange('Vestimenta');
+        }
+    };
+
+    useEffect(() => {
+        if (!wizardSteps.some((step) => step.id === currentStep)) {
+            setCurrentStep(wizardSteps[wizardSteps.length - 1]?.id ?? 1);
+        }
+    }, [currentStep, wizardSteps]);
 
     useEffect(() => {
         if (open) {
@@ -235,7 +263,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     baseProductId: productToEdit.baseProductId || '',
                     operationalCategoryId: productToEdit.operationalCategoryId || '',
                     apparelType: productToEdit.apparelType || '',
-                    apparelSize: productToEdit.apparelSize || '',
+                    apparelSize: productToEdit.apparelSize === 'Único' ? 'Tamanho único' : productToEdit.apparelSize || '',
                     apparelColor: productToEdit.apparelColor || '',
                     apparelFit: productToEdit.apparelFit || '',
                     apparelMaterial: productToEdit.apparelMaterial || '',
@@ -350,12 +378,12 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             notes: values.notes,
             baseProductId: values.baseProductId,
             defaultCountingUnit: values.defaultCountingUnit,
-            apparelType: values.category === 'Vestimenta' ? values.apparelType : undefined,
-            apparelSize: values.category === 'Vestimenta' ? values.apparelSize : undefined,
-            apparelColor: values.category === 'Vestimenta' ? values.apparelColor : undefined,
-            apparelFit: values.category === 'Vestimenta' ? values.apparelFit : undefined,
-            apparelMaterial: values.category === 'Vestimenta' ? values.apparelMaterial : undefined,
-            apparelUsage: values.category === 'Vestimenta' ? values.apparelUsage : undefined,
+            apparelType: isApparel ? values.apparelType : undefined,
+            apparelSize: isApparel ? values.apparelSize : undefined,
+            apparelColor: isApparel ? values.apparelColor : undefined,
+            apparelFit: isApparel ? values.apparelFit : undefined,
+            apparelMaterial: isApparel ? values.apparelMaterial : undefined,
+            apparelUsage: isApparel ? values.apparelUsage : undefined,
 
             multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
             rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,
@@ -363,11 +391,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             countingInstruction: values.enableCountingInstruction ? values.countingInstruction : undefined,
             countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl : undefined,
 
-            nutritionalTableImageUrl: values.nutritionalTableImageUrl || undefined,
-            compositionImageUrl: values.compositionImageUrl || undefined,
-            nutritionalData: productToEdit?.nutritionalData,
-            compositionText: productToEdit?.compositionText,
-            detectedAllergens: productToEdit?.detectedAllergens,
+            nutritionalTableImageUrl: showNutritionStep ? values.nutritionalTableImageUrl || undefined : undefined,
+            compositionImageUrl: showNutritionStep ? values.compositionImageUrl || undefined : undefined,
+            nutritionalData: showNutritionStep ? productToEdit?.nutritionalData : undefined,
+            compositionText: showNutritionStep ? productToEdit?.compositionText : undefined,
+            detectedAllergens: showNutritionStep ? productToEdit?.detectedAllergens : undefined,
             aliases: aliases.length > 0 ? aliases : undefined,
         };
 
@@ -402,9 +430,17 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
     const handleNext = async () => {
         const valid = await form.trigger(stepFields[currentStep]);
-        if (valid) setCurrentStep((step) => Math.min(WIZARD_STEPS.length, step + 1));
+        if (valid) {
+            const currentIndex = wizardSteps.findIndex((step) => step.id === currentStep);
+            const nextStep = wizardSteps[currentIndex + 1];
+            if (nextStep) setCurrentStep(nextStep.id);
+        }
     };
-    const handleBack = () => setCurrentStep((step) => Math.max(1, step - 1));
+    const handleBack = () => {
+        const currentIndex = wizardSteps.findIndex((step) => step.id === currentStep);
+        const previousStep = wizardSteps[currentIndex - 1];
+        if (previousStep) setCurrentStep(previousStep.id);
+    };
 
     const handleAddAlias = () => {
         const nextAlias = aliasInput.trim();
@@ -469,14 +505,14 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                         <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
                             {/* Stepper sidebar */}
                             <aside className="border-r bg-muted/40 px-5 py-6">
-                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {WIZARD_STEPS.length}</p>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStepPosition + 1} de {wizardSteps.length}</p>
                                 <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                    <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${(currentStep / WIZARD_STEPS.length) * 100}%` }} />
+                                    <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${((currentStepPosition + 1) / wizardSteps.length) * 100}%` }} />
                                 </div>
                                 <nav className="space-y-1">
-                                    {WIZARD_STEPS.map((step) => {
+                                    {wizardSteps.map((step, index) => {
                                         const isActive = step.id === currentStep;
-                                        const isDone = step.id < currentStep;
+                                        const isDone = index < currentStepPosition;
                                         return (
                                             <button
                                                 key={step.id}
@@ -507,11 +543,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <div className="mb-5 flex items-start justify-between gap-4">
                                         <div className="flex items-start gap-3">
                                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50 text-foreground">
-                                                {React.createElement(WIZARD_STEPS[currentStep - 1].icon, { className: 'h-4 w-4' })}
+                                                {React.createElement(currentStepMeta.icon, { className: 'h-4 w-4' })}
                                             </div>
                                             <div>
-                                                <h3 className="font-semibold leading-tight">{WIZARD_STEPS[currentStep - 1].label}</h3>
-                                                <p className="text-sm text-muted-foreground">{WIZARD_STEPS[currentStep - 1].description}</p>
+                                                <h3 className="font-semibold leading-tight">{currentStepMeta.label}</h3>
+                                                <p className="text-sm text-muted-foreground">{currentStepMeta.description}</p>
                                             </div>
                                         </div>
                                         {currentStep === 1 && linkedBaseProduct && (
@@ -568,7 +604,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             <FormLabel>Categoria do item <span className="text-rose-500">*</span></FormLabel>
                                                             <span className="text-xs text-muted-foreground">define o fluxo de compra</span>
                                                         </div>
-                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                        <Select onValueChange={(value) => handleOperationalCategoryChange(value, field.onChange)} value={field.value}>
                                                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione a categoria do item..."/></SelectTrigger></FormControl>
                                                             <SelectContent>
                                                                 {activeCategories.filter((category) => category.destination !== 'asset').map((category) => (
@@ -762,7 +798,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                 <FormLabel>Tamanho</FormLabel>
                                                                 <Select value={field.value ?? ''} onValueChange={field.onChange}>
                                                                     <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                                                    <SelectContent>{['PP','P','M','G','GG','XGG','Único'].map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
+                                                                    <SelectContent>{APPAREL_SIZE_OPTIONS.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
                                                                 </Select>
                                                             </FormItem>
                                                         )} />
@@ -1002,14 +1038,14 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                         <DialogFooter className="flex flex-row items-center justify-between gap-4 border-t px-6 py-4 sm:justify-between">
                             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
                             <div className="hidden flex-col items-center text-center sm:flex">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {WIZARD_STEPS.length}</span>
-                                <span className="text-sm font-medium">{WIZARD_STEPS[currentStep - 1].label}</span>
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStepPosition + 1} de {wizardSteps.length}</span>
+                                <span className="text-sm font-medium">{currentStepMeta.label}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                {currentStep > 1 && (
+                                {currentStepPosition > 0 && (
                                     <Button type="button" variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" /> Voltar</Button>
                                 )}
-                                {currentStep < WIZARD_STEPS.length ? (
+                                {currentStepPosition < wizardSteps.length - 1 ? (
                                     <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
                                 ) : (
                                     <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600">{productToEdit ? 'Salvar alterações' : 'Adicionar insumo'}</Button>
