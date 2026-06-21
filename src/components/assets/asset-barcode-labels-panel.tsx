@@ -22,19 +22,39 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const DEFAULT_GENERATED_UNTIL = 1000;
 const GENERATE_INCREMENT = 100;
+const LABELS_PER_PRINT_PAGE = 50;
 
 type BarcodeSettings = {
   generatedUntil: number;
   defaultGeneratedUntil: number;
+  productionRanges: ProductionRange[];
+};
+
+type ProductionRange = {
+  from: number;
+  to: number;
+  createdAt?: string;
+  createdBy?: string;
+  createdByName?: string;
 };
 
 type LabelRow = {
   code: string;
   asset?: Asset;
   status: "cadastrado" | "livre";
+  productionSent: boolean;
+  sequence: number;
 };
 
 function makeAssetCode(sequence: number) {
@@ -56,7 +76,26 @@ function assetCodeSequence(code?: string | null) {
   return match ? Number(match[1]) : null;
 }
 
-function buildRows(assets: Asset[], generatedUntil: number): LabelRow[] {
+function isSequenceInProduction(sequence: number, productionRanges: ProductionRange[]) {
+  return productionRanges.some((range) => sequence >= range.from && sequence <= range.to);
+}
+
+function countProducedLabels(generatedUntil: number, productionRanges: ProductionRange[]) {
+  let count = 0;
+  for (let sequence = 1; sequence <= generatedUntil; sequence += 1) {
+    if (isSequenceInProduction(sequence, productionRanges)) count += 1;
+  }
+  return count;
+}
+
+function findFirstNotProduced(generatedUntil: number, productionRanges: ProductionRange[]) {
+  for (let sequence = 1; sequence <= generatedUntil; sequence += 1) {
+    if (!isSequenceInProduction(sequence, productionRanges)) return sequence;
+  }
+  return generatedUntil + 1;
+}
+
+function buildRows(assets: Asset[], generatedUntil: number, productionRanges: ProductionRange[]): LabelRow[] {
   const normalizedAssets = assets
     .map((asset) => ({
       asset,
@@ -74,7 +113,13 @@ function buildRows(assets: Asset[], generatedUntil: number): LabelRow[] {
   for (let sequence = 1; sequence <= generatedUntil; sequence += 1) {
     const code = makeAssetCode(sequence);
     const asset = assetsByCode.get(code);
-    rows.push({ code, asset, status: asset ? "cadastrado" : "livre" });
+    rows.push({
+      code,
+      asset,
+      status: asset ? "cadastrado" : "livre",
+      productionSent: isSequenceInProduction(sequence, productionRanges),
+      sequence,
+    });
     included.add(code);
   }
 
@@ -82,10 +127,24 @@ function buildRows(assets: Asset[], generatedUntil: number): LabelRow[] {
     .filter((entry) => !included.has(entry.code))
     .sort((left, right) => left.sequence - right.sequence)
     .forEach((entry) => {
-      rows.push({ code: entry.code, asset: entry.asset, status: "cadastrado" });
+      rows.push({
+        code: entry.code,
+        asset: entry.asset,
+        status: "cadastrado",
+        productionSent: isSequenceInProduction(entry.sequence, productionRanges),
+        sequence: entry.sequence,
+      });
     });
 
   return rows;
+}
+
+function chunkRows(rows: LabelRow[], size: number) {
+  const chunks: LabelRow[][] = [];
+  for (let index = 0; index < rows.length; index += size) {
+    chunks.push(rows.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function BarcodeSvg({ code }: { code: string }) {
@@ -143,8 +202,14 @@ export function AssetBarcodeLabelsPanel() {
   const [settings, setSettings] = useState<BarcodeSettings>({
     generatedUntil: DEFAULT_GENERATED_UNTIL,
     defaultGeneratedUntil: DEFAULT_GENERATED_UNTIL,
+    productionRanges: [],
   });
   const [saving, setSaving] = useState(false);
+  const [productionSaving, setProductionSaving] = useState(false);
+  const [productionDialogOpen, setProductionDialogOpen] = useState(false);
+  const [productionFrom, setProductionFrom] = useState("1");
+  const [productionTo, setProductionTo] = useState("50");
+  const [printRowsOverride, setPrintRowsOverride] = useState<LabelRow[] | null>(null);
   const [filter, setFilter] = useState("");
 
   const loadSettings = useCallback(async () => {
@@ -164,9 +229,15 @@ export function AssetBarcodeLabelsPanel() {
     void loadSettings();
   }, [loadSettings]);
 
+  useEffect(() => {
+    const clearProductionPrintMode = () => setPrintRowsOverride(null);
+    window.addEventListener("afterprint", clearProductionPrintMode);
+    return () => window.removeEventListener("afterprint", clearProductionPrintMode);
+  }, []);
+
   const rows = useMemo(
-    () => buildRows(assets, settings.generatedUntil),
-    [assets, settings.generatedUntil]
+    () => buildRows(assets, settings.generatedUntil, settings.productionRanges ?? []),
+    [assets, settings.generatedUntil, settings.productionRanges]
   );
   const visibleRows = useMemo(() => {
     const term = filter.trim().toUpperCase();
@@ -174,12 +245,28 @@ export function AssetBarcodeLabelsPanel() {
     return rows.filter((row) =>
       row.code.includes(term) ||
       row.asset?.name?.toUpperCase().includes(term) ||
-      row.status.toUpperCase().includes(term)
+      row.status.toUpperCase().includes(term) ||
+      (row.productionSent && "PRODUCAO PRODUÇÃO ENVIADA".includes(term))
     );
   }, [filter, rows]);
+  const printRows = printRowsOverride ?? visibleRows;
+  const labelPages = useMemo(
+    () => chunkRows(printRows, LABELS_PER_PRINT_PAGE),
+    [printRows]
+  );
 
   const registeredCount = rows.filter((row) => row.status === "cadastrado").length;
   const freeCount = rows.filter((row) => row.status === "livre").length;
+  const producedCount = countProducedLabels(settings.generatedUntil, settings.productionRanges ?? []);
+
+  const openProductionDialog = () => {
+    const first = findFirstNotProduced(settings.generatedUntil, settings.productionRanges ?? []);
+    const safeFirst = Math.min(first, settings.generatedUntil);
+    const safeLast = Math.min(settings.generatedUntil, safeFirst + LABELS_PER_PRINT_PAGE - 1);
+    setProductionFrom(String(safeFirst || 1));
+    setProductionTo(String(safeLast || Math.min(settings.generatedUntil, LABELS_PER_PRINT_PAGE)));
+    setProductionDialogOpen(true);
+  };
 
   const handleGenerateMore = async () => {
     if (!firebaseUser) return;
@@ -189,7 +276,11 @@ export function AssetBarcodeLabelsPanel() {
         method: "POST",
         body: JSON.stringify({ incrementBy: GENERATE_INCREMENT }),
       });
-      setSettings((current) => ({ ...current, generatedUntil: result.generatedUntil }));
+      setSettings((current) => ({
+        ...current,
+        generatedUntil: result.generatedUntil,
+        productionRanges: result.productionRanges ?? current.productionRanges,
+      }));
       toast({
         title: "Numeração gerada",
         description: `Foram liberadas mais ${GENERATE_INCREMENT} etiquetas, até ${makeAssetCode(result.generatedUntil)}.`,
@@ -202,6 +293,57 @@ export function AssetBarcodeLabelsPanel() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleExportForProduction = async () => {
+    if (!firebaseUser) return;
+    const from = Math.floor(Number(productionFrom));
+    const to = Math.floor(Number(productionTo));
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from < 1 || to < from) {
+      toast({
+        variant: "destructive",
+        title: "Intervalo inválido",
+        description: "Informe um intervalo válido. Exemplo: 1 até 500.",
+      });
+      return;
+    }
+    if (to > settings.generatedUntil) {
+      toast({
+        variant: "destructive",
+        title: "Intervalo acima da numeração gerada",
+        description: `Hoje existem etiquetas geradas até ${makeAssetCode(settings.generatedUntil)}.`,
+      });
+      return;
+    }
+
+    setProductionSaving(true);
+    try {
+      const selectedRows = rows.filter((row) => row.sequence >= from && row.sequence <= to);
+      const result = await authedJson<BarcodeSettings>(firebaseUser, "/api/assets/barcode-labels", {
+        method: "POST",
+        body: JSON.stringify({ action: "mark-production", from, to }),
+      });
+      setSettings((current) => ({
+        ...current,
+        generatedUntil: result.generatedUntil,
+        productionRanges: result.productionRanges ?? current.productionRanges,
+      }));
+      setPrintRowsOverride(selectedRows);
+      setProductionDialogOpen(false);
+      toast({
+        title: "Intervalo enviado para produção",
+        description: `${makeAssetCode(from)} até ${makeAssetCode(to)} foi marcado e será exportado para PDF.`,
+      });
+      window.setTimeout(() => window.print(), 100);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Falha ao exportar para produção",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+      });
+    } finally {
+      setProductionSaving(false);
     }
   };
 
@@ -230,10 +372,20 @@ export function AssetBarcodeLabelsPanel() {
           }
           .asset-label-grid {
             display: grid !important;
-            grid-template-columns: repeat(4, 45mm) !important;
+            grid-template-columns: repeat(5, 45mm) !important;
+            grid-template-rows: repeat(10, 15mm) !important;
             gap: 2mm !important;
             align-items: start !important;
             justify-content: start !important;
+          }
+          .asset-label-page {
+            break-after: page !important;
+            page-break-after: always !important;
+            margin: 0 !important;
+          }
+          .asset-label-page:last-child {
+            break-after: auto !important;
+            page-break-after: auto !important;
           }
           .asset-label-card {
             width: 45mm !important;
@@ -248,7 +400,7 @@ export function AssetBarcodeLabelsPanel() {
           .asset-label-screen-only { display: none !important; }
         }
         @page {
-          size: A4;
+          size: A4 landscape;
           margin: 8mm;
         }
       `}</style>
@@ -264,7 +416,7 @@ export function AssetBarcodeLabelsPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-5">
             <div className="rounded-xl border bg-muted/30 p-3">
               <p className="text-xs font-semibold uppercase text-muted-foreground">Geradas até</p>
               <p className="mt-1 font-mono text-xl font-bold">{makeAssetCode(settings.generatedUntil)}</p>
@@ -280,6 +432,10 @@ export function AssetBarcodeLabelsPanel() {
             <div className="rounded-xl border bg-muted/30 p-3">
               <p className="text-xs font-semibold uppercase text-muted-foreground">Livres</p>
               <p className="mt-1 text-xl font-bold">{freeCount}</p>
+            </div>
+            <div className="rounded-xl border bg-muted/30 p-3">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Enviadas à produção</p>
+              <p className="mt-1 text-xl font-bold">{producedCount}</p>
             </div>
           </div>
 
@@ -313,7 +469,11 @@ export function AssetBarcodeLabelsPanel() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-              <Button type="button" onClick={() => window.print()}>
+              <Button type="button" variant="outline" onClick={openProductionDialog}>
+                <Printer className="mr-2 h-4 w-4" />
+                Exportar para produzir
+              </Button>
+              <Button type="button" onClick={() => { setPrintRowsOverride(null); window.print(); }}>
                 <Printer className="mr-2 h-4 w-4" />
                 Exportar PDF
               </Button>
@@ -321,7 +481,7 @@ export function AssetBarcodeLabelsPanel() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            A exportação usa a impressão do navegador. Escolha “Salvar como PDF”. Cada etiqueta sai em 45x15mm.
+            A exportação usa a impressão do navegador. Escolha “Salvar como PDF”. Cada etiqueta sai em 45x15mm, com 50 etiquetas por página.
           </p>
         </CardContent>
       </Card>
@@ -332,32 +492,92 @@ export function AssetBarcodeLabelsPanel() {
         </div>
       ) : null}
 
-      <div className="asset-label-print-area rounded-xl border bg-white p-4">
-        <div className="asset-label-grid grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {visibleRows.map((row) => (
-            <div key={row.code} className="asset-label-card rounded-md border bg-white p-2 text-zinc-950 shadow-sm">
-              <div className="flex h-full min-h-0 items-center gap-1.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={brand.logo} alt="Coala" className="h-8 w-8 shrink-0 object-contain" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <p className="font-mono text-[11px] font-black leading-none tracking-tight">{row.code}</p>
-                    <span className="asset-label-screen-only rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase text-zinc-500">
-                      {row.status === "cadastrado" ? "Cadastrado" : "Livre"}
-                    </span>
+      <div className="asset-label-print-area space-y-4 rounded-xl border bg-white p-4">
+        {labelPages.map((pageRows, pageIndex) => (
+          <div key={`page-${pageIndex}`} className="asset-label-page">
+            <div className="asset-label-grid grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {pageRows.map((row) => (
+                <div key={row.code} className="asset-label-card rounded-md border bg-white p-2 text-zinc-950 shadow-sm">
+                  <div className="flex h-full min-h-0 items-center gap-1.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={brand.logo} alt="Coala" className="h-8 w-8 shrink-0 object-contain" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="font-mono text-[11px] font-black leading-none tracking-tight">{row.code}</p>
+                        <div className="asset-label-screen-only flex items-center gap-1">
+                          {row.productionSent ? (
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[8px] font-bold uppercase text-emerald-700">
+                              Produção
+                            </span>
+                          ) : null}
+                          <span className="rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase text-zinc-500">
+                            {row.status === "cadastrado" ? "Cadastrado" : "Livre"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-0.5">
+                        <BarcodeSvg code={row.code} />
+                      </div>
+                      <p className="asset-label-screen-only truncate text-[9px] leading-none text-zinc-500">
+                        {row.asset?.name ?? "Código livre para novo patrimônio"}
+                      </p>
+                    </div>
                   </div>
-                  <div className="mt-0.5">
-                    <BarcodeSvg code={row.code} />
-                  </div>
-                  <p className="asset-label-screen-only truncate text-[9px] leading-none text-zinc-500">
-                    {row.asset?.name ?? "Código livre para novo patrimônio"}
-                  </p>
                 </div>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
+
+      <Dialog open={productionDialogOpen} onOpenChange={setProductionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Exportar etiquetas para produção física</DialogTitle>
+            <DialogDescription>
+              Informe o intervalo que será enviado para fabricação. Ao confirmar, o intervalo será marcado como enviado à produção física e o PDF será aberto.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">De</label>
+              <Input
+                type="number"
+                min={1}
+                max={settings.generatedUntil}
+                value={productionFrom}
+                onChange={(event) => setProductionFrom(event.target.value)}
+                placeholder="1"
+              />
+              <p className="text-xs text-muted-foreground">{makeAssetCode(Math.max(1, Math.floor(Number(productionFrom)) || 1))}</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Até</label>
+              <Input
+                type="number"
+                min={1}
+                max={settings.generatedUntil}
+                value={productionTo}
+                onChange={(event) => setProductionTo(event.target.value)}
+                placeholder="500"
+              />
+              <p className="text-xs text-muted-foreground">{makeAssetCode(Math.max(1, Math.floor(Number(productionTo)) || 1))}</p>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+            Exemplo: preencher <span className="font-semibold text-foreground">1</span> até <span className="font-semibold text-foreground">500</span> exporta 500 etiquetas em 10 páginas de 50 etiquetas.
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setProductionDialogOpen(false)} disabled={productionSaving}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={handleExportForProduction} disabled={productionSaving}>
+              {productionSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+              Marcar e exportar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
