@@ -305,13 +305,17 @@ function KpiCard({
             : "from-red-50 to-white text-red-700 border-red-200";
 
   return (
-    <Card className={cn("bg-gradient-to-br", toneClass)}>
-      <CardContent className="p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          {label}
-        </p>
-        <p className="mt-2 text-3xl font-semibold tracking-tight">{value}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+    <Card className={cn("overflow-hidden bg-gradient-to-br", toneClass)}>
+      <CardContent className="flex min-h-[132px] flex-col justify-between gap-3 p-5">
+        <div className="space-y-3">
+          <p className="text-[11px] font-bold uppercase leading-tight tracking-[0.12em] text-muted-foreground">
+            {label}
+          </p>
+          <p className="text-4xl font-semibold leading-none tracking-tight tabular-nums">
+            {value}
+          </p>
+        </div>
+        <p className="text-sm leading-snug text-muted-foreground">{subtitle}</p>
       </CardContent>
     </Card>
   );

@@ -1,13 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Loader2, Shirt, Users } from "lucide-react";
+import { Boxes, Loader2, Pencil, Shirt, Users } from "lucide-react";
 
 import { fetchUniformOverview, type UniformOverview } from "@/features/uniforms/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useProducts } from "@/hooks/use-products";
 import { useToast } from "@/hooks/use-toast";
+import { type Product } from "@/types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AddEditProductModal } from "@/components/add-edit-product-modal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -60,9 +64,12 @@ function formatEventDate(value: string) {
 
 export function UniformManagement() {
   const { firebaseUser, permissions } = useAuth();
+  const { products } = useProducts();
   const { toast } = useToast();
   const [overview, setOverview] = useState<UniformOverview>(EMPTY_OVERVIEW);
   const [loading, setLoading] = useState(true);
+  const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!firebaseUser) return;
@@ -126,6 +133,26 @@ export function UniformManagement() {
     return Array.from(rows.values()).sort((left, right) => left.size.localeCompare(right.size, "pt-BR"));
   }, [overview]);
 
+  const productById = useMemo(() => {
+    return new Map(products.map((product) => [product.id, product]));
+  }, [products]);
+
+  const canEditUniformCatalog = permissions.registration.items.edit === true;
+
+  const openProductEditor = (productId?: string | null) => {
+    const product = productId ? productById.get(productId) : null;
+    if (!product) {
+      toast({
+        variant: "destructive",
+        title: "Cadastro não encontrado",
+        description: "Não foi possível localizar o cadastro desta peça.",
+      });
+      return;
+    }
+    setProductToEdit(product);
+    setEditDialogOpen(true);
+  };
+
   if (!permissions.stock.uniforms?.view) {
     return <p className="text-sm text-muted-foreground">Sem permissão para visualizar o estoque de uniformes.</p>;
   }
@@ -184,7 +211,14 @@ export function UniformManagement() {
             <CardContent className="pt-6">
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead>Peça</TableHead><TableHead>Tamanho</TableHead><TableHead>Condição</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Quantidade</TableHead></TableRow>
+                  <TableRow>
+                    <TableHead>Peça</TableHead>
+                    <TableHead>Tamanho</TableHead>
+                    <TableHead>Condição</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Quantidade</TableHead>
+                    {canEditUniformCatalog ? <TableHead className="text-right">Cadastro</TableHead> : null}
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
                   {overview.lots.map((lot) => (
@@ -202,9 +236,28 @@ export function UniformManagement() {
                       <TableCell><Badge variant="secondary">{conditionLabel(lot.condition)}</Badge></TableCell>
                       <TableCell>{lot.uniformStockStatus === "disponivel" || !lot.uniformStockStatus ? "Disponível" : "Indisponível"}</TableCell>
                       <TableCell className="text-right font-bold">{lot.quantity}</TableCell>
+                      {canEditUniformCatalog ? (
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openProductEditor(lot.productId)}
+                          >
+                            <Pencil className="mr-2 h-3.5 w-3.5" />
+                            Editar
+                          </Button>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   ))}
-                  {overview.lots.length === 0 ? <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhuma peça no estoque de uniformes.</TableCell></TableRow> : null}
+                  {overview.lots.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={canEditUniformCatalog ? 6 : 5} className="h-24 text-center">
+                        Nenhuma peça no estoque de uniformes.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
                 </TableBody>
               </Table>
             </CardContent>
@@ -272,6 +325,18 @@ export function UniformManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <AddEditProductModal
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        productToEdit={productToEdit}
+        onManageBaseProducts={() => {
+          toast({
+            title: "Produto base",
+            description: "Para alterar produtos base, acesse Configurações > Cadastros.",
+          });
+        }}
+      />
     </div>
   );
 }
