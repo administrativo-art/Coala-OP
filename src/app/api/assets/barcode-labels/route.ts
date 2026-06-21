@@ -19,7 +19,8 @@ function canManageLabels(context: Awaited<ReturnType<typeof requireUser>>) {
 }
 
 export async function GET(request: NextRequest) {
-  const context = await requireUser(request);
+  const context = await requireUser(request).catch(() => null);
+  if (!context) return jsonError("Não autenticado.", 401);
   if (!context.permissions.assets?.view) {
     return jsonError("Sem permissão para visualizar etiquetas de patrimônio.", 403);
   }
@@ -39,7 +40,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireUser(request);
+  const context = await requireUser(request).catch(() => null);
+  if (!context) return jsonError("Não autenticado.", 401);
   if (!canManageLabels(context)) {
     return jsonError("Sem permissão para gerar etiquetas de patrimônio.", 403);
   }
