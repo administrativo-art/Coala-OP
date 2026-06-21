@@ -73,8 +73,14 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
       await updateTaskDocument({
         context,
         taskId: currentRequest.taskId,
+        allowOriginStatusChange: true,
         updates: {
-          status: "completed",
+          status: body.status === "rejected" ? "rejected" : "completed",
+          title:
+            body.status === "rejected"
+              ? `Solicitação rejeitada: ${currentRequest.productName}`
+              : `Solicitação concluída: ${currentRequest.productName}`,
+          originLink: "/dashboard/stock/item-requests",
           completedAt: now,
           history: [
             ...currentHistory,
@@ -119,7 +125,28 @@ export async function DELETE(request: NextRequest, contextArg: RouteContext) {
     }
 
     const { requestId } = await contextArg.params;
-    await dbAdmin.collection("itemAdditionRequests").doc(requestId).delete();
+    const requestRef = dbAdmin.collection("itemAdditionRequests").doc(requestId);
+    const snap = await requestRef.get();
+    const currentRequest = snap.exists
+      ? ({ id: snap.id, ...(snap.data() as Omit<ItemAdditionRequest, "id">) } as ItemAdditionRequest)
+      : null;
+
+    await requestRef.delete();
+
+    if (currentRequest?.taskId) {
+      await updateTaskDocument({
+        context,
+        taskId: currentRequest.taskId,
+        allowOriginStatusChange: true,
+        updates: {
+          status: "rejected",
+          title: `Solicitação removida: ${currentRequest.productName}`,
+          description: "A solicitação de cadastro foi removida.",
+          originLink: "/dashboard/stock/item-requests",
+        },
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

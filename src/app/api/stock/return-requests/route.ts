@@ -1,13 +1,16 @@
 import { addDays, format } from "date-fns";
 import { NextRequest, NextResponse } from "next/server";
 
-import { createManualTask } from "@/features/tasks/lib/server";
+import { createManualTask, ensureTaskProject } from "@/features/tasks/lib/server";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { type ReturnRequest } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const RETURN_REQUEST_ASSIGNEE_ID = "__return_request_handler__";
+const RETURN_REQUEST_ORIGIN_LINK = "/dashboard/stock/returns";
 
 function canReadRequests(context: Awaited<ReturnType<typeof requireUser>>) {
   return context.isDefaultAdmin || !!context.permissions?.stock?.returns?.view;
@@ -140,18 +143,35 @@ export async function POST(request: NextRequest) {
       return { requestPayload: payload, newCount: nextCount };
     });
 
+    const projectId = await ensureTaskProject(context, {
+      slug: "return-requests",
+      name: "Avarias e devoluções",
+      description: "Tarefas geradas por chamados de avaria, devolução e bonificação.",
+    });
+
     const task = await createManualTask({
       context,
       input: {
         title: `Avaria ${requestPayload.numero}: ${productName}`,
-        description: motivo,
-        assigneeType: "profile",
-        assigneeId: "admin",
+        description: [
+          `Tipo: ${tipo === "devolucao" ? "Devolução" : "Bonificação"}`,
+          `Insumo: ${productName}`,
+          `Lote: ${lote}`,
+          `Quantidade: ${quantidade}`,
+          `Motivo: ${motivo}`,
+        ].join("\n"),
+        assigneeType: "role",
+        assigneeId: RETURN_REQUEST_ASSIGNEE_ID,
         origin: {
           kind: "legacy",
           type: "return_request",
           id: requestRef.id,
         },
+        projectId,
+        priority: "high",
+        watcherUserIds: [context.userDoc.id],
+        visibilityScope: "workspace",
+        originLink: RETURN_REQUEST_ORIGIN_LINK,
       },
     });
 

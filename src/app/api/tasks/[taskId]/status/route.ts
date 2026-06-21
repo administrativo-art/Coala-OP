@@ -4,8 +4,9 @@ import { requireUser } from "@/lib/auth-server";
 import {
   assertTaskPermission,
   assertTasksModuleEnabled,
+  canActOnTask,
 } from "@/features/tasks/lib/server-access";
-import { updateTaskStatus } from "@/features/tasks/lib/server";
+import { getTaskById, updateTaskStatus } from "@/features/tasks/lib/server";
 import { type Task } from "@/types";
 
 export const runtime = "nodejs";
@@ -19,14 +20,32 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
   try {
     const context = await requireUser(request);
     await assertTasksModuleEnabled(context.workspace_id);
-    assertTaskPermission(
-      context.permissions,
-      context.isDefaultAdmin,
-      null,
-      "manage"
-    );
 
     const { taskId } = await contextArg.params;
+    const currentTask = await getTaskById(taskId);
+    if (!currentTask) {
+      return NextResponse.json(
+        { error: "Tarefa não encontrada." },
+        { status: 404 }
+      );
+    }
+
+    try {
+      assertTaskPermission(
+        context.permissions,
+        context.isDefaultAdmin,
+        null,
+        "manage"
+      );
+    } catch {
+      if (!canActOnTask(context, currentTask)) {
+        return NextResponse.json(
+          { error: "Sem permissão para atuar nesta tarefa." },
+          { status: 403 }
+        );
+      }
+    }
+
     const body = (await request.json().catch(() => null)) as
       | { status?: Task["status"]; details?: string }
       | null;

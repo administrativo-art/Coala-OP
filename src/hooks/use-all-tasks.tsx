@@ -84,15 +84,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const allTasks: Task[] = useMemo(() => {
     if (loading || !user) return [];
 
-    const myTasks = tasks.filter(task => {
-      const isAssignee = (task.assigneeType === 'user' && task.assigneeId === user.id) || (task.assigneeType === 'profile' && task.assigneeId === user.profileId);
-      const isApprover = (task.approverType === 'user' && task.approverId === user.id) || (task.approverType === 'profile' && task.approverId === user.profileId);
-      const isPendingApproval = task.status === 'awaiting_approval';
-
-      return (isPendingApproval && isApprover) || (!isPendingApproval && isAssignee);
-    });
-
-    return myTasks.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return [...tasks].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [user, tasks, loading, permissions]);
 
   const legacyTasks: LegacyTask[] = useMemo(() => {
@@ -113,6 +105,12 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
 
     if (permissions.stock.stockCount.approve) {
         auditSessions.forEach(session => {
+            if (
+              coveredLegacyOrigins.has(`stock_count_approval:${session.id}`) ||
+              (session.taskId && coveredTaskIds.has(session.taskId))
+            ) {
+              return;
+            }
             if (session.status === 'pending_review') {
                 allLegacyTasks.push({
                     id: `count-${session.id}`,
@@ -217,7 +215,13 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
         const coveringTask = activity.taskId ? tasks.find((task) => task.id === activity.taskId) : undefined;
         const coveringAssignedToMe = !!coveringTask && (
           (coveringTask.assigneeType === 'user' && coveringTask.assigneeId === user.id) ||
-          (coveringTask.assigneeType === 'profile' && coveringTask.assigneeId === user.profileId)
+          (coveringTask.assigneeType === 'profile' && coveringTask.assigneeId === user.profileId) ||
+          (coveringTask.assigneeType === 'role' && (
+            coveringTask.assigneeId === user.profileId ||
+            coveringTask.assigneeId === user.jobRoleId ||
+            (user.jobFunctionIds ?? []).includes(coveringTask.assigneeId)
+          )) ||
+          (coveringTask.assigneeType === 'unit' && assignedKioskIds.includes(coveringTask.assigneeId))
         );
         return !coveringAssignedToMe;
       })

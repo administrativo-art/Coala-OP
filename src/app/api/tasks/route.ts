@@ -12,10 +12,28 @@ import {
   listTaskStatuses,
   listTasks,
 } from "@/features/tasks/lib/server";
-import { type TaskOrigin } from "@/types";
+import { type Task, type TaskOrigin } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function isTaskParticipantType(value: unknown): value is Task["assigneeType"] {
+  return (
+    value === "user" ||
+    value === "profile" ||
+    value === "role" ||
+    value === "team" ||
+    value === "unit"
+  );
+}
+
+function asStringArray(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const entries = value
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+  return entries.length ? entries : undefined;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,7 +49,7 @@ export async function GET(request: NextRequest) {
     await ensureDefaultTaskProject(context);
     const projects = await listTaskProjects(context.workspace_id);
     const statuses = await listTaskStatuses(projects.map((project) => project.id));
-    const tasks = await listTasks(context.workspace_id);
+    const tasks = await listTasks(context);
 
     return NextResponse.json({ projects, statuses, tasks });
   } catch (error) {
@@ -89,19 +107,37 @@ export async function POST(request: NextRequest) {
         ...(typeof body.description === "string"
           ? { description: body.description.trim() }
           : {}),
-        ...(body.assigneeType === "profile" || body.assigneeType === "user"
+        ...(isTaskParticipantType(body.assigneeType)
           ? { assigneeType: body.assigneeType }
           : {}),
         ...(typeof body.assigneeId === "string" ? { assigneeId: body.assigneeId } : {}),
         ...(typeof body.requiresApproval === "boolean"
           ? { requiresApproval: body.requiresApproval }
           : {}),
-        ...(body.approverType === "profile" || body.approverType === "user"
+        ...(isTaskParticipantType(body.approverType)
           ? { approverType: body.approverType }
           : {}),
         ...(typeof body.approverId === "string" ? { approverId: body.approverId } : {}),
         ...(typeof body.dueDate === "string" ? { dueDate: body.dueDate } : {}),
         ...(typeof body.projectId === "string" ? { projectId: body.projectId } : {}),
+        ...(typeof body.unitId === "string" ? { unitId: body.unitId } : {}),
+        ...(typeof body.unitName === "string" ? { unitName: body.unitName } : {}),
+        ...(typeof body.originLink === "string" ? { originLink: body.originLink } : {}),
+        ...(body.priority === "low" ||
+        body.priority === "normal" ||
+        body.priority === "high" ||
+        body.priority === "urgent"
+          ? { priority: body.priority }
+          : {}),
+        ...(asStringArray(body.watcherUserIds)
+          ? { watcherUserIds: asStringArray(body.watcherUserIds) }
+          : {}),
+        ...(asStringArray(body.watcherProfileIds)
+          ? { watcherProfileIds: asStringArray(body.watcherProfileIds) }
+          : {}),
+        ...(asStringArray(body.watcherRoleIds)
+          ? { watcherRoleIds: asStringArray(body.watcherRoleIds) }
+          : {}),
         ...(origin && (origin.kind === "manual" || origin.kind === "legacy")
           ? { origin }
           : {}),

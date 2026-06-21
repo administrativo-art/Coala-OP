@@ -86,27 +86,44 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     onOpenChange(false);
   }
   
-  const getAssigneeName = (type: 'user' | 'profile', id: string) => {
+  const getAssigneeName = (type: Task['assigneeType'], id: string) => {
     if (type === 'user') return users.find(u => u.id === id)?.username || 'Usuário desconhecido';
-    return profiles.find(p => p.id === id)?.name || 'Perfil desconhecido';
+    if (type === 'profile') return profiles.find(p => p.id === id)?.name || 'Perfil desconhecido';
+    if (type === 'role') return profiles.find(p => p.id === id)?.name || `Função/cargo: ${id}`;
+    if (type === 'team') return `Equipe: ${id}`;
+    if (type === 'unit') return task?.unitName || `Unidade: ${id}`;
+    return id || 'Não definido';
   };
 
   const isMyTurn = useMemo(() => {
     if (!task || !user) return false;
     const { status, assigneeType, assigneeId, approverType, approverId } = task;
+    const userUnitIds = Array.from(new Set([...(user.unitIds ?? []), ...(user.assignedKioskIds ?? [])]));
+    const userRoleIds = Array.from(new Set([
+      user.profileId,
+      user.jobRoleId,
+      ...(user.jobFunctionIds ?? []),
+    ].filter(Boolean)));
 
     if (status === 'awaiting_approval') {
         if (approverType === 'user' && approverId === user.id) return true;
         if (approverType === 'profile' && user.profileId === approverId) return true;
+        if (approverType === 'role' && approverId && userRoleIds.includes(approverId)) return true;
+        if (approverType === 'unit' && approverId && userUnitIds.includes(approverId)) return true;
     } else if (status === 'pending' || status === 'reopened' || status === 'in_progress') {
         if (assigneeType === 'user' && assigneeId === user.id) return true;
         if (assigneeType === 'profile' && user.profileId === assigneeId) return true;
+        if (assigneeType === 'role' && userRoleIds.includes(assigneeId)) return true;
+        if (assigneeType === 'unit' && userUnitIds.includes(assigneeId)) return true;
     }
     return false;
   }, [task, user, users, profiles]);
 
   const originLink = useMemo(() => {
     if (!task) return null;
+    if (task.originLink) {
+      return task.originLink;
+    }
     if (task.origin.kind === 'form_trigger') {
       return `/dashboard/forms/${task.origin.execution_id}/view`;
     }
@@ -203,6 +220,12 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
                       <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarIcon /> Prazo de conclusão</h4>
                       <p>{task.dueDate ? format(parseISO(task.dueDate), 'dd/MM/yyyy') : 'Não definido'}</p>
                   </div>
+                  {(task.unitName || task.unitId) &&
+                    <div className="p-3 border rounded-lg space-y-1">
+                        <h4 className="text-sm font-semibold flex items-center gap-2"><FileText /> Unidade vinculada</h4>
+                        <p>{task.unitName || task.unitId}</p>
+                    </div>
+                  }
                   {task.completedAt &&
                     <div className="p-3 border rounded-lg space-y-1">
                         <h4 className="text-sm font-semibold flex items-center gap-2"><CheckCircle2 /> Data de conclusão</h4>

@@ -1127,6 +1127,8 @@ export type StockAuditSession = {
     startedAt: string; // ISO String
     completedAt?: string; // ISO String
     items: StockAuditItem[];
+    taskId?: string;
+    workspaceId?: string;
 };
 
 export type ReturnRequestStatus = 'em_andamento' | 'finalizado_sucesso' | 'finalizado_erro';
@@ -1908,6 +1910,15 @@ export type TaskHistoryItem = {
     details?: string;
 };
 
+export type TaskAssigneeType = 'user' | 'profile' | 'role' | 'team' | 'unit';
+export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type TaskVisibilityScope =
+  | 'assignee'
+  | 'assignee_and_watchers'
+  | 'unit'
+  | 'project'
+  | 'workspace';
+
 export interface LegacyTask {
   id: string;
   type: string;
@@ -1919,16 +1930,27 @@ export interface LegacyTask {
 
 export type Task = {
     id: string;
+    workspaceId?: string;
     projectId?: string;
     statusId?: string;
     title: string;
     description?: string;
     status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
-    assigneeType: 'user' | 'profile';
+    assigneeType: TaskAssigneeType;
     assigneeId: string; // userId or profileId
     requiresApproval: boolean;
-    approverType?: 'user' | 'profile';
+    approverType?: TaskAssigneeType;
     approverId?: string;
+    priority?: TaskPriority;
+    unitId?: string;
+    unitName?: string;
+    createdByUserId?: string;
+    createdByUsername?: string;
+    watcherUserIds?: string[];
+    watcherProfileIds?: string[];
+    watcherRoleIds?: string[];
+    visibilityScope?: TaskVisibilityScope;
+    originLink?: string;
     origin: TaskOrigin;
     history: TaskHistoryItem[];
     createdAt: string; // ISO string
@@ -2524,7 +2546,7 @@ export type FormTask = {
   status_id: string;
   title: string;
   description?: string;
-  assignee_type: 'user' | 'role';
+  assignee_type: 'user' | 'role' | 'team' | 'unit';
   assignee_id: string;
   assignee_name?: string;
   requires_approval: boolean;

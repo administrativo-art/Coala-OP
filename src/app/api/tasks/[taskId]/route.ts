@@ -82,7 +82,7 @@ export async function DELETE(request: NextRequest, contextArg: RouteContext) {
     );
 
     const { taskId } = await contextArg.params;
-    await deleteTaskDocument(taskId);
+    await deleteTaskDocument({ context, taskId });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

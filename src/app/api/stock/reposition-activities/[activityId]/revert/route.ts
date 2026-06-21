@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { revertRepositionActivityServer } from "@/features/reposition/lib/server";
+import { syncRepositionTaskSafely } from "@/features/reposition/lib/task-sync";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
-import { updateTaskDocument } from "@/features/tasks/lib/server";
 import { type RepositionActivity } from "@/types";
 
 export const runtime = "nodejs";
@@ -34,12 +34,11 @@ export async function POST(request: NextRequest, routeContext: RouteContext) {
       ? ({ id: snap.id, ...(snap.data() as Omit<RepositionActivity, "id">) } as RepositionActivity)
       : null;
 
-    if (activity?.taskId) {
-      await updateTaskDocument({
+    if (activity) {
+      await syncRepositionTaskSafely({
         context,
-        taskId: activity.taskId,
-        allowOriginStatusChange: true,
-        updates: { status: "pending" },
+        activity,
+        label: "revert",
       });
     }
     return NextResponse.json({ ok: true });

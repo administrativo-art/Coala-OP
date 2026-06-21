@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { type ServerUserContext } from "@/lib/auth-server";
+import { canViewTask } from "@/features/tasks/lib/server-access";
 import {
   type LegacyTaskOriginType,
   type Task,
@@ -138,18 +139,43 @@ function inferStatusFromDoc(data: FirestoreRecord) {
   return "pending";
 }
 
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [] as string[];
+  return value
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+}
+
+function assertTaskWorkspace(data: FirestoreRecord, context: ServerUserContext) {
+  const workspaceId = typeof data.workspace_id === "string" ? data.workspace_id : null;
+  if (workspaceId !== context.workspace_id) {
+    const error = new Error("Tarefa não encontrada neste workspace.");
+    (error as Error & { code?: number }).code = 404;
+    throw error;
+  }
+}
+
 function adaptTaskDoc(id: string, data: FirestoreRecord): Task {
+  const createdBy = isRecord(data.created_by) ? data.created_by : null;
   return {
     id,
+    ...(typeof data.workspace_id === "string" ? { workspaceId: data.workspace_id } : {}),
     ...(typeof data.project_id === "string" ? { projectId: data.project_id } : {}),
     ...(typeof data.status_id === "string" ? { statusId: data.status_id } : {}),
     title: typeof data.title === "string" ? data.title : "Tarefa sem título",
     ...(typeof data.description === "string" ? { description: data.description } : {}),
     status: inferStatusFromDoc(data),
     assigneeType:
-      data.assigneeType === "profile" || data.assignee_type === "role"
-        ? "profile"
-        : "user",
+      data.assigneeType === "profile" ||
+      data.assigneeType === "role" ||
+      data.assigneeType === "team" ||
+      data.assigneeType === "unit"
+        ? data.assigneeType
+        : data.assignee_type === "role" ||
+            data.assignee_type === "team" ||
+            data.assignee_type === "unit"
+          ? data.assignee_type
+          : "user",
     assigneeId:
       typeof data.assigneeId === "string"
         ? data.assigneeId
@@ -158,8 +184,15 @@ function adaptTaskDoc(id: string, data: FirestoreRecord): Task {
           : "",
     requiresApproval:
       data.requiresApproval === true || data.requires_approval === true,
-    ...(data.approverType === "profile" || data.approver_type === "role"
-      ? { approverType: "profile" as const }
+    ...(data.approverType === "profile" ||
+    data.approverType === "role" ||
+    data.approverType === "team" ||
+    data.approverType === "unit"
+      ? { approverType: data.approverType as Task["approverType"] }
+      : data.approver_type === "role" ||
+          data.approver_type === "team" ||
+          data.approver_type === "unit"
+        ? { approverType: data.approver_type as Task["approverType"] }
       : typeof data.approverId === "string" || typeof data.approver_id === "string"
         ? { approverType: "user" as const }
         : {}),
@@ -167,6 +200,83 @@ function adaptTaskDoc(id: string, data: FirestoreRecord): Task {
       ? { approverId: data.approverId }
       : typeof data.approver_id === "string"
         ? { approverId: data.approver_id }
+        : {}),
+    ...(data.priority === "low" ||
+    data.priority === "normal" ||
+    data.priority === "high" ||
+    data.priority === "urgent"
+      ? { priority: data.priority }
+      : {}),
+    ...(typeof data.unitId === "string"
+      ? { unitId: data.unitId }
+      : typeof data.unit_id === "string"
+        ? { unitId: data.unit_id }
+        : {}),
+    ...(typeof data.unitName === "string"
+      ? { unitName: data.unitName }
+      : typeof data.unit_name === "string"
+        ? { unitName: data.unit_name }
+        : {}),
+    ...(typeof data.createdByUserId === "string"
+      ? { createdByUserId: data.createdByUserId }
+      : typeof data.created_by_user_id === "string"
+        ? { createdByUserId: data.created_by_user_id }
+        : createdBy && typeof createdBy.user_id === "string"
+          ? { createdByUserId: createdBy.user_id }
+          : {}),
+    ...(typeof data.createdByUsername === "string"
+      ? { createdByUsername: data.createdByUsername }
+      : typeof data.created_by_username === "string"
+        ? { createdByUsername: data.created_by_username }
+        : createdBy && typeof createdBy.username === "string"
+          ? { createdByUsername: createdBy.username }
+          : {}),
+    ...(normalizeStringArray(data.watcherUserIds).length > 0 ||
+    normalizeStringArray(data.watcher_user_ids).length > 0
+      ? {
+          watcherUserIds: Array.from(
+            new Set([
+              ...normalizeStringArray(data.watcherUserIds),
+              ...normalizeStringArray(data.watcher_user_ids),
+            ])
+          ),
+        }
+      : {}),
+    ...(normalizeStringArray(data.watcherProfileIds).length > 0 ||
+    normalizeStringArray(data.watcher_profile_ids).length > 0
+      ? {
+          watcherProfileIds: Array.from(
+            new Set([
+              ...normalizeStringArray(data.watcherProfileIds),
+              ...normalizeStringArray(data.watcher_profile_ids),
+            ])
+          ),
+        }
+      : {}),
+    ...(normalizeStringArray(data.watcherRoleIds).length > 0 ||
+    normalizeStringArray(data.watcher_role_ids).length > 0
+      ? {
+          watcherRoleIds: Array.from(
+            new Set([
+              ...normalizeStringArray(data.watcherRoleIds),
+              ...normalizeStringArray(data.watcher_role_ids),
+            ])
+          ),
+        }
+      : {}),
+    ...(data.visibilityScope === "assignee" ||
+    data.visibilityScope === "assignee_and_watchers" ||
+    data.visibilityScope === "unit" ||
+    data.visibilityScope === "project" ||
+    data.visibilityScope === "workspace"
+      ? { visibilityScope: data.visibilityScope }
+      : typeof data.visibility_scope === "string"
+        ? { visibilityScope: data.visibility_scope as Task["visibilityScope"] }
+        : {}),
+    ...(typeof data.originLink === "string"
+      ? { originLink: data.originLink }
+      : typeof data.origin_link === "string"
+        ? { originLink: data.origin_link }
         : {}),
     origin: normalizeOrigin(data.origin),
     history: normalizeHistory(data.history),
@@ -198,14 +308,25 @@ export function buildDeterministicTaskId(parts: string[]) {
 }
 
 export async function ensureDefaultTaskProject(context: ServerUserContext) {
-  const projectId = makeProjectId(context.workspace_id, DEFAULT_PROJECT_SLUG);
+  return ensureTaskProject(context, {
+    slug: DEFAULT_PROJECT_SLUG,
+    name: DEFAULT_PROJECT_NAME,
+    description: "Projeto padrão do novo motor de tarefas.",
+  });
+}
+
+export async function ensureTaskProject(
+  context: ServerUserContext,
+  input: { slug: string; name: string; description?: string }
+) {
+  const projectId = makeProjectId(context.workspace_id, input.slug);
   const projectRef = dbAdmin.collection("task_projects").doc(projectId);
 
   await projectRef.set(
     {
       workspace_id: context.workspace_id,
-      name: DEFAULT_PROJECT_NAME,
-      description: "Projeto padrão do novo motor de tarefas.",
+      name: input.name,
+      description: input.description ?? "",
       members: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -294,16 +415,32 @@ export async function listTaskStatuses(projectIds: string[]) {
     .sort((left, right) => left.order - right.order);
 }
 
-export async function listTasks(workspaceId: string) {
-  const snap = await dbAdmin.collection("tasks").get();
+export async function listTasks(context: ServerUserContext, options?: { limit?: number }) {
+  let query: FirebaseFirestore.Query = dbAdmin
+    .collection("tasks")
+    .where("workspace_id", "==", context.workspace_id);
+  if (typeof options?.limit === "number") {
+    query = query.limit(Math.min(Math.max(options.limit, 1), 500));
+  }
+  const snap = await query.get();
+
   return snap.docs
-    .filter((doc) => {
+    .map((doc) => {
       const data = doc.data();
-      const taskWorkspaceId = typeof data.workspace_id === "string" ? data.workspace_id : null;
-      return taskWorkspaceId === null || taskWorkspaceId === workspaceId;
+      return {
+        raw: { id: doc.id, ...data },
+        task: adaptTaskDoc(doc.id, data),
+      };
     })
-    .map((doc) => adaptTaskDoc(doc.id, doc.data()))
+    .filter(({ raw, task }) => canViewTask(context, { ...raw, ...task }))
+    .map(({ task }) => task)
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+export async function getTaskById(taskId: string) {
+  const snap = await dbAdmin.collection("tasks").doc(taskId).get();
+  if (!snap.exists) return null;
+  return adaptTaskDoc(snap.id, snap.data() ?? {});
 }
 
 function buildHistoryItem(
@@ -424,13 +561,21 @@ export async function createManualTask(params: {
   input: {
     title: string;
     description?: string;
-    assigneeType?: "user" | "profile";
+    assigneeType?: Task["assigneeType"];
     assigneeId?: string;
     requiresApproval?: boolean;
-    approverType?: "user" | "profile";
+    approverType?: Task["approverType"];
     approverId?: string;
     dueDate?: string;
     projectId?: string;
+    unitId?: string;
+    unitName?: string;
+    priority?: Task["priority"];
+    watcherUserIds?: string[];
+    watcherProfileIds?: string[];
+    watcherRoleIds?: string[];
+    visibilityScope?: Task["visibilityScope"];
+    originLink?: string;
     origin?: Extract<TaskOrigin, { kind: "manual" | "legacy" }>;
   };
 }) {
@@ -451,17 +596,44 @@ export async function createManualTask(params: {
     status_slug: status.slug,
     title: params.input.title,
     description: params.input.description ?? "",
-    assignee_type: params.input.assigneeType === "profile" ? "role" : "user",
+    assignee_type:
+      params.input.assigneeType === "profile"
+        ? "role"
+        : params.input.assigneeType ?? "user",
     assignee_id: params.input.assigneeId ?? params.context.userDoc.id,
     requires_approval: params.input.requiresApproval === true,
     ...(params.input.approverId
       ? {
           approver_type:
-            params.input.approverType === "profile" ? "role" : "user",
+            params.input.approverType === "profile"
+              ? "role"
+              : params.input.approverType ?? "user",
           approver_id: params.input.approverId,
         }
       : {}),
+    priority: params.input.priority ?? "normal",
+    ...(params.input.unitId ? { unit_id: params.input.unitId, unitId: params.input.unitId } : {}),
+    ...(params.input.unitName ? { unit_name: params.input.unitName, unitName: params.input.unitName } : {}),
+    ...(params.input.originLink ? { origin_link: params.input.originLink, originLink: params.input.originLink } : {}),
+    watcher_user_ids: params.input.watcherUserIds ?? [],
+    watcher_profile_ids: params.input.watcherProfileIds ?? [],
+    watcher_role_ids: params.input.watcherRoleIds ?? [],
+    watcherUserIds: params.input.watcherUserIds ?? [],
+    watcherProfileIds: params.input.watcherProfileIds ?? [],
+    watcherRoleIds: params.input.watcherRoleIds ?? [],
+    visibility_scope:
+      params.input.visibilityScope ?? (params.input.unitId ? "unit" : "assignee_and_watchers"),
+    visibilityScope:
+      params.input.visibilityScope ?? (params.input.unitId ? "unit" : "assignee_and_watchers"),
     origin: params.input.origin ?? { kind: "manual" },
+    created_by: {
+      user_id: params.context.userDoc.id,
+      username: params.context.userDoc.username,
+    },
+    created_by_user_id: params.context.userDoc.id,
+    created_by_username: params.context.userDoc.username,
+    createdByUserId: params.context.userDoc.id,
+    createdByUsername: params.context.userDoc.username,
     history,
     created_at: now,
     updated_at: now,
@@ -492,6 +664,32 @@ export async function ensureTaskFromOrigin(params: {
   description?: string;
   dueDate?: string;
 }) {
+  const originDetails =
+    isRecord(params.origin.details) ? params.origin.details : {};
+  const originUnitId =
+    typeof originDetails.unit_id === "string" && originDetails.unit_id.trim()
+      ? originDetails.unit_id.trim()
+      : null;
+  const originUnitName =
+    typeof originDetails.unit_name === "string" && originDetails.unit_name.trim()
+      ? originDetails.unit_name.trim()
+      : null;
+  const answeredByUserId =
+    typeof originDetails.answered_by_user_id === "string" &&
+    originDetails.answered_by_user_id.trim()
+      ? originDetails.answered_by_user_id.trim()
+      : null;
+  const answeredByUsername =
+    typeof originDetails.answered_by_username === "string" &&
+    originDetails.answered_by_username.trim()
+      ? originDetails.answered_by_username.trim()
+      : null;
+  const originLink =
+    params.origin.kind === "form_trigger"
+      ? `/dashboard/forms/${params.origin.execution_id}/view`
+      : params.origin.kind === "purchase_receipt"
+        ? "/dashboard/purchasing/receipts"
+        : null;
   const taskId = buildDeterministicTaskId([
     params.workspaceId,
     params.origin.kind,
@@ -525,12 +723,33 @@ export async function ensureTaskFromOrigin(params: {
         status_slug: pendingStatus.slug,
         title: params.title,
         description: params.description ?? "",
-        assignee_type: params.trigger.assignee_type === "role" ? "role" : "user",
+        assignee_type:
+          params.trigger.assignee_type === "role" ||
+          params.trigger.assignee_type === "team" ||
+          params.trigger.assignee_type === "unit"
+            ? params.trigger.assignee_type
+            : "user",
         assignee_id: params.trigger.assignee_id,
         assignee_name: params.trigger.assignee_name ?? null,
         requires_approval: params.trigger.requires_approval,
         approver_id: params.trigger.approver_id ?? null,
         approver_name: params.trigger.approver_name ?? null,
+        priority: "normal",
+        ...(originUnitId ? { unit_id: originUnitId, unitId: originUnitId } : {}),
+        ...(originUnitName ? { unit_name: originUnitName, unitName: originUnitName } : {}),
+        ...(originLink ? { origin_link: originLink, originLink } : {}),
+        watcher_user_ids: answeredByUserId ? [answeredByUserId] : [],
+        watcherUserIds: answeredByUserId ? [answeredByUserId] : [],
+        visibility_scope: originUnitId ? "unit" : "assignee_and_watchers",
+        visibilityScope: originUnitId ? "unit" : "assignee_and_watchers",
+        created_by: {
+          user_id: params.actor.user_id,
+          username: params.actor.username,
+        },
+        created_by_user_id: answeredByUserId ?? params.actor.user_id,
+        created_by_username: answeredByUsername ?? params.actor.username,
+        createdByUserId: answeredByUserId ?? params.actor.user_id,
+        createdByUsername: answeredByUsername ?? params.actor.username,
         origin: params.origin,
         dedupe_key: taskId,
         section_id:
@@ -555,7 +774,13 @@ export async function ensureTaskFromOrigin(params: {
         status: "pending",
         projectId,
         statusId: pendingStatus.id,
-        assigneeType: params.trigger.assignee_type === "role" ? "profile" : "user",
+        assigneeType:
+          params.trigger.assignee_type === "role"
+            ? "profile"
+            : params.trigger.assignee_type === "team" ||
+                params.trigger.assignee_type === "unit"
+              ? params.trigger.assignee_type
+              : "user",
         assigneeId: params.trigger.assignee_id,
         requiresApproval: params.trigger.requires_approval,
         ...(params.trigger.approver_id ? { approverId: params.trigger.approver_id } : {}),
@@ -608,6 +833,7 @@ export async function updateTaskDocument(params: {
   }
 
   const data = snap.data() as FirestoreRecord;
+  assertTaskWorkspace(data, params.context);
   const origin = normalizeOrigin(data.origin);
   if (
     params.updates.status &&
@@ -625,6 +851,10 @@ export async function updateTaskDocument(params: {
 
   if (typeof params.updates.title === "string") nextData.title = params.updates.title;
   if (typeof params.updates.description === "string") nextData.description = params.updates.description;
+  if (typeof params.updates.projectId === "string") {
+    nextData.projectId = params.updates.projectId;
+    nextData.project_id = params.updates.projectId;
+  }
   if (typeof params.updates.status === "string") {
     const projectId =
       typeof data.project_id === "string"
@@ -647,7 +877,7 @@ export async function updateTaskDocument(params: {
   if (typeof params.updates.assigneeType === "string") {
     nextData.assigneeType = params.updates.assigneeType;
     nextData.assignee_type =
-      params.updates.assigneeType === "profile" ? "role" : "user";
+      params.updates.assigneeType === "profile" ? "role" : params.updates.assigneeType;
   }
   if (typeof params.updates.assigneeId === "string") {
     nextData.assigneeId = params.updates.assigneeId;
@@ -660,7 +890,7 @@ export async function updateTaskDocument(params: {
   if (typeof params.updates.approverType === "string") {
     nextData.approverType = params.updates.approverType;
     nextData.approver_type =
-      params.updates.approverType === "profile" ? "role" : "user";
+      params.updates.approverType === "profile" ? "role" : params.updates.approverType;
   }
   if (typeof params.updates.approverId === "string") {
     nextData.approverId = params.updates.approverId;
@@ -669,6 +899,45 @@ export async function updateTaskDocument(params: {
   if (typeof params.updates.dueDate === "string") {
     nextData.dueDate = params.updates.dueDate;
     nextData.due_date = params.updates.dueDate;
+  }
+  if (typeof params.updates.priority === "string") {
+    nextData.priority = params.updates.priority;
+  }
+  if (typeof params.updates.unitId === "string") {
+    nextData.unitId = params.updates.unitId;
+    nextData.unit_id = params.updates.unitId;
+  }
+  if (typeof params.updates.unitName === "string") {
+    nextData.unitName = params.updates.unitName;
+    nextData.unit_name = params.updates.unitName;
+  }
+  if (typeof params.updates.createdByUserId === "string") {
+    nextData.createdByUserId = params.updates.createdByUserId;
+    nextData.created_by_user_id = params.updates.createdByUserId;
+  }
+  if (typeof params.updates.createdByUsername === "string") {
+    nextData.createdByUsername = params.updates.createdByUsername;
+    nextData.created_by_username = params.updates.createdByUsername;
+  }
+  if (Array.isArray(params.updates.watcherUserIds)) {
+    nextData.watcherUserIds = params.updates.watcherUserIds;
+    nextData.watcher_user_ids = params.updates.watcherUserIds;
+  }
+  if (Array.isArray(params.updates.watcherProfileIds)) {
+    nextData.watcherProfileIds = params.updates.watcherProfileIds;
+    nextData.watcher_profile_ids = params.updates.watcherProfileIds;
+  }
+  if (Array.isArray(params.updates.watcherRoleIds)) {
+    nextData.watcherRoleIds = params.updates.watcherRoleIds;
+    nextData.watcher_role_ids = params.updates.watcherRoleIds;
+  }
+  if (typeof params.updates.visibilityScope === "string") {
+    nextData.visibilityScope = params.updates.visibilityScope;
+    nextData.visibility_scope = params.updates.visibilityScope;
+  }
+  if (typeof params.updates.originLink === "string") {
+    nextData.originLink = params.updates.originLink;
+    nextData.origin_link = params.updates.originLink;
   }
   if (Array.isArray(params.updates.history)) {
     nextData.history = params.updates.history;
@@ -709,6 +978,7 @@ export async function updateTaskStatus(params: {
   }
 
   const data = snap.data() as FirestoreRecord;
+  assertTaskWorkspace(data, params.context);
   const origin = normalizeOrigin(data.origin);
   if (
     origin.kind !== "manual" &&
@@ -728,9 +998,13 @@ export async function updateTaskStatus(params: {
   const statusDoc = await resolveStatusDoc(projectId, params.status);
 
   let action: TaskHistoryItem["action"] = "status_changed";
-  if (params.status === "completed") action = "completed";
-  if (params.status === "awaiting_approval") action = "approved";
-  if (params.status === "reopened" || params.status === "pending") action = "reopened";
+  if (params.status === "completed") {
+    action = currentTask.status === "awaiting_approval" ? "approved" : "completed";
+  }
+  if (params.status === "awaiting_approval") action = "status_changed";
+  if (params.status === "reopened" || params.status === "pending") {
+    action = currentTask.status === "awaiting_approval" ? "rejected" : "reopened";
+  }
 
   const now = new Date().toISOString();
   const history = [
@@ -771,6 +1045,17 @@ export function isDefaultTaskProjectId(workspaceId: string, projectId: string) {
   return projectId === makeProjectId(workspaceId, DEFAULT_PROJECT_SLUG);
 }
 
-export async function deleteTaskDocument(taskId: string) {
-  await dbAdmin.collection("tasks").doc(taskId).delete();
+export async function deleteTaskDocument(params: {
+  context: ServerUserContext;
+  taskId: string;
+}) {
+  const ref = dbAdmin.collection("tasks").doc(params.taskId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    const error = new Error("Tarefa não encontrada.");
+    (error as Error & { code?: number }).code = 404;
+    throw error;
+  }
+  assertTaskWorkspace((snap.data() ?? {}) as FirestoreRecord, params.context);
+  await ref.delete();
 }

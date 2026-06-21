@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { createManualTask } from "@/features/tasks/lib/server";
+import { syncRepositionTaskSafely } from "@/features/reposition/lib/task-sync";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { type RepositionActivity } from "@/types";
@@ -53,14 +53,6 @@ function canManage(context: Awaited<ReturnType<typeof requireUser>>) {
 
 function canView(context: Awaited<ReturnType<typeof requireUser>>) {
   return canManage(context) || !!context.permissions?.reposition?.view || !!context.permissions?.reposition?.receive;
-}
-
-function buildRepositionTaskDescription(activity: Pick<
-  RepositionActivity,
-  "kioskOriginName" | "kioskDestinationName" | "items" | "status"
->) {
-  const totalItems = activity.items.length;
-  return `${activity.kioskOriginName} -> ${activity.kioskDestinationName}. ${totalItems} ${totalItems === 1 ? "item" : "itens"}. Status: ${activity.status}.`;
 }
 
 export async function GET(request: NextRequest) {
@@ -203,32 +195,13 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    try {
-      const task = await createManualTask({
-        context,
-        input: {
-          title: `Reposição ${payload.kioskOriginName} -> ${payload.kioskDestinationName}`,
-          description: buildRepositionTaskDescription(payload),
-          assigneeType: "user",
-          assigneeId: context.userDoc.id,
-          origin: {
-            kind: "legacy",
-            type: "reposition_activity",
-            id: activityRef.id,
-          },
-        },
-      });
-
+    const task = await syncRepositionTaskSafely({
+      context,
+      activity: payload,
+      label: "create",
+    });
+    if (task) {
       payload.taskId = task.id;
-      await activityRef.set({ taskId: task.id }, { merge: true });
-    } catch (taskError) {
-      console.error(
-        "[REPOSITION POST] Reposição criada, mas falhou ao criar tarefa vinculada",
-        {
-          activityId: activityRef.id,
-          error: taskError,
-        }
-      );
     }
 
     if (payload.requestId) {

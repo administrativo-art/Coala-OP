@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
+import {
+  cancelStockCountTaskSafely,
+  syncStockCountTaskSafely,
+} from '@/features/stock-count/lib/task-sync';
+import { type StockAuditSession } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -171,6 +176,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     createdBy: userContext.decoded.uid,
   });
 
+  if (resource === 'stock-audit') {
+    const createdSnap = await ref.get();
+    await syncStockCountTaskSafely({
+      context: userContext,
+      session: { id: ref.id, ...(createdSnap.data() ?? {}) } as StockAuditSession,
+      label: 'create',
+    });
+  }
+
   return NextResponse.json({ id: ref.id }, { status: 201 });
 }
 
@@ -213,6 +227,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     await dbAdmin.collection(collectionName).doc(id).update(updatePayload);
   }
 
+  if (resource === 'stock-audit') {
+    const updatedSnap = await dbAdmin.collection(collectionName).doc(id).get();
+    if (updatedSnap.exists) {
+      await syncStockCountTaskSafely({
+        context: userContext,
+        session: { id: updatedSnap.id, ...(updatedSnap.data() ?? {}) } as StockAuditSession,
+        label: 'update',
+      });
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }
 
@@ -235,6 +260,22 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   const collectionName = collectionMap[resource];
   if (!collectionName || !id) return jsonError('Recurso ou ID inválido.', 404);
 
+  const existingSnap =
+    resource === 'stock-audit'
+      ? await dbAdmin.collection(collectionName).doc(id).get()
+      : null;
+
   await dbAdmin.collection(collectionName).doc(id).delete();
+
+  if (resource === 'stock-audit') {
+    const existingData = existingSnap?.data() as Partial<StockAuditSession> | undefined;
+    await cancelStockCountTaskSafely({
+      context: userContext,
+      sessionId: id,
+      taskId: existingData?.taskId,
+      label: 'delete',
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }

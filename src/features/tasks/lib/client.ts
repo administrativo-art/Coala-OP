@@ -57,13 +57,21 @@ export async function createTask(
   input: {
     title: string;
     description?: string;
-    assigneeType?: "user" | "profile";
+    assigneeType?: Task["assigneeType"];
     assigneeId?: string;
     requiresApproval?: boolean;
-    approverType?: "user" | "profile";
+    approverType?: Task["approverType"];
     approverId?: string;
     dueDate?: string;
     projectId?: string;
+    unitId?: string;
+    unitName?: string;
+    priority?: Task["priority"];
+    watcherUserIds?: string[];
+    watcherProfileIds?: string[];
+    watcherRoleIds?: string[];
+    visibilityScope?: Task["visibilityScope"];
+    originLink?: string;
     origin?: Extract<TaskOrigin, { kind: "manual" | "legacy" }>;
   }
 ) {

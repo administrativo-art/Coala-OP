@@ -127,10 +127,19 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         try {
             const shouldUseStatusRoute =
                 typeof updates.status === 'string' &&
-                Object.keys(updates).every((key) => key === 'status');
+                Object.keys(updates).every((key) =>
+                    key === 'status' ||
+                    key === 'history' ||
+                    key === 'updatedAt' ||
+                    key === 'completedAt'
+                );
+
+            const statusDetails = Array.isArray(updates.history)
+                ? updates.history[updates.history.length - 1]?.details
+                : undefined;
 
             const updatedTask = shouldUseStatusRoute
-                ? await updateTaskStatus(firebaseUser, taskId, updates.status as Task['status'])
+                ? await updateTaskStatus(firebaseUser, taskId, updates.status as Task['status'], statusDetails)
                 : await updateTaskRequest(firebaseUser, taskId, updates);
 
             setTasks((current) =>
