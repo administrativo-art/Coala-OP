@@ -3,26 +3,20 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowDown,
   ArrowRight,
   Banknote,
   BriefcaseBusiness,
-  Building2,
   Cake,
   ChevronDown,
   ChevronRight,
-  CircleDot,
   Coffee,
   GraduationCap,
   HeartHandshake,
   Instagram,
-  MapPin,
-  MessageCircle,
+  Mail,
   Search,
   ShieldPlus,
   Sparkles,
-  Star,
-  Ticket,
   TramFront,
   Users,
 } from "lucide-react";
@@ -45,173 +39,337 @@ interface PublicOpening {
 const WORK_TYPE_LABELS: Record<WorkType, string> = {
   presencial: "Presencial",
   remoto: "Remoto",
-  hibrido: "Hibrido",
+  hibrido: "Híbrido",
 };
 
 const FALLBACK_ROLES = [
-  "Marketing",
   "Atendente",
   "Operador(a) de loja",
   "Auxiliar de cozinha",
   "Caixa",
   "Gerente de unidade",
-  "Estagio",
+  "Estágio · Marketing",
 ];
 
-const CARD_ACCENTS = [
-  "border-t-[#a8d7b5]",
-  "border-t-[#61bed7]",
-  "border-t-[#df69a6]",
-  "border-t-[#f3d45c]",
-  "border-t-[#f5b19f]",
-  "border-t-[#c8a7e7]",
+const FALLBACK_PUBLIC_UNITS = [
+  "Tirirical",
+  "João Paulo",
+  "Tirimai",
+  "Administrativo/CTA",
 ];
 
-const ROLE_ICONS = [BriefcaseBusiness, Coffee, HeartHandshake, Sparkles, Ticket, Building2];
+const ROLE_META = [
+  { emoji: "🥤", color: "#EE6FA8" },
+  { emoji: "🏪", color: "#3FBCD9" },
+  { emoji: "🍳", color: "#F7D154" },
+  { emoji: "💳", color: "#FFB39A" },
+  { emoji: "📋", color: "#A2D8B5" },
+  { emoji: "✨", color: "#C9A6E0" },
+];
+
+const ROLE_META_BY_KEY = [
+  { key: "atendente", emoji: "🥤", color: "#EE6FA8" },
+  { key: "operador", emoji: "🏪", color: "#3FBCD9" },
+  { key: "auxiliar de cozinha", emoji: "🍳", color: "#F7D154" },
+  { key: "cozinha", emoji: "🍳", color: "#F7D154" },
+  { key: "caixa", emoji: "💳", color: "#FFB39A" },
+  { key: "gerente", emoji: "📋", color: "#A2D8B5" },
+  { key: "marketing", emoji: "✨", color: "#C9A6E0" },
+];
 
 const VALUE_CARDS = [
   {
+    emoji: "🚀",
     title: "Quem entra, cresce.",
-    text: "70% dos gerentes comecaram no balcao. Tem trilha clara, treino interno e gente disposta a ensinar.",
-    footer: "Trilha: balcao -> lider de turno -> subgerente -> gerente",
-    icon: Sparkles,
-    color: "bg-[#f6d7e8]",
-    image: "bg-[#df69a6]/15",
+    text: "70% dos gerentes começaram no balcão. Trilha clara, treino interno e gente disposta a ensinar.",
+    footer: "Trilha: balcão → líder → gerente",
+    color: "#EE6FA8",
+    background: "#FCDFEB",
   },
   {
-    title: "Time que e time mesmo.",
-    text: "A gente revisa escala junto, divide gorjeta por loja e tira foto na quinta. Sem misterio, sem hierarquia desnecessaria.",
-    footer: "Nota media no Glassdoor: 4,6 estrelas",
-    icon: HeartHandshake,
-    color: "bg-[#cdeef6]",
-    image: "bg-[#61bed7]/15",
+    emoji: "🤝",
+    title: "Time que é time mesmo.",
+    text: "Revisão de escala conjunta e ambiente sem hierarquia desnecessária. Todo mundo contribui para o resultado.",
+    footer: "Escala revisada todo mês",
+    color: "#3FBCD9",
+    background: "#CFEEF6",
   },
   {
-    title: "Salario em dia, sempre.",
-    text: "PLR semestral, day-off de aniversario, VT integral, refeicao na loja e Sulamerica apos 90 dias. Sem letras miudas.",
-    footer: "Pagamento no 5o dia util, sem excecao",
-    icon: Banknote,
-    color: "bg-[#fff0bc]",
-    image: "bg-[#f3d45c]/20",
+    emoji: "💸",
+    title: "Salário em dia, sempre.",
+    text: "Bonificações, day-off de aniversário, VT integral, refeições de acordo com a jornada e plano odontológico.",
+    footer: "Pagamento no 5º dia útil",
+    color: "#9A7200",
+    background: "#FBEDC2",
   },
 ];
 
 const BENEFITS = [
-  { title: "Shake na casa", text: "1 shake e 1 refeicao por turno trabalhado", icon: Coffee },
-  { title: "Vale-transporte", text: "Cobertura completa do deslocamento", icon: TramFront },
-  { title: "PLR semestral", text: "Atrelada as metas da sua loja", icon: Banknote },
-  { title: "Trilha de carreira", text: "70% dos gerentes comecaram no balcao", icon: GraduationCap },
-  { title: "Plano Sulamerica", text: "Apos 90 dias, com coparticipacao", icon: ShieldPlus },
-  { title: "Day-off de aniversario", text: "Folga remunerada no seu dia", icon: Cake },
+  { title: "Shake na casa", text: "1 shake por turno", icon: Coffee, color: "#EE6FA8" },
+  { title: "Vale-transporte", text: "Cobertura total do deslocamento", icon: TramFront, color: "#3FBCD9" },
+  { title: "Bonificações", text: "Atreladas ao desempenho e metas", icon: Banknote, color: "#E0A100" },
+  { title: "Trilha de carreira", text: "70% dos gerentes vieram do balcão", icon: GraduationCap, color: "#2FA86A" },
+  { title: "Plano odontológico", text: "Cobertura odontológica para você", icon: ShieldPlus, color: "#9A6FD0" },
+  { title: "Day-off aniversário", text: "Folga remunerada no seu dia", icon: Cake, color: "#F0794F" },
 ];
 
 const PROCESS_STEPS = [
-  {
-    title: "Voce se inscreve",
-    text: "Formulario rapido mais curriculo opcional. A gente le tudo.",
-    color: "bg-[#df69a6]",
-  },
-  {
-    title: "Triagem",
-    text: "Em ate 5 dias uteis voce recebe um e-mail confirmando se segue.",
-    color: "bg-[#61bed7]",
-  },
-  {
-    title: "Conversa rapida",
-    text: "Papo de 30 min com a lider da unidade: pessoa, rotina, expectativa.",
-    color: "bg-[#f3d45c]",
-  },
-  {
-    title: "Dia de loja",
-    text: "Voce passa um turno com a gente para sentir como e.",
-    color: "bg-[#f5b19f]",
-  },
-  {
-    title: "Proposta",
-    text: "Se rolar match, mandamos a proposta com tudo escrito. Sem surpresa.",
-    color: "bg-[#a8d7b5]",
-  },
-];
-
-const TESTIMONIALS = [
-  {
-    quote: "Em 14 meses fui de atendente a subgerente. Aqui ninguem te empurra pra tras.",
-    name: "Patricia L.",
-    role: "Subgerente - Iguatemi - 2 anos de Coala",
-    initials: "PL",
-    color: "bg-[#df69a6]",
-  },
-  {
-    quote: "Treinamento e levado a serio mesmo. Comecei sem saber nada de cozinha e hoje toco a estacao fria sozinha.",
-    name: "Karina P.",
-    role: "Aux. de cozinha - Morumbi - 8 meses",
-    initials: "KP",
-    color: "bg-[#61bed7]",
-  },
-  {
-    quote: "Esperava so um job de fim de semana. Acabei ficando porque o time e absurdamente bom.",
-    name: "Lucas B.",
-    role: "Atendente - Higienopolis - 1 ano",
-    initials: "LB",
-    color: "bg-[#f3d45c]",
-  },
+  { color: "#EE6FA8", title: "Você se inscreve", text: "Formulário rápido + currículo opcional. A gente lê tudo." },
+  { color: "#3FBCD9", title: "Triagem", text: "Nosso time de RH avalia o perfil e confirma os próximos passos." },
+  { color: "#F7D154", textColor: "#2A1F2A", title: "Conversa rápida", text: "Papo sobre rotina, expectativas e disponibilidade." },
+  { color: "#FFB39A", title: "Dia de loja", text: "Quando fizer sentido, você sente na prática como é a operação." },
+  { color: "#C7E8C8", textColor: "#2A1F2A", title: "Proposta", text: "Se rolar match, mandamos tudo por escrito. Sem surpresa." },
+  { color: "#EE6FA8", title: "Contratação", text: "Documentação, integração e primeiro turno. Do oi ao crachá." },
 ];
 
 const FAQS = [
   {
-    question: "Preciso ter experiencia?",
-    answer: "Para a maioria das vagas de atendimento e balcao, nao. Treinamos do zero. Voce so precisa querer estar la.",
+    question: "Preciso ter experiência?",
+    answer: "Para a maioria das vagas de atendimento e balcão, não. Treinamos do zero — você só precisa querer estar lá.",
   },
   {
     question: "Quanto tempo leva o processo?",
-    answer: "A meta e fechar tudo em ate 12 dias, com retorno por e-mail em cada movimento.",
+    answer: "Nosso time de RH manterá você atualizado sobre cada etapa do processo.",
   },
   {
-    question: "Tem oportunidade para menor aprendiz?",
-    answer: "Quando a vaga abre, ela aparece na lista. Voce tambem pode deixar seu cadastro no banco de talentos.",
+    question: "Há oportunidades para menor aprendiz?",
+    answer: "Ainda não temos vagas para menor aprendiz abertas. Deixe seu cadastro no banco de talentos e entraremos em contato quando houver.",
   },
   {
-    question: "E se eu nao encontrar uma vaga para o meu perfil?",
-    answer: "Mande seu CV para o banco de talentos. Chamamos primeiro quando abrir algo perto de voce.",
+    question: "E se eu não encontrar uma vaga pro meu perfil?",
+    answer: "Deixa seu currículo no banco de talentos. A gente te chama assim que uma oportunidade surgir!",
   },
 ];
 
-function titleCaseCity(value?: string) {
-  if (!value) return "Sao Paulo";
+function formatUnitName(name: string) {
+  return name.replace(/^\s*(qui[oa]?sque|loja|unidade)\s+/i, "").trim() || name;
+}
+
+function getLocationLabel(value?: string) {
+  if (!value?.trim()) return "São Luís";
   return value
     .split(/[,-]/)[0]
     .trim()
     .replace(/\s+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    .replace(/\b\p{L}/gu, (char) => char.toLocaleUpperCase("pt-BR"));
 }
 
 function getPreview(text?: string) {
-  if (!text) return "Rotina dinamica, atendimento proximo e treinamento completo com o time Coala.";
-  return text.length > 145 ? `${text.slice(0, 145).trim()}...` : text;
+  const fallback = "Rotina dinâmica, atendimento próximo e treinamento completo com o time Coala.";
+  const source = text?.split("\n")[0]?.trim() || fallback;
+  return source.length > 132 ? `${source.slice(0, 132).trim()}...` : source;
 }
 
 function getRoleLabel(opening: PublicOpening) {
-  return opening.jobRoleName || opening.title.split("-")[0]?.trim() || "Time Coala";
+  return opening.jobRoleName || opening.title.split("-")[0]?.split("—")[0]?.trim() || "Time Coala";
 }
 
-function Logo() {
+function getRoleMeta(label: string) {
+  const normalized = label.toLocaleLowerCase("pt-BR");
+  const mapped = ROLE_META_BY_KEY.find((item) => normalized.includes(item.key));
+  if (mapped) return mapped;
+
+  const index = Math.abs(Array.from(label).reduce((sum, char) => sum + char.charCodeAt(0), 0)) % ROLE_META.length;
+  return ROLE_META[index];
+}
+
+function daysUntil(date?: string) {
+  if (!date) return null;
+  const diff = new Date(date).getTime() - Date.now();
+  if (!Number.isFinite(diff)) return null;
+  return Math.max(0, Math.ceil(diff / 86_400_000));
+}
+
+function pluralize(count: number, singular: string, plural: string) {
+  return count === 1 ? singular : plural;
+}
+
+function Logo({ size = 26 }: { size?: number }) {
   return (
-    <span className="inline-flex items-baseline gap-1 leading-none">
-      <span className="text-[28px] font-black text-[#df69a6]">coala</span>
-      <span className="text-[20px] font-black text-[#61bed7]">shakes</span>
+    <span className="inline-flex items-baseline gap-[0.3em] leading-none">
+      <span className="fd text-[#EE6FA8]" style={{ fontSize: size, letterSpacing: "-0.04em" }}>coala</span>
+      <span className="fd text-[#3FBCD9]" style={{ fontSize: size * 0.62 }}>shakes</span>
     </span>
   );
 }
 
+function Cup({ size = 56, fill = "#EE6FA8" }: { size?: number; fill?: string }) {
+  return (
+    <svg viewBox="0 0 64 80" width={size} height={size} aria-hidden="true">
+      <rect x="10" y="8" width="44" height="10" rx="3" fill="#2A1F2A" />
+      <rect x="36" y="0" width="6" height="22" rx="2" fill="#F7D154" />
+      <path d="M14 18 L50 18 L46 72 Q46 76 42 76 L22 76 Q18 76 18 72 Z" fill={fill} />
+      <path d="M20 22 L22 70" stroke="white" strokeWidth="3" opacity=".35" strokeLinecap="round" />
+      <circle cx="42" cy="14" r="3" fill="#D9528E" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  );
+}
+
+function PageStyles() {
+  return (
+    <style dangerouslySetInnerHTML={{ __html: `
+      .vagas-publicas {
+        --pk: #EE6FA8;
+        --pk-d: #D9528E;
+        --cy: #3FBCD9;
+        --cr: #F4ECD8;
+        --ik: #2A1F2A;
+        --ik2: #5B4C5B;
+        --ye: #F7D154;
+        --mn: #C7E8C8;
+        --pe: #FFB39A;
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .vagas-publicas .fd {
+        font-family: 'Baloo 2', system-ui, sans-serif !important;
+        font-weight: 800 !important;
+        letter-spacing: -0.025em;
+      }
+      .vagas-publicas .fm {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 600;
+      }
+      .vagas-publicas .vagas-shell {
+        width: min(1280px, calc(100% - clamp(40px, 7vw, 120px)));
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .vagas-publicas .vagas-readable {
+        width: min(880px, calc(100% - clamp(40px, 7vw, 120px)));
+        max-width: 980px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .vagas-publicas .stk {
+        box-shadow: 2px 2px 0 rgba(42,31,42,.12);
+      }
+      .vagas-publicas .btn {
+        border-radius: 999px !important;
+        box-shadow: 0 4px 0 rgba(42,31,42,.15) !important;
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif !important;
+        transition: transform .12s, box-shadow .12s;
+      }
+      .vagas-publicas .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 0 rgba(42,31,42,.15);
+      }
+      .vagas-publicas .btn:active {
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 rgba(42,31,42,.15);
+      }
+      .vagas-publicas .squig {
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8'><path d='M0 4 Q7.5 0,15 4 T30 4 T45 4 T60 4' fill='none' stroke='%23F7D154' stroke-width='3' stroke-linecap='round'/></svg>");
+        background-repeat: repeat-x;
+        background-position: 0 100%;
+        background-size: 60px 8px;
+        padding-bottom: 8px;
+      }
+      @keyframes vagasFloat {
+        0%,100% { transform: translateY(0) rotate(-4deg); }
+        50% { transform: translateY(-10px) rotate(4deg); }
+      }
+      @keyframes vagasCardIconFloat {
+        0%,100% { transform: translate3d(0,0,0) rotate(-6deg) scale(1); }
+        50% { transform: translate3d(0,-10px,0) rotate(4deg) scale(1.04); }
+      }
+      @keyframes vagasCardIconPulse {
+        0%,100% { transform: translate3d(0,0,0) scale(1); }
+        50% { transform: translate3d(0,-3px,0) scale(1.08); }
+      }
+      .vagas-publicas .wgl {
+        animation: vagasFloat 3.6s ease-in-out infinite;
+        transform-origin: bottom center;
+        filter: drop-shadow(0 10px 12px rgba(238,111,168,.28));
+        will-change: transform;
+      }
+      .vagas-publicas .wgl:hover {
+        animation-duration: 1.1s;
+      }
+      @keyframes vagasMarquee {
+        from { transform: translateX(0); }
+        to { transform: translateX(-50%); }
+      }
+      .vagas-publicas .mq {
+        animation: vagasMarquee 36s linear infinite;
+      }
+      .vagas-publicas .card-hover {
+        transition: transform .2s, box-shadow .2s;
+      }
+      .vagas-publicas .card-hover:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 32px rgba(42,31,42,.12);
+      }
+      .vagas-publicas .value-ghost-icon {
+        animation: vagasCardIconFloat 4.8s ease-in-out infinite;
+        transform-origin: center;
+        will-change: transform;
+      }
+      .vagas-publicas .value-main-icon {
+        animation: vagasCardIconPulse 3.4s ease-in-out infinite;
+        display: inline-block;
+        transform-origin: center;
+        will-change: transform;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .vagas-publicas .mq,
+        .vagas-publicas .wgl,
+        .vagas-publicas .value-ghost-icon,
+        .vagas-publicas .value-main-icon {
+          animation: none !important;
+        }
+      }
+    ` }} />
+  );
+}
+
+interface PublicStats {
+  unitCount: number;
+  units: string[];
+  collaboratorCount: number;
+}
+
+const FALLBACK_PUBLIC_STATS: PublicStats = {
+  unitCount: FALLBACK_PUBLIC_UNITS.length,
+  units: FALLBACK_PUBLIC_UNITS,
+  collaboratorCount: 0,
+};
+
+function normalizePublicStats(data: unknown): PublicStats {
+  if (!data || typeof data !== "object") return FALLBACK_PUBLIC_STATS;
+
+  const payload = data as Partial<PublicStats>;
+  const fetchedUnits = Array.isArray(payload.units)
+    ? payload.units.filter((unit): unit is string => typeof unit === "string" && unit.trim().length > 0)
+    : [];
+  const units = fetchedUnits.length > 0 ? fetchedUnits : FALLBACK_PUBLIC_UNITS;
+  const unitCount = typeof payload.unitCount === "number" && payload.unitCount > 0
+    ? payload.unitCount
+    : units.length;
+  const collaboratorCount = typeof payload.collaboratorCount === "number" && payload.collaboratorCount > 0
+    ? payload.collaboratorCount
+    : 0;
+
+  return { unitCount, units, collaboratorCount };
+}
+
 export default function VagasPage() {
   const [openings, setOpenings] = useState<PublicOpening[]>([]);
+  const [stats, setStats] = useState<PublicStats>(FALLBACK_PUBLIC_STATS);
+  const [statsLoaded, setStatsLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filterWorkType, setFilterWorkType] = useState<WorkType | "">("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
-  const [openFaq, setOpenFaq] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -221,8 +379,16 @@ export default function VagasPage() {
         return response.json();
       })
       .then((data) => setOpenings(Array.isArray(data) ? data : []))
-      .catch(() => setError("Nao foi possivel carregar as vagas no momento."))
+      .catch(() => setError("Não foi possível carregar as vagas no momento."))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/hr/public-stats")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setStats(normalizePublicStats(data)))
+      .catch(() => undefined)
+      .finally(() => setStatsLoaded(true));
   }, []);
 
   const categories = useMemo(() => {
@@ -246,534 +412,454 @@ export default function VagasPage() {
   }, [openings]);
 
   const locations = useMemo(() => {
-    return Array.from(new Set(openings.map((opening) => titleCaseCity(opening.location)).filter(Boolean))).sort();
+    return Array.from(new Set(openings.map((opening) => getLocationLabel(opening.location)).filter(Boolean))).sort();
   }, [openings]);
 
   const filtered = openings.filter((opening) => {
     const term = search.toLowerCase().trim();
     const haystack = `${opening.title} ${opening.jobRoleName ?? ""} ${opening.location ?? ""} ${opening.description ?? ""}`.toLowerCase();
     if (term && !haystack.includes(term)) return false;
-    if (filterWorkType && opening.workType !== filterWorkType) return false;
     if (filterCategory && getRoleLabel(opening) !== filterCategory) return false;
-    if (filterLocation && titleCaseCity(opening.location) !== filterLocation) return false;
+    if (filterLocation && getLocationLabel(opening.location) !== filterLocation) return false;
     return true;
   });
 
   const openCount = openings.length;
-  const unitCount = locations.length || 5;
-  const hasFilters = !!(search || filterWorkType || filterCategory || filterLocation);
-
-  const scrollToList = () => listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const unitCount = stats.unitCount;
+  const collaboratorCount = stats.collaboratorCount;
+  const hasOpenings = openCount > 0;
+  const hasFilters = !!(search || filterCategory || filterLocation);
+  const footerUnits = useMemo(() => {
+    return Array.from(new Set(stats.units.map(formatUnitName)));
+  }, [stats.units]);
+  const statsSummary = statsLoaded && unitCount > 0
+    ? `${openCount} ${pluralize(openCount, "vaga", "vagas")} em ${unitCount} ${pluralize(unitCount, "unidade", "unidades")}`
+    : `${openCount} ${pluralize(openCount, "vaga", "vagas")}`;
+  const hiringBadge = openCount > 0
+    ? {
+      label: "Estamos contratando",
+      dotClass: "bg-[#3FBCD9]",
+      dotPingClass: "bg-[#3FBCD9]",
+    }
+    : {
+      label: "Novas vagas em breve!",
+      dotClass: "bg-[#F7D154]",
+      dotPingClass: "bg-[#F7D154]",
+    };
+  const companySummary = (
+    <>
+      Somos <strong className="text-[#2A1F2A]">{unitCount} unidades Coala Shakes</strong> em São Luís/MA
+      {collaboratorCount > 0 ? (
+        <> e <strong className="text-[#2A1F2A]">{collaboratorCount} coalas</strong></>
+      ) : null} servindo shake todo dia.
+    </>
+  );
+  const scrollToList = () => {
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState(null, "", "#vagas");
+  };
   const resetFilters = () => {
     setSearch("");
-    setFilterWorkType("");
     setFilterCategory("");
     setFilterLocation("");
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#f4ecd9] text-[#2a1d29]">
-      <header className="sticky top-0 z-40 border-b border-[#2a1d29]/10 bg-[#f4ecd9]/95 backdrop-blur">
-        <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8 lg:px-10">
-          <Link href="/vagas" aria-label="Coala Shakes vagas">
+    <div className="vagas-publicas min-h-screen overflow-x-hidden bg-[#F4ECD8] text-[#2A1F2A]">
+      <PageStyles />
+
+      <header className="sticky top-0 z-40 border-b border-[#2A1F2A]/10 bg-[#F4ECD8]/95 backdrop-blur">
+        <div className="vagas-shell flex h-[68px] items-center gap-4">
+          <Link href="/vagas" aria-label="Coala Shakes vagas" className="shrink-0">
             <Logo />
           </Link>
-
-          <nav className="hidden items-center gap-8 text-lg font-bold text-[#5f5360] lg:flex">
-            <button onClick={scrollToList} className="inline-flex items-center gap-2 text-[#df69a6]">
-              Vagas
-              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#df69a6] px-2 text-sm text-white">
-                {openCount || 0}
-              </span>
-            </button>
-            <a href="mailto:trabalheconosco@coalashakes.com" className="transition hover:text-[#2a1d29]">
-              Contato
-            </a>
-          </nav>
-
-          <div className="flex items-center gap-4">
-            <a
-              href="mailto:trabalheconosco@coalashakes.com"
-              className="hidden text-base font-bold text-[#5f5360] transition hover:text-[#2a1d29] xl:inline-flex"
+          <div className="ml-auto flex items-center gap-2">
+            <Link
+              href="/vagas/banco-de-talentos"
+              className="hidden h-10 items-center rounded-full border border-[#2A1F2A]/15 px-4 text-[13px] font-bold text-[#5B4C5B] transition hover:-translate-y-0.5 sm:inline-flex"
             >
-              Acompanhar candidatura
-            </a>
-            <button
-              onClick={scrollToList}
-              className="inline-flex h-12 shrink-0 items-center gap-2 rounded-full bg-[#2a1d29] px-5 text-sm font-black text-white shadow-[0_4px_0_rgba(42,29,41,0.2)] transition hover:-translate-y-0.5 sm:h-14 sm:px-7 sm:text-base"
-            >
-              Candidatar-se
-              <ArrowRight className="h-5 w-5" />
-            </button>
+              Banco de talentos
+            </Link>
+	            <a
+	              href="#vagas"
+	              onClick={(event) => {
+	                event.preventDefault();
+	                scrollToList();
+	              }}
+	              className="btn inline-flex h-10 items-center gap-1.5 bg-[#2A1F2A] px-4 text-[13px] font-bold text-white"
+	            >
+	              Ver vagas <ArrowRight className="h-3.5 w-3.5" />
+	            </a>
           </div>
         </div>
       </header>
 
       <main>
-        <section className="relative overflow-hidden px-5 pb-16 pt-16 sm:px-8 lg:px-10 lg:pb-24 lg:pt-24">
-          <div className="absolute left-0 top-36 h-56 w-56 rounded-full bg-[#61bed7]/20 blur-3xl" />
-          <div className="absolute right-0 top-16 h-80 w-80 rounded-full bg-[#df69a6]/25 blur-3xl" />
-
-          <div className="mx-auto grid max-w-7xl gap-10 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-end">
-            <div className="relative z-10">
-              <div className="flex flex-wrap items-center gap-4">
-                <span className="inline-flex items-center gap-3 rounded-full bg-white px-5 py-3 text-sm font-black uppercase text-[#2a1d29] shadow-[0_3px_0_rgba(42,29,41,0.12)]">
-                  <span className="h-4 w-4 rounded-full border-4 border-[#cdeef6] bg-[#61bed7]" />
-                  Estamos contratando
-                </span>
-                <span className="text-lg font-semibold text-[#6f6370]">
-                  {openCount} vagas abertas em {unitCount} unidades
-                </span>
-              </div>
-
-              <h1 className="mt-12 max-w-[820px] text-[52px] font-black leading-[0.96] text-[#2a1d29] sm:text-[76px] lg:text-[96px]">
-                cresce com
-                <br />
-                <span className="text-[#df69a6]">a gente.</span>
-                <Coffee className="ml-4 inline h-12 w-12 align-middle text-[#df69a6] sm:h-16 sm:w-16" />
-              </h1>
-
-              <p className="mt-8 max-w-[760px] text-xl leading-relaxed text-[#665b67] sm:text-2xl">
-                Somos <strong className="text-[#2a1d29]">5 lojas Coala Shakes</strong> em Sao Paulo e{" "}
-                <strong className="text-[#2a1d29]">68 coalas</strong> servindo shake todo dia. Vagas pra quem gosta de
-                gente, de movimento e de aprender num lugar onde da pra crescer de verdade.
-              </p>
-
-              <div className="mt-10 flex flex-wrap gap-4">
-                <button
-                  onClick={scrollToList}
-                  className="inline-flex h-16 items-center gap-3 rounded-full bg-[#df69a6] px-7 text-base font-black text-white shadow-[0_5px_0_rgba(42,29,41,0.16)] transition hover:-translate-y-0.5 sm:h-20 sm:px-9 sm:text-xl"
-                >
-                  Ver vagas abertas
-                  <ArrowDown className="h-6 w-6" />
-                </button>
-                <a
-                  href="mailto:trabalheconosco@coalashakes.com?subject=Cadastro%20espontaneo%20-%20Coala%20Shakes"
-                  className="inline-flex h-16 items-center rounded-full bg-white px-7 text-base font-black text-[#2a1d29] shadow-[0_4px_0_rgba(42,29,41,0.14)] transition hover:-translate-y-0.5 sm:h-20 sm:px-9 sm:text-xl"
-                >
-                  Cadastro espontaneo
-                </a>
-              </div>
-
-              <div className="mt-12 flex max-w-full flex-wrap gap-3">
-                {categories.slice(0, 7).map((category, index) => {
-                  const Icon = ROLE_ICONS[index % ROLE_ICONS.length];
-                  const active = filterCategory === category.name;
-                  return (
-                    <button
-                      key={category.name}
-                      onClick={() => {
-                        setFilterCategory(active ? "" : category.name);
-                        scrollToList();
-                      }}
-                      className={`inline-flex min-h-12 max-w-full items-center gap-3 rounded-full px-5 text-sm font-black shadow-[0_3px_0_rgba(42,29,41,0.12)] transition sm:min-h-14 sm:px-6 sm:text-base ${
-                        active ? "bg-[#df69a6] text-white" : "bg-white text-[#2a1d29]"
-                      }`}
-                    >
-                      <Icon className="h-5 w-5" />
-                      {category.name}
-                    </button>
-                  );
-                })}
-              </div>
+        <section className="relative overflow-hidden">
+          <div className="absolute -right-20 -top-24 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,#EE6FA8_0%,transparent_65%)] opacity-55 blur-2xl" />
+          <div className="absolute -left-32 top-40 h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle,#3FBCD9_0%,transparent_65%)] opacity-35 blur-2xl" />
+	          <div className="vagas-shell relative pb-12 pt-10 md:pt-14">
+	            <div className="mb-6 flex items-center gap-3">
+	              <span className="stk inline-flex h-8 items-center gap-2 rounded-full bg-white px-3 text-[11.5px] font-bold uppercase tracking-wider">
+	                <span className="relative inline-flex">
+	                  <span className={`absolute inset-0 animate-ping rounded-full ${hiringBadge.dotPingClass}`} />
+	                  <span className={`relative h-2 w-2 rounded-full ${hiringBadge.dotClass}`} />
+	                </span>
+	                {hiringBadge.label}
+	              </span>
+              <span className="text-[12px] text-[#5B4C5B]">{statsSummary}</span>
             </div>
 
-            <div className="relative z-10 hidden max-w-full xl:block xl:pb-4">
-              <div className="rounded-[34px] bg-[#2a1d29] p-7 shadow-[0_5px_0_rgba(42,29,41,0.18)]">
-                <div className="flex items-start gap-5 rounded-[22px] bg-[#fbf0d4] p-6">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#d7d0d8] text-[#2a1d29]">
-                    <Star className="h-7 w-7 fill-[#df69a6] text-[#df69a6]" />
-                  </div>
-                  <div>
-                    <p className="text-xl font-black leading-snug">
-                      "Aqui eu cresci de auxiliar pra subgerente em 14 meses."
-                    </p>
-                    <p className="mt-3 text-sm font-bold text-[#6f6370]">Patricia - 2 anos de Coala</p>
+            <div className="grid items-end gap-8 md:grid-cols-12">
+              <div className="md:col-span-7">
+                <h1 className="fd leading-[0.9]" style={{ fontSize: "clamp(52px,9vw,128px)" }}>
+                  cresça com
+                  <br />
+                  <span className="text-[#EE6FA8]">a gente.</span>
+                  <span className="wgl ml-3 inline-block align-middle"><Cup size={68} /></span>
+                </h1>
+                <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-[#5B4C5B]">
+                  {companySummary} Vagas para quem gosta
+                  de gente, de movimento e quer crescer de verdade.
+                </p>
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Link
+                    href="/vagas/banco-de-talentos"
+                    className="btn inline-flex h-14 items-center gap-2 bg-[#EE6FA8] px-8 text-[15px] font-bold text-white"
+                  >
+                    Inscreva-se no banco de talentos <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+
+                <div className="-mx-5 mt-10 overflow-hidden" style={{ maskImage: "linear-gradient(90deg,transparent,black 8%,black 92%,transparent)" }}>
+                  <div className="mq flex w-max gap-3">
+                    {[...categories.slice(0, 8), ...categories.slice(0, 8)].map((role, index) => {
+                      const meta = getRoleMeta(role.name);
+                      return (
+                        <button
+                          key={`${role.name}-${index}`}
+                          type="button"
+                          onClick={() => {
+                            setFilterCategory(role.name);
+                            scrollToList();
+                          }}
+                          className="stk inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3.5 text-[12.5px] font-bold"
+                        >
+                          <span>{meta.emoji}</span>{role.name}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                <div className="rounded-[28px] bg-white p-7 shadow-[0_4px_0_rgba(42,29,41,0.14)]">
-                  <p className="text-sm font-black uppercase text-[#6f6370]">Vagas hoje</p>
-                  <p className="mt-5 text-7xl font-black text-[#df69a6]">{openCount}</p>
-                  <p className="mt-4 text-lg text-[#6f6370]">em {unitCount} unidades de SP</p>
+              <div className="grid gap-3 md:col-span-5 md:grid-cols-2">
+                <div className="stk rounded-3xl bg-white p-5">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-[#5B4C5B]">no mercado desde</div>
+                  <div className="fd mt-1 text-[64px] leading-none text-[#EE6FA8]">2019</div>
+                  <div className="mt-1 text-[11px] text-[#5B4C5B]">servindo em São Luís</div>
                 </div>
-                <div className="rounded-[28px] bg-[#61bed7] p-7 text-white shadow-[0_4px_0_rgba(42,29,41,0.14)]">
-                  <p className="text-sm font-black uppercase text-white/85">Contratados em 2026</p>
-                  <p className="mt-5 text-7xl font-black">12</p>
-                  <p className="mt-4 text-lg text-white/85">8 indicacoes internas</p>
+                <div className="stk rounded-3xl bg-[#3FBCD9] p-5 text-white">
+                  <div className="text-[10px] font-bold uppercase tracking-widest opacity-80">Nota no iFood</div>
+                  <div className="fd mt-1 text-[64px] leading-none">4,9</div>
+                  <div className="mt-1 text-[11px] opacity-80">avaliação média das nossas lojas</div>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="px-6 py-20 sm:px-10 lg:px-24">
-          <div className="mx-auto max-w-[1728px]">
-            <p className="text-sm font-black uppercase text-[#6f6370]">Por que Coala</p>
-            <h2 className="mt-4 max-w-[920px] text-6xl font-black leading-none text-[#2a1d29] lg:text-8xl">
-              Trabalho com energia,
-              <br />
-              ambiente <span className="text-[#df69a6]">com afeto.</span>
-            </h2>
+        <section className="vagas-shell py-14 md:py-20">
+          <div className="mb-2 text-[11px] font-bold uppercase tracking-widest text-[#5B4C5B]">Por que Coala</div>
+          <h2 className="fd mb-8 leading-[0.95]" style={{ fontSize: "clamp(34px,6vw,64px)" }}>
+            Trabalho <span className="squig">com energia</span>,
+            <br />
+            ambiente <span className="text-[#EE6FA8]">com afeto.</span>
+          </h2>
+          <div className="mb-5 grid gap-4 md:grid-cols-3">
+            {VALUE_CARDS.map((card) => (
+              <article key={card.title} className="stk relative min-h-[296px] overflow-hidden rounded-3xl p-6" style={{ background: card.background }}>
+                <div className="value-ghost-icon absolute -right-4 -top-4 text-[110px] leading-none opacity-20">{card.emoji}</div>
+                <div className="relative flex h-full flex-col">
+                  <div className="mb-3 text-[26px]"><span className="value-main-icon">{card.emoji}</span></div>
+                  <h3 className="fd text-[26px] leading-tight" style={{ color: card.color }}>{card.title}</h3>
+                  <p className="mt-2 text-[14px] leading-relaxed text-[#5B4C5B]">{card.text}</p>
+                  <div className="mt-auto pt-5">
+                    <div className="flex min-h-10 items-center gap-2 rounded-full bg-white px-4 py-2 text-[11.5px] font-bold leading-snug">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: card.color }} />
+                      <span>{card.footer}</span>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
 
-            <div className="mt-14 grid gap-6 lg:grid-cols-3">
-              {VALUE_CARDS.map((card) => {
-                const Icon = card.icon;
+          <div className="stk rounded-3xl bg-white p-6">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="fd text-[22px]">Benefícios na prática</h3>
+              <span className="hidden text-[11.5px] text-[#5B4C5B] sm:block">vale pra todo mundo, do estagiário ao gerente</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+              {BENEFITS.map((benefit) => {
+                const Icon = benefit.icon;
                 return (
-                  <article key={card.title} className={`relative min-h-[340px] overflow-hidden rounded-[28px] p-8 shadow-[0_4px_0_rgba(42,29,41,0.14)] ${card.color}`}>
-                    <div className={`absolute -right-8 -top-8 h-40 w-40 rounded-full ${card.image}`} />
-                    <Icon className="h-11 w-11 text-[#2a1d29]" />
-                    <h3 className="mt-16 text-4xl font-black text-[#df69a6]">{card.title}</h3>
-                    <p className="mt-7 text-xl leading-relaxed text-[#665b67]">{card.text}</p>
-                    <p className="mt-8 inline-flex rounded-full bg-white px-5 py-3 text-sm font-black text-[#2a1d29]">
-                      {card.footer}
-                    </p>
-                  </article>
+                  <div key={benefit.title} className="group rounded-2xl bg-[#EFE6CC]/50 p-3.5 transition hover:-translate-y-0.5">
+                    <span
+                      className="mb-2.5 inline-flex h-10 w-10 items-center justify-center rounded-xl transition group-hover:scale-110"
+                      style={{ background: `${benefit.color}24`, color: benefit.color }}
+                    >
+                      <Icon className="h-[22px] w-[22px]" />
+                    </span>
+                    <div className="text-[12px] font-bold leading-tight">{benefit.title}</div>
+                    <div className="mt-1 text-[10.5px] leading-snug text-[#5B4C5B]">{benefit.text}</div>
+                  </div>
                 );
               })}
             </div>
-
-            <div className="mt-14 rounded-[30px] bg-white p-8 shadow-[0_4px_0_rgba(42,29,41,0.14)] lg:p-12">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <h3 className="text-3xl font-black">Beneficios na pratica</h3>
-                <p className="text-lg text-[#6f6370]">vale pra todo mundo, do estagiario ao gerente</p>
-              </div>
-              <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-6">
-                {BENEFITS.map((benefit) => {
-                  const Icon = benefit.icon;
-                  return (
-                    <div key={benefit.title}>
-                      <Icon className="h-9 w-9 text-[#2a1d29]" />
-                      <h4 className="mt-6 text-lg font-black">{benefit.title}</h4>
-                      <p className="mt-2 text-base leading-snug text-[#6f6370]">{benefit.text}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         </section>
 
-        <section ref={listRef} id="vagas" className="relative bg-[#2a1d29] px-6 pb-24 pt-24 text-white sm:px-10 lg:px-24">
-          <div className="mx-auto max-w-[1728px]">
-            <div className="grid gap-10 lg:grid-cols-[1fr_420px] lg:items-end">
-              <div>
-                <p className="text-sm font-black uppercase text-white/55">Oportunidades abertas agora</p>
-                <h2 className="mt-5 text-7xl font-black leading-none lg:text-9xl">
-                  vagas <span className="text-[#df69a6]">frescas.</span>
-                </h2>
+        <section id="vagas" ref={listRef} className="scroll-mt-20 py-10">
+          <div className="vagas-shell stk overflow-hidden rounded-[40px]">
+            <div className="bg-[#2A1F2A] px-8 pb-8 pt-12">
+              <div className="mb-8 grid items-end gap-6 md:grid-cols-[1fr_auto]">
+                <div>
+                  <div className="mb-2 text-[11px] font-bold uppercase tracking-widest text-white/40">Oportunidades abertas agora</div>
+                  <h2 className="fd leading-[0.9] text-white" style={{ fontSize: "clamp(44px,7vw,88px)" }}>
+                    {hasOpenings ? (
+                      <>vagas <span className="text-[#EE6FA8]">frescas.</span></>
+                    ) : (
+                      <>Novas vagas <span className="text-[#EE6FA8]">em breve!</span></>
+                    )}
+                  </h2>
+                </div>
+	                <div className="text-[16px] text-white/65">
+	                  <strong className="fd block text-[42px] leading-none text-white">{openCount}</strong>
+	                </div>
               </div>
-              <div className="text-2xl text-white/70">
-                <strong className="block text-4xl text-white">{openCount}</strong>
-                oportunidades em {unitCount} unidades, atualizadas semanalmente
-              </div>
-            </div>
 
-            <div className="mt-12 grid gap-3 rounded-[32px] bg-white p-4 text-[#2a1d29] shadow-[0_4px_0_rgba(0,0,0,0.2)] lg:grid-cols-[1fr_270px_270px]">
-              <label className="flex min-h-20 items-center gap-4 px-5">
-                <Search className="h-6 w-6 text-[#6f6370]" />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Buscar por cargo, unidade..."
-                  className="w-full border-0 bg-transparent text-xl font-medium outline-none placeholder:text-[#a8a0a9]"
-                />
-              </label>
-              <label className="flex min-h-20 items-center rounded-full bg-[#f4ecd9] px-6">
-                <select
-                  value={filterCategory}
-                  onChange={(event) => setFilterCategory(event.target.value)}
-                  className="w-full appearance-none bg-transparent text-lg font-black outline-none"
-                >
-                  <option value="">Todos os cargos</option>
-                  {categories.map((category) => (
-                    <option key={category.name} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="h-5 w-5" />
-              </label>
-              <label className="flex min-h-20 items-center rounded-full bg-[#f4ecd9] px-6">
-                <select
-                  value={filterLocation}
-                  onChange={(event) => setFilterLocation(event.target.value)}
-                  className="w-full appearance-none bg-transparent text-lg font-black outline-none"
-                >
-                  <option value="">Todas as unidades</option>
-                  {locations.map((location) => (
-                    <option key={location} value={location}>
-                      {location}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="h-5 w-5" />
-              </label>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <select
-                value={filterWorkType}
-                onChange={(event) => setFilterWorkType(event.target.value as WorkType | "")}
-                className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-black text-white outline-none"
-              >
-                <option className="text-[#2a1d29]" value="">
-                  Todas as modalidades
-                </option>
-                <option className="text-[#2a1d29]" value="presencial">
-                  Presencial
-                </option>
-                <option className="text-[#2a1d29]" value="remoto">
-                  Remoto
-                </option>
-                <option className="text-[#2a1d29]" value="hibrido">
-                  Hibrido
-                </option>
-              </select>
-              {hasFilters && (
-                <button onClick={resetFilters} className="rounded-full bg-white/10 px-5 py-3 text-sm font-black text-white">
-                  Limpar filtros
-                </button>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="relative bg-[#f4ecd9] px-6 pb-24 sm:px-10 lg:px-24">
-          <div className="absolute left-0 right-0 top-0 h-8 -translate-y-full bg-[radial-gradient(circle_at_16px_-4px,#f4ecd9_22px,transparent_23px)] bg-[length:32px_32px]" />
-          <div className="mx-auto max-w-[1728px] pt-20">
-            {loading && (
-              <div className="grid gap-6 lg:grid-cols-3">
-                {[0, 1, 2, 3, 4, 5].map((item) => (
-                  <div key={item} className="h-[320px] animate-pulse rounded-[28px] bg-white/70" />
-                ))}
-              </div>
-            )}
-
-            {error && <div className="rounded-[28px] bg-white p-12 text-center text-lg font-bold text-[#df4950]">{error}</div>}
-
-            {!loading && !error && filtered.length === 0 && (
-              <div className="rounded-[28px] bg-white p-12 text-center shadow-[0_4px_0_rgba(42,29,41,0.14)]">
-                <BriefcaseBusiness className="mx-auto h-14 w-14 text-[#df69a6]" />
-                <h3 className="mt-6 text-3xl font-black">Nenhuma vaga encontrada.</h3>
-                <p className="mt-3 text-lg text-[#6f6370]">
-                  {hasFilters ? "Tente ajustar os filtros ou deixe seu cadastro espontaneo." : "Volte em breve ou envie seu CV para o banco de talentos."}
-                </p>
-              </div>
-            )}
-
-            {!loading && !error && filtered.length > 0 && (
-              <div className="grid gap-7 lg:grid-cols-3">
-                {filtered.map((opening, index) => {
-                  const Icon = ROLE_ICONS[index % ROLE_ICONS.length];
-                  const location = titleCaseCity(opening.location);
-                  return (
-                    <Link
-                      key={opening.id}
-                      href={`/vagas/${opening.slug}`}
-                      className={`group flex min-h-[360px] flex-col overflow-hidden rounded-[28px] border-t-[8px] bg-white shadow-[0_4px_0_rgba(42,29,41,0.14)] transition hover:-translate-y-1 ${CARD_ACCENTS[index % CARD_ACCENTS.length]}`}
+              <div className="rounded-3xl bg-white p-3">
+                <div className="grid gap-2 md:grid-cols-[1fr_196px_196px]">
+                  <label className="flex h-[56px] items-center gap-3 px-4">
+                    <Search className="h-4 w-4 text-[#2A1F2A]/35" />
+                    <input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Buscar cargo ou unidade..."
+                      className="w-full bg-transparent text-[15px] font-medium text-[#2A1F2A] outline-none placeholder:text-[#2A1F2A]/35"
+                    />
+                  </label>
+                  <label className="flex h-[56px] items-center gap-1.5 rounded-2xl bg-[#F4ECD8] px-4">
+                    <select
+                      value={filterCategory}
+                      onChange={(event) => setFilterCategory(event.target.value)}
+                      className="w-full appearance-none bg-transparent text-[13px] font-bold text-[#2A1F2A] outline-none"
                     >
-                      <div className="flex flex-1 gap-6 p-8">
-                        <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-[#f4ecd9] text-[#2a1d29]">
-                          <Icon className="h-9 w-9" />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="flex items-start justify-between gap-3">
-                            <h3 className="text-3xl font-black leading-tight text-[#2a1d29]">{opening.title}</h3>
-                            {index < 3 && (
-                              <span className="rounded-full bg-[#61bed7] px-3 py-1 text-xs font-black uppercase text-white">Nova</span>
-                            )}
+                      <option value="">Todos os cargos</option>
+                      {categories.map((category) => (
+                        <option key={category.name} value={category.name}>{category.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </label>
+                  <label className="flex h-[56px] items-center gap-1.5 rounded-2xl bg-[#F4ECD8] px-4">
+                    <select
+                      value={filterLocation}
+                      onChange={(event) => setFilterLocation(event.target.value)}
+                      className="w-full appearance-none bg-transparent text-[13px] font-bold text-[#2A1F2A] outline-none"
+                    >
+                      <option value="">Todas as unidades</option>
+                      {locations.map((location) => (
+                        <option key={location} value={location}>{location}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </label>
+                </div>
+              </div>
+
+              {hasFilters ? (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-white/15 px-3 text-[12px] font-bold text-white/55 transition hover:bg-white/10"
+                >
+                  × Limpar filtros
+                </button>
+              ) : null}
+            </div>
+
+            <div className="bg-white px-8 pb-10 pt-8">
+              {loading ? (
+                <div className="stk rounded-3xl bg-[#F4ECD8]/70 p-12 text-center">
+                  <h3 className="fd mb-2 text-[26px]">{hasOpenings ? "Carregando vagas..." : "Novas vagas em breve!"}</h3>
+                  <p className="text-[14px] text-[#5B4C5B]">{hasOpenings ? "Estamos consultando as oportunidades abertas." : "Nosso banco de talentos segue aberto para receber seu cadastro."}</p>
+                </div>
+              ) : null}
+
+              {error ? (
+                <div className="stk rounded-3xl bg-white p-12 text-center text-[14px] font-bold text-[#B91C1C]">{error}</div>
+              ) : null}
+
+              {!loading && !error && filtered.length === 0 ? (
+                <div className="stk rounded-3xl bg-white p-12 text-center">
+                  <div className="mb-4 text-5xl">🔍</div>
+                  <h3 className="fd mb-2 text-[26px]">{hasFilters ? "Nenhuma vaga encontrada." : "Em breve teremos novas vagas!"}</h3>
+                  <p className="text-[14px] text-[#5B4C5B]">
+                    {hasFilters ? "Ajuste os filtros ou deixe seu cadastro espontâneo." : "Nosso banco de talentos segue aberto para receber seu cadastro."}
+                  </p>
+                  {hasFilters ? (
+                    <button type="button" onClick={resetFilters} className="btn mt-5 inline-flex h-10 items-center bg-[#EE6FA8] px-5 text-[13px] font-bold text-white">
+                      Ver todas as vagas
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!loading && !error && filtered.length > 0 ? (
+                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                  {filtered.map((opening, index) => {
+                    const role = getRoleLabel(opening);
+                    const meta = getRoleMeta(role);
+                    const location = getLocationLabel(opening.location);
+                    const closingDays = daysUntil(opening.closesAt);
+                    const isNew = index < 3;
+                    const urgent = closingDays != null && closingDays <= 7;
+                    return (
+                      <Link
+                        key={opening.id}
+                        href={`/vagas/${opening.slug}`}
+                        className="card-hover stk flex w-full flex-col overflow-hidden rounded-3xl bg-white text-left"
+                      >
+                        <div className="h-[5px] shrink-0" style={{ background: meta.color }} />
+                        <div className="flex flex-1 flex-col p-6">
+                          <div className="flex items-start gap-4">
+                            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-[28px]" style={{ background: `${meta.color}28` }}>
+                              {meta.emoji}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <h3 className="fd text-[21px] leading-[1.1]">{opening.title}</h3>
+                                <div className="flex shrink-0 flex-col gap-1">
+                                  {isNew ? <span className="inline-flex items-center gap-1 rounded-full bg-[#3FBCD9] px-2 py-0.5 text-[9px] font-bold uppercase text-white">● nova</span> : null}
+                                  {urgent ? <span className="inline-flex items-center gap-0.5 rounded-full bg-[#FFF3CD] px-2 py-0.5 text-[9px] font-bold text-[#7A5C00]">⏱ {closingDays}d</span> : null}
+                                </div>
+                              </div>
+                              <div className="mt-1 text-[11px] font-bold uppercase tracking-widest text-[#5B4C5B]">Coala {location}</div>
+                            </div>
                           </div>
-                          <p className="mt-5 text-sm font-black uppercase text-[#6f6370]">Coala {location} - Sao Paulo</p>
-                          <p className="mt-7 text-xl leading-relaxed text-[#665b67]">{getPreview(opening.description)}</p>
-                          <div className="mt-8 flex flex-wrap gap-5 text-base font-black text-[#2a1d29]">
-                            <span className="inline-flex items-center gap-2">
-                              <MapPin className="h-5 w-5" />
-                              {location}
-                            </span>
-                            {opening.workType && <span>{WORK_TYPE_LABELS[opening.workType]}</span>}
-                            <span className="inline-flex items-center gap-2">
-                              <Users className="h-5 w-5" />
-                              {opening.slots} vaga{opening.slots === 1 ? "" : "s"}
-                            </span>
+                          <p className="mt-4 line-clamp-2 text-[13px] leading-relaxed text-[#5B4C5B]">{getPreview(opening.description)}</p>
+                          <div className="mt-auto flex flex-wrap gap-1.5 pt-4">
+                            <span className="inline-flex rounded-full bg-[#F4ECD8]/90 px-2.5 py-1 text-[11px] font-bold">{location}</span>
+                            {opening.workType ? <span className="inline-flex rounded-full bg-[#F4ECD8]/90 px-2.5 py-1 text-[11px] font-bold">{WORK_TYPE_LABELS[opening.workType]}</span> : null}
+                            {opening.slots > 1 ? <span className="inline-flex rounded-full bg-[#F4ECD8]/90 px-2.5 py-1 text-[11px] font-bold">{opening.slots} vagas</span> : null}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center justify-between border-t border-[#2a1d29]/10 px-8 py-6">
-                        <span className="text-xl font-black">A combinar</span>
-                        <span className="inline-flex items-center gap-2 text-lg font-black text-[#2a1d29] group-hover:text-[#df69a6]">
-                          ver vaga
-                          <ChevronRight className="h-5 w-5" />
-                        </span>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
+                        <div className="flex items-center justify-between border-t border-[#2A1F2A]/10 bg-[#F4ECD8]/40 px-6 py-3.5">
+                          <span className="fm text-[13px]">A combinar</span>
+                          <span className="inline-flex items-center gap-1 text-[12px] font-bold text-[#5B4C5B]">
+                            ver vaga <ChevronRight className="h-3.5 w-3.5" />
+                          </span>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           </div>
         </section>
 
-        <section className="bg-[#f4ecd9] px-6 py-24 sm:px-10 lg:px-24">
-          <div className="mx-auto max-w-[1728px] text-center">
-            <p className="text-sm font-black uppercase text-[#6f6370]">Como funciona</p>
-            <h2 className="mx-auto mt-5 max-w-[860px] text-6xl font-black leading-none lg:text-8xl">
-              Do <span className="text-[#df69a6]">oi</span> ao <span className="text-[#61bed7]">vem!</span> em 12 dias.
-            </h2>
-            <p className="mt-9 text-xl text-[#6f6370]">
-              Processo curto, sem etapa que nao faz sentido. Voce e avisado por e-mail em cada movimento.
-            </p>
+        <section className="vagas-shell py-14 text-center md:py-20">
+          <div className="mb-2 text-[11px] font-bold uppercase tracking-widest text-[#5B4C5B]">Como funciona</div>
+          <h2 className="fd mb-3 leading-[0.95]" style={{ fontSize: "clamp(32px,5.5vw,60px)" }}>
+            Do <span className="text-[#EE6FA8]">oi</span> ao <span className="text-[#3FBCD9]">crachá.</span>
+          </h2>
+          <p className="mx-auto mb-12 max-w-lg text-[15px] text-[#5B4C5B]">Processo curto, sem etapas desnecessárias.</p>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {PROCESS_STEPS.map((step, index) => (
+              <article key={step.title} className="stk rounded-3xl bg-white p-6 text-left">
+                <div className="fd flex h-11 w-11 items-center justify-center rounded-xl text-xl" style={{ background: step.color, color: step.textColor || "white" }}>
+                  {index + 1}
+                </div>
+                <h3 className="fd mt-5 text-[19px]">{step.title}</h3>
+                <p className="mt-2 text-[13px] leading-relaxed text-[#5B4C5B]">{step.text}</p>
+              </article>
+            ))}
+          </div>
+        </section>
 
-            <div className="mt-20 grid gap-6 md:grid-cols-2 xl:grid-cols-5">
-              {PROCESS_STEPS.map((step, index) => (
-                <article key={step.title} className="relative rounded-[28px] bg-white p-8 text-left shadow-[0_4px_0_rgba(42,29,41,0.14)]">
-                  <p className="text-sm font-black text-[#df69a6]">0{index + 1}</p>
-                  <span className={`mt-5 flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-black text-white ${step.color}`}>
-                    {index + 1}
+        <section className="vagas-readable py-14 md:py-20">
+          <div className="mb-2 text-center text-[11px] font-bold uppercase tracking-widest text-[#5B4C5B]">Dúvidas frequentes</div>
+          <h2 className="fd mb-10 text-center" style={{ fontSize: "clamp(28px,5vw,52px)" }}>A gente respondeu antes.</h2>
+          <div className="space-y-3">
+            {FAQS.map((faq, index) => (
+              <details
+                key={faq.question}
+                className="stk group overflow-hidden rounded-2xl bg-white text-left transition hover:-translate-y-0.5"
+                open={index === 0}
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 marker:hidden">
+                  <span className="text-[15px] font-bold">{faq.question}</span>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4ECD8]">
+                    <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
                   </span>
-                  <h3 className="mt-8 text-2xl font-black">{step.title}</h3>
-                  <p className="mt-4 text-lg leading-relaxed text-[#6f6370]">{step.text}</p>
-                  {index < PROCESS_STEPS.length - 1 && (
-                    <ChevronRight className="absolute -right-5 top-1/2 hidden h-9 w-9 -translate-y-1/2 text-[#2a1d29] xl:block" />
-                  )}
-                </article>
-              ))}
-            </div>
+                </summary>
+                <p className="px-5 pb-4 text-[14px] leading-relaxed text-[#5B4C5B]">{faq.answer}</p>
+              </details>
+            ))}
           </div>
         </section>
 
-        <section className="bg-[#efe6cf] px-6 py-24 sm:px-10 lg:px-24">
-          <div className="mx-auto max-w-[1728px]">
-            <div className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
-              <h2 className="text-6xl font-black leading-none lg:text-8xl">
-                Quem esta <span className="text-[#df69a6]">aqui</span> conta.
-              </h2>
-              <p className="text-xl leading-relaxed text-[#6f6370]">
-                Coletado entre coalas com 6+ meses de casa. Reviews completos no Glassdoor.
-              </p>
-            </div>
-
-            <div className="mt-16 grid gap-7 lg:grid-cols-3">
-              {TESTIMONIALS.map((testimonial) => (
-                <article key={testimonial.name} className="rounded-[28px] bg-white p-8 shadow-[0_4px_0_rgba(42,29,41,0.14)]">
-                  <MessageCircle className="h-12 w-12 text-[#df69a6]" />
-                  <p className="mt-9 text-2xl font-black leading-relaxed">{testimonial.quote}</p>
-                  <div className="mt-10 flex items-center gap-5">
-                    <span className={`flex h-16 w-16 items-center justify-center rounded-full text-xl font-black text-white ${testimonial.color}`}>
-                      {testimonial.initials}
-                    </span>
-                    <div>
-                      <p className="text-lg font-black">{testimonial.name}</p>
-                      <p className="text-base text-[#6f6370]">{testimonial.role}</p>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-[#f4ecd9] px-6 py-24 sm:px-10 lg:px-24">
-          <div className="mx-auto max-w-[1120px] text-center">
-            <p className="text-sm font-black uppercase text-[#6f6370]">Perguntas que aparecem</p>
-            <h2 className="mt-5 text-5xl font-black leading-none lg:text-7xl">A gente respondeu antes.</h2>
-
-            <div className="mt-14 space-y-5 text-left">
-              {FAQS.map((faq, index) => {
-                const active = openFaq === index;
-                return (
-                  <button
-                    key={faq.question}
-                    onClick={() => setOpenFaq(active ? -1 : index)}
-                    className="w-full rounded-[24px] bg-white p-7 text-left shadow-[0_4px_0_rgba(42,29,41,0.12)]"
-                  >
-                    <span className="flex items-center justify-between gap-6">
-                      <span className="text-2xl font-black">{faq.question}</span>
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f4ecd9]">
-                        <ChevronDown className={`h-5 w-5 transition ${active ? "rotate-180" : ""}`} />
-                      </span>
-                    </span>
-                    {active && <span className="mt-7 block text-xl leading-relaxed text-[#6f6370]">{faq.answer}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-[#f4ecd9] px-6 pb-24 sm:px-10 lg:px-24">
-          <div className="relative mx-auto max-w-[1728px] overflow-hidden rounded-[42px] bg-[#df69a6] p-10 text-white shadow-[0_4px_0_rgba(42,29,41,0.14)] lg:p-20">
-            <Coffee className="absolute right-24 top-14 h-20 w-20 rotate-12 text-[#2a1d29]" />
-            <div className="absolute -bottom-24 -right-10 h-72 w-72 rounded-full bg-[#d7d0d8]" />
-            <div className="absolute bottom-9 right-16 hidden h-36 w-36 rounded-full bg-[#c8c1ca] lg:block">
-              <div className="absolute left-8 top-12 h-5 w-5 rounded-full bg-[#2a1d29]" />
-              <div className="absolute right-8 top-12 h-5 w-5 rounded-full bg-[#2a1d29]" />
-              <div className="absolute bottom-9 left-1/2 h-9 w-12 -translate-x-1/2 rounded-full bg-[#2a1d29]" />
-            </div>
-            <div className="relative z-10 max-w-[720px]">
-              <p className="text-sm font-black uppercase text-white/75">Nao achou sua vaga?</p>
-              <h2 className="mt-6 text-6xl font-black leading-none lg:text-8xl">Manda teu CV</h2>
-              <p className="mt-10 text-2xl leading-relaxed text-white/85">
-                Banco de talentos sempre aberto. Quando algo abrir na unidade mais perto de voce, a gente te chama primeiro.
-              </p>
-              <div className="mt-12 flex flex-wrap items-center gap-5">
-                <a
-                  href="mailto:trabalheconosco@coalashakes.com?subject=Cadastro%20espontaneo%20-%20Coala%20Shakes"
-                  className="inline-flex h-16 items-center gap-3 rounded-full bg-[#2a1d29] px-8 text-lg font-black text-white shadow-[0_4px_0_rgba(42,29,41,0.2)]"
-                >
-                  Cadastrar curriculo
-                  <ArrowRight className="h-5 w-5" />
-                </a>
-                <a href="mailto:trabalheconosco@coalashakes.com" className="text-lg font-black underline decoration-2 underline-offset-4">
-                  ou manda direto pro nosso e-mail
-                </a>
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
 
-      <footer className="bg-[#2a1d29] px-6 py-20 text-white sm:px-10 lg:px-24">
-        <div className="mx-auto grid max-w-[1728px] gap-12 lg:grid-cols-[1.2fr_1fr_1fr]">
+      <footer className="bg-[#2A1F2A] px-5 py-14 text-white">
+        <div className="vagas-shell grid gap-10 md:grid-cols-[1.4fr_1fr_1fr]">
           <div>
             <Logo />
-            <p className="mt-9 max-w-[420px] text-xl leading-relaxed text-white/62">
-              Shakes artesanais e ambiente bom de trabalhar. Cinco lojas em Sao Paulo, desde 2019.
+            <p className="mt-6 max-w-[420px] text-[14px] leading-relaxed text-white/50">
+              Shakes únicos, rotina dinâmica e um ambiente bom para trabalhar. Estamos em São Luís desde 2019.
             </p>
-            <div className="mt-9 flex gap-4">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10">
-                <Instagram className="h-6 w-6" />
-              </span>
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10">
-                <CircleDot className="h-6 w-6" />
-              </span>
+            <div className="mt-6 flex gap-2">
+              <a href="https://www.instagram.com/coalashakes/" target="_blank" className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:-translate-y-0.5" rel="noreferrer">
+                <Instagram className="h-[18px] w-[18px]" />
+              </a>
+              <a href="https://wa.me/5598999072739" target="_blank" className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:-translate-y-0.5" rel="noreferrer">
+                <WhatsAppIcon className="h-[18px] w-[18px]" />
+              </a>
+              <a href="mailto:vagas@coalashakes.com" className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:-translate-y-0.5" aria-label="Enviar e-mail">
+                <Mail className="h-[18px] w-[18px]" />
+              </a>
             </div>
           </div>
-          <div id="unidades">
-            <h3 className="text-sm font-black uppercase text-white/45">Unidades</h3>
-            <ul className="mt-7 space-y-4 text-xl text-white/68">
-              {(locations.length ? locations : ["Iguatemi", "Higienopolis", "JK", "Morumbi", "Pinheiros"]).map((location) => (
-                <li key={location} className="flex items-center gap-3">
-                  <span className="h-2 w-2 rounded-full bg-[#df69a6]" />
-                  Coala {location} <span className="text-white/32">- Sao Paulo - SP</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {footerUnits.length > 0 ? (
+            <div>
+              <div className="mb-5 text-[10.5px] font-bold uppercase tracking-widest text-white/35">Unidades</div>
+              <ul className="space-y-3 text-[14px] text-white/55">
+                {footerUnits.map((location) => (
+                  <li key={location} className="grid grid-cols-[6px_1fr] items-start gap-3">
+                    <span className="mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full bg-[#EE6FA8]" />
+                    <span className="min-w-0 leading-snug">
+                      <span className="block text-white/58">Coala {location}</span>
+                      <span className="mt-0.5 block text-[12px] text-white/30">São Luís · MA</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div>
-            <h3 className="text-sm font-black uppercase text-white/45">Fala com a gente</h3>
-            <div className="mt-7 space-y-5 text-xl text-white/68">
-              <p>trabalheconosco@coalashakes.com</p>
-              <p>WhatsApp RH - (11) 99999-0000</p>
-              <p>Resposta em ate 5 dias uteis.</p>
+            <div className="mb-5 text-[10.5px] font-bold uppercase tracking-widest text-white/35">Fala com a gente</div>
+            <div className="flex flex-col space-y-3 text-[14px] text-white/55">
+              <a href="mailto:vagas@coalashakes.com" className="transition hover:text-white">vagas@coalashakes.com</a>
+              <a href="https://wa.me/5598999072739" target="_blank" className="transition hover:text-white" rel="noreferrer">Contato: (98) 99907-2739</a>
             </div>
           </div>
         </div>
-        <div className="mx-auto mt-16 flex max-w-[1728px] flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-8 text-base text-white/38">
-          <p>{new Date().getFullYear()} Coala Shakes - op.coalashakes.com/vagas</p>
-          <a href="mailto:trabalheconosco@coalashakes.com">Privacidade</a>
+        <div className="vagas-shell mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-6 text-[12px] text-white/30">
+          <span>© {new Date().getFullYear()} Coala Shakes · vagas.coalashakes.com</span>
+          <a href="mailto:vagas@coalashakes.com" className="transition hover:text-white/60">Privacidade</a>
         </div>
       </footer>
     </div>

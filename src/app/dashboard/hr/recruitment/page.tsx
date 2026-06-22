@@ -8,7 +8,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchHrBootstrap } from '@/features/hr/lib/client';
-import type { Candidate, CandidateStatus, HrFormQuestion, JobRole, JobOpening, JobOpeningStatus } from '@/types';
+import type { Candidate, CandidateStatus, HrFormQuestion, JobRole, JobOpening, JobOpeningStatus, RecruitmentFormConfig } from '@/types';
+import { DEFAULT_TALENT_POOL_FORM } from '@/lib/recruitment-forms';
 import {
   UserPlus, Search, Filter, MoreHorizontal, Mail, Phone,
   FileText, Calendar, Star, Clock, CheckCircle2, XCircle,
@@ -41,6 +42,7 @@ const OPENING_STATUS_CONFIG: Record<JobOpeningStatus, { label: string; color: st
 };
 
 const SOURCE_OPTIONS = ['LinkedIn', 'Indicação', 'Site', 'Indeed', 'Catho', 'Espontâneo', 'Outro'];
+const PUBLIC_RECRUITMENT_URL = 'https://vagas.coalashakes.com';
 const WORK_TYPE_OPTIONS = [
   { value: 'presencial', label: 'Presencial' },
   { value: 'remoto',     label: 'Remoto' },
@@ -52,6 +54,8 @@ const QUESTION_TYPES: Array<{ value: HrFormQuestion['type']; label: string }> = 
   { value: 'yes_no', label: 'Sim/Não' },
   { value: 'select', label: 'Seleção única' },
   { value: 'multi_select', label: 'Múltipla escolha' },
+  { value: 'date', label: 'Data' },
+  { value: 'number_range', label: 'Número' },
 ];
 
 const EMPTY_QUESTION_DRAFT = {
@@ -890,6 +894,39 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(prev => ({ ...prev, [field]: e.target.value }));
 
+  const updateQuestion = (questionId: string, patch: Partial<HrFormQuestion>) => {
+    setQuestions(prev => prev.map(question => question.id === questionId ? { ...question, ...patch } : question));
+  };
+
+  const updateQuestionOptions = (questionId: string, optionsText: string) => {
+    const options = optionsText
+      .split('\n')
+      .map(option => option.trim())
+      .filter(Boolean);
+    setQuestions(prev => prev.map(question => {
+      if (question.id !== questionId) return question;
+      return {
+        ...question,
+        config: {
+          ...(question.config ?? {}),
+          options,
+        },
+      };
+    }));
+  };
+
+  const moveQuestion = (questionId: string, direction: -1 | 1) => {
+    setQuestions(prev => {
+      const index = prev.findIndex(question => question.id === questionId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next;
+    });
+  };
+
   const addQuestion = () => {
     const text = questionDraft.text.trim();
     if (!text) {
@@ -1049,29 +1086,93 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
 
               {questions.length > 0 && (
                 <div className="space-y-2">
-                  {questions.map((question) => (
-                    <div key={question.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <div className="min-w-0 space-y-2">
-                        <p className="text-sm font-medium text-slate-100">{question.text}</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400">
-                            {QUESTION_TYPES.find(item => item.value === question.type)?.label ?? question.type}
-                          </span>
-                          {question.required && (
-                            <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-300">Obrigatória</span>
-                          )}
-                          {question.eliminatory && (
-                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300">Eliminatória</span>
+                  {questions.map((question, index) => (
+                    <div key={question.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <div className="grid gap-3 md:grid-cols-[1fr_160px_auto] md:items-start">
+                        <div>
+                          <input
+                            type="text"
+                            value={question.text}
+                            onChange={event => updateQuestion(question.id, { text: event.target.value })}
+                            className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                          />
+                          <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-400">
+                            <label className="flex items-center gap-1.5">
+                              <input
+                                type="checkbox"
+                                checked={question.required}
+                                onChange={event => updateQuestion(question.id, { required: event.target.checked })}
+                                className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500"
+                              />
+                              Obrigatória
+                            </label>
+                            <label className="flex items-center gap-1.5">
+                              <input
+                                type="checkbox"
+                                checked={question.eliminatory}
+                                onChange={event => updateQuestion(question.id, { eliminatory: event.target.checked })}
+                                className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500"
+                              />
+                              Eliminatória
+                            </label>
+                            <label className="flex items-center gap-1.5">
+                              <input
+                                type="checkbox"
+                                checked={question.config?.multiline === true}
+                                onChange={event => updateQuestion(question.id, {
+                                  config: { ...(question.config ?? {}), multiline: event.target.checked },
+                                })}
+                                disabled={question.type !== 'text'}
+                                className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500 disabled:opacity-40"
+                              />
+                              Texto longo
+                            </label>
+                          </div>
+                          {(question.type === 'select' || question.type === 'multi_select') && (
+                            <textarea
+                              value={Array.isArray(question.config?.options) ? question.config.options.join('\n') : ''}
+                              onChange={event => updateQuestionOptions(question.id, event.target.value)}
+                              rows={3}
+                              placeholder={'Opções, uma por linha\nManhã\nTarde/noite\nFlexível'}
+                              className="mt-3 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                            />
                           )}
                         </div>
+                        <select
+                          value={question.type}
+                          onChange={event => updateQuestion(question.id, { type: event.target.value as HrFormQuestion['type'] })}
+                          className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        >
+                          {QUESTION_TYPES.map(type => (
+                            <option key={type.value} value={type.value}>{type.label}</option>
+                          ))}
+                        </select>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            disabled={index === 0}
+                            onClick={() => moveQuestion(question.id, -1)}
+                            className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-white disabled:opacity-30"
+                          >
+                            Subir
+                          </button>
+                          <button
+                            type="button"
+                            disabled={index === questions.length - 1}
+                            onClick={() => moveQuestion(question.id, 1)}
+                            className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-white disabled:opacity-30"
+                          >
+                            Descer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setQuestions(prev => prev.filter(item => item.id !== question.id))}
+                            className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-white"
+                          >
+                            Remover
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setQuestions(prev => prev.filter(item => item.id !== question.id))}
-                        className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-white"
-                      >
-                        Remover
-                      </button>
                     </div>
                   ))}
                 </div>
@@ -1251,6 +1352,16 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
+                        {opening.status === 'open' && (
+                          <a
+                            href={`${PUBLIC_RECRUITMENT_URL}/${opening.slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-950 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors"
+                          >
+                            Ver vaga
+                          </a>
+                        )}
                         <button
                           onClick={() => onCandidatesFilter(opening.id)}
                           className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-950 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors">
@@ -1475,6 +1586,383 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
   );
 }
 
+// ─── RecruitmentFormsView ────────────────────────────────────────────────────
+
+function RecruitmentFormsView({ getToken, canManage }: {
+  getToken: () => Promise<string>;
+  canManage: boolean;
+}) {
+  const [form, setForm] = useState<RecruitmentFormConfig>(DEFAULT_TALENT_POOL_FORM);
+  const [questionDraft, setQuestionDraft] = useState(EMPTY_QUESTION_DRAFT);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  const loadForm = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFetch('/api/hr/recruitment/forms/talent-pool', getToken);
+      setForm(data as RecruitmentFormConfig);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao carregar formulário.');
+    } finally {
+      setLoading(false);
+    }
+  }, [getToken]);
+
+  useEffect(() => { loadForm(); }, [loadForm]);
+
+  const updateQuestion = (questionId: string, patch: Partial<HrFormQuestion>) => {
+    setForm(prev => ({
+      ...prev,
+      questions: prev.questions.map(question => question.id === questionId ? { ...question, ...patch } : question),
+    }));
+  };
+
+  const updateQuestionOptions = (questionId: string, optionsText: string) => {
+    const options = optionsText
+      .split('\n')
+      .map(option => option.trim())
+      .filter(Boolean);
+    setForm(prev => ({
+      ...prev,
+      questions: prev.questions.map(question => {
+        if (question.id !== questionId) return question;
+        return {
+          ...question,
+          config: {
+            ...(question.config ?? {}),
+            options,
+          },
+        };
+      }),
+    }));
+  };
+
+  const removeQuestion = (questionId: string) => {
+    setForm(prev => ({ ...prev, questions: prev.questions.filter(question => question.id !== questionId) }));
+  };
+
+  const moveQuestion = (questionId: string, direction: -1 | 1) => {
+    setForm(prev => {
+      const index = prev.questions.findIndex(question => question.id === questionId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= prev.questions.length) return prev;
+      const next = [...prev.questions];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return { ...prev, questions: next };
+    });
+  };
+
+  const addQuestion = () => {
+    const text = questionDraft.text.trim();
+    if (!text) return;
+    const options = questionDraft.optionsText
+      .split('\n')
+      .map(option => option.trim())
+      .filter(Boolean);
+    if ((questionDraft.type === 'select' || questionDraft.type === 'multi_select') && options.length === 0) {
+      setError('Informe ao menos uma opção para campos de seleção.');
+      return;
+    }
+
+    const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `question-${Date.now()}`;
+    setForm(prev => ({
+      ...prev,
+      questions: [
+        ...prev.questions,
+        {
+          id,
+          text,
+          type: questionDraft.type,
+          required: questionDraft.required,
+          scored: false,
+          weight: 'medium',
+          eliminatory: questionDraft.eliminatory,
+          tags: ['talent_pool'],
+          config: options.length > 0 ? { options } : undefined,
+        },
+      ],
+    }));
+    setQuestionDraft(EMPTY_QUESTION_DRAFT);
+    setError(null);
+  };
+
+  const saveForm = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await apiFetch('/api/hr/recruitment/forms/talent-pool', getToken, {
+        method: 'PATCH',
+        body: JSON.stringify(form),
+      });
+      setForm(saved as RecruitmentFormConfig);
+      setSavedAt(new Date().toISOString());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao salvar formulário.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-2xl bg-white">
+        <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Formulário público</p>
+            <h2 className="mt-1 text-xl font-bold text-slate-950">Banco de talentos</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500">
+              Os campos abaixo aparecem em <span className="font-semibold text-slate-700">vagas.coalashakes.com/banco-de-talentos</span>, dentro do design público do site.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={`${PUBLIC_RECRUITMENT_URL}/banco-de-talentos`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              <ExternalLink className="h-4 w-4" /> Ver no site
+            </a>
+            {canManage && (
+              <button
+                type="button"
+                onClick={saveForm}
+                disabled={saving}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Salvar alterações
+              </button>
+            )}
+          </div>
+        </div>
+
+        {error ? <div className="mt-4"><ErrorLine msg={error} /></div> : null}
+        {savedAt ? (
+          <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+            Formulário atualizado em {new Date(savedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-950">Textos do formulário</h3>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Título</label>
+                <input
+                  value={form.title}
+                  onChange={event => setForm(prev => ({ ...prev, title: event.target.value }))}
+                  disabled={!canManage}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Descrição</label>
+                <textarea
+                  value={form.description ?? ''}
+                  onChange={event => setForm(prev => ({ ...prev, description: event.target.value }))}
+                  disabled={!canManage}
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Texto LGPD</label>
+                <textarea
+                  value={form.consentText ?? ''}
+                  onChange={event => setForm(prev => ({ ...prev, consentText: event.target.value }))}
+                  disabled={!canManage}
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">Texto do botão</label>
+                <input
+                  value={form.submitLabel ?? ''}
+                  onChange={event => setForm(prev => ({ ...prev, submitLabel: event.target.value }))}
+                  disabled={!canManage}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={form.status === 'published'}
+                  onChange={event => setForm(prev => ({ ...prev, status: event.target.checked ? 'published' : 'draft' }))}
+                  disabled={!canManage}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Usar esta versão no site
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-950">Campos fixos</h3>
+            <p className="mt-1 text-xs text-slate-500">Esses campos sempre aparecem para proteger o fluxo público.</p>
+            <div className="mt-4 space-y-2">
+              {['Nome completo', 'E-mail', 'Telefone / WhatsApp', 'Currículo', 'Consentimento LGPD'].map(item => (
+                <div key={item} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-950">Campos complementares</h3>
+                <p className="mt-1 text-xs text-slate-500">Esses campos aparecem abaixo dos dados básicos no site público.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">{form.questions.length} campos</span>
+            </div>
+
+            <div className="mt-4 divide-y divide-slate-100 rounded-2xl border border-slate-100">
+              {form.questions.map((question, index) => (
+                <div key={question.id} className="grid gap-3 p-4 md:grid-cols-[1fr_160px_auto] md:items-start">
+                  <div>
+                    <input
+                      value={question.text}
+                      onChange={event => updateQuestion(question.id, { text: event.target.value })}
+                      disabled={!canManage}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={question.required}
+                          onChange={event => updateQuestion(question.id, { required: event.target.checked })}
+                          disabled={!canManage}
+                        />
+                        Obrigatório
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={question.config?.multiline === true}
+                          onChange={event => updateQuestion(question.id, {
+                            config: { ...(question.config ?? {}), multiline: event.target.checked },
+                          })}
+                          disabled={!canManage || question.type !== 'text'}
+                        />
+                        Texto longo
+                      </label>
+                    </div>
+                    {(question.type === 'select' || question.type === 'multi_select') && (
+                      question.config?.source === 'public_units' ? (
+                        <p className="mt-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
+                          Opções atualizadas automaticamente pelas unidades ativas do site público.
+                        </p>
+                      ) : (
+                        <textarea
+                          value={Array.isArray(question.config?.options) ? question.config.options.join('\n') : ''}
+                          onChange={event => updateQuestionOptions(question.id, event.target.value)}
+                          disabled={!canManage}
+                          rows={3}
+                          placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
+                          className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                        />
+                      )
+                    )}
+                  </div>
+                  <select
+                    value={question.type}
+                    onChange={event => updateQuestion(question.id, { type: event.target.value as HrFormQuestion['type'] })}
+                    disabled={!canManage}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                  >
+                    {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                  </select>
+                  <div className="flex items-center justify-end gap-1">
+                    <button type="button" disabled={!canManage || index === 0} onClick={() => moveQuestion(question.id, -1)}
+                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30">Subir</button>
+                    <button type="button" disabled={!canManage || index === form.questions.length - 1} onClick={() => moveQuestion(question.id, 1)}
+                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30">Descer</button>
+                    <button type="button" disabled={!canManage} onClick={() => removeQuestion(question.id)}
+                      className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {canManage && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-950">Adicionar campo</h3>
+              <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px]">
+                <input
+                  value={questionDraft.text}
+                  onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
+                  placeholder="Ex: Tem disponibilidade aos domingos?"
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+                />
+                <select
+                  value={questionDraft.type}
+                  onChange={event => setQuestionDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
+                >
+                  {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                </select>
+                {(questionDraft.type === 'select' || questionDraft.type === 'multi_select') && (
+                  <textarea
+                    value={questionDraft.optionsText}
+                    onChange={event => setQuestionDraft(prev => ({ ...prev, optionsText: event.target.value }))}
+                    rows={3}
+                    placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
+                    className="resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 md:col-span-2"
+                  />
+                )}
+                <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={questionDraft.required}
+                      onChange={event => setQuestionDraft(prev => ({ ...prev, required: event.target.checked }))}
+                    />
+                    Obrigatório
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addQuestion}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <Plus className="h-4 w-4" /> Adicionar campo
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── RecruitmentPage ──────────────────────────────────────────────────────────
 
 export default function RecruitmentPage() {
@@ -1485,8 +1973,8 @@ export default function RecruitmentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // View mode: kanban | list (triagem) | openings (por vaga)
-  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'openings' | 'talents'>('kanban');
+  // View mode: kanban | list (triagem) | openings (por vaga) | talents | forms
+  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'openings' | 'talents' | 'forms'>('kanban');
 
   // Pipeline filters
   const [search, setSearch] = useState('');
@@ -1724,8 +2212,8 @@ export default function RecruitmentPage() {
         <div className="flex items-center gap-2 flex-wrap">
           {/* View toggle */}
           <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
-            {(['kanban', 'list', 'openings', 'talents'] as const).map((mode) => {
-              const labels: Record<string, string> = { kanban: 'Kanban', list: 'Triagem', openings: 'Por vaga', talents: 'Talentos' };
+            {(['kanban', 'list', 'openings', 'talents', 'forms'] as const).map((mode) => {
+              const labels: Record<string, string> = { kanban: 'Kanban', list: 'Triagem', openings: 'Por vaga', talents: 'Talentos', forms: 'Formulários' };
               return (
                 <button key={mode} onClick={() => setViewMode(mode)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
@@ -1735,7 +2223,7 @@ export default function RecruitmentPage() {
                 </button>
               );
             })}
-            <a href="/vagas" target="_blank" rel="noopener noreferrer"
+            <a href={PUBLIC_RECRUITMENT_URL} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-900 transition-all">
               <Globe className="h-3.5 w-3.5" />
               Página pública
@@ -1743,7 +2231,7 @@ export default function RecruitmentPage() {
           </div>
 
           {/* CTA */}
-          {canManage && viewMode !== 'openings' && viewMode !== 'talents' && (
+          {canManage && viewMode !== 'openings' && viewMode !== 'talents' && viewMode !== 'forms' && (
             <button onClick={() => setShowNewModal(true)}
               className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800">
               <UserPlus className="h-4 w-4" />
@@ -1855,7 +2343,7 @@ export default function RecruitmentPage() {
       )}
 
       {/* ─── Pipeline filters ─── */}
-      {viewMode !== 'openings' && viewMode !== 'talents' && (
+      {viewMode !== 'openings' && viewMode !== 'talents' && viewMode !== 'forms' && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
           <div className="mr-2 hidden items-center gap-2 border-r border-slate-100 pr-3 text-sm font-semibold text-slate-950 md:flex">
             <Kanban className="h-4 w-4 text-slate-500" />
@@ -2099,6 +2587,14 @@ export default function RecruitmentPage() {
           canManage={canManage}
           onOpen={setDetailCandidate}
           onReactivated={loadData}
+        />
+      )}
+
+      {/* ─── Formulários ─── */}
+      {viewMode === 'forms' && (
+        <RecruitmentFormsView
+          getToken={getToken}
+          canManage={canManage}
         />
       )}
 

@@ -1,0 +1,229 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { getFeatureFlags } from '@/lib/feature-flags';
+import type { HrFormQuestion } from '@/types';
+import {
+  DEFAULT_TALENT_POOL_FORM,
+  TALENT_POOL_FORM_ID,
+  getRecruitmentQuestionOptions,
+  hasRecruitmentAnswer,
+  normalizeRecruitmentFormConfig,
+} from '@/lib/recruitment-forms';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const TALENT_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const TALENT_LIMIT_MAX = 5;
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function jsonError(message: string, status = 400) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+function trimText(value: unknown, maxLength: number) {
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+
+function getClientKey(request: NextRequest) {
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return forwarded || request.headers.get('x-real-ip') || 'unknown';
+}
+
+function isRateLimited(key: string) {
+  const now = Date.now();
+  for (const [bucketKey, bucket] of rateBuckets.entries()) {
+    if (now > bucket.resetAt) rateBuckets.delete(bucketKey);
+  }
+
+  const current = rateBuckets.get(key);
+  if (!current || now > current.resetAt) {
+    rateBuckets.set(key, { count: 1, resetAt: now + TALENT_LIMIT_WINDOW_MS });
+    return false;
+  }
+  current.count += 1;
+  return current.count > TALENT_LIMIT_MAX;
+}
+
+function isAllowedResumeUrl(value: unknown) {
+  return typeof value === 'string' &&
+    value.startsWith('https://firebasestorage.googleapis.com/') &&
+    value.length <= 1200;
+}
+
+function normalizeTalentFormAnswers(rawAnswers: unknown, questions: HrFormQuestion[]) {
+  if (rawAnswers !== undefined && (typeof rawAnswers !== 'object' || rawAnswers === null || Array.isArray(rawAnswers))) {
+    throw new Error('Respostas do formulário inválidas.');
+  }
+
+  const input = (rawAnswers ?? {}) as Record<string, unknown>;
+  if (JSON.stringify(input).length > 12_000) {
+    throw new Error('Respostas do formulário acima do limite permitido.');
+  }
+
+  const normalized: Record<string, unknown> = {};
+  for (const question of questions) {
+    const raw = input[question.id];
+    if (question.required && !hasRecruitmentAnswer(raw)) {
+      throw new Error(`Responda o campo obrigatório: ${question.text}`);
+    }
+    if (!hasRecruitmentAnswer(raw)) continue;
+
+    const options = getRecruitmentQuestionOptions(question);
+    if (question.type === 'yes_no') {
+      if (typeof raw !== 'boolean') throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = raw;
+      continue;
+    }
+    if (question.type === 'select') {
+      const value = trimText(raw, 200);
+      if (!value) throw new Error(`Resposta inválida para: ${question.text}`);
+      if (options.length > 0 && !options.includes(value)) throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = value;
+      continue;
+    }
+    if (question.type === 'multi_select') {
+      if (!Array.isArray(raw)) throw new Error(`Resposta inválida para: ${question.text}`);
+      const values = raw.map(entry => trimText(entry, 200)).filter(Boolean);
+      if (options.length > 0 && values.some(value => !options.includes(value))) {
+        throw new Error(`Resposta inválida para: ${question.text}`);
+      }
+      if (question.required && values.length === 0) throw new Error(`Responda o campo obrigatório: ${question.text}`);
+      normalized[question.id] = Array.from(new Set(values));
+      continue;
+    }
+    if (question.type === 'number_range') {
+      const value = Number(raw);
+      if (!Number.isFinite(value)) throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = value;
+      continue;
+    }
+    if (question.type === 'date') {
+      const value = trimText(raw, 40);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = value;
+      continue;
+    }
+    if (question.type === 'file_upload') {
+      if (!isAllowedResumeUrl(raw)) throw new Error(`Arquivo inválido para: ${question.text}`);
+      normalized[question.id] = raw;
+      continue;
+    }
+
+    normalized[question.id] = trimText(raw, 1000);
+  }
+
+  return normalized;
+}
+
+function createQuestionSnapshot(questions: HrFormQuestion[]) {
+  return questions.map(question => ({
+    id: question.id,
+    text: question.text,
+    type: question.type,
+    required: question.required,
+    eliminatory: question.eliminatory,
+    weight: question.weight,
+    config: question.config ?? null,
+  }));
+}
+
+export async function POST(request: NextRequest) {
+  const flags = await getFeatureFlags();
+  if (flags.kill_recruitment_public_landing) {
+    return jsonError('Cadastro temporariamente indisponível.', 503);
+  }
+
+  if (isRateLimited(getClientKey(request))) {
+    return jsonError('Muitas tentativas. Tente novamente em alguns minutos.', 429);
+  }
+
+  const body = await request.json().catch(() => null);
+  if (!body) return jsonError('Payload inválido.');
+
+  const name = trimText(body.name, 120);
+  const email = trimText(body.email, 180).toLowerCase();
+  const phone = trimText(body.phone, 40);
+  const rolePreference = trimText(body.rolePreference, 120);
+  const unitPreference = trimText(body.unitPreference, 120);
+  const notes = trimText(body.message, 1500);
+  const rawFormAnswers = body.formAnswers;
+  const resumeUrl = isAllowedResumeUrl(body.resumeUrl) ? body.resumeUrl : null;
+  const resumePath = trimText(body.resumePath, 500) || null;
+  const consentAccepted = body.consentAccepted === true;
+  const website = trimText(body.website, 200);
+
+  if (website) return jsonError('Cadastro não aceito.', 400);
+  if (!consentAccepted) return jsonError('É necessário aceitar o tratamento dos dados para enviar o cadastro.');
+  if (!name) return jsonError('Nome é obrigatório.');
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return jsonError('E-mail inválido.');
+  }
+
+  const formDoc = await hrDbAdmin.collection('recruitmentForms').doc(TALENT_POOL_FORM_ID).get();
+  const formConfig = normalizeRecruitmentFormConfig(
+    formDoc.exists ? { id: formDoc.id, ...formDoc.data() } : DEFAULT_TALENT_POOL_FORM
+  );
+  const publicForm = formConfig.status === 'published' ? formConfig : DEFAULT_TALENT_POOL_FORM;
+  let formAnswers: Record<string, unknown>;
+  try {
+    formAnswers = normalizeTalentFormAnswers(rawFormAnswers, publicForm.questions);
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : 'Respostas do formulário inválidas.');
+  }
+  const formQuestionSnapshot = createQuestionSnapshot(publicForm.questions);
+
+  const resolvedRolePreference = rolePreference || trimText(formAnswers.preferred_role, 120);
+  const resolvedUnitPreference = unitPreference || trimText(formAnswers.preferred_unit, 120);
+  const resolvedNotes = notes || trimText(formAnswers.message, 1500);
+
+  const existing = await hrDbAdmin
+    .collection('candidates')
+    .where('email', '==', email)
+    .limit(1)
+    .get();
+
+  const now = new Date().toISOString();
+  const candidateRef = existing.empty ? hrDbAdmin.collection('candidates').doc() : existing.docs[0].ref;
+  const existingData = existing.empty ? null : existing.docs[0].data();
+  const jobRoleName = resolvedRolePreference || 'Banco de talentos';
+
+  await candidateRef.set({
+    name,
+    email,
+    phone: phone || null,
+    jobRoleId: existingData?.jobRoleId ?? 'talent_pool',
+    jobRoleName,
+    status: existingData?.status ?? 'withdrawn',
+    notes: resolvedNotes || null,
+    source: 'talent_pool',
+    resumeUrl,
+    resumePath,
+    formAnswers,
+    formQuestionSnapshot,
+    rating: existingData?.rating ?? 0,
+    consent: {
+      accepted: true,
+      acceptedAt: now,
+      purpose: 'talent_pool',
+      retention: 'recruitment_process',
+    },
+    talentPool: {
+      rolePreference: resolvedRolePreference || null,
+      unitPreference: resolvedUnitPreference || null,
+      submittedAt: now,
+      formId: publicForm.id,
+      formVersion: publicForm.version,
+    },
+    publicMetadata: {
+      ip: getClientKey(request),
+      userAgent: request.headers.get('user-agent')?.slice(0, 300) || null,
+    },
+    appliedAt: existingData?.appliedAt ?? now,
+    updatedAt: now,
+    createdBy: existingData?.createdBy ?? 'public',
+    firstAppliedAt: existingData?.firstAppliedAt ?? existingData?.appliedAt ?? now,
+  }, { merge: true });
+
+  return NextResponse.json({ ok: true, id: candidateRef.id, reused: !existing.empty }, { status: existing.empty ? 201 : 200 });
+}

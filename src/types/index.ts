@@ -804,6 +804,25 @@ export type HrFormQuestion = {
   config?: Record<string, unknown>;
 };
 
+export type RecruitmentFormKind = 'talent_pool' | 'job_opening';
+export type RecruitmentFormStatus = 'draft' | 'published';
+
+export type RecruitmentFormConfig = {
+  id: string;
+  kind: RecruitmentFormKind;
+  title: string;
+  description?: string;
+  status: RecruitmentFormStatus;
+  questions: HrFormQuestion[];
+  consentText?: string;
+  submitLabel?: string;
+  version: number;
+  createdAt?: string;
+  updatedAt: string;
+  updatedBy?: string;
+  publishedAt?: string | null;
+};
+
 export type JobRoleSalaryRange = {
   min?: number;
   max?: number;

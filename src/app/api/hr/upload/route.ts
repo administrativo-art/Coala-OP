@@ -61,6 +61,10 @@ async function assertPublicUploadAllowed(request: NextRequest, formData: FormDat
   const website = trimText(formData.get('website'), 200);
   if (website) return jsonError('Envio não aceito.', 400);
 
+  if (trimText(formData.get('talentPool'), 20) === 'true') {
+    return null;
+  }
+
   const slug = trimText(formData.get('slug'), 120);
   if (!slug) return jsonError('Identificador da vaga ausente.');
 

@@ -98,6 +98,18 @@ function normalizeFormAnswers(rawAnswers: unknown, questions: HrFormQuestion[]) 
       normalized[question.id] = Array.from(new Set(values));
       continue;
     }
+    if (question.type === 'number_range') {
+      const value = Number(raw);
+      if (!Number.isFinite(value)) throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = value;
+      continue;
+    }
+    if (question.type === 'date') {
+      const value = trimText(raw, 40);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = value;
+      continue;
+    }
 
     normalized[question.id] = trimText(raw, 1000);
   }
