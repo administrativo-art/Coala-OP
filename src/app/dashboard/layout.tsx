@@ -16,6 +16,7 @@ import {
   submitHrLoginJustification,
   type HrLoginAccessPayload,
 } from '@/features/hr/lib/client';
+import { isPublicRecruitmentHost as isRecruitmentHost } from '@/lib/public-recruitment-host';
 import { LockKeyhole, ShieldAlert } from 'lucide-react';
 
 function shouldSurfaceLoginAccessNotice(payload: HrLoginAccessPayload) {
@@ -101,7 +102,7 @@ export default function DashboardLayout({
   const [submittingJustification, setSubmittingJustification] = useState(false);
 
   useEffect(() => {
-    if (window.location.hostname.toLowerCase() === 'vagas.coalashakes.com') {
+    if (isRecruitmentHost(window.location.hostname)) {
       setIsPublicRecruitmentHost(true);
       window.location.replace('/');
       return;

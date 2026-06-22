@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { isPublicRecruitmentRequest } from '@/lib/public-recruitment-host';
+
 /**
  * Domínio(s) público(s) dedicado(s) à landing de vagas.
  * Nesses hosts, a seção /vagas é servida a partir da raiz:
@@ -10,7 +12,6 @@ import { NextRequest, NextResponse } from 'next/server';
  * Em qualquer outro host (op.coalashakes.com, *.run.app, localhost) o
  * middleware não faz nada.
  */
-const VAGAS_HOSTS = new Set(['vagas.coalashakes.com']);
 const BLOCKED_SYSTEM_PREFIXES = [
   '/dashboard',
   '/configuracoes',
@@ -20,8 +21,7 @@ const BLOCKED_SYSTEM_PREFIXES = [
 ];
 
 export function middleware(req: NextRequest) {
-  const host = req.headers.get('host')?.split(':')[0]?.toLowerCase() ?? '';
-  if (!VAGAS_HOSTS.has(host)) return NextResponse.next();
+  if (!isPublicRecruitmentRequest(req.headers)) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
   const normalizedPathname = pathname.toLowerCase();

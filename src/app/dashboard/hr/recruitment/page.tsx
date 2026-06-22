@@ -29,10 +29,12 @@ const STATUS_CONFIG: Record<CandidateStatus, { label: string; color: string; ico
   hired:          { label: 'Contratado',    color: 'bg-green-500',  icon: CheckCircle2 },
   rejected:       { label: 'Reprovado',     color: 'bg-red-500',    icon: XCircle },
   withdrawn:      { label: 'Desistência',   color: 'bg-slate-500',  icon: ArrowRight },
+  talent_pool:    { label: 'Banco de talentos', color: 'bg-cyan-500', icon: Star },
 };
 
 const PIPELINE_STATUSES: CandidateStatus[] = ['applied', 'screening', 'interview', 'technical_test', 'offer', 'hired'];
 const ARCHIVED_STATUSES: CandidateStatus[] = ['rejected', 'withdrawn'];
+const TALENT_POOL_STATUS: CandidateStatus = 'talent_pool';
 const ALL_STATUSES = Object.keys(STATUS_CONFIG) as CandidateStatus[];
 
 const OPENING_STATUS_CONFIG: Record<JobOpeningStatus, { label: string; color: string; icon: React.ElementType }> = {
@@ -612,6 +614,7 @@ const COLUMN_ACCENT: Record<CandidateStatus, string> = {
   hired:          'from-lime-50 to-green-50 border-green-100',
   rejected:       'from-rose-50 to-red-50 border-red-100',
   withdrawn:      'from-slate-50 to-zinc-50 border-slate-200',
+  talent_pool:    'from-cyan-50 to-sky-50 border-cyan-100',
 };
 
 const CARD_ACCENT: Record<CandidateStatus, string> = {
@@ -623,6 +626,7 @@ const CARD_ACCENT: Record<CandidateStatus, string> = {
   hired:          'bg-cyan-100/80 border-cyan-200 text-cyan-950',
   rejected:       'bg-rose-100/80 border-rose-200 text-rose-950',
   withdrawn:      'bg-slate-100 border-slate-200 text-slate-950',
+  talent_pool:    'bg-cyan-100/80 border-cyan-200 text-cyan-950',
 };
 
 function CandidateInitials({ name }: { name: string }) {
@@ -1268,9 +1272,10 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
 
 // ─── OpeningsView ─────────────────────────────────────────────────────────────
 
-function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandidatesFilter }: {
+function OpeningsView({ openings, roles, candidates, getToken, canManage, onRefresh, onCandidatesFilter }: {
   openings: JobOpening[];
   roles: JobRole[];
+  candidates: Candidate[];
   getToken: () => Promise<string>;
   canManage: boolean;
   onRefresh: () => void;
@@ -1328,6 +1333,9 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
             <div className="space-y-3">
               {group.map(opening => {
                 const role = roles.find(r => r.id === opening.jobRoleId);
+                const openingCandidates = candidates.filter(c => c.jobOpeningId === opening.id);
+                const pipelineCount = openingCandidates.filter(c => PIPELINE_STATUSES.includes(c.status)).length;
+                const hiredCount = openingCandidates.filter(c => c.status === 'hired').length;
                 return (
                   <div key={opening.id}
                     className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-slate-300">
@@ -1344,6 +1352,8 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
                           {opening.location && <span>{opening.location}</span>}
                           {opening.workType && <span>{{ presencial: 'Presencial', remoto: 'Remoto', hibrido: 'Híbrido' }[opening.workType]}</span>}
                           <span>{opening.slots} vaga{opening.slots !== 1 ? 's' : ''}</span>
+                          <span>{openingCandidates.length} inscrito{openingCandidates.length !== 1 ? 's' : ''}</span>
+                          {hiredCount > 0 && <span className="text-emerald-600">{hiredCount} contratado{hiredCount !== 1 ? 's' : ''}</span>}
                           {opening.closesAt && (
                             <span className="text-amber-600">
                               até {new Date(opening.closesAt).toLocaleDateString('pt-BR')}
@@ -1365,7 +1375,7 @@ function OpeningsView({ openings, roles, getToken, canManage, onRefresh, onCandi
                         <button
                           onClick={() => onCandidatesFilter(opening.id)}
                           className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-950 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors">
-                          Candidatos
+                          Candidatos ({pipelineCount})
                         </button>
                         {canManage && (
                           <>
@@ -1440,9 +1450,9 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
   const [filterRating, setFilterRating] = useState('');
   const [reactivating, setReactivating] = useState<string | null>(null);
 
-  const archived = candidates.filter(c => ARCHIVED_STATUSES.includes(c.status));
+  const talentPoolCandidates = candidates.filter(c => c.status === TALENT_POOL_STATUS || c.source === 'talent_pool');
 
-  const filtered = archived.filter(c => {
+  const filtered = talentPoolCandidates.filter(c => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
         !c.email.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterRole && c.jobRoleId !== filterRole) return false;
@@ -1450,7 +1460,7 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
     return true;
   });
 
-  const highRating = archived.filter(c => (c.rating ?? 0) >= 4).length;
+  const highRating = talentPoolCandidates.filter(c => (c.rating ?? 0) >= 4).length;
 
   async function handleReactivate(candidate: Candidate) {
     setReactivating(candidate.id);
@@ -1468,9 +1478,9 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
   }
 
   const roleOptions = useMemo(() => {
-    const ids = new Set(archived.map(c => c.jobRoleId).filter(Boolean));
+    const ids = new Set(talentPoolCandidates.map(c => c.jobRoleId).filter(Boolean));
     return roles.filter(r => ids.has(r.id));
-  }, [archived, roles]);
+  }, [talentPoolCandidates, roles]);
 
   return (
     <div className="flex flex-col gap-4 flex-1">
@@ -1478,7 +1488,7 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Total no banco</p>
-          <p className="text-3xl font-bold text-white">{archived.length}</p>
+          <p className="text-3xl font-bold text-white">{talentPoolCandidates.length}</p>
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Alta avaliação (4+)</p>
@@ -1518,11 +1528,11 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
       </div>
 
       {/* Empty state */}
-      {archived.length === 0 && (
+      {talentPoolCandidates.length === 0 && (
         <div className="py-16 text-center">
           <Star className="h-10 w-10 text-slate-700 mx-auto mb-3" />
           <p className="text-slate-500 text-sm">Nenhum candidato no banco de talentos ainda.</p>
-          <p className="text-slate-600 text-xs mt-1">Candidatos reprovados ou desistentes aparecem aqui.</p>
+          <p className="text-slate-600 text-xs mt-1">Candidatos espontâneos ou movidos para o banco aparecem aqui.</p>
         </div>
       )}
 
@@ -1578,8 +1588,8 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
         </div>
       )}
 
-      {/* No results (but has archived) */}
-      {archived.length > 0 && filtered.length === 0 && (
+      {/* No results */}
+      {talentPoolCandidates.length > 0 && filtered.length === 0 && (
         <div className="py-10 text-center text-slate-600 text-sm">Nenhum candidato encontrado com os filtros aplicados.</div>
       )}
     </div>
@@ -2067,6 +2077,29 @@ export default function RecruitmentPage() {
   const archivedCandidates = useMemo(() =>
     filtered.filter(c => ARCHIVED_STATUSES.includes(c.status)), [filtered]);
 
+  const selectedOpening = useMemo(() =>
+    filterOpening ? openings.find(o => o.id === filterOpening) ?? null : null,
+    [filterOpening, openings]
+  );
+
+  const selectedOpeningRole = useMemo(() => {
+    if (!selectedOpening) return null;
+    return roles.find(role => role.id === selectedOpening.jobRoleId) ?? null;
+  }, [roles, selectedOpening]);
+
+  const selectedOpeningCandidates = useMemo(() =>
+    selectedOpening ? candidates.filter(c => c.jobOpeningId === selectedOpening.id) : [],
+    [candidates, selectedOpening]
+  );
+
+  const selectedOpeningStatusCounts = useMemo(() => {
+    const counts = Object.fromEntries(ALL_STATUSES.map(status => [status, 0])) as Record<CandidateStatus, number>;
+    selectedOpeningCandidates.forEach(candidate => {
+      counts[candidate.status] += 1;
+    });
+    return counts;
+  }, [selectedOpeningCandidates]);
+
   const stats = useMemo(() => {
     const now = Date.now();
     const MS_DAY = 86_400_000;
@@ -2408,6 +2441,58 @@ export default function RecruitmentPage() {
         </div>
       )}
 
+      {viewMode !== 'openings' && viewMode !== 'talents' && viewMode !== 'forms' && selectedOpening && (
+        <div className="rounded-2xl border border-pink-100 bg-pink-50/60 p-4 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-pink-600 ring-1 ring-pink-100">
+                  Processo seletivo
+                </span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {selectedOpening.location || 'Unidade não informada'}
+                </span>
+              </div>
+              <h2 className="mt-2 text-lg font-bold text-slate-950">{selectedOpening.title}</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {selectedOpeningRole?.name ?? selectedOpening.jobRoleName ?? 'Cargo não informado'} ·{' '}
+                {selectedOpening.slots} vaga{selectedOpening.slots !== 1 ? 's' : ''} ·{' '}
+                {selectedOpeningCandidates.length} candidato{selectedOpeningCandidates.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {PIPELINE_STATUSES.map(status => {
+                const cfg = STATUS_CONFIG[status];
+                return (
+                  <span key={status} className="rounded-xl border border-white bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
+                    <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${cfg.color}`} />
+                    {cfg.label}: {selectedOpeningStatusCounts[status]}
+                  </span>
+                );
+              })}
+              {selectedOpening.status === 'open' && (
+                <a
+                  href={`${PUBLIC_RECRUITMENT_URL}/${selectedOpening.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:text-slate-950"
+                >
+                  Ver vaga pública
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => setFilterOpening('')}
+                className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800"
+              >
+                Ver todas as vagas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Kanban ─── */}
       {viewMode === 'kanban' && (
         <div className="flex-1 flex flex-col gap-4 overflow-y-auto min-h-0">
@@ -2571,6 +2656,7 @@ export default function RecruitmentPage() {
         <OpeningsView
           openings={openings}
           roles={roles}
+          candidates={candidates}
           getToken={getToken}
           canManage={canManage}
           onRefresh={loadData}

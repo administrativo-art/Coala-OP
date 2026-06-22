@@ -187,6 +187,8 @@ export async function POST(request: NextRequest) {
   const candidateRef = existing.empty ? hrDbAdmin.collection('candidates').doc() : existing.docs[0].ref;
   const existingData = existing.empty ? null : existing.docs[0].data();
   const jobRoleName = resolvedRolePreference || 'Banco de talentos';
+  const existingStatus = typeof existingData?.status === 'string' ? existingData.status : null;
+  const status = existingStatus && existingStatus !== 'withdrawn' ? existingStatus : 'talent_pool';
 
   await candidateRef.set({
     name,
@@ -194,7 +196,7 @@ export async function POST(request: NextRequest) {
     phone: phone || null,
     jobRoleId: existingData?.jobRoleId ?? 'talent_pool',
     jobRoleName,
-    status: existingData?.status ?? 'withdrawn',
+    status,
     notes: resolvedNotes || null,
     source: 'talent_pool',
     resumeUrl,

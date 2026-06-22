@@ -9,7 +9,6 @@ import {
   Cake,
   ChevronDown,
   ChevronRight,
-  Coffee,
   GraduationCap,
   HeartHandshake,
   Instagram,
@@ -82,7 +81,7 @@ const VALUE_CARDS = [
     emoji: "🚀",
     title: "Quem entra, cresce.",
     text: "70% dos gerentes começaram no balcão. Trilha clara, treino interno e gente disposta a ensinar.",
-    footer: "Trilha: balcão → líder → gerente",
+    footer: "Atendente - líder - supervisão - gerente",
     color: "#EE6FA8",
     background: "#FCDFEB",
   },
@@ -105,7 +104,6 @@ const VALUE_CARDS = [
 ];
 
 const BENEFITS = [
-  { title: "Shake na casa", text: "1 shake por turno", icon: Coffee, color: "#EE6FA8" },
   { title: "Vale-transporte", text: "Cobertura total do deslocamento", icon: TramFront, color: "#3FBCD9" },
   { title: "Bonificações", text: "Atreladas ao desempenho e metas", icon: Banknote, color: "#E0A100" },
   { title: "Trilha de carreira", text: "70% dos gerentes vieram do balcão", icon: GraduationCap, color: "#2FA86A" },

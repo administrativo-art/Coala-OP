@@ -5,8 +5,7 @@ import { Loader2 } from "lucide-react";
 
 import VagasPage from "@/app/vagas/page";
 import { RootSystemRedirect } from "@/components/root-system-redirect";
-
-const PUBLIC_RECRUITMENT_HOST = "vagas.coalashakes.com";
+import { isPublicRecruitmentHost as isRecruitmentHost } from "@/lib/public-recruitment-host";
 
 function RootLoading() {
   return (
@@ -23,7 +22,7 @@ export function RootHostSwitch() {
   const [isPublicRecruitmentHost, setIsPublicRecruitmentHost] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const isPublicHost = window.location.hostname.toLowerCase() === PUBLIC_RECRUITMENT_HOST;
+    const isPublicHost = isRecruitmentHost(window.location.hostname);
     setIsPublicRecruitmentHost(isPublicHost);
 
     if (isPublicHost) {

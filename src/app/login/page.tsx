@@ -16,6 +16,7 @@ import {
   submitHrLoginJustification,
   type HrLoginAccessPayload,
 } from "@/features/hr/lib/client";
+import { isPublicRecruitmentHost as isRecruitmentHost } from "@/lib/public-recruitment-host";
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido"),
@@ -42,7 +43,7 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (window.location.hostname.toLowerCase() === "vagas.coalashakes.com") {
+    if (isRecruitmentHost(window.location.hostname)) {
       setIsPublicRecruitmentHost(true);
       window.location.replace("/");
     }

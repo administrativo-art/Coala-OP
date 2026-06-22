@@ -830,7 +830,7 @@ export type JobRoleSalaryRange = {
   visible?: boolean;
 };
 
-export type CandidateStatus = 'applied' | 'screening' | 'interview' | 'technical_test' | 'offer' | 'hired' | 'rejected' | 'withdrawn';
+export type CandidateStatus = 'applied' | 'screening' | 'interview' | 'technical_test' | 'offer' | 'hired' | 'rejected' | 'withdrawn' | 'talent_pool';
 
 export type Candidate = {
   id: string;
