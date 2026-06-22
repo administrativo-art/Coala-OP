@@ -31,6 +31,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginAccessGate, setLoginAccessGate] = useState<HrLoginAccessPayload | null>(null);
   const [submittingJustification, setSubmittingJustification] = useState(false);
+  const [isPublicRecruitmentHost, setIsPublicRecruitmentHost] = useState(false);
 
   const {
     register,
@@ -39,6 +40,13 @@ export default function LoginPage() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
+
+  useEffect(() => {
+    if (window.location.hostname.toLowerCase() === "vagas.coalashakes.com") {
+      setIsPublicRecruitmentHost(true);
+      window.location.replace("/");
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading && isAuthenticated && !loginAccessGate) {
@@ -99,7 +107,7 @@ export default function LoginPage() {
     }
   }
 
-  if (loading || (isAuthenticated && !loginAccessGate)) {
+  if (isPublicRecruitmentHost || loading || (isAuthenticated && !loginAccessGate)) {
     return <div className="flex h-screen items-center justify-center">Carregando...</div>;
   }
 

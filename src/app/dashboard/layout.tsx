@@ -95,11 +95,18 @@ export default function DashboardLayout({
   const router = useRouter();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [isPublicRecruitmentHost, setIsPublicRecruitmentHost] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loginAccessState, setLoginAccessState] = useState<HrLoginAccessPayload | null>(null);
   const [submittingJustification, setSubmittingJustification] = useState(false);
 
   useEffect(() => {
+    if (window.location.hostname.toLowerCase() === 'vagas.coalashakes.com') {
+      setIsPublicRecruitmentHost(true);
+      window.location.replace('/');
+      return;
+    }
+
     setIsMounted(true);
   }, []);
 
@@ -224,7 +231,7 @@ export default function DashboardLayout({
     }
   }, [firebaseUser, toast, user?.id]);
   
-  if (!isMounted || authLoading || !isAuthenticated) {
+  if (isPublicRecruitmentHost || !isMounted || authLoading || !isAuthenticated) {
     return <LoadingSkeleton />;
   }
 
