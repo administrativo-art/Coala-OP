@@ -1807,7 +1807,7 @@ export function ExpenseForm() {
                           </div>
                           <div className="text-right">
                             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</p>
-                            <p className="font-mono text-3xl font-bold">{formatCurrency(totalValue || 0)}</p>
+                            <p className="font-mono text-2xl font-bold">{formatCurrency(totalValue || 0)}</p>
                           </div>
                         </div>
 

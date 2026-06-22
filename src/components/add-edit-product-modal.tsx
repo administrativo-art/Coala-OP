@@ -55,12 +55,8 @@ const productFormSchema = z.object({
   baseProductId: z.string().optional(),
   operationalCategoryId: z.string().min(1, 'Selecione a categoria do item.'),
   defaultCountingUnit: z.enum(['package', 'base', 'content']).optional(),
-  apparelType: z.string().optional(),
   apparelSize: z.string().optional(),
   apparelColor: z.string().optional(),
-  apparelFit: z.string().optional(),
-  apparelMaterial: z.string().optional(),
-  apparelUsage: z.string().optional(),
 
   // Conditional sections
   enableLogistics: z.boolean().optional(),
@@ -108,7 +104,7 @@ interface AddEditProductModalProps {
 }
 
 const WIZARD_STEPS = [
-    { id: 1, label: 'Identificação', icon: FileText, description: 'Foto, nome, vínculo com o produto base e observações.' },
+    { id: 1, label: 'Identificação', icon: FileText, description: 'Foto, nome, atributos principais, vínculo com o produto base e observações.' },
     { id: 2, label: 'Aliases de compra', icon: Tag, description: 'Nomes que os fornecedores usam para este item nos pedidos e notas. O sistema reconhece esses nomes automaticamente nas compras.' },
     { id: 3, label: 'Detalhes logísticos', icon: Package, description: 'O item físico que você compra. Define a conversão para a unidade do estoque.' },
     { id: 4, label: 'Nutricional', icon: ImageIcon, description: 'Opcional — fotografe a embalagem; o assistente transcreve quando solicitado.' },
@@ -145,8 +141,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             category: 'Massa', packageSize: undefined, unit: 'g',
             notes: '', baseProductId: '',
             operationalCategoryId: '',
-            apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
-            apparelMaterial: '', apparelUsage: '',
+            apparelSize: '', apparelColor: '',
             defaultCountingUnit: 'package',
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
             enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
@@ -262,12 +257,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     notes: productToEdit.notes || '',
                     baseProductId: productToEdit.baseProductId || '',
                     operationalCategoryId: productToEdit.operationalCategoryId || '',
-                    apparelType: productToEdit.apparelType || '',
                     apparelSize: productToEdit.apparelSize === 'Único' ? 'Tamanho único' : productToEdit.apparelSize || '',
                     apparelColor: productToEdit.apparelColor || '',
-                    apparelFit: productToEdit.apparelFit || '',
-                    apparelMaterial: productToEdit.apparelMaterial || '',
-                    apparelUsage: productToEdit.apparelUsage || '',
                     defaultCountingUnit: productToEdit.defaultCountingUnit || 'package',
                     // Switches
                     enableLogistics: !!productToEdit.multiplo_caixa,
@@ -288,8 +279,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     category: 'Massa', packageSize: undefined, unit: 'g',
                     notes: '', baseProductId: '',
                     operationalCategoryId: '',
-                    apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
-                    apparelMaterial: '', apparelUsage: '',
+                    apparelSize: '', apparelColor: '',
                     defaultCountingUnit: 'package',
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
@@ -378,12 +368,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             notes: values.notes,
             baseProductId: values.baseProductId,
             defaultCountingUnit: values.defaultCountingUnit,
-            apparelType: isApparel ? values.apparelType : undefined,
             apparelSize: isApparel ? values.apparelSize : undefined,
             apparelColor: isApparel ? values.apparelColor : undefined,
-            apparelFit: isApparel ? values.apparelFit : undefined,
-            apparelMaterial: isApparel ? values.apparelMaterial : undefined,
-            apparelUsage: isApparel ? values.apparelUsage : undefined,
 
             multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
             rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,
@@ -408,7 +394,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     };
 
     const fieldStep: Partial<Record<keyof ProductFormValues, number>> = {
-        baseName: 1, operationalCategoryId: 1,
+        baseName: 1, operationalCategoryId: 1, apparelSize: 1, apparelColor: 1,
         packageType: 3, category: 3, packageSize: 3, unit: 3, multiplo_caixa: 3, rotulo_caixa: 3, countingInstruction: 3,
     };
 
@@ -640,6 +626,28 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 )}/>
                                             </div>
 
+                                            {isApparel && (
+                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <FormField control={form.control} name="apparelSize" render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Tamanho</FormLabel>
+                                                            <Select value={field.value ?? ''} onValueChange={field.onChange}>
+                                                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                                                <SelectContent>{APPAREL_SIZE_OPTIONS.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
+                                                            </Select>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )} />
+                                                    <FormField control={form.control} name="apparelColor" render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Cor</FormLabel>
+                                                            <FormControl><Input placeholder="Ex: Areia" {...field} value={field.value ?? ''} /></FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )} />
+                                                </div>
+                                            )}
+
                                             {activeCategories.length === 0 && (
                                                 <Alert>
                                                     <AlertTitle>Cadastre categorias operacionais</AlertTitle>
@@ -788,27 +796,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     </div>
                                                 )}
                                             </Card>
-
-                                            {isApparel && (
-                                                <Card className="border-amber-200 bg-amber-50 p-4 dark:bg-amber-900/20">
-                                                    <p className="mb-3 text-sm font-semibold">Atributos do item</p>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <FormField control={form.control} name="apparelSize" render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>Tamanho</FormLabel>
-                                                                <Select value={field.value ?? ''} onValueChange={field.onChange}>
-                                                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                                                    <SelectContent>{APPAREL_SIZE_OPTIONS.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
-                                                                </Select>
-                                                            </FormItem>
-                                                        )} />
-                                                        <FormField control={form.control} name="apparelColor" render={({ field }) => (<FormItem><FormLabel>Cor</FormLabel><FormControl><Input placeholder="Ex: Preto" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
-                                                        <FormField control={form.control} name="apparelType" render={({ field }) => (<FormItem><FormLabel>Modelo</FormLabel><FormControl><Input placeholder="Ex: Camiseta, Avental" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
-                                                        <FormField control={form.control} name="apparelMaterial" render={({ field }) => (<FormItem><FormLabel>Tecido / material</FormLabel><FormControl><Input placeholder="Ex: Algodão, Poliéster" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
-                                                        <FormField control={form.control} name="apparelUsage" render={({ field }) => (<FormItem className="col-span-2"><FormLabel>Uso</FormLabel><FormControl><Input placeholder="Ex: Cozinha, Atendimento, EPI" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
-                                                    </div>
-                                                </Card>
-                                            )}
 
                                             <Card className="p-4">
                                                 <div className="flex items-center justify-between">

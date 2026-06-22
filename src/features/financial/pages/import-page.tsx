@@ -2268,10 +2268,10 @@ export function FinancialImportPage({
   return (
     <div className={cn("mx-auto w-full max-w-[1460px] space-y-4", embedded && "max-w-none")}>
       {!embedded ? (
-        <div className="flex flex-wrap items-end justify-between gap-3 rounded-[28px] border border-border/70 bg-background/80 px-5 py-4 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 px-5 py-4 shadow-sm backdrop-blur">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Financeiro / Importações</p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight">Importar extrato bancário</h1>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight">Importar extrato bancário</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Concilie pagamentos com despesas provisionadas. OFX, CSV e Pix-API.
             </p>
@@ -3212,7 +3212,7 @@ export function FinancialImportPage({
         </Card>
       ) : (
         uploadOnly || showImportControls ? (
-        <Card className="mx-auto max-w-[1120px] rounded-[28px] border-border/70 shadow-sm">
+        <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle>Upload do arquivo</CardTitle>
             <CardDescription>Selecione a conta do extrato e importe um arquivo OFX ou CSV para iniciar a conciliação.</CardDescription>
@@ -3279,7 +3279,7 @@ export function FinancialImportPage({
               }}
               onClick={() => fileRef.current?.click()}
               className={cn(
-                "grid min-h-[150px] w-full place-items-center rounded-[24px] border-2 border-dashed px-6 py-8 text-center transition-colors",
+                "grid min-h-[132px] w-full place-items-center rounded-2xl border-2 border-dashed px-5 py-6 text-center transition-colors",
                 isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/20"
               )}
             >
@@ -3292,8 +3292,8 @@ export function FinancialImportPage({
           </CardContent>
         </Card>
         ) : (
-        <Card className="mx-auto max-w-[1120px] rounded-[28px] border-border/70 shadow-sm">
-          <CardContent className="flex min-h-[240px] items-center justify-center p-8 text-center">
+        <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-sm">
+          <CardContent className="flex min-h-[180px] items-center justify-center p-6 text-center">
             <div className="space-y-2">
               <p className="text-base font-semibold">Nenhuma sessão aberta para auditoria</p>
               <p className="text-sm text-muted-foreground">Use o botão “Importar extrato” em Despesas para carregar um novo arquivo.</p>

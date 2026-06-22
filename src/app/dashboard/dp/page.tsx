@@ -44,7 +44,7 @@ function VacationStatCard({ title, value, icon, bg, color }: {
           <div className={color}>{icon}</div>
         </div>
         <div>
-          <div className="text-3xl font-bold">{value}</div>
+          <div className="text-2xl font-bold">{value}</div>
           <p className="text-sm text-muted-foreground">{title}</p>
         </div>
       </CardContent>
@@ -74,7 +74,7 @@ function UpcomingVacationsCard({ vacations, userMap }: {
       </CardHeader>
       <CardContent>
         {upcoming.length === 0 ? (
-          <div className="flex flex-col items-center py-8 text-muted-foreground gap-2">
+          <div className="flex flex-col items-center py-6 text-muted-foreground gap-2">
             <Plane className="h-10 w-10" />
             <p className="text-sm">Nenhuma férias agendada.</p>
           </div>
@@ -530,7 +530,7 @@ export default function DPDashboardPage() {
   }, [vacations]);
 
   if (!permissions.dp?.view) {
-    return <p className="text-muted-foreground p-6">Sem permissão para acessar o Departamento Pessoal.</p>;
+    return <p className="text-muted-foreground p-6">Sem permissão para acessar o departamento pessoal.</p>;
   }
 
   const dashboardLoading =
@@ -556,7 +556,7 @@ export default function DPDashboardPage() {
           <p className="mt-1 text-muted-foreground">{dashboardErrors[0]}</p>
         </div>
       )}
-      <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid gap-5 grid-cols-1 lg:grid-cols-3 xl:grid-cols-4">
 
         {/* ── Coluna principal ── */}
         <div className="lg:col-span-2 xl:col-span-3 space-y-8">

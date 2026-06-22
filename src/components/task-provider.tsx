@@ -2,18 +2,21 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { type Task, type TaskProject, type TaskStatusDoc } from '@/types';
+import { type Task, type TaskProject, type TaskStatusDoc, type TaskSubproject } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
   createTask,
   createTaskProject,
   createTaskStatus,
   deleteTaskProject as deleteTaskProjectRequest,
+  deleteTaskSubproject as deleteTaskSubprojectRequest,
   deleteTaskStatus as deleteTaskStatusRequest,
   deleteTask as deleteTaskRequest,
   fetchTasksBootstrap,
   updateTask as updateTaskRequest,
   updateTaskProject as updateTaskProjectRequest,
+  createTaskSubproject,
+  updateTaskSubproject as updateTaskSubprojectRequest,
   updateTaskStatus,
   updateTaskStatusDoc,
 } from '@/features/tasks/lib/client';
@@ -21,6 +24,7 @@ import {
 export interface TaskContextType {
   tasks: Task[];
   projects: TaskProject[];
+  subprojects: TaskSubproject[];
   statuses: TaskStatusDoc[];
   loading: boolean;
   addTask: (task: Omit<Task, 'id'>) => Promise<string | null>;
@@ -29,8 +33,12 @@ export interface TaskContextType {
   createProject: (input: { name: string; description?: string }) => Promise<string | null>;
   updateProject: (projectId: string, input: { name: string; description?: string }) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
+  createSubproject: (input: { project_id: string; name: string; description?: string }) => Promise<string | null>;
+  updateSubproject: (subprojectId: string, input: { name: string; description?: string; order?: number }) => Promise<void>;
+  deleteSubproject: (subprojectId: string) => Promise<void>;
   createStatus: (input: {
     project_id: string;
+    subproject_id: string;
     name: string;
     slug: string;
     category?: TaskStatusDoc['category'];
@@ -43,6 +51,7 @@ export interface TaskContextType {
     statusId: string,
     input: {
       project_id: string;
+      subproject_id: string;
       name: string;
       slug: string;
       category?: TaskStatusDoc['category'];
@@ -61,6 +70,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     const { firebaseUser } = useAuth();
     const [tasks, setTasks] = useState<Task[]>([]);
     const [projects, setProjects] = useState<TaskProject[]>([]);
+    const [subprojects, setSubprojects] = useState<TaskSubproject[]>([]);
     const [statuses, setStatuses] = useState<TaskStatusDoc[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -73,6 +83,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
                 const payload = await fetchTasksBootstrap(firebaseUser);
                 if (isMounted) {
                     setProjects(payload.projects);
+                    setSubprojects(payload.subprojects ?? []);
                     setStatuses(payload.statuses);
                     setTasks(payload.tasks);
                 }
@@ -109,6 +120,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
                 approverId: task.approverId || undefined,
                 dueDate: task.dueDate,
                 projectId: (task as Task & { projectId?: string }).projectId,
+                subprojectId: (task as Task & { subprojectId?: string }).subprojectId,
+                subprojectName: (task as Task & { subprojectName?: string }).subprojectName,
                 origin:
                     task.origin.kind === 'manual' || task.origin.kind === 'legacy'
                         ? task.origin
@@ -193,14 +206,60 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         try {
             await deleteTaskProjectRequest(firebaseUser, projectId);
             setProjects((current) => current.filter((project) => project.id !== projectId));
+            setSubprojects((current) => current.filter((subproject) => subproject.project_id !== projectId));
             setStatuses((current) => current.filter((status) => status.project_id !== projectId));
         } catch (error) {
             console.error("Error deleting project:", error);
         }
     }, [firebaseUser]);
 
+    const createSubproject = useCallback(async (input: { project_id: string; name: string; description?: string }) => {
+        if (!firebaseUser) return null;
+        try {
+            const response = await createTaskSubproject(firebaseUser, input);
+            setSubprojects((current) =>
+                [...current, response.subproject].sort((left, right) => left.name.localeCompare(right.name))
+            );
+            if (response.statuses?.length) {
+                setStatuses((current) =>
+                    [...current, ...response.statuses!].sort((left, right) => left.order - right.order)
+                );
+            }
+            return response.subproject.id;
+        } catch (error) {
+            console.error("Error creating subproject:", error);
+            return null;
+        }
+    }, [firebaseUser]);
+
+    const updateSubproject = useCallback(async (subprojectId: string, input: { name: string; description?: string; order?: number }) => {
+        if (!firebaseUser) return;
+        try {
+            const response = await updateTaskSubprojectRequest(firebaseUser, subprojectId, input);
+            setSubprojects((current) =>
+                current
+                    .map((subproject) => (subproject.id === subprojectId ? response.subproject : subproject))
+                    .sort((left, right) => left.name.localeCompare(right.name))
+            );
+        } catch (error) {
+            console.error("Error updating subproject:", error);
+        }
+    }, [firebaseUser]);
+
+    const deleteSubproject = useCallback(async (subprojectId: string) => {
+        if (!firebaseUser) return;
+        try {
+            await deleteTaskSubprojectRequest(firebaseUser, subprojectId);
+            setSubprojects((current) => current.filter((subproject) => subproject.id !== subprojectId));
+            setStatuses((current) => current.filter((status) => status.subproject_id !== subprojectId));
+        } catch (error) {
+            console.error("Error deleting subproject:", error);
+        }
+    }, [firebaseUser]);
+
     const createStatusDoc = useCallback(async (input: {
         project_id: string;
+        subproject_id: string;
         name: string;
         slug: string;
         category?: TaskStatusDoc['category'];
@@ -224,6 +283,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
     const updateStatus = useCallback(async (statusId: string, input: {
         project_id: string;
+        subproject_id: string;
         name: string;
         slug: string;
         category?: TaskStatusDoc['category'];
@@ -258,6 +318,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     const value = useMemo(() => ({
         tasks,
         projects,
+        subprojects,
         statuses,
         loading,
         addTask,
@@ -266,12 +327,16 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         createProject,
         updateProject,
         deleteProject,
+        createSubproject,
+        updateSubproject,
+        deleteSubproject,
         createStatus: createStatusDoc,
         updateStatusDoc: updateStatus,
         deleteStatusDoc,
     }), [
         tasks,
         projects,
+        subprojects,
         statuses,
         loading,
         addTask,
@@ -280,6 +345,9 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         createProject,
         updateProject,
         deleteProject,
+        createSubproject,
+        updateSubproject,
+        deleteSubproject,
         createStatusDoc,
         updateStatus,
         deleteStatusDoc,

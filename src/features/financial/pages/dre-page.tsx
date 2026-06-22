@@ -305,7 +305,7 @@ export function DrePage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">DRE</h1>
+          <h1 className="text-2xl font-bold tracking-tight">DRE</h1>
           <p className="text-muted-foreground">Demonstrativo gerencial com CMV automático e categorização por plano de contas.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

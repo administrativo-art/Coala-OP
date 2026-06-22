@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 
-import { mirrorExecutionToLegacy } from "@/features/forms/lib/legacy-bridge";
 import {
   listFormExecutions,
   listFormExecutionsForAssignee,
@@ -245,13 +244,6 @@ export async function POST(request: NextRequest) {
     };
 
     await ref.set(execution);
-
-    await mirrorExecutionToLegacy({
-      executionId: ref.id,
-      execution: { id: ref.id, ...execution } as FormExecution,
-    }).catch((error) => {
-      console.error("Legacy dual-write failed for form execution create:", error);
-    });
 
     await logAction({
       workspace_id: user.workspace_id,

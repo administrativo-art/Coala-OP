@@ -10,6 +10,7 @@ import {
   ensureDefaultTaskProject,
   listTaskProjects,
   listTaskStatuses,
+  listTaskSubprojects,
   listTasks,
 } from "@/features/tasks/lib/server";
 import { type Task, type TaskOrigin } from "@/types";
@@ -48,10 +49,11 @@ export async function GET(request: NextRequest) {
 
     await ensureDefaultTaskProject(context);
     const projects = await listTaskProjects(context.workspace_id);
+    const subprojects = await listTaskSubprojects(projects.map((project) => project.id));
     const statuses = await listTaskStatuses(projects.map((project) => project.id));
     const tasks = await listTasks(context);
 
-    return NextResponse.json({ projects, statuses, tasks });
+    return NextResponse.json({ projects, subprojects, statuses, tasks });
   } catch (error) {
     const status =
       error instanceof Error &&
@@ -120,6 +122,8 @@ export async function POST(request: NextRequest) {
         ...(typeof body.approverId === "string" ? { approverId: body.approverId } : {}),
         ...(typeof body.dueDate === "string" ? { dueDate: body.dueDate } : {}),
         ...(typeof body.projectId === "string" ? { projectId: body.projectId } : {}),
+        ...(typeof body.subprojectId === "string" ? { subprojectId: body.subprojectId } : {}),
+        ...(typeof body.subprojectName === "string" ? { subprojectName: body.subprojectName } : {}),
         ...(typeof body.unitId === "string" ? { unitId: body.unitId } : {}),
         ...(typeof body.unitName === "string" ? { unitName: body.unitName } : {}),
         ...(typeof body.originLink === "string" ? { originLink: body.originLink } : {}),

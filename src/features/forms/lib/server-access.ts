@@ -7,14 +7,6 @@ type ProjectPermissionLevel = "view" | "operate" | "manage";
 
 export const FORM_UNIT_POOL_ASSIGNEE_ID = "__unit_pool__";
 
-function legacyCanUseForms(permissions: PermissionSet) {
-  return (
-    permissions.dp.checklists.view ||
-    permissions.dp.checklists.operate ||
-    permissions.dp.checklists.manageTemplates
-  );
-}
-
 function projectMemberPermission(params: {
   project?: Pick<FormProject, "members"> | null;
   userId?: string | null;
@@ -40,9 +32,10 @@ export function canAccessFormsModule(
 ) {
   return (
     isDefaultAdmin ||
-    legacyCanUseForms(permissions) ||
     permissions.forms.global.view_all_projects ||
     permissions.forms.global.create_projects ||
+    permissions.forms.global.manage_templates ||
+    permissions.forms.global.view_analytics ||
     Object.values(permissions.forms.projects).some(
       (project) => project.view || project.operate || project.manage
     ) ||
@@ -63,16 +56,6 @@ export function assertFormPermission(
   }
 ) {
   if (isDefaultAdmin) return;
-
-  if (legacyCanUseForms(permissions)) {
-    if (level === "manage" && !permissions.dp.checklists.manageTemplates) {
-      throw new Error("Sem permissão para gerenciar formulários.");
-    }
-    if (level === "operate" && !permissions.dp.checklists.operate) {
-      throw new Error("Sem permissão para operar formulários.");
-    }
-    return;
-  }
 
   if (!projectId && level === "view" && permissions.forms.global.view_all_projects) {
     return;

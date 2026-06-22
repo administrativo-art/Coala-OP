@@ -546,7 +546,7 @@ export function ExpensesPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Despesas</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Despesas</h1>
           <p className="text-muted-foreground">Painel consolidado de despesas, contas a pagar e histórico de liquidações.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -887,7 +887,7 @@ export function ExpensesPage() {
                                 <div className="flex flex-col justify-between gap-4">
                                   <div className="text-right">
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Valor total</p>
-                                    <p className="mt-1 font-mono text-2xl font-bold">{formatCurrency(expense.totalValue || 0)}</p>
+                                    <p className="mt-1 font-mono text-xl font-bold">{formatCurrency(expense.totalValue || 0)}</p>
                                   </div>
                                   <div className="flex flex-wrap justify-end gap-2">
                                     {permissions.financial?.expenses?.pay && expense.status === "pending" && (

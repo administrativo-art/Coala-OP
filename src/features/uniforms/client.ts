@@ -2,10 +2,12 @@
 
 import type {
   LotEntry,
+  UniformCondition,
   UniformAssignment,
   UniformEvent,
   UniformReturnedCondition,
   UniformStockDisposition,
+  UniformStockStatus,
 } from "@/types";
 
 type FirebaseUserLike = {
@@ -48,6 +50,23 @@ export function fetchUniformOverview(
     ? `?collaboratorUserId=${encodeURIComponent(collaboratorUserId)}`
     : "";
   return authedJson<UniformOverview>(firebaseUser, `/api/uniforms${search}`);
+}
+
+export function adjustUniformLot(
+  firebaseUser: FirebaseUserLike,
+  input: {
+    lotId: string;
+    quantity: number;
+    condition: UniformCondition;
+    uniformStockStatus: UniformStockStatus;
+    notes?: string;
+  },
+) {
+  return authedJson<{ lot: LotEntry }>(
+    firebaseUser,
+    "/api/uniforms",
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
 }
 
 export function deliverUniform(

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { mirrorExecutionToLegacy } from "@/features/forms/lib/legacy-bridge";
 import { buildFormExecutionPayload } from "@/features/forms/lib/service";
 import { formExecutionUpdateSchema } from "@/features/forms/lib/schemas";
 import { assertFormExecutionAccess } from "@/features/forms/lib/server-access";
@@ -645,13 +644,6 @@ export async function PATCH(
         result.items = nextItems as FormExecutionItem[];
       }
     }
-
-    await mirrorExecutionToLegacy({
-      executionId,
-      execution: result as unknown as FormExecution,
-    }).catch((error) => {
-      console.error("Legacy dual-write failed for form execution update:", error);
-    });
 
     await logAction({
       workspace_id: user.workspace_id,

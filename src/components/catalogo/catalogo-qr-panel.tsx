@@ -27,7 +27,7 @@ export function CatalogoQRPanel() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>QR Code — Catálogo de Mercadorias</title>
+          <title>QR code — Catálogo de mercadorias</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: white; }
@@ -40,8 +40,8 @@ export function CatalogoQRPanel() {
         </head>
         <body>
           <div class="card">
-            <p class="title">Fichas Técnicas</p>
-            <img src="${dataUrl}" alt="QR Code" />
+            <p class="title">Fichas técnicas</p>
+            <img src="${dataUrl}" alt="QR code" />
             <p class="subtitle">Escaneie para consultar o modo de montagem e ficha técnica</p>
             <p class="url">${CATALOG_URL}</p>
           </div>
@@ -57,17 +57,17 @@ export function CatalogoQRPanel() {
       <div className="flex items-center gap-2">
         <QrCode className="h-5 w-5 text-muted-foreground" />
         <div>
-          <p className="text-sm font-semibold">QR Code do Catálogo</p>
+          <p className="text-sm font-semibold">QR code do catálogo</p>
           <p className="text-xs text-muted-foreground">Imprima e cole no balcão ou cozinha</p>
         </div>
       </div>
 
-      {/* QR Code */}
+      {/* QR code */}
       <div className="flex justify-center">
         {dataUrl ? (
           <div className="rounded-xl overflow-hidden border p-3 bg-white shadow-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={dataUrl} alt="QR Code catálogo" width={180} height={180} />
+            <img src={dataUrl} alt="QR code do catálogo" width={180} height={180} />
           </div>
         ) : (
           <div

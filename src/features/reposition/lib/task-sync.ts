@@ -3,11 +3,13 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import {
   createManualTask,
   ensureTaskProject,
+  ensureTaskSubproject,
   updateTaskDocument,
 } from "@/features/tasks/lib/server";
 import { type RepositionActivity, type Task } from "@/types";
 
-const REPOSITION_TASK_PROJECT_SLUG = "reposition";
+const STOCK_TASK_PROJECT_SLUG = "stock";
+const REPOSITION_TASK_SUBPROJECT_SLUG = "reposition";
 const REPOSITION_TASK_ORIGIN_LINK = "/dashboard/stock/reposition";
 
 function unique(values: Array<string | undefined | null>) {
@@ -49,7 +51,7 @@ function mapTaskStatus(activity: RepositionActivity): Task["status"] {
   return "pending";
 }
 
-function buildTaskPatch(activity: RepositionActivity, projectId: string): Partial<Task> {
+function buildTaskPatch(activity: RepositionActivity, projectId: string, subprojectId: string): Partial<Task> {
   const watcherUserIds = unique([
     activity.requestedBy?.userId,
     activity.updatedBy?.userId,
@@ -58,6 +60,8 @@ function buildTaskPatch(activity: RepositionActivity, projectId: string): Partia
   if (activity.status === "Aguardando recebimento") {
     return {
       projectId,
+      subprojectId,
+      subprojectName: "Reposição",
       title: `Receber reposição: ${activity.kioskOriginName} → ${activity.kioskDestinationName}`,
       description: buildDescription(activity),
       status: "pending",
@@ -79,6 +83,8 @@ function buildTaskPatch(activity: RepositionActivity, projectId: string): Partia
     const hasDivergence = activity.status === "Recebido com divergência";
     return {
       projectId,
+      subprojectId,
+      subprojectName: "Reposição",
       title: hasDivergence
         ? `Analisar divergência de reposição: ${activity.kioskDestinationName}`
         : `Efetivar reposição: ${activity.kioskDestinationName}`,
@@ -98,6 +104,8 @@ function buildTaskPatch(activity: RepositionActivity, projectId: string): Partia
   if (activity.status === "Concluído") {
     return {
       projectId,
+      subprojectId,
+      subprojectName: "Reposição",
       title: `Reposição concluída: ${activity.kioskOriginName} → ${activity.kioskDestinationName}`,
       description: buildDescription(activity),
       status: "completed",
@@ -114,6 +122,8 @@ function buildTaskPatch(activity: RepositionActivity, projectId: string): Partia
   if (activity.status === "Cancelada") {
     return {
       projectId,
+      subprojectId,
+      subprojectName: "Reposição",
       title: `Reposição cancelada: ${activity.kioskOriginName} → ${activity.kioskDestinationName}`,
       description: buildDescription(activity),
       status: "rejected",
@@ -129,6 +139,8 @@ function buildTaskPatch(activity: RepositionActivity, projectId: string): Partia
 
   return {
     projectId,
+    subprojectId,
+    subprojectName: "Reposição",
     title: `Despachar reposição: ${activity.kioskOriginName} → ${activity.kioskDestinationName}`,
     description: buildDescription(activity),
     status: mapTaskStatus(activity),
@@ -161,11 +173,17 @@ export async function syncRepositionTask(params: {
   activity: RepositionActivity;
 }) {
   const projectId = await ensureTaskProject(params.context, {
-    slug: REPOSITION_TASK_PROJECT_SLUG,
-    name: "Reposição",
-    description: "Tarefas operacionais geradas pelo fluxo de reposição de estoque.",
+    slug: STOCK_TASK_PROJECT_SLUG,
+    name: "Gestão de Estoque",
+    description: "Projeto macro das tarefas operacionais de estoque.",
   });
-  const patch = buildTaskPatch(params.activity, projectId);
+  const subprojectId = await ensureTaskSubproject(params.context, {
+    projectId,
+    slug: REPOSITION_TASK_SUBPROJECT_SLUG,
+    name: "Reposição",
+    description: "Quadro de tarefas geradas pelo fluxo de reposição de estoque.",
+  });
+  const patch = buildTaskPatch(params.activity, projectId, subprojectId);
   const taskId =
     params.activity.taskId ?? (await findExistingRepositionTaskId(params.activity.id));
 
@@ -193,6 +211,8 @@ export async function syncRepositionTask(params: {
       assigneeType: patch.assigneeType,
       assigneeId: patch.assigneeId,
       projectId,
+      subprojectId,
+      subprojectName: "Reposição",
       unitId: patch.unitId,
       unitName: patch.unitName,
       priority: patch.priority,

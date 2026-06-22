@@ -12,13 +12,6 @@ import {
   listFormTemplates,
   listFormTypes,
 } from "@/features/forms/lib/server";
-import {
-  getLegacyFormExecutionBySyntheticId,
-  getLegacyFormTemplateBySyntheticId,
-  listLegacyFormExecutions,
-  listLegacyFormProjects,
-  listLegacyFormTemplates,
-} from "@/features/forms/lib/legacy-read";
 import { getFeatureFlags } from "@/lib/feature-flags";
 
 export async function buildFormsBootstrap(params: {
@@ -42,21 +35,8 @@ export async function buildFormsBootstrap(params: {
     listFormExecutions({ workspaceId: params.workspaceId, limit: 30 }),
     listFormTypes({ workspaceId: params.workspaceId, isActive: true }),
   ]);
-  const [legacyProjects, legacyTemplates, legacyExecutions] =
-    flags.forms_read_from_legacy_enabled
-      ? await Promise.all([
-          listLegacyFormProjects(200),
-          listLegacyFormTemplates(200),
-          listLegacyFormExecutions(200),
-        ])
-      : [[], [], []];
 
   const mergedProjects = [...projects];
-  legacyProjects.forEach((project) => {
-    if (!mergedProjects.some((current) => current.id === project.id)) {
-      mergedProjects.push(project);
-    }
-  });
 
   const visibleProjects = mergedProjects.filter((project) => {
       try {
@@ -90,19 +70,17 @@ export async function buildFormsBootstrap(params: {
         params.isDefaultAdmin || params.permissions.forms.global.create_projects,
       can_manage_templates:
         params.isDefaultAdmin ||
-        params.permissions.forms.global.manage_templates ||
-        params.permissions.dp.checklists.manageTemplates,
+        params.permissions.forms.global.manage_templates,
       can_view_analytics:
         params.isDefaultAdmin ||
-        params.permissions.forms.global.view_analytics ||
-        params.permissions.dp.checklists.viewAnalytics,
+        params.permissions.forms.global.view_analytics,
     },
     projects: visibleProjects,
     types: types.filter((type) => visibleProjectIds.has(type.form_project_id)),
-    templates: [...templates, ...legacyTemplates].filter((template) =>
+    templates: templates.filter((template) =>
       visibleProjectIds.has(template.form_project_id)
     ),
-    executions: [...executions, ...legacyExecutions].filter((execution) =>
+    executions: executions.filter((execution) =>
       visibleProjectIds.has(execution.form_project_id)
     ),
   };
@@ -114,9 +92,7 @@ export async function buildFormTemplatePayload(params: {
   permissions: PermissionSet;
   isDefaultAdmin: boolean;
 }) {
-  const template =
-    (await getFormTemplateById(params.templateId, params.workspaceId)) ??
-    (await getLegacyFormTemplateBySyntheticId(params.templateId));
+  const template = await getFormTemplateById(params.templateId, params.workspaceId);
   if (!template) {
     throw new Error("Template não encontrado.");
   }
@@ -137,9 +113,7 @@ export async function buildFormExecutionPayload(params: {
   permissions: PermissionSet;
   isDefaultAdmin: boolean;
 }) {
-  const payload =
-    (await getFormExecutionById(params.executionId, params.workspaceId)) ??
-    (await getLegacyFormExecutionBySyntheticId(params.executionId));
+  const payload = await getFormExecutionById(params.executionId, params.workspaceId);
   if (!payload) {
     throw new Error("Execução não encontrada.");
   }

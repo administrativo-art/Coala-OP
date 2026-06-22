@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { cn } from "@/lib/utils";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -240,6 +240,7 @@ function CollaboratorPill({ user }: { user: User }) {
   return (
     <div className="flex items-start gap-3 rounded-lg border bg-background/70 px-3 py-2">
       <Avatar className="h-9 w-9">
+        <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
         <AvatarFallback className="text-xs">{initials(user.username)}</AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
@@ -460,7 +461,7 @@ export function DPOrgChart() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Cadastre cargos em <strong>Cargos &amp; Funções</strong> e depois vincule os colaboradores para montar a hierarquia.
+            Cadastre cargos em <strong>Cargos e funções</strong> e depois vincule os colaboradores para montar a hierarquia.
           </p>
         </CardContent>
       </Card>
@@ -541,7 +542,7 @@ export function DPOrgChart() {
                 {chart.detachedRoleCount} cargo{chart.detachedRoleCount === 1 ? "" : "s"} sem hierarquia definida.
               </p>
               <p className="text-sm text-amber-800">
-                {chart.detachedRoleCount === 1 ? "Esse cargo aponta" : "Esses cargos apontam"} para um superior inexistente ou removido. Corrija em <strong>Cargos &amp; Funções</strong>.
+                {chart.detachedRoleCount === 1 ? "Esse cargo aponta" : "Esses cargos apontam"} para um superior inexistente ou removido. Corrija em <strong>Cargos e funções</strong>.
               </p>
             </div>
           </CardContent>

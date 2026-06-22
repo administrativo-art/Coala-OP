@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
@@ -517,11 +517,11 @@ function EditSheet({
                       <FormLabel>Limitador de login por escala</FormLabel>
                       <p className="text-xs text-muted-foreground">
                         Quando ligado, o acesso deste colaborador passa a depender da escala montada.
-                        Se não houver escala atribuida, a primeira versao vai liberar o login e sinalizar a ausencia da escala.
+                        Se não houver escala atribuída, a primeira versão vai liberar o login e sinalizar a ausência da escala.
                       </p>
                       {selectedRole?.loginRestricted && (
                         <p className="text-xs text-amber-700">
-                          O cargo atual ja esta marcado como elegivel para restricao por escala.
+                          O cargo atual já está marcado como elegível para restrição por escala.
                         </p>
                       )}
                     </div>
@@ -769,6 +769,7 @@ function CollaboratorRow({ user, onEdit, onTerminate, canEdit, canTerminate, shi
   return (
     <div className="flex items-center gap-3 py-3 px-1">
       <Avatar className="h-9 w-9 shrink-0">
+        <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
         <AvatarFallback className="text-xs">{initials(user.username)}</AvatarFallback>
       </Avatar>
 

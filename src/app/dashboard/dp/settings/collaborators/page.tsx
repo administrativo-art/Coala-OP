@@ -13,7 +13,7 @@ export default function DPSettingsCollaboratorsPage() {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground text-sm">
-        Edite os dados do Departamento Pessoal de cada colaborador. Para desligar um colaborador, use o menu de ações.
+        Edite os dados do departamento pessoal de cada colaborador. Para desligar um colaborador, use o menu de ações.
       </p>
       <DPCollaboratorsManager />
     </div>

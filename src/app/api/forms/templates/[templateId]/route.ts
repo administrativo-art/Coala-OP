@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { mirrorTemplateToLegacy } from "@/features/forms/lib/legacy-bridge";
 import { buildFormTemplatePayload } from "@/features/forms/lib/service";
 import { getFormProjectById } from "@/features/forms/lib/server";
 import { formTemplateSchema } from "@/features/forms/lib/schemas";
@@ -8,7 +7,6 @@ import { assertFormPermission } from "@/features/forms/lib/server-access";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
-import { type FormTemplate } from "@/types/forms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,15 +114,6 @@ export async function PATCH(
           username: user.userDoc.username,
         },
       });
-    });
-    await mirrorTemplateToLegacy({
-      templateId,
-      template: {
-        ...(currentData as Record<string, unknown>),
-        ...patch,
-      } as unknown as FormTemplate,
-    }).catch((error) => {
-      console.error("Legacy dual-write failed for form template update:", error);
     });
     await logAction({
       workspace_id: user.workspace_id,

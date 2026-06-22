@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
-import { createManualTask, ensureTaskProject } from "@/features/tasks/lib/server";
+import { createManualTask, ensureTaskProject, ensureTaskSubproject } from "@/features/tasks/lib/server";
 import { type ItemAdditionRequest } from "@/types";
 
 export const runtime = "nodejs";
@@ -10,6 +10,8 @@ export const dynamic = "force-dynamic";
 
 const ITEM_REQUEST_ASSIGNEE_ID = "__item_request_approver__";
 const ITEM_REQUEST_ORIGIN_LINK = "/dashboard/stock/item-requests";
+const STOCK_TASK_PROJECT_SLUG = "stock";
+const ITEM_REQUEST_SUBPROJECT_SLUG = "item-requests";
 
 function canReadRequests(context: Awaited<ReturnType<typeof requireUser>>) {
   return (
@@ -99,9 +101,15 @@ export async function POST(request: NextRequest) {
       typeof kioskData.name === "string" ? kioskData.name : "Quiosque";
 
     const projectId = await ensureTaskProject(context, {
-      slug: "item-requests",
+      slug: STOCK_TASK_PROJECT_SLUG,
+      name: "Gestão de Estoque",
+      description: "Projeto macro das tarefas operacionais de estoque.",
+    });
+    const subprojectId = await ensureTaskSubproject(context, {
+      projectId,
+      slug: ITEM_REQUEST_SUBPROJECT_SLUG,
       name: "Solicitações de cadastro",
-      description: "Tarefas geradas por solicitações de cadastro de insumos vindas da operação.",
+      description: "Quadro de tarefas geradas por solicitações de cadastro de insumos vindas da operação.",
     });
 
     const task = await createManualTask({
@@ -125,6 +133,8 @@ export async function POST(request: NextRequest) {
           id: requestRef.id,
         },
         projectId,
+        subprojectId,
+        subprojectName: "Solicitações de cadastro",
         unitId: body.kioskId,
         unitName: kioskName,
         priority: "normal",

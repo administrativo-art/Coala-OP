@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map((n) => n[0]).join('').toUpperCase();
@@ -34,12 +35,15 @@ function fmtDate(value: any) {
 
 function AvatarMark({ user }: { user: User }) {
   return (
-    <div
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-violet-100 text-xs font-bold text-violet-700"
-      style={user.color ? { backgroundColor: user.color, color: '#fff' } : undefined}
-    >
-      {initials(user.username)}
-    </div>
+    <Avatar className="h-9 w-9 shrink-0 rounded-md">
+      <AvatarImage src={user.avatarUrl || undefined} alt={user.username} className="rounded-md object-cover" />
+      <AvatarFallback
+        className="rounded-md bg-violet-100 text-xs font-bold text-violet-700"
+        style={user.color ? { backgroundColor: user.color, color: '#fff' } : undefined}
+      >
+        {initials(user.username)}
+      </AvatarFallback>
+    </Avatar>
   );
 }
 
@@ -63,7 +67,7 @@ function CollaboratorCard({
       className="overflow-hidden rounded-md border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="flex items-start justify-between bg-violet-50 px-4 py-3">
-        <Badge variant="outline" className="bg-white text-[10px] uppercase text-violet-700">
+        <Badge variant="outline" className="bg-white text-[10px] text-violet-700">
           Colaborador
         </Badge>
         {isActive ? (
@@ -138,24 +142,24 @@ export default function DPCollaboratorsPage() {
   }, [allUsers, search, statusFilter, unitFilter, roleFilter]);
 
   if (!permissions.dp?.collaborators?.view) {
-    return <p className="p-6 text-sm text-muted-foreground">Sem permissão para acessar Colaboradores.</p>;
+    return <p className="p-6 text-sm text-muted-foreground">Sem permissão para acessar colaboradores.</p>;
   }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="text-xs text-muted-foreground">Pessoal / Colaboradores</p>
-          <h1 className="text-3xl font-bold tracking-tight">Colaboradores</h1>
+          <p className="text-xs text-muted-foreground">Pessoal / colaboradores</p>
+          <h1 className="text-2xl font-bold tracking-tight">Colaboradores</h1>
           <p className="text-sm text-muted-foreground">Perfis da equipe, vínculos, escalas e histórico operacional.</p>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Cadastros</p><p className="mt-1 text-2xl font-bold">{allUsers.length}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ativos</p><p className="mt-1 text-2xl font-bold text-emerald-600">{activeUsers.length}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Desligados</p><p className="mt-1 text-2xl font-bold text-slate-600">{terminatedUsers.length}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Funções</p><p className="mt-1 text-2xl font-bold">{roleOptions.length}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Cadastros</p><p className="mt-1 text-xl font-bold">{allUsers.length}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ativos</p><p className="mt-1 text-xl font-bold text-emerald-600">{activeUsers.length}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Desligados</p><p className="mt-1 text-xl font-bold text-slate-600">{terminatedUsers.length}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Funções</p><p className="mt-1 text-xl font-bold">{roleOptions.length}</p></CardContent></Card>
       </div>
 
       <div className="space-y-3 rounded-md border bg-card p-3">
@@ -172,7 +176,7 @@ export default function DPCollaboratorsPage() {
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
             <SelectTrigger className="w-full lg:w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos status</SelectItem>
+              <SelectItem value="all">Todos os status</SelectItem>
               <SelectItem value="active">Ativos</SelectItem>
               <SelectItem value="terminated">Desligados</SelectItem>
             </SelectContent>
@@ -180,14 +184,14 @@ export default function DPCollaboratorsPage() {
           <Select value={unitFilter} onValueChange={setUnitFilter}>
             <SelectTrigger className="w-full lg:w-52"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas unidades</SelectItem>
+              <SelectItem value="all">Todas as unidades</SelectItem>
               {units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={roleFilter} onValueChange={setRoleFilter}>
             <SelectTrigger className="w-full lg:w-52"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas funções</SelectItem>
+              <SelectItem value="all">Todas as funções</SelectItem>
               {roleOptions.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -245,7 +249,7 @@ export default function DPCollaboratorsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Colaborador</TableHead>
-                <TableHead>Cargo/Função</TableHead>
+                <TableHead>Cargo/função</TableHead>
                 <TableHead>Unidades</TableHead>
                 <TableHead>Turno padrão</TableHead>
                 <TableHead>Admissão</TableHead>

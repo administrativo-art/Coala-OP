@@ -46,6 +46,39 @@ const ORIGIN_LABELS: Record<string, string> = {
     author_board_diary: 'Diário de bordo',
 };
 
+const AUTOMATIC_PROJECT_RULES = [
+    {
+        process: 'Reposição',
+        project: 'Gestão de Estoque > Reposição',
+        rule: 'Criada/atualizada pelo fluxo de reposição conforme a etapa: despacho, recebimento, auditoria ou conclusão.',
+    },
+    {
+        process: 'Contagem de estoque',
+        project: 'Gestão de Estoque > Contagem de estoque',
+        rule: 'Criada quando uma sessão de contagem vai para revisão e concluída quando a contagem é finalizada.',
+    },
+    {
+        process: 'Avarias e devoluções',
+        project: 'Gestão de Estoque > Avarias e devoluções',
+        rule: 'Criada no chamado de avaria/devolução e sincronizada com o status operacional do chamado.',
+    },
+    {
+        process: 'Solicitações de cadastro',
+        project: 'Gestão de Estoque > Solicitações de cadastro',
+        rule: 'Criada quando a operação solicita cadastro de insumo durante a contagem.',
+    },
+    {
+        process: 'Formulários',
+        project: 'Configurado no gatilho do formulário',
+        rule: 'Cada regra do formulário informa em qual projeto a tarefa deve nascer.',
+    },
+    {
+        process: 'Tarefa manual',
+        project: 'Escolhido pelo usuário',
+        rule: 'O usuário seleciona o projeto no modal “Nova tarefa manual”.',
+    },
+];
+
 function isLegacyTaskItem(task: TaskListItem): task is LegacyTask & { legacy: true } {
     return 'legacy' in task && task.legacy === true;
 }
@@ -89,10 +122,14 @@ export function TaskManager() {
     const {
         addTask,
         projects,
+        subprojects,
         statuses,
         createProject,
         updateProject,
         deleteProject,
+        createSubproject,
+        updateSubproject,
+        deleteSubproject,
         createStatus,
         updateStatusDoc,
         deleteStatusDoc,
@@ -104,11 +141,17 @@ export function TaskManager() {
     const [draftTitle, setDraftTitle] = useState('');
     const [draftDescription, setDraftDescription] = useState('');
     const [draftProjectId, setDraftProjectId] = useState('');
+    const [draftSubprojectId, setDraftSubprojectId] = useState('');
     const [managerProjectId, setManagerProjectId] = useState('');
     const [managerProjectName, setManagerProjectName] = useState('');
     const [managerProjectDescription, setManagerProjectDescription] = useState('');
+    const [managerSubprojectId, setManagerSubprojectId] = useState('');
+    const [managerSubprojectName, setManagerSubprojectName] = useState('');
+    const [managerSubprojectDescription, setManagerSubprojectDescription] = useState('');
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDescription, setNewProjectDescription] = useState('');
+    const [newSubprojectName, setNewSubprojectName] = useState('');
+    const [newSubprojectDescription, setNewSubprojectDescription] = useState('');
     const [newStatusName, setNewStatusName] = useState('');
     const [newStatusSlug, setNewStatusSlug] = useState('');
     const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
@@ -118,6 +161,7 @@ export function TaskManager() {
         useState<TaskStatusDoc['category']>('active');
     const [search, setSearch] = useState('');
     const [projectFilter, setProjectFilter] = useState(ALL_FILTER);
+    const [subprojectFilter, setSubprojectFilter] = useState(ALL_FILTER);
     const [statusFilter, setStatusFilter] = useState(ALL_FILTER);
     const [unitFilter, setUnitFilter] = useState(ALL_FILTER);
     const [originFilter, setOriginFilter] = useState(ALL_FILTER);
@@ -131,6 +175,13 @@ export function TaskManager() {
     }, [draftProjectId, projects]);
 
     useEffect(() => {
+        const available = subprojects.filter((subproject) => subproject.project_id === draftProjectId);
+        if (draftProjectId && (!draftSubprojectId || !available.some((entry) => entry.id === draftSubprojectId))) {
+            setDraftSubprojectId(available[0]?.id ?? '');
+        }
+    }, [draftProjectId, draftSubprojectId, subprojects]);
+
+    useEffect(() => {
         if (!managerProjectId && projects[0]?.id) {
             setManagerProjectId(projects[0].id);
         }
@@ -142,6 +193,19 @@ export function TaskManager() {
         setManagerProjectDescription(project?.description ?? '');
     }, [managerProjectId, projects]);
 
+    useEffect(() => {
+        const available = subprojects.filter((subproject) => subproject.project_id === managerProjectId);
+        if (managerProjectId && (!managerSubprojectId || !available.some((entry) => entry.id === managerSubprojectId))) {
+            setManagerSubprojectId(available[0]?.id ?? '');
+        }
+    }, [managerProjectId, managerSubprojectId, subprojects]);
+
+    useEffect(() => {
+        const subproject = subprojects.find((entry) => entry.id === managerSubprojectId);
+        setManagerSubprojectName(subproject?.name ?? '');
+        setManagerSubprojectDescription(subproject?.description ?? '');
+    }, [managerSubprojectId, subprojects]);
+
     const projectsById = useMemo(
         () => new Map(projects.map((project) => [project.id, project])),
         [projects]
@@ -150,6 +214,11 @@ export function TaskManager() {
     const statusesById = useMemo(
         () => new Map(statuses.map((status) => [status.id, status])),
         [statuses]
+    );
+
+    const subprojectsById = useMemo(
+        () => new Map(subprojects.map((subproject) => [subproject.id, subproject])),
+        [subprojects]
     );
 
     const unitsById = useMemo(
@@ -164,6 +233,11 @@ export function TaskManager() {
 
     const getProjectName = (task: Task) => {
         return task.projectId ? projectsById.get(task.projectId)?.name ?? task.projectId : 'Sem projeto';
+    };
+
+    const getSubprojectName = (task: Task) => {
+        if (task.subprojectName) return task.subprojectName;
+        return task.subprojectId ? subprojectsById.get(task.subprojectId)?.name ?? task.subprojectId : 'Sem subprojeto';
     };
 
     const getUnitName = (task: Task) => {
@@ -216,6 +290,15 @@ export function TaskManager() {
             .sort((left, right) => left[1].localeCompare(right[1], 'pt-BR'));
     }, [allTasks, legacyTasks.length]);
 
+    const subprojectOptions = useMemo(() => {
+        const options = new Map<string, string>();
+        allTasks.forEach((task) => {
+            if (task.subprojectId) options.set(task.subprojectId, getSubprojectName(task));
+        });
+        subprojects.forEach((subproject) => options.set(subproject.id, subproject.name));
+        return [...options.entries()].sort((left, right) => left[1].localeCompare(right[1], 'pt-BR'));
+    }, [allTasks, subprojects, subprojectsById]);
+
     const assigneeOptions = useMemo(() => {
         const options = new Map<string, string>();
         allTasks.forEach((task) => {
@@ -228,6 +311,7 @@ export function TaskManager() {
     const filtersActive = [
         search.trim(),
         projectFilter !== ALL_FILTER,
+        subprojectFilter !== ALL_FILTER,
         statusFilter !== ALL_FILTER,
         unitFilter !== ALL_FILTER,
         originFilter !== ALL_FILTER,
@@ -239,6 +323,7 @@ export function TaskManager() {
         const searchTerm = search.trim().toLowerCase();
         return allTasks.filter((task) => {
             const projectName = getProjectName(task);
+            const subprojectName = getSubprojectName(task);
             const unitName = getUnitName(task);
             const assigneeName = getAssigneeName(task);
             const originKey = taskOriginKey(task);
@@ -247,6 +332,7 @@ export function TaskManager() {
                 task.title,
                 task.description ?? '',
                 projectName,
+                subprojectName,
                 unitName,
                 assigneeName,
                 originLabel,
@@ -255,6 +341,7 @@ export function TaskManager() {
 
             if (searchTerm && !haystack.includes(searchTerm)) return false;
             if (projectFilter !== ALL_FILTER && task.projectId !== projectFilter) return false;
+            if (subprojectFilter !== ALL_FILTER && task.subprojectId !== subprojectFilter) return false;
             if (statusFilter !== ALL_FILTER) {
                 if (statusFilter === 'open') {
                     if (!isOpenTask(task)) return false;
@@ -277,12 +364,14 @@ export function TaskManager() {
         allTasks,
         search,
         projectFilter,
+        subprojectFilter,
         statusFilter,
         unitFilter,
         originFilter,
         assigneeFilter,
         dueFilter,
         projectsById,
+        subprojectsById,
         unitsById,
         statusesById,
         users,
@@ -293,6 +382,7 @@ export function TaskManager() {
         const searchTerm = search.trim().toLowerCase();
         if (
             projectFilter !== ALL_FILTER ||
+            subprojectFilter !== ALL_FILTER ||
             unitFilter !== ALL_FILTER ||
             assigneeFilter !== ALL_FILTER ||
             (originFilter !== ALL_FILTER && originFilter !== 'legacy') ||
@@ -311,7 +401,7 @@ export function TaskManager() {
                 ...task,
                 legacy: true as const,
             }));
-    }, [legacyTasks, search, projectFilter, unitFilter, assigneeFilter, originFilter, statusFilter, dueFilter]);
+    }, [legacyTasks, search, projectFilter, subprojectFilter, unitFilter, assigneeFilter, originFilter, statusFilter, dueFilter]);
 
     const taskLists = useMemo(() => {
         const pendingNew: TaskListItem[] = filteredTasks.filter(isOpenTask);
@@ -334,13 +424,18 @@ export function TaskManager() {
         return <Skeleton className="h-96 w-full" />;
     }
 
-    const selectedProjectStatuses = statuses
-        .filter((status) => status.project_id === managerProjectId)
+    const selectedProjectSubprojects = subprojects
+        .filter((subproject) => subproject.project_id === managerProjectId)
+        .sort((left, right) => (left.order ?? 0) - (right.order ?? 0) || left.name.localeCompare(right.name, 'pt-BR'));
+
+    const selectedSubprojectStatuses = statuses
+        .filter((status) => status.subproject_id === managerSubprojectId)
         .sort((left, right) => left.order - right.order);
 
     const resetFilters = () => {
         setSearch('');
         setProjectFilter(ALL_FILTER);
+        setSubprojectFilter(ALL_FILTER);
         setStatusFilter(ALL_FILTER);
         setUnitFilter(ALL_FILTER);
         setOriginFilter(ALL_FILTER);
@@ -355,6 +450,7 @@ export function TaskManager() {
         return (
             <>
                 <Badge variant="secondary">{getProjectName(task)}</Badge>
+                {task.subprojectId ? <Badge variant="outline">Subprojeto: {getSubprojectName(task)}</Badge> : null}
                 {unitName ? <Badge variant="outline">Unidade: {unitName}</Badge> : null}
                 <Badge variant="outline">Origem: {ORIGIN_LABELS[originKey] ?? originKey}</Badge>
                 <Badge variant="outline">Resp.: {getAssigneeName(task)}</Badge>
@@ -385,6 +481,8 @@ export function TaskManager() {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             projectId: draftProjectId || undefined,
+            subprojectId: draftSubprojectId || undefined,
+            subprojectName: draftSubprojectId ? subprojectsById.get(draftSubprojectId)?.name : undefined,
         });
 
         if (!taskId) {
@@ -395,6 +493,7 @@ export function TaskManager() {
         setDraftTitle('');
         setDraftDescription('');
         setDraftProjectId(projects[0]?.id ?? '');
+        setDraftSubprojectId('');
         setIsCreateOpen(false);
         toast({ title: 'Tarefa criada' });
     };
@@ -441,18 +540,62 @@ export function TaskManager() {
         toast({ title: 'Projeto removido' });
     };
 
+    const handleCreateSubproject = async () => {
+        if (!managerProjectId || !newSubprojectName.trim()) {
+            toast({ variant: 'destructive', title: 'Projeto e nome do subprojeto são obrigatórios.' });
+            return;
+        }
+
+        const subprojectId = await createSubproject({
+            project_id: managerProjectId,
+            name: newSubprojectName.trim(),
+            description: newSubprojectDescription.trim() || undefined,
+        });
+
+        if (!subprojectId) {
+            toast({ variant: 'destructive', title: 'Não foi possível criar o subprojeto.' });
+            return;
+        }
+
+        setNewSubprojectName('');
+        setNewSubprojectDescription('');
+        setManagerSubprojectId(subprojectId);
+        toast({ title: 'Subprojeto criado' });
+    };
+
+    const handleUpdateSubproject = async () => {
+        if (!managerSubprojectId || !managerSubprojectName.trim()) {
+            toast({ variant: 'destructive', title: 'Selecione um subprojeto válido.' });
+            return;
+        }
+
+        await updateSubproject(managerSubprojectId, {
+            name: managerSubprojectName.trim(),
+            description: managerSubprojectDescription.trim() || undefined,
+        });
+        toast({ title: 'Subprojeto atualizado' });
+    };
+
+    const handleDeleteSubproject = async () => {
+        if (!managerSubprojectId) return;
+        await deleteSubproject(managerSubprojectId);
+        setManagerSubprojectId(selectedProjectSubprojects.find((subproject) => subproject.id !== managerSubprojectId)?.id ?? '');
+        toast({ title: 'Subprojeto removido' });
+    };
+
     const handleCreateStatus = async () => {
-        if (!managerProjectId || !newStatusName.trim() || !newStatusSlug.trim()) {
-            toast({ variant: 'destructive', title: 'Projeto, nome e slug do status são obrigatórios.' });
+        if (!managerProjectId || !managerSubprojectId || !newStatusName.trim() || !newStatusSlug.trim()) {
+            toast({ variant: 'destructive', title: 'Projeto, subprojeto, nome e slug do status são obrigatórios.' });
             return;
         }
 
         const statusId = await createStatus({
             project_id: managerProjectId,
+            subproject_id: managerSubprojectId,
             name: newStatusName.trim(),
             slug: newStatusSlug.trim(),
             category: 'active',
-            order: selectedProjectStatuses.length * 10 + 50,
+            order: selectedSubprojectStatuses.length * 10 + 50,
         });
 
         if (!statusId) {
@@ -480,6 +623,7 @@ export function TaskManager() {
 
         await updateStatusDoc(status.id, {
             project_id: status.project_id,
+            subproject_id: status.subproject_id ?? managerSubprojectId,
             name: editingStatusName.trim(),
             slug: editingStatusSlug.trim(),
             category: editingStatusCategory,
@@ -518,7 +662,7 @@ export function TaskManager() {
                         <div className="flex gap-2">
                             <Button variant="outline" onClick={() => setIsManageOpen(true)}>
                                 <Settings2 className="mr-2 h-4 w-4" />
-                                Projetos e status
+                                Projetos e quadros
                             </Button>
                             <Button onClick={() => setIsCreateOpen(true)}>
                                 <Plus className="mr-2 h-4 w-4" />
@@ -560,6 +704,20 @@ export function TaskManager() {
                                     {projects.map((project) => (
                                         <SelectItem key={project.id} value={project.id}>
                                             {project.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <Select value={subprojectFilter} onValueChange={setSubprojectFilter}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Subprojeto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={ALL_FILTER}>Todos os subprojetos</SelectItem>
+                                    {subprojectOptions.map(([subprojectId, subprojectName]) => (
+                                        <SelectItem key={subprojectId} value={subprojectId}>
+                                            {subprojectName}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -711,6 +869,23 @@ export function TaskManager() {
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Subprojeto / quadro</label>
+                            <Select value={draftSubprojectId} onValueChange={setDraftSubprojectId} disabled={!draftProjectId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione um subprojeto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {subprojects
+                                        .filter((subproject) => subproject.project_id === draftProjectId)
+                                        .map((subproject) => (
+                                            <SelectItem key={subproject.id} value={subproject.id}>
+                                                {subproject.name}
+                                            </SelectItem>
+                                        ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancelar</Button>
@@ -720,17 +895,51 @@ export function TaskManager() {
             </Dialog>
 
             <Dialog open={isManageOpen} onOpenChange={setIsManageOpen}>
-                <DialogContent className="max-w-3xl">
+                <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-5xl">
                     <DialogHeader>
-                        <DialogTitle>Projetos e status do motor novo</DialogTitle>
+                        <DialogTitle>Projetos, subprojetos e colunas</DialogTitle>
                         <DialogDescription>
-                            Gestão mínima do catálogo de tarefas por projeto e status.
+                            Projeto é a definição macro. Subprojeto é o quadro/fluxo. Status são as colunas do subprojeto.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-6 md:grid-cols-2">
+
+                    <div className="rounded-xl border bg-muted/30 p-4">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="space-y-1">
+                                <h3 className="text-sm font-semibold">Onde cada tarefa roda</h3>
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                    Toda tarefa salva o campo técnico <span className="font-medium text-foreground">projectId</span>.
+                                    Agora ela também pode salvar <span className="font-medium text-foreground">subprojectId</span>.
+                                    Os fluxos automáticos definem projeto e subprojeto; nas tarefas manuais, o usuário escolhe.
+                                </p>
+                            </div>
+                            <Badge variant="secondary" className="w-fit shrink-0">
+                                Subprojeto = quadro
+                            </Badge>
+                        </div>
+
+                        <div className="mt-4 grid gap-2 md:grid-cols-2">
+                            {AUTOMATIC_PROJECT_RULES.map((item) => (
+                                <div key={item.process} className="rounded-lg border bg-background/80 p-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-sm font-medium">{item.process}</p>
+                                        <Badge variant="outline">{item.project}</Badge>
+                                    </div>
+                                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.rule}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
                         <div className="space-y-4">
-                            <div className="rounded-lg border p-4 space-y-3">
-                                <h3 className="font-medium">Criar projeto</h3>
+                            <div className="space-y-3 rounded-xl border p-4">
+                                <div>
+                                    <h3 className="font-medium">Criar projeto</h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Use para novos processos que terão tarefas próprias.
+                                    </p>
+                                </div>
                                 <Input
                                     value={newProjectName}
                                     onChange={(event) => setNewProjectName(event.target.value)}
@@ -742,11 +951,18 @@ export function TaskManager() {
                                     placeholder="Descrição opcional"
                                     rows={3}
                                 />
-                                <Button onClick={handleCreateProject}>Criar projeto</Button>
+                                <Button onClick={handleCreateProject} className="w-full sm:w-fit">
+                                    Criar projeto
+                                </Button>
                             </div>
 
-                            <div className="rounded-lg border p-4 space-y-3">
-                                <h3 className="font-medium">Editar projeto</h3>
+                            <div className="space-y-3 rounded-xl border p-4">
+                                <div>
+                                    <h3 className="font-medium">Editar projeto</h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        O nome/descrição organiza a central. Não altera automaticamente a origem das tarefas já criadas.
+                                    </p>
+                                </div>
                                 <Select value={managerProjectId} onValueChange={setManagerProjectId}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Selecione um projeto" />
@@ -772,47 +988,131 @@ export function TaskManager() {
                                     rows={3}
                                     disabled={!managerProjectId}
                                 />
-                                <div className="flex gap-2">
-                                    <Button onClick={handleUpdateProject} disabled={!managerProjectId}>
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <Button onClick={handleUpdateProject} disabled={!managerProjectId} className="sm:flex-1">
                                         Salvar projeto
                                     </Button>
-                                    <Button variant="destructive" onClick={handleDeleteProject} disabled={!managerProjectId}>
+                                    <Button variant="destructive" onClick={handleDeleteProject} disabled={!managerProjectId} className="sm:flex-1">
                                         Excluir projeto
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 rounded-xl border p-4">
+                                <div>
+                                    <h3 className="font-medium">Subprojetos / quadros</h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Aqui ficam os quadros do projeto macro. É no subprojeto que as colunas/status são definidas.
+                                    </p>
+                                </div>
+
+                                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                                    <Input
+                                        value={newSubprojectName}
+                                        onChange={(event) => setNewSubprojectName(event.target.value)}
+                                        placeholder="Nome do subprojeto"
+                                        disabled={!managerProjectId}
+                                    />
+                                    <Button onClick={handleCreateSubproject} disabled={!managerProjectId}>
+                                        Criar
+                                    </Button>
+                                </div>
+                                <Textarea
+                                    value={newSubprojectDescription}
+                                    onChange={(event) => setNewSubprojectDescription(event.target.value)}
+                                    placeholder="Descrição opcional do subprojeto"
+                                    rows={2}
+                                    disabled={!managerProjectId}
+                                />
+
+                                <Select value={managerSubprojectId} onValueChange={setManagerSubprojectId} disabled={!managerProjectId}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione um subprojeto" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {selectedProjectSubprojects.map((subproject) => (
+                                            <SelectItem key={subproject.id} value={subproject.id}>
+                                                {subproject.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Input
+                                    value={managerSubprojectName}
+                                    onChange={(event) => setManagerSubprojectName(event.target.value)}
+                                    placeholder="Nome do subprojeto"
+                                    disabled={!managerSubprojectId}
+                                />
+                                <Textarea
+                                    value={managerSubprojectDescription}
+                                    onChange={(event) => setManagerSubprojectDescription(event.target.value)}
+                                    placeholder="Descrição"
+                                    rows={2}
+                                    disabled={!managerSubprojectId}
+                                />
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <Button onClick={handleUpdateSubproject} disabled={!managerSubprojectId} className="sm:flex-1">
+                                        Salvar subprojeto
+                                    </Button>
+                                    <Button variant="destructive" onClick={handleDeleteSubproject} disabled={!managerSubprojectId} className="sm:flex-1">
+                                        Excluir subprojeto
                                     </Button>
                                 </div>
                             </div>
                         </div>
 
                         <div className="space-y-4">
-                            <div className="rounded-lg border p-4 space-y-3">
-                                <h3 className="font-medium">Criar status</h3>
+                            <div className="space-y-3 rounded-xl border p-4">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <h3 className="font-medium">Criar coluna/status</h3>
+                                        <p className="text-xs text-muted-foreground">
+                                            A nova coluna será criada dentro do subprojeto selecionado.
+                                        </p>
+                                    </div>
+                                    {managerSubprojectName ? (
+                                        <Badge variant="outline" className="w-fit">
+                                            {managerSubprojectName}
+                                        </Badge>
+                                    ) : null}
+                                </div>
                                 <Input
                                     value={newStatusName}
                                     onChange={(event) => setNewStatusName(event.target.value)}
-                                    placeholder="Nome do status"
-                                    disabled={!managerProjectId}
+                                    placeholder="Nome da coluna/status"
+                                    disabled={!managerSubprojectId}
                                 />
                                 <Input
                                     value={newStatusSlug}
                                     onChange={(event) => setNewStatusSlug(event.target.value)}
                                     placeholder="Slug"
-                                    disabled={!managerProjectId}
+                                    disabled={!managerSubprojectId}
                                 />
-                                <Button onClick={handleCreateStatus} disabled={!managerProjectId}>
-                                    Criar status
+                                <Button onClick={handleCreateStatus} disabled={!managerSubprojectId} className="w-full sm:w-fit">
+                                    Criar coluna
                                 </Button>
                             </div>
 
-                            <div className="rounded-lg border p-4 space-y-3">
-                                <h3 className="font-medium">Status do projeto</h3>
-                                {!managerProjectId ? (
-                                    <p className="text-sm text-muted-foreground">Selecione um projeto para gerenciar seus status.</p>
-                                ) : selectedProjectStatuses.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">Nenhum status cadastrado.</p>
+                            <div className="space-y-3 rounded-xl border p-4">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <h3 className="font-medium">Colunas/status do subprojeto</h3>
+                                        <p className="text-xs text-muted-foreground">
+                                            Cada subprojeto pode ter seu próprio fluxo de colunas.
+                                        </p>
+                                    </div>
+                                    <Badge variant="secondary" className="w-fit">
+                                        {selectedSubprojectStatuses.length} status
+                                    </Badge>
+                                </div>
+                                {!managerSubprojectId ? (
+                                    <p className="text-sm text-muted-foreground">Selecione um subprojeto para gerenciar suas colunas/status.</p>
+                                ) : selectedSubprojectStatuses.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">Nenhum status cadastrado neste subprojeto.</p>
                                 ) : (
                                     <div className="space-y-3">
-                                        {selectedProjectStatuses.map((status) => (
-                                            <div key={status.id} className="rounded-md border p-3 space-y-2">
+                                        {selectedSubprojectStatuses.map((status) => (
+                                            <div key={status.id} className="space-y-2 rounded-lg border p-3">
                                                 {editingStatusId === status.id ? (
                                                     <>
                                                         <Input
@@ -839,27 +1139,28 @@ export function TaskManager() {
                                                                 <SelectItem value="canceled">Cancelado</SelectItem>
                                                             </SelectContent>
                                                         </Select>
-                                                        <div className="flex gap-2">
+                                                        <div className="flex flex-col gap-2 sm:flex-row">
                                                             <Button onClick={() => handleUpdateStatus(status)}>Salvar status</Button>
                                                             <Button variant="outline" onClick={() => setEditingStatusId(null)}>Cancelar</Button>
                                                         </div>
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <div className="flex items-center justify-between gap-3">
-                                                            <div>
+                                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                            <div className="min-w-0">
                                                                 <p className="font-medium">{status.name}</p>
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    {status.slug} • {status.category}
-                                                                    {status.is_initial ? ' • inicial' : ''}
-                                                                    {status.is_terminal ? ' • terminal' : ''}
-                                                                </p>
+                                                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                                                    <Badge variant="outline">{status.slug}</Badge>
+                                                                    <Badge variant="secondary">{status.category}</Badge>
+                                                                    {status.is_initial ? <Badge variant="outline">Inicial</Badge> : null}
+                                                                    {status.is_terminal ? <Badge variant="outline">Terminal</Badge> : null}
+                                                                </div>
                                                             </div>
-                                                            <div className="flex gap-2">
+                                                            <div className="flex shrink-0 gap-2">
                                                                 <Button variant="outline" size="sm" onClick={() => startEditStatus(status)}>
                                                                     Editar
                                                                 </Button>
-                                                                <Button variant="ghost" size="sm" onClick={() => handleDeleteStatus(status.id)}>
+                                                                <Button variant="ghost" size="icon" onClick={() => handleDeleteStatus(status.id)} aria-label={`Excluir status ${status.name}`}>
                                                                     <Trash2 className="h-4 w-4 text-destructive" />
                                                                 </Button>
                                                             </div>

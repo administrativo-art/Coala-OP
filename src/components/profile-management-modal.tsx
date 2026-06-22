@@ -374,7 +374,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
   const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
   const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
-  const dpChecklistsViewWatch = form.watch('permissions.dp.checklists.view' as any);
   const purchasingModuleViewWatch = form.watch('permissions.purchasing.view' as any);
 
   return (
@@ -610,8 +609,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                         </div>
                                       )}
                                       {renderPermissionSwitch("permissions.settings.manageLabels" as any, "Configurar Etiquetas de Estoque", "Permite alterar o tamanho padrão das etiquetas de lote.", !settingsViewWatch)}
-                                      {renderPermissionSwitch("permissions.dp.checklists.manageTemplates" as any, "Gerenciar Templates de Checklists", "Permite manter templates de checklists operacionais.", !settingsViewWatch)}
-                                      {renderPermissionSwitch("permissions.dp.settings.manageChecklistTypes" as any, "Gerenciar Tipos de Checklist", "Permite criar e editar tipos de checklist.", !settingsViewWatch)}
                                     </div>
 
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
@@ -795,25 +792,12 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                   </div>
                                 </div>
 
-                                {/* Formulários operacionais */}
-                                <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><ClipboardCheck className="h-4 w-4" /> Formulários Operacionais</h4>
-                                  {renderPermissionSwitch("permissions.dp.checklists.view" as any, "Visualizar formulários", "Permite ver a lista de execuções e abrir formulários em modo leitura.", !dpViewWatch)}
-                                  <div className="pl-6 space-y-2">
-                                    {renderPermissionSwitch("permissions.dp.checklists.operate" as any, "Preencher formulários", "Permite assumir e responder formulários atribuídos.", !dpChecklistsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.dp.checklists.create" as any, "Criar formulário manual", "Permite criar execuções manuais a partir de templates ou em branco.", !dpChecklistsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.dp.checklists.manageTemplates" as any, "Gerenciar templates", "Permite criar, editar e desativar templates de formulário.", !dpChecklistsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.dp.checklists.viewAnalytics" as any, "Ver Análises", "Permite acessar a aba analítica e os dashboards por tipo.", !dpChecklistsViewWatch, true)}
-                                  </div>
-                                </div>
-
                                 {/* Configurações DP */}
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Settings className="h-4 w-4" /> Configurações do DP</h4>
                                   {renderPermissionSwitch("permissions.dp.settings.manageUnits" as any, "Gerenciar Unidades", "Permite criar e editar unidades (quiosques) no DP.", !dpViewWatch)}
                                   {renderPermissionSwitch("permissions.dp.settings.manageShifts" as any, "Gerenciar Turnos", "Permite criar e editar definições de turnos.", !dpViewWatch)}
                                   {renderPermissionSwitch("permissions.dp.settings.manageCalendars" as any, "Gerenciar Calendários", "Permite criar e editar calendários de feriados.", !dpViewWatch)}
-                                  {renderPermissionSwitch("permissions.dp.settings.manageChecklistTypes" as any, "Gerenciar Tipos de Checklist", "Permite criar/editar tipos de checklist personalizados.", !dpViewWatch)}
                                 </div>
                               </AccordionContent>
                             </AccordionItem>

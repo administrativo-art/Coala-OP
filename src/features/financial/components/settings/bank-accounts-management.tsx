@@ -356,7 +356,7 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : accountsList.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
             Nenhuma conta cadastrada.
           </div>
         ) : (

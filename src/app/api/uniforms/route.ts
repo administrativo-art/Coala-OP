@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
-import { UNIFORM_STOCK_ID } from "@/lib/uniform";
+import { UNIFORM_STOCK_ID, UNIFORM_STOCK_NAME } from "@/lib/uniform";
+import { pruneUndefined } from "@/lib/utils";
 import { WORKSPACE_ID } from "@/lib/workspace";
-import type { LotEntry, Product, UniformAssignment, UniformEvent } from "@/types";
+import type { LotEntry, Product, UniformAssignment, UniformCondition, UniformEvent, UniformStockStatus } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,12 @@ function canView(context: Awaited<ReturnType<typeof requireUser>>) {
   return context.isDefaultAdmin ||
     context.permissions.stock.uniforms?.view === true ||
     context.permissions.dp.collaborators.view === true;
+}
+
+function canAdjust(context: Awaited<ReturnType<typeof requireUser>>) {
+  return context.isDefaultAdmin ||
+    context.permissions.stock.uniforms?.manageEvaluation === true ||
+    context.permissions.stock.inventoryControl?.editLot === true;
 }
 
 export async function GET(request: NextRequest) {
@@ -108,6 +115,93 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Falha ao carregar uniformes." },
+      { status: 400 },
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const context = await requireUser(request);
+    if (!canAdjust(context)) {
+      return NextResponse.json(
+        { error: "Sem permissão para ajustar estoque de uniformes." },
+        { status: 403 },
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const lotId = String(body.lotId ?? "").trim();
+    const quantity = Number(body.quantity);
+    const condition = String(body.condition ?? "").trim() as UniformCondition;
+    const uniformStockStatus = String(body.uniformStockStatus ?? "").trim() as UniformStockStatus;
+    const notes = String(body.notes ?? "").trim() || undefined;
+
+    if (!lotId) {
+      return NextResponse.json({ error: "Lote obrigatório." }, { status: 400 });
+    }
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      return NextResponse.json({ error: "Informe uma quantidade inteira maior ou igual a zero." }, { status: 400 });
+    }
+    if (!["novo", "usado"].includes(condition)) {
+      return NextResponse.json({ error: "Condição inválida." }, { status: 400 });
+    }
+    if (!["disponivel", "em_avaliacao"].includes(uniformStockStatus)) {
+      return NextResponse.json({ error: "Status inválido." }, { status: 400 });
+    }
+
+    const lotRef = dbAdmin.collection("lots").doc(lotId);
+    const movementRef = dbAdmin.collection("movementHistory").doc();
+    const now = new Date().toISOString();
+
+    const lot = await dbAdmin.runTransaction(async (tx) => {
+      const lotSnap = await tx.get(lotRef);
+      if (!lotSnap.exists) throw new Error("Lote de uniforme não encontrado.");
+
+      const current = { id: lotSnap.id, ...lotSnap.data() } as LotEntry;
+      if (current.kioskId !== UNIFORM_STOCK_ID) {
+        throw new Error("Este lote não pertence ao estoque próprio de uniformes.");
+      }
+
+      const previousQuantity = Number(current.quantity ?? 0);
+      const quantityDiff = quantity - previousQuantity;
+      const updates: Partial<LotEntry> = {
+        quantity,
+        condition,
+        uniformStockStatus,
+        updatedAt: now,
+      };
+
+      tx.update(lotRef, pruneUndefined(updates));
+
+      if (quantityDiff !== 0) {
+        tx.set(movementRef, pruneUndefined({
+          lotId,
+          productId: current.productId,
+          productName: current.productName,
+          lotNumber: current.lotNumber,
+          type: quantityDiff > 0 ? "ENTRADA_CORRECAO" : "SAIDA_CORRECAO",
+          quantityChange: Math.abs(quantityDiff),
+          ...(quantityDiff > 0
+            ? { toKioskId: UNIFORM_STOCK_ID, toKioskName: UNIFORM_STOCK_NAME }
+            : { fromKioskId: UNIFORM_STOCK_ID, fromKioskName: UNIFORM_STOCK_NAME }),
+          userId: context.userDoc.id,
+          username: context.userDoc.username,
+          timestamp: now,
+          sourceType: "uniform_stock_adjustment",
+          sourceId: lotId,
+          itemClass: "uniform",
+          notes: notes || `Ajuste manual de uniforme: ${previousQuantity} -> ${quantity}.`,
+        }));
+      }
+
+      return { ...current, ...updates };
+    });
+
+    return NextResponse.json({ lot }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Falha ao ajustar estoque de uniformes." },
       { status: 400 },
     );
   }

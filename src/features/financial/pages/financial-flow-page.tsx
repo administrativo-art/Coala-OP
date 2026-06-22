@@ -127,7 +127,7 @@ export function FinancialFlowPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Fluxo financeiro</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Fluxo financeiro</h1>
           <p className="text-muted-foreground">Análise de despesas provisionadas e liquidadas por período.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -157,7 +157,7 @@ export function FinancialFlowPage() {
             <AlertCircle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-500">{formatCurrency(totals.pending)}</div>
+            <div className="text-xl font-bold text-amber-500">{formatCurrency(totals.pending)}</div>
             <p className="mt-1 text-xs text-muted-foreground">Compromissos futuros</p>
           </CardContent>
         </Card>
@@ -167,7 +167,7 @@ export function FinancialFlowPage() {
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-500">{formatCurrency(totals.paid)}</div>
+            <div className="text-xl font-bold text-emerald-500">{formatCurrency(totals.paid)}</div>
             <p className="mt-1 text-xs text-muted-foreground">Liquidados no período</p>
           </CardContent>
         </Card>
@@ -177,7 +177,7 @@ export function FinancialFlowPage() {
             <TrendingDown className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totals.pending + totals.paid)}</div>
+            <div className="text-xl font-bold">{formatCurrency(totals.pending + totals.paid)}</div>
             <p className="mt-1 text-xs text-muted-foreground">Provisionado + pago</p>
           </CardContent>
         </Card>

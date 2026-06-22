@@ -110,6 +110,7 @@ export type FormTaskTrigger = {
   title_template: string;
   description_template?: string;
   task_project_id: string;
+  task_subproject_id?: string;
   assignee_type: 'user' | 'role' | 'team' | 'unit';
   assignee_id: string;
   assignee_name?: string;

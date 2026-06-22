@@ -9,10 +9,26 @@ import type {
   FormType,
 } from "@/types/forms";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
-import { serializeChecklistValue } from "@/features/dp-checklists/lib/server-access";
 
 export function serializeFormValue(value: unknown): unknown {
-  return serializeChecklistValue(value);
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(serializeFormValue);
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { toDate?: () => Date }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        serializeFormValue(entry),
+      ])
+    );
+  }
+  return value;
 }
 
 function collectionWithWorkspace(collectionName: string, workspaceId: string) {

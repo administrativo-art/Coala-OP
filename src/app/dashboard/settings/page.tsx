@@ -311,7 +311,7 @@ function SettingsLaunchPanel({
   );
 }
 
-function OperationalChecklistsPanel() {
+function OperationalFormsPanel() {
   return (
     <SettingsLaunchPanel
       title="Módulo de formulários"
@@ -418,11 +418,11 @@ export default function SettingsPage() {
 
   const operationalTabs: NestedTab[] = [
     {
-      value: "checklists",
+      value: "forms",
       label: "Formulários",
       title: "Formulários operacionais",
       description: "Centralize o acesso às configurações operacionais dos formulários e ao catálogo de templates.",
-      content: <OperationalChecklistsPanel />,
+      content: <OperationalFormsPanel />,
     },
     {
       value: "cadastros",
@@ -441,14 +441,14 @@ export default function SettingsPage() {
     {
       value: "pdv-sync",
       label: "Sincronizar",
-      title: "Sincronização PDV",
+      title: "Sincronização do PDV",
       description: "Reprocesse dados históricos e configure a rotina operacional ligada ao PDV.",
       content: <PdvSyncManagement />,
     },
     {
       value: "catalogo-qr",
-      label: "QR Catálogo",
-      title: "QR Code do Catálogo",
+      label: "QR do catálogo",
+      title: "QR code do catálogo",
       description: "Imprima o QR code para que atendentes acessem o catálogo de mercadorias diretamente pelo celular.",
       content: <CatalogoQRPanel />,
     },
@@ -512,8 +512,8 @@ export default function SettingsPage() {
     },
     {
       value: "roles",
-      label: "Cargos & Funções",
-      title: "Cargos & Funções",
+      label: "Cargos e funções",
+      title: "Cargos e funções",
       description: "Catálogo de cargos, funções e vínculo com perfis do departamento pessoal.",
       content: <DPSettingsRoles />,
     },
@@ -533,8 +533,8 @@ export default function SettingsPage() {
     },
     {
       value: "login-access",
-      label: "Acesso por Escala",
-      title: "Acesso por Escala",
+      label: "Acesso por escala",
+      title: "Acesso por escala",
       description: "Diagnóstico e auditoria da política de acesso vinculada à escala.",
       content: (
         <div className="space-y-4">
@@ -549,14 +549,14 @@ export default function SettingsPage() {
     {
       value: "privacy",
       label: "Privacidade",
-      title: "Privacidade Interna",
+      title: "Privacidade interna",
       description: "Aviso interno, inventário LGPD, fornecedores, retenção e pendências de governança.",
       content: <InternalPrivacySettings />,
     },
     {
       value: "profile-fields",
-      label: "Campos do Perfil",
-      title: "Campos do Perfil",
+      label: "Campos do perfil",
+      title: "Campos do perfil",
       description: "Crie, nomeie e organize as seções e campos exibidos no perfil dos colaboradores.",
       content: <FieldConfigPage />,
     },
@@ -577,7 +577,7 @@ export default function SettingsPage() {
     {
       value: "calendars",
       label: "Calendário",
-      title: "Calendários de Trabalho",
+      title: "Calendários de trabalho",
       description: "Configure calendários de feriados usados nas escalas.",
       content: <DPSettingsCalendars />,
     },
@@ -636,7 +636,7 @@ export default function SettingsPage() {
     {
       value: "accounting",
       label: "Contabilidade",
-      title: "Cadastros Contábeis",
+      title: "Cadastros contábeis",
       description: "Plano de contas e centros de resultado do módulo financeiro.",
       content: (
         <div className="space-y-6">
@@ -651,7 +651,7 @@ export default function SettingsPage() {
     {
       value: "accounts",
       label: "Contas",
-      title: "Contas Bancárias",
+      title: "Contas bancárias",
       description: "Gerencie bancos, contas e vínculos usados no financeiro.",
       content: (
         <BankAccountsManagement canManage={permissions.financial?.settings?.manageBankAccounts} />
@@ -660,7 +660,7 @@ export default function SettingsPage() {
     {
       value: "import",
       label: "Importação",
-      title: "Aliases de Importação",
+      title: "Aliases de importação",
       description: "Mapeie aliases e regras usadas na importação financeira.",
       content: (
         <ImportAliasesManagement canManage={permissions.financial?.settings?.manageImportAliases} />

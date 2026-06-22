@@ -37,17 +37,20 @@ export async function POST(request: NextRequest) {
       !body ||
       typeof body.project_id !== "string" ||
       !body.project_id ||
+      typeof body.subproject_id !== "string" ||
+      !body.subproject_id ||
       typeof body.name !== "string" ||
       !body.name.trim() ||
       typeof body.slug !== "string" ||
       !body.slug.trim()
     ) {
-      return NextResponse.json({ error: "Projeto, nome e slug são obrigatórios." }, { status: 400 });
+      return NextResponse.json({ error: "Projeto, subprojeto, nome e slug são obrigatórios." }, { status: 400 });
     }
 
     const ref = dbAdmin.collection("task_statuses").doc();
     const payload = {
       project_id: body.project_id,
+      subproject_id: body.subproject_id,
       name: body.name.trim(),
       slug: body.slug.trim(),
       category: typeof body.category === "string" ? body.category : "active",
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
       username: context.userDoc.username,
       module: "tasks",
       action: "status_created",
-      metadata: { status_id: ref.id, project_id: payload.project_id, slug: payload.slug },
+      metadata: { status_id: ref.id, project_id: payload.project_id, subproject_id: payload.subproject_id, slug: payload.slug },
     });
 
     return NextResponse.json({ status: { id: ref.id, ...payload } }, { status: 201 });

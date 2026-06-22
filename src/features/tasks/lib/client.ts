@@ -1,6 +1,6 @@
 "use client";
 
-import { type Task, type TaskOrigin, type TaskProject, type TaskStatusDoc } from "@/types";
+import { type Task, type TaskOrigin, type TaskProject, type TaskStatusDoc, type TaskSubproject } from "@/types";
 
 type FirebaseUserLike = {
   getIdToken: (forceRefresh?: boolean) => Promise<string>;
@@ -8,6 +8,7 @@ type FirebaseUserLike = {
 
 type TasksBootstrapResponse = {
   projects: TaskProject[];
+  subprojects: TaskSubproject[];
   statuses: TaskStatusDoc[];
   tasks: Task[];
 };
@@ -64,6 +65,8 @@ export async function createTask(
     approverId?: string;
     dueDate?: string;
     projectId?: string;
+    subprojectId?: string;
+    subprojectName?: string;
     unitId?: string;
     unitName?: string;
     priority?: Task["priority"];
@@ -151,6 +154,38 @@ export async function updateTaskProject(
 
 export async function deleteTaskProject(firebaseUser: FirebaseUserLike, projectId: string) {
   const response = await authedFetch(firebaseUser, `/api/tasks/projects/${projectId}`, {
+    method: "DELETE",
+  });
+  return parseJson<{ ok: true }>(response);
+}
+
+export async function createTaskSubproject(
+  firebaseUser: FirebaseUserLike,
+  body: Record<string, unknown>
+) {
+  const response = await authedFetch(firebaseUser, "/api/tasks/subprojects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson<{ subproject: TaskSubproject; statuses?: TaskStatusDoc[] }>(response);
+}
+
+export async function updateTaskSubproject(
+  firebaseUser: FirebaseUserLike,
+  subprojectId: string,
+  body: Record<string, unknown>
+) {
+  const response = await authedFetch(firebaseUser, `/api/tasks/subprojects/${subprojectId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJson<{ subproject: TaskSubproject }>(response);
+}
+
+export async function deleteTaskSubproject(firebaseUser: FirebaseUserLike, subprojectId: string) {
+  const response = await authedFetch(firebaseUser, `/api/tasks/subprojects/${subprojectId}`, {
     method: "DELETE",
   });
   return parseJson<{ ok: true }>(response);

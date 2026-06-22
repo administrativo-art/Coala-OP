@@ -130,7 +130,7 @@ export function CashFlowPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Fluxo de caixa</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Fluxo de caixa</h1>
           <p className="text-muted-foreground">Movimentações financeiras por conta e período.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -173,7 +173,7 @@ export function CashFlowPage() {
             <TrendingUp className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-500">{formatCurrency(totals.income)}</div>
+            <div className="text-xl font-bold text-emerald-500">{formatCurrency(totals.income)}</div>
           </CardContent>
         </Card>
         <Card className="border-rose-500/20 bg-rose-500/5">
@@ -182,7 +182,7 @@ export function CashFlowPage() {
             <TrendingDown className="h-4 w-4 text-rose-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-rose-500">{formatCurrency(totals.outcome)}</div>
+            <div className="text-xl font-bold text-rose-500">{formatCurrency(totals.outcome)}</div>
           </CardContent>
         </Card>
         <Card className="border-sky-500/20 bg-sky-500/5">
@@ -191,7 +191,7 @@ export function CashFlowPage() {
             <ArrowLeftRight className="h-4 w-4 text-sky-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-sky-500">{formatCurrency(totals.transfers)}</div>
+            <div className="text-xl font-bold text-sky-500">{formatCurrency(totals.transfers)}</div>
           </CardContent>
         </Card>
         <Card className={cn("border-primary/20", totals.balance >= 0 ? "bg-emerald-500/5" : "bg-rose-500/5")}>
@@ -200,7 +200,7 @@ export function CashFlowPage() {
             <Wallet className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className={cn("text-2xl font-bold", totals.balance >= 0 ? "text-emerald-500" : "text-rose-500")}>
+            <div className={cn("text-xl font-bold", totals.balance >= 0 ? "text-emerald-500" : "text-rose-500")}>
               {formatCurrency(totals.balance)}
             </div>
           </CardContent>

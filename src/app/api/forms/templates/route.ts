@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { mirrorTemplateToLegacy } from "@/features/forms/lib/legacy-bridge";
 import { getFormProjectById, listFormTemplates } from "@/features/forms/lib/server";
 import { formTemplateSchema } from "@/features/forms/lib/schemas";
 import { assertFormPermission } from "@/features/forms/lib/server-access";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
-import { type FormTemplate } from "@/types/forms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -103,12 +101,6 @@ export async function POST(request: NextRequest) {
           username: context.userDoc.username,
         },
       });
-    });
-    await mirrorTemplateToLegacy({
-      templateId: ref.id,
-      template: template as unknown as FormTemplate,
-    }).catch((error) => {
-      console.error("Legacy dual-write failed for form template create:", error);
     });
     await logAction({
       workspace_id: context.workspace_id,

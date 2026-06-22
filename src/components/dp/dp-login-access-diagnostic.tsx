@@ -55,7 +55,7 @@ function statusBadge(payload: HrLoginAccessPayload["evaluation"]["status"]) {
     );
   }
 
-  return <Badge variant="secondary">Nao se aplica</Badge>;
+  return <Badge variant="secondary">Não se aplica</Badge>;
 }
 
 function reasonLabel(reason: HrLoginAccessPayload["evaluation"]["reason"]) {
@@ -63,21 +63,21 @@ function reasonLabel(reason: HrLoginAccessPayload["evaluation"]["reason"]) {
     case "disabled":
       return "Limitador desligado para o colaborador.";
     case "within_shift":
-      return "Existe turno vigente neste horario.";
+      return "Existe turno vigente neste horário.";
     case "pre_shift_tolerance":
-      return "O colaborador esta dentro da tolerancia de 15 minutos antes do inicio do turno.";
+      return "O colaborador está dentro da tolerância de 15 minutos antes do início do turno.";
     case "before_shift_too_early":
-      return "Ha um proximo turno, mas ainda nao chegou a janela permitida de entrada.";
+      return "Há um próximo turno, mas ainda não chegou a janela permitida de entrada.";
     case "after_shift_requires_justification":
       return "O turno terminou e o sistema exige justificativa para liberar mais 15 minutos.";
     case "after_shift_extension_active":
-      return "Existe uma extensao ativa por justificativa apos o termino do turno.";
+      return "Existe uma extensão ativa por justificativa após o término do turno.";
     case "after_shift_extension_limit_reached":
-      return "O turno ja consumiu as 2 extensoes automaticas permitidas.";
+      return "O turno já consumiu as 2 extensões automáticas permitidas.";
     case "day_off":
-      return "O dia atual esta marcado como folga na escala.";
+      return "O dia atual está marcado como folga na escala.";
     case "no_schedule_assigned":
-      return "Nao ha escala atribuida para este colaborador neste recorte.";
+      return "Não há escala atribuída para este colaborador neste recorte.";
     default:
       return reason;
   }
@@ -149,10 +149,10 @@ export function DPLoginAccessDiagnostic() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
             <LockKeyhole className="h-5 w-5" />
-            Diagnostico do limitador
+            Diagnóstico do limitador
           </CardTitle>
           <CardDescription>
-            Simula o efeito do login por escala sem bloquear a usabilidade atual. Nesta primeira versao, colaborador com limitador ligado e sem escala atribuida continua liberado.
+            Simula o efeito do login por escala sem bloquear a usabilidade atual. Nesta primeira versão, colaborador com limitador ligado e sem escala atribuída continua liberado.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
@@ -227,7 +227,7 @@ export function DPLoginAccessDiagnostic() {
             <Card>
               <CardContent className="flex items-start justify-between gap-3 p-5">
                 <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Limitador do usuario</p>
+                  <p className="text-sm text-muted-foreground">Limitador do usuário</p>
                   <p className="text-lg font-semibold">
                     {result.user.loginRestrictionEnabled ? "Ligado" : "Desligado"}
                   </p>
@@ -254,12 +254,12 @@ export function DPLoginAccessDiagnostic() {
 
             <Card>
               <CardContent className="p-5">
-                <p className="text-sm text-muted-foreground">Cargo elegivel</p>
+                <p className="text-sm text-muted-foreground">Cargo elegível</p>
                 <p className="mt-1 text-lg font-semibold">
-                  {result.role?.loginRestricted ? "Sim" : "Nao"}
+                  {result.role?.loginRestricted ? "Sim" : "Não"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Campo do cargo continua informativo; a trava efetiva esta no usuario.
+                  Campo do cargo continua informativo; a trava efetiva está no usuário.
                 </p>
               </CardContent>
             </Card>
@@ -276,7 +276,7 @@ export function DPLoginAccessDiagnostic() {
               <CardContent className="space-y-3">
                 {result.evaluation.shiftsConsidered.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Nenhum turno encontrado para o recorte. Pela politica atual, isso libera o login e sinaliza ausencia de escala.
+                    Nenhum turno encontrado para o recorte. Pela política atual, isso libera o login e sinaliza ausência de escala.
                   </p>
                 ) : (
                   result.evaluation.shiftsConsidered.map((shift) => (
@@ -289,14 +289,14 @@ export function DPLoginAccessDiagnostic() {
                           )}
                         </div>
                         <span className="text-xs text-muted-foreground">
-                          Unidade: {shift.unitId || "nao informada"}
+                          Unidade: {shift.unitId || "não informada"}
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">
                         {shiftWindowLabel(shift)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Escala: {shift.scheduleId || "nao informada"}
+                        Escala: {shift.scheduleId || "não informada"}
                       </p>
                     </div>
                   ))
@@ -321,7 +321,7 @@ export function DPLoginAccessDiagnostic() {
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      Nenhum turno vigente no horario avaliado.
+                      Nenhum turno vigente no horário avaliado.
                     </p>
                   )}
                 </CardContent>
@@ -329,7 +329,7 @@ export function DPLoginAccessDiagnostic() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Proximo turno</CardTitle>
+                  <CardTitle className="text-base">Próximo turno</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {result.evaluation.nextShift ? (
@@ -351,14 +351,14 @@ export function DPLoginAccessDiagnostic() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Politica atual</CardTitle>
+                  <CardTitle className="text-base">Política atual</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-muted-foreground">
-                  <p>1. O limitador so entra em vigor quando o usuario estiver marcado com a opcao ativa.</p>
-                  <p>2. A entrada abre 15 minutos antes do inicio do turno.</p>
-                  <p>3. Apos o fim do turno, cada justificativa libera mais 15 minutos.</p>
-                  <p>4. O sistema aceita no maximo 2 extensoes automaticas por turno.</p>
-                  <p>5. Se nao houver escala atribuida, o sistema libera o acesso para nao travar a operacao por falta de cadastro.</p>
+                  <p>1. O limitador só entra em vigor quando o usuário estiver marcado com a opção ativa.</p>
+                  <p>2. A entrada abre 15 minutos antes do início do turno.</p>
+                  <p>3. Após o fim do turno, cada justificativa libera mais 15 minutos.</p>
+                  <p>4. O sistema aceita no máximo 2 extensões automáticas por turno.</p>
+                  <p>5. Se não houver escala atribuída, o sistema libera o acesso para não travar a operação por falta de cadastro.</p>
                 </CardContent>
               </Card>
 
@@ -375,7 +375,7 @@ export function DPLoginAccessDiagnostic() {
                     Restantes: {result.evaluation.extensionUsage.remaining}
                   </p>
                   <p>
-                    Cada extensao libera {result.evaluation.extensionUsage.minutesPerExtension} minutos.
+                    Cada extensão libera {result.evaluation.extensionUsage.minutesPerExtension} minutos.
                   </p>
                   {result.evaluation.activeExtension && (
                     <p>

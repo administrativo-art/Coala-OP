@@ -91,6 +91,10 @@ export async function POST(request: NextRequest) {
 
       const collaboratorName = String(collaborator.username ?? collaborator.name ?? "Colaborador");
       const issuedCondition = (lot.condition ?? "novo") as UniformCondition;
+      const apparelType = lot.apparelType ?? product.apparelType;
+      const apparelSize = lot.apparelSize ?? product.apparelSize;
+      const apparelColor = lot.apparelColor ?? product.apparelColor;
+      const imageUrl = lot.imageUrl ?? product.imageUrl;
       const movement = {
         lotId,
         productId: lot.productId,
@@ -128,10 +132,10 @@ export async function POST(request: NextRequest) {
         collaboratorName,
         occurredAt,
         issuedCondition,
-        apparelType: product.apparelType,
-        apparelSize: product.apparelSize,
-        apparelColor: product.apparelColor,
-        imageUrl: product.imageUrl,
+        apparelType,
+        apparelSize,
+        apparelColor,
+        imageUrl,
         registeredByUserId: context.userDoc.id,
         registeredByUserName: context.userDoc.username,
         notes,
@@ -153,10 +157,10 @@ export async function POST(request: NextRequest) {
         quantityInPossession: quantity,
         status: "em_posse",
         deliveredAt: occurredAt,
-        apparelType: product.apparelType,
-        apparelSize: product.apparelSize,
-        apparelColor: product.apparelColor,
-        imageUrl: product.imageUrl,
+        apparelType,
+        apparelSize,
+        apparelColor,
+        imageUrl,
         createdAt: now,
         updatedAt: now,
       };

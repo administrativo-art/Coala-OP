@@ -3,13 +3,15 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import {
   createManualTask,
   ensureTaskProject,
+  ensureTaskSubproject,
   updateTaskDocument,
 } from "@/features/tasks/lib/server";
 import { type StockAuditSession, type Task } from "@/types";
 
 export const STOCK_COUNT_APPROVER_ASSIGNEE_ID = "__stock_count_approver__";
 
-const STOCK_COUNT_TASK_PROJECT_SLUG = "stock-count";
+const STOCK_TASK_PROJECT_SLUG = "stock";
+const STOCK_COUNT_TASK_SUBPROJECT_SLUG = "stock-count";
 const STOCK_COUNT_TASK_ORIGIN_LINK = "/dashboard/stock/count";
 
 function unique(values: Array<string | undefined | null>) {
@@ -46,13 +48,15 @@ function buildDescription(session: StockAuditSession) {
     .join("\n");
 }
 
-function buildTaskPatch(session: StockAuditSession, projectId: string): Partial<Task> {
+function buildTaskPatch(session: StockAuditSession, projectId: string, subprojectId: string): Partial<Task> {
   const divergenceCount = countDivergences(session);
   const watcherUserIds = unique([session.auditedBy?.userId]);
 
   if (session.status === "completed") {
     return {
       projectId,
+      subprojectId,
+      subprojectName: "Contagem de estoque",
       title: `Contagem concluída: ${session.kioskName}`,
       description: buildDescription(session),
       status: "completed",
@@ -74,6 +78,8 @@ function buildTaskPatch(session: StockAuditSession, projectId: string): Partial<
 
   return {
     projectId,
+    subprojectId,
+    subprojectName: "Contagem de estoque",
     title: `Aprovar contagem: ${session.kioskName}`,
     description: buildDescription(session),
     status: "awaiting_approval",
@@ -112,11 +118,17 @@ export async function syncStockCountTask(params: {
   session: StockAuditSession;
 }) {
   const projectId = await ensureTaskProject(params.context, {
-    slug: STOCK_COUNT_TASK_PROJECT_SLUG,
-    name: "Contagem de estoque",
-    description: "Tarefas operacionais geradas por sessões de contagem de estoque.",
+    slug: STOCK_TASK_PROJECT_SLUG,
+    name: "Gestão de Estoque",
+    description: "Projeto macro das tarefas operacionais de estoque.",
   });
-  const patch = buildTaskPatch(params.session, projectId);
+  const subprojectId = await ensureTaskSubproject(params.context, {
+    projectId,
+    slug: STOCK_COUNT_TASK_SUBPROJECT_SLUG,
+    name: "Contagem de estoque",
+    description: "Quadro de tarefas geradas por sessões de contagem de estoque.",
+  });
+  const patch = buildTaskPatch(params.session, projectId, subprojectId);
   const existingTaskId =
     params.session.taskId ?? (await findExistingStockCountTaskId(params.session.id));
 
@@ -154,6 +166,8 @@ export async function syncStockCountTask(params: {
       approverType: patch.approverType,
       approverId: patch.approverId,
       projectId,
+      subprojectId,
+      subprojectName: "Contagem de estoque",
       unitId: patch.unitId,
       unitName: patch.unitName,
       priority: patch.priority,

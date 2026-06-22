@@ -7,17 +7,10 @@ import { Menu, Search, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserProfile } from "./user-profile";
-import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
 import { type LegacyTask, NotificationCenter } from "./notification-center";
 import { GlobalBarcodeScanner } from "./global-barcode-scanner";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
-import {
-  fetchDPChecklistTasks,
-  updateDPChecklistTask,
-} from "@/features/dp-checklists/lib/client";
 import { cn } from "@/lib/utils";
-import type { OperationalTask } from "@/types";
 
 // ── Route label map (mirrors sidebar) ────────────────────────────────────────
 
@@ -36,10 +29,10 @@ const SECTION_MAP: Record<string, string> = {
   "/dashboard/financial/financial-flow": "Financeiro",
   "/dashboard/financial/dre": "Financeiro",
   "/dashboard/financial/settings": "Financeiro",
-  "/dashboard/dp": "Departamento Pessoal",
-  "/dashboard/dp/schedules": "Departamento Pessoal",
-  "/dashboard/dp/ferias": "Departamento Pessoal",
-  "/dashboard/dp/settings": "Departamento Pessoal",
+  "/dashboard/dp": "Departamento pessoal",
+  "/dashboard/dp/schedules": "Departamento pessoal",
+  "/dashboard/dp/ferias": "Departamento pessoal",
+  "/dashboard/dp/settings": "Departamento pessoal",
   "/dashboard/purchasing": "Compras",
   "/dashboard/registration": "Configurações",
   "/dashboard/settings": "Configurações",
@@ -48,15 +41,15 @@ const SECTION_MAP: Record<string, string> = {
 
 const LABEL_MAP: Record<string, string> = {
   "/dashboard": "Painel da gestão",
-  "/dashboard/operations": "Painel de Operações",
-  "/dashboard/tasks": "Tarefas Gerais",
+  "/dashboard/operations": "Painel de operações",
+  "/dashboard/tasks": "Tarefas gerais",
   "/dashboard/forms": "Formulários",
-  "/dashboard/stock": "Gestão de Estoque",
+  "/dashboard/stock": "Gestão de estoque",
   "/dashboard/expiry": "Validades",
   "/dashboard/stock/restock": "Reposição",
-  "/dashboard/stock/movement": "Histórico de Movimentos",
+  "/dashboard/stock/movement": "Histórico de movimentos",
   "/dashboard/stock/audit": "Auditoria",
-  "/dashboard/stock/analysis": "Análise de Consumo",
+  "/dashboard/stock/analysis": "Análise de consumo",
   "/dashboard/stock/purchasing": "Compras (legado)",
   "/dashboard/purchasing": "Compras",
   "/dashboard/purchasing/quotations": "Cotações",
@@ -65,24 +58,24 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/purchasing/financial": "Despesas de compras",
   "/dashboard/purchasing/costs": "Histórico de custo efetivo",
   "/dashboard/commercial": "Ficha técnica",
-  "/dashboard/goals": "Metas de Vendas",
-  "/dashboard/pricing": "Gestão de Preços",
-  "/dashboard/financial": "Painel Financeiro",
+  "/dashboard/goals": "Metas de vendas",
+  "/dashboard/pricing": "Gestão de preços",
+  "/dashboard/financial": "Painel financeiro",
   "/dashboard/financial/expenses": "Despesas",
-  "/dashboard/financial/expenses/new": "Nova Despesa",
-  "/dashboard/financial/expenses/import": "Importar Extrato",
-  "/dashboard/financial/cash-flow": "Fluxo de Caixa",
-  "/dashboard/financial/financial-flow": "Fluxo Financeiro",
+  "/dashboard/financial/expenses/new": "Nova despesa",
+  "/dashboard/financial/expenses/import": "Importar extrato",
+  "/dashboard/financial/cash-flow": "Fluxo de caixa",
+  "/dashboard/financial/financial-flow": "Fluxo financeiro",
   "/dashboard/financial/dre": "DRE",
-  "/dashboard/financial/settings": "Configurações Financeiras",
+  "/dashboard/financial/settings": "Configurações financeiras",
   "/dashboard/dp": "Painel DP",
-  "/dashboard/dp/schedules": "Escalas de Trabalho",
-  "/dashboard/dp/ferias": "Férias da Equipe",
+  "/dashboard/dp/schedules": "Escalas de trabalho",
+  "/dashboard/dp/ferias": "Férias da equipe",
   "/dashboard/dp/settings": "Configurações do DP",
   "/dashboard/dp/settings/collaborators": "Colaboradores",
-  "/dashboard/dp/settings/roles": "Cargos & Funções",
+  "/dashboard/dp/settings/roles": "Cargos e funções",
   "/dashboard/dp/settings/organogram": "Organograma",
-  "/dashboard/dp/settings/login-access": "Acesso por Escala",
+  "/dashboard/dp/settings/login-access": "Acesso por escala",
   "/dashboard/dp/settings/units": "Unidades do DP",
   "/dashboard/dp/settings/shifts": "Turnos do DP",
   "/dashboard/dp/settings/calendars": "Calendários do DP",
@@ -240,42 +233,42 @@ function StatusBar({ tasks }: { tasks: LegacyTask[] }) {
 
 const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Painel da gestão", href: "/dashboard", section: "Início" },
-  { label: "Painel de Operações", href: "/dashboard/operations", section: "Departamento Operacional" },
-  { label: "Tarefas gerais", href: "/dashboard/tasks", section: "Departamento Operacional" },
-  { label: "Formulários", href: "/dashboard/forms", section: "Departamento Operacional" },
-  { label: "Gestão de Estoque", href: "/dashboard/stock", section: "Departamento Operacional" },
-  { label: "Validades", href: "/dashboard/expiry", section: "Departamento Operacional" },
-  { label: "Reposição", href: "/dashboard/stock/restock", section: "Departamento Operacional" },
-  { label: "Histórico de Movimentos", href: "/dashboard/stock/movement", section: "Departamento Operacional" },
-  { label: "Auditoria de Estoque", href: "/dashboard/stock/audit", section: "Departamento Operacional" },
-  { label: "Análise de Consumo", href: "/dashboard/stock/analysis", section: "Departamento Operacional" },
-  { label: "Compras", href: "/dashboard/purchasing", section: "Departamento Operacional" },
-  { label: "Cotações", href: "/dashboard/purchasing/quotations", section: "Departamento Operacional" },
-  { label: "Pedidos de compra", href: "/dashboard/purchasing/orders", section: "Departamento Operacional" },
-  { label: "Recebimentos", href: "/dashboard/purchasing/receipts", section: "Departamento Operacional" },
-  { label: "Despesas de compras", href: "/dashboard/financial/expenses?origin=purchasing&status=pending_audit", section: "Departamento Financeiro" },
-  { label: "Histórico de custo efetivo", href: "/dashboard/purchasing/costs", section: "Departamento Operacional" },
-  { label: "Ficha técnica", href: "/dashboard/commercial", section: "Departamento Comercial" },
-  { label: "Metas de Vendas", href: "/dashboard/goals", section: "Departamento Comercial" },
-  { label: "Gestão de Preços", href: "/dashboard/pricing", section: "Departamento Comercial" },
-  { label: "Painel DP", href: "/dashboard/dp", section: "Departamento Pessoal" },
-  { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", section: "Departamento Pessoal" },
-  { label: "Férias da equipe", href: "/dashboard/dp/ferias", section: "Departamento Pessoal" },
-  { label: "Configurações do DP", href: "/dashboard/settings?department=pessoal&tab=users", section: "Departamento Pessoal" },
-  { label: "Colaboradores", href: "/dashboard/settings?department=pessoal&tab=users", section: "Departamento Pessoal" },
-  { label: "Cargos & Funções", href: "/dashboard/settings?department=pessoal&tab=roles", section: "Departamento Pessoal" },
-  { label: "Organograma", href: "/dashboard/settings?department=pessoal&tab=organogram", section: "Departamento Pessoal" },
-  { label: "Acesso por Escala", href: "/dashboard/settings?department=pessoal&tab=login-access", section: "Departamento Pessoal" },
-  { label: "Campos do Perfil", href: "/dashboard/settings?department=pessoal&tab=profile-fields", section: "Departamento Pessoal" },
-  { label: "Turnos do DP", href: "/dashboard/settings?department=pessoal&tab=shifts", section: "Departamento Pessoal" },
-  { label: "Calendários do DP", href: "/dashboard/settings?department=pessoal&tab=calendars", section: "Departamento Pessoal" },
-  { label: "Coala Signage", href: "/dashboard/signage", section: "Departamento de Marketing" },
-  { label: "Painel Financeiro", href: "/dashboard/financial", section: "Departamento Financeiro" },
-  { label: "Despesas", href: "/dashboard/financial/expenses", section: "Departamento Financeiro" },
-  { label: "Nova Despesa", href: "/dashboard/financial/expenses/new", section: "Departamento Financeiro" },
-  { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", section: "Departamento Financeiro" },
-  { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", section: "Departamento Financeiro" },
-  { label: "DRE", href: "/dashboard/financial/dre", section: "Departamento Financeiro" },
+  { label: "Painel de operações", href: "/dashboard/operations", section: "Departamento operacional" },
+  { label: "Tarefas gerais", href: "/dashboard/tasks", section: "Departamento operacional" },
+  { label: "Formulários", href: "/dashboard/forms", section: "Departamento operacional" },
+  { label: "Gestão de estoque", href: "/dashboard/stock", section: "Departamento operacional" },
+  { label: "Validades", href: "/dashboard/expiry", section: "Departamento operacional" },
+  { label: "Reposição", href: "/dashboard/stock/restock", section: "Departamento operacional" },
+  { label: "Histórico de movimentos", href: "/dashboard/stock/movement", section: "Departamento operacional" },
+  { label: "Auditoria de estoque", href: "/dashboard/stock/audit", section: "Departamento operacional" },
+  { label: "Análise de consumo", href: "/dashboard/stock/analysis", section: "Departamento operacional" },
+  { label: "Compras", href: "/dashboard/purchasing", section: "Departamento operacional" },
+  { label: "Cotações", href: "/dashboard/purchasing/quotations", section: "Departamento operacional" },
+  { label: "Pedidos de compra", href: "/dashboard/purchasing/orders", section: "Departamento operacional" },
+  { label: "Recebimentos", href: "/dashboard/purchasing/receipts", section: "Departamento operacional" },
+  { label: "Despesas de compras", href: "/dashboard/financial/expenses?origin=purchasing&status=pending_audit", section: "Departamento financeiro" },
+  { label: "Histórico de custo efetivo", href: "/dashboard/purchasing/costs", section: "Departamento operacional" },
+  { label: "Ficha técnica", href: "/dashboard/commercial", section: "Departamento comercial" },
+  { label: "Metas de vendas", href: "/dashboard/goals", section: "Departamento comercial" },
+  { label: "Gestão de preços", href: "/dashboard/pricing", section: "Departamento comercial" },
+  { label: "Painel DP", href: "/dashboard/dp", section: "Departamento pessoal" },
+  { label: "Escalas de trabalho", href: "/dashboard/dp/schedules", section: "Departamento pessoal" },
+  { label: "Férias da equipe", href: "/dashboard/dp/ferias", section: "Departamento pessoal" },
+  { label: "Configurações do DP", href: "/dashboard/settings?department=pessoal&tab=users", section: "Departamento pessoal" },
+  { label: "Colaboradores", href: "/dashboard/settings?department=pessoal&tab=users", section: "Departamento pessoal" },
+  { label: "Cargos e funções", href: "/dashboard/settings?department=pessoal&tab=roles", section: "Departamento pessoal" },
+  { label: "Organograma", href: "/dashboard/settings?department=pessoal&tab=organogram", section: "Departamento pessoal" },
+  { label: "Acesso por escala", href: "/dashboard/settings?department=pessoal&tab=login-access", section: "Departamento pessoal" },
+  { label: "Campos do perfil", href: "/dashboard/settings?department=pessoal&tab=profile-fields", section: "Departamento pessoal" },
+  { label: "Turnos do DP", href: "/dashboard/settings?department=pessoal&tab=shifts", section: "Departamento pessoal" },
+  { label: "Calendários do DP", href: "/dashboard/settings?department=pessoal&tab=calendars", section: "Departamento pessoal" },
+  { label: "Coala Signage", href: "/dashboard/signage", section: "Departamento de marketing" },
+  { label: "Painel financeiro", href: "/dashboard/financial", section: "Departamento financeiro" },
+  { label: "Despesas", href: "/dashboard/financial/expenses", section: "Departamento financeiro" },
+  { label: "Nova despesa", href: "/dashboard/financial/expenses/new", section: "Departamento financeiro" },
+  { label: "Fluxo de caixa", href: "/dashboard/financial/cash-flow", section: "Departamento financeiro" },
+  { label: "Fluxo financeiro", href: "/dashboard/financial/financial-flow", section: "Departamento financeiro" },
+  { label: "DRE", href: "/dashboard/financial/dre", section: "Departamento financeiro" },
   { label: "Cadastros", href: "/dashboard/settings?department=operacional&tab=cadastros", section: "Configurações" },
   { label: "Configurações", href: "/dashboard/settings", section: "Configurações" },
   { label: "Ajuda", href: "/dashboard/help", section: "Configurações" },
@@ -409,138 +402,7 @@ interface HeaderProps {
 
 export function Header({ onMenuClick, tasks }: HeaderProps) {
   const pathname = usePathname();
-  const { firebaseUser, permissions } = useAuth();
-  const { toast } = useToast();
   const { section, current } = getBreadcrumb(pathname ?? "");
-  const [checklistTasks, setChecklistTasks] = useState<OperationalTask[]>([]);
-  const [checklistLoading, setChecklistLoading] = useState(false);
-  const [legacyChecklistAlertsEnabled, setLegacyChecklistAlertsEnabled] =
-    useState(false);
-  const checklistFetchInFlightRef = useRef(false);
-
-  const canViewChecklistAlerts =
-    permissions.dp?.view ||
-    permissions.dp?.schedules?.view ||
-    permissions.dp?.schedules?.edit ||
-    permissions.dp?.collaborators?.view ||
-    permissions.dp?.collaborators?.edit ||
-    permissions.settings?.manageUsers;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadRolloutState() {
-      if (!firebaseUser || !canViewChecklistAlerts) {
-        if (!cancelled) {
-          setLegacyChecklistAlertsEnabled(false);
-          setChecklistTasks([]);
-        }
-        return;
-      }
-
-      try {
-        const token = await firebaseUser.getIdToken();
-        const response = await fetch("/api/dp/checklists/rollout", {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          if (!cancelled) {
-            setLegacyChecklistAlertsEnabled(false);
-            setChecklistTasks([]);
-          }
-          return;
-        }
-
-        const payload = (await response.json()) as {
-          legacyReadAllowed?: boolean;
-        };
-
-        if (!cancelled) {
-          const enabled = payload.legacyReadAllowed === true;
-          setLegacyChecklistAlertsEnabled(enabled);
-          if (!enabled) {
-            setChecklistTasks([]);
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setLegacyChecklistAlertsEnabled(false);
-          setChecklistTasks([]);
-        }
-      }
-    }
-
-    void loadRolloutState();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canViewChecklistAlerts, firebaseUser]);
-
-  const refreshChecklistTasks = useCallback(async () => {
-    if (!firebaseUser || !canViewChecklistAlerts || !legacyChecklistAlertsEnabled) {
-      setChecklistTasks([]);
-      return;
-    }
-
-    if (checklistFetchInFlightRef.current) {
-      return;
-    }
-
-    checklistFetchInFlightRef.current = true;
-    setChecklistLoading(true);
-
-    try {
-      const payload = await fetchDPChecklistTasks(firebaseUser, {
-        status: ["open", "in_progress", "escalated"],
-      });
-      setChecklistTasks(payload.tasks);
-    } catch (error) {
-      console.error("[Header] Falha ao carregar alertas operacionais.", error);
-    } finally {
-      checklistFetchInFlightRef.current = false;
-      setChecklistLoading(false);
-    }
-  }, [canViewChecklistAlerts, firebaseUser, legacyChecklistAlertsEnabled]);
-
-  useEffect(() => {
-    void refreshChecklistTasks();
-
-    if (!firebaseUser || !canViewChecklistAlerts || !legacyChecklistAlertsEnabled) {
-      return;
-    }
-  }, [canViewChecklistAlerts, firebaseUser, legacyChecklistAlertsEnabled, refreshChecklistTasks]);
-
-  const handleResolveChecklistTask = useCallback(
-    async (taskId: string) => {
-      if (!firebaseUser || !legacyChecklistAlertsEnabled) return;
-
-      try {
-        await updateDPChecklistTask(firebaseUser, taskId, { status: "resolved" });
-        await refreshChecklistTasks();
-
-        toast({
-          title: "Alerta resolvido",
-          description: "A tarefa operacional foi marcada como resolvida.",
-        });
-      } catch (error) {
-        toast({
-          title: "Falha ao resolver alerta",
-          description:
-            error instanceof Error
-              ? error.message
-              : "Não foi possível atualizar a tarefa operacional agora.",
-          variant: "destructive",
-        });
-      }
-    },
-    [firebaseUser, legacyChecklistAlertsEnabled, refreshChecklistTasks, toast]
-  );
 
   return (
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-sm">
@@ -579,9 +441,6 @@ export function Header({ onMenuClick, tasks }: HeaderProps) {
           <GlobalBarcodeScanner />
           <NotificationCenter
             tasks={tasks}
-            checklistTasks={checklistTasks}
-            checklistLoading={checklistLoading}
-            onResolveChecklistTask={handleResolveChecklistTask}
           />
           <UserProfile />
         </div>

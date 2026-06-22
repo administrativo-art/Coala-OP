@@ -170,6 +170,7 @@ type EditorTaskTrigger = {
   title_template: string;
   description_template: string;
   task_project_id: string;
+  task_subproject_id: string;
   assignee_type: "user" | "role" | "team" | "unit";
   assignee_id: string;
   assignee_name: string;
@@ -366,6 +367,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   title_template: trigger.title_template,
                   description_template: trigger.description_template ?? "",
                   task_project_id: trigger.task_project_id,
+                  task_subproject_id: trigger.task_subproject_id ?? "",
                   assignee_type: trigger.assignee_type,
                   assignee_id: trigger.assignee_id,
                   assignee_name: trigger.assignee_name ?? "",
@@ -535,6 +537,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   ? undefined
                   : trigger.description_template,
               task_project_id: trigger.task_project_id,
+              ...(trigger.task_subproject_id ? { task_subproject_id: trigger.task_subproject_id } : {}),
               assignee_type: trigger.assignee_type,
               assignee_id: trigger.assignee_id,
               assignee_name:
@@ -837,6 +840,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
           title_template: "Ação corretiva: {{item_title}}",
           description_template: "",
           task_project_id: defaultTaskProjectId,
+          task_subproject_id: "",
           assignee_type: "role",
           assignee_id: "",
           assignee_name: "",
@@ -2686,6 +2690,23 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                                       }
                                       placeholder="Task project id"
                                     />
+                                    <Input
+                                      value={trigger.task_subproject_id}
+                                      onChange={(event) =>
+                                        updateTaskTrigger(
+                                          section.id,
+                                          item.id,
+                                          trigger.id,
+                                          {
+                                            task_subproject_id:
+                                              event.target.value,
+                                          }
+                                        )
+                                      }
+                                      placeholder="Task subproject id (opcional)"
+                                    />
+                                  </div>
+                                  <div className="grid gap-3 md:grid-cols-2">
                                     <select
                                       className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                                       value={trigger.assignee_type}
@@ -2696,13 +2717,15 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                                           trigger.id,
                                           {
                                             assignee_type:
-                                              event.target.value as "user" | "role",
+                                              event.target.value as "user" | "role" | "team" | "unit",
                                           }
                                         )
                                       }
                                     >
                                       <option value="role">Cargo</option>
                                       <option value="user">Usuário</option>
+                                      <option value="team">Equipe</option>
+                                      <option value="unit">Unidade</option>
                                     </select>
                                   </div>
                                   <div className="grid gap-3 md:grid-cols-2">

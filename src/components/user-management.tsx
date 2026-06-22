@@ -1191,7 +1191,7 @@ export function UserManagement() {
                           </span>
                         </div>
                         <FormDescription className="text-xs">
-                          Proximo ato: {nextTransportVoucherActionLabel(currentTransportVoucherStatus).toLowerCase()} beneficio.
+                          Próximo ato: {nextTransportVoucherActionLabel(currentTransportVoucherStatus).toLowerCase()} benefício.
                         </FormDescription>
                       </div>
 
@@ -1331,7 +1331,7 @@ export function UserManagement() {
                 <SelectValue placeholder="Perfil" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os Perfis</SelectItem>
+                <SelectItem value="all">Todos os perfis</SelectItem>
                 {profiles.map(profile => (
                   <SelectItem key={profile.id} value={profile.id}>{profile.name}</SelectItem>
                 ))}
@@ -1342,7 +1342,7 @@ export function UserManagement() {
                 <SelectValue placeholder="Quiosque" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os Quiosques</SelectItem>
+                <SelectItem value="all">Todos os quiosques</SelectItem>
                 {kiosks.map(kiosk => (
                   <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
                 ))}
@@ -1419,7 +1419,7 @@ export function UserManagement() {
                         </div>
                         <div className="text-xs font-black text-slate-700">
                           {lastAccessLabel((user as any).lastLoginAt)}
-                          <p className="text-[10px] font-semibold text-slate-400">ultimo acesso</p>
+                          <p className="text-[10px] font-semibold text-slate-400">último acesso</p>
                         </div>
                         <div className="flex items-center justify-end gap-1">
                           {permissions.settings.manageUsers && (
@@ -1493,7 +1493,7 @@ export function UserManagement() {
             </div>
             {transportVoucherDialog?.toStatus === 'active' && (
               <div>
-                <Label>Valor diario (R$)</Label>
+                <Label>Valor diário (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -1510,7 +1510,7 @@ export function UserManagement() {
                 value={transportVoucherReason}
                 onChange={(event) => setTransportVoucherReason(event.target.value)}
                 rows={3}
-                placeholder="Ex.: colaborador solicitou adesao ao beneficio."
+                placeholder="Ex.: colaborador solicitou adesão ao benefício."
               />
             </div>
           </div>

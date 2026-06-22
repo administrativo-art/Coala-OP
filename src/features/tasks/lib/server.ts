@@ -10,6 +10,7 @@ import {
   type TaskHistoryItem,
   type TaskOrigin,
   type TaskProject,
+  type TaskSubproject,
   type TaskStatusDoc,
 } from "@/types";
 import { type FormTaskTrigger } from "@/types/forms";
@@ -18,9 +19,11 @@ type FirestoreRecord = Record<string, unknown>;
 
 const DEFAULT_PROJECT_SLUG = "general";
 const DEFAULT_PROJECT_NAME = "Tarefas gerais";
+const DEFAULT_SUBPROJECT_SLUG = "geral";
+const DEFAULT_SUBPROJECT_NAME = "Geral";
 
 const DEFAULT_STATUSES: Array<
-  Omit<TaskStatusDoc, "id" | "project_id"> & { id: string }
+  Omit<TaskStatusDoc, "id" | "project_id" | "subproject_id"> & { id: string }
 > = [
   {
     id: "pending",
@@ -161,6 +164,16 @@ function adaptTaskDoc(id: string, data: FirestoreRecord): Task {
     id,
     ...(typeof data.workspace_id === "string" ? { workspaceId: data.workspace_id } : {}),
     ...(typeof data.project_id === "string" ? { projectId: data.project_id } : {}),
+    ...(typeof data.subproject_id === "string"
+      ? { subprojectId: data.subproject_id }
+      : typeof data.subprojectId === "string"
+        ? { subprojectId: data.subprojectId }
+        : {}),
+    ...(typeof data.subproject_name === "string"
+      ? { subprojectName: data.subproject_name }
+      : typeof data.subprojectName === "string"
+        ? { subprojectName: data.subprojectName }
+        : {}),
     ...(typeof data.status_id === "string" ? { statusId: data.status_id } : {}),
     title: typeof data.title === "string" ? data.title : "Tarefa sem título",
     ...(typeof data.description === "string" ? { description: data.description } : {}),
@@ -295,12 +308,16 @@ function adaptTaskDoc(id: string, data: FirestoreRecord): Task {
   };
 }
 
-function makeStatusId(projectId: string, slug: string) {
-  return `${projectId}__${slug}`;
+function makeStatusId(scopeId: string, slug: string) {
+  return `${scopeId}__${slug}`;
 }
 
 function makeProjectId(workspaceId: string, slug: string) {
   return `${workspaceId}__${slug}`;
+}
+
+function makeSubprojectId(projectId: string, slug: string) {
+  return `${projectId}__${slug}`;
 }
 
 export function buildDeterministicTaskId(parts: string[]) {
@@ -338,37 +355,69 @@ export async function ensureTaskProject(
     { merge: true }
   );
 
-  const batch = dbAdmin.batch();
-  DEFAULT_STATUSES.forEach((status) => {
-    const statusId = makeStatusId(projectId, status.slug);
-    batch.set(
-      dbAdmin.collection("task_statuses").doc(statusId),
-      {
-        project_id: projectId,
-        name: status.name,
-        slug: status.slug,
-        category: status.category,
-        is_initial: status.is_initial,
-        is_terminal: status.is_terminal,
-        order: status.order,
-        color: status.color,
-      },
-      { merge: true }
-    );
+  await ensureTaskSubproject(context, {
+    projectId,
+    slug: DEFAULT_SUBPROJECT_SLUG,
+    name: DEFAULT_SUBPROJECT_NAME,
+    description: "Fluxo padrão do projeto.",
   });
-  await batch.commit();
 
   return projectId;
 }
 
-export async function ensureTaskProjectStatuses(projectId: string) {
+export async function ensureTaskSubproject(
+  context: ServerUserContext,
+  input: { projectId: string; slug: string; name: string; description?: string; order?: number }
+) {
+  const subprojectId = makeSubprojectId(input.projectId, input.slug);
+  const subprojectRef = dbAdmin.collection("task_subprojects").doc(subprojectId);
+  const now = new Date().toISOString();
+
+  await subprojectRef.set(
+    {
+      workspace_id: context.workspace_id,
+      project_id: input.projectId,
+      name: input.name,
+      description: input.description ?? "",
+      slug: input.slug,
+      order: input.order ?? 0,
+      created_at: now,
+      updated_at: now,
+      created_by: {
+        user_id: context.userDoc.id,
+        username: context.userDoc.username,
+      },
+    },
+    { merge: true }
+  );
+
+  await ensureTaskProjectStatuses(input.projectId, subprojectId);
+
+  return subprojectId;
+}
+
+export async function ensureDefaultTaskSubproject(
+  context: ServerUserContext,
+  projectId: string
+) {
+  return ensureTaskSubproject(context, {
+    projectId,
+    slug: DEFAULT_SUBPROJECT_SLUG,
+    name: DEFAULT_SUBPROJECT_NAME,
+    description: "Fluxo padrão do projeto.",
+  });
+}
+
+export async function ensureTaskProjectStatuses(projectId: string, subprojectId?: string) {
+  const statusScopeId = subprojectId ?? projectId;
   const batch = dbAdmin.batch();
   DEFAULT_STATUSES.forEach((status) => {
-    const statusId = makeStatusId(projectId, status.slug);
+    const statusId = makeStatusId(statusScopeId, status.slug);
     batch.set(
       dbAdmin.collection("task_statuses").doc(statusId),
       {
         project_id: projectId,
+        ...(subprojectId ? { subproject_id: subprojectId } : {}),
         name: status.name,
         slug: status.slug,
         category: status.category,
@@ -390,6 +439,29 @@ export async function listTaskProjects(workspaceId: string) {
     .get();
 
   return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Omit<TaskProject, "id">) }));
+}
+
+export async function listTaskSubprojects(projectIds: string[]) {
+  if (projectIds.length === 0) return [] as TaskSubproject[];
+
+  const chunks: string[][] = [];
+  for (let index = 0; index < projectIds.length; index += 10) {
+    chunks.push(projectIds.slice(index, index + 10));
+  }
+
+  const snapshots = await Promise.all(
+    chunks.map((projectIdChunk) =>
+      dbAdmin
+        .collection("task_subprojects")
+        .where("project_id", "in", projectIdChunk)
+        .get()
+    )
+  );
+
+  return snapshots
+    .flatMap((snapshot) => snapshot.docs)
+    .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<TaskSubproject, "id">) }))
+    .sort((left, right) => (left.order ?? 0) - (right.order ?? 0) || left.name.localeCompare(right.name, "pt-BR"));
 }
 
 export async function listTaskStatuses(projectIds: string[]) {
@@ -529,31 +601,38 @@ async function syncFormExecutionTaskStatus(params: {
   });
 }
 
-async function resolveStatusDoc(projectId: string, status: Task["status"]) {
+async function resolveStatusDoc(projectId: string, status: Task["status"], subprojectId?: string) {
   const slug = status === "reopened" || status === "rejected" ? "pending" : status;
-  const statusId = makeStatusId(projectId, slug);
+  const statusId = makeStatusId(subprojectId ?? projectId, slug);
   const snap = await dbAdmin.collection("task_statuses").doc(statusId).get();
   if (!snap.exists) {
+    if (subprojectId) {
+      return resolveStatusDoc(projectId, status);
+    }
     throw new Error("Status da tarefa não encontrado.");
   }
 
   return { id: snap.id, ...(snap.data() as Omit<TaskStatusDoc, "id">) };
 }
 
-async function resolveInitialStatusDoc(projectId: string) {
-  const snap = await dbAdmin
+async function resolveInitialStatusDoc(projectId: string, subprojectId?: string) {
+  let query: FirebaseFirestore.Query = dbAdmin
     .collection("task_statuses")
     .where("project_id", "==", projectId)
-    .where("is_initial", "==", true)
-    .limit(1)
-    .get();
+    .where("is_initial", "==", true);
+
+  if (subprojectId) {
+    query = query.where("subproject_id", "==", subprojectId);
+  }
+
+  const snap = await query.limit(1).get();
 
   if (!snap.empty) {
     const doc = snap.docs[0];
     return { id: doc.id, ...(doc.data() as Omit<TaskStatusDoc, "id">) };
   }
 
-  return resolveStatusDoc(projectId, "pending");
+  return resolveStatusDoc(projectId, "pending", subprojectId);
 }
 
 export async function createManualTask(params: {
@@ -568,6 +647,8 @@ export async function createManualTask(params: {
     approverId?: string;
     dueDate?: string;
     projectId?: string;
+    subprojectId?: string;
+    subprojectName?: string;
     unitId?: string;
     unitName?: string;
     priority?: Task["priority"];
@@ -583,8 +664,12 @@ export async function createManualTask(params: {
     typeof params.input.projectId === "string" && params.input.projectId.trim()
       ? params.input.projectId.trim()
       : await ensureDefaultTaskProject(params.context);
-  await ensureTaskProjectStatuses(projectId);
-  const status = await resolveInitialStatusDoc(projectId);
+  const subprojectId =
+    typeof params.input.subprojectId === "string" && params.input.subprojectId.trim()
+      ? params.input.subprojectId.trim()
+      : await ensureDefaultTaskSubproject(params.context, projectId);
+  await ensureTaskProjectStatuses(projectId, subprojectId);
+  const status = await resolveInitialStatusDoc(projectId, subprojectId);
   const now = new Date().toISOString();
   const history = [buildHistoryItem(params.context, "created", "Tarefa criada manualmente.")];
 
@@ -592,6 +677,9 @@ export async function createManualTask(params: {
   const payload = {
     workspace_id: params.context.workspace_id,
     project_id: projectId,
+    subproject_id: subprojectId,
+    subprojectId,
+    ...(params.input.subprojectName ? { subproject_name: params.input.subprojectName, subprojectName: params.input.subprojectName } : {}),
     status_id: status.id,
     status_slug: status.slug,
     title: params.input.title,
@@ -641,6 +729,7 @@ export async function createManualTask(params: {
     // Bridge fields while the UI still consumes the legacy Task shape.
     status: "pending",
     projectId,
+    ...(params.input.subprojectName ? { subprojectName: params.input.subprojectName } : {}),
     statusId: status.id,
     assigneeType: params.input.assigneeType ?? "user",
     assigneeId: params.input.assigneeId ?? params.context.userDoc.id,
@@ -704,9 +793,33 @@ export async function ensureTaskFromOrigin(params: {
   ]);
   const taskRef = dbAdmin.collection("tasks").doc(taskId);
   const projectId = params.trigger.task_project_id;
-  await ensureTaskProjectStatuses(projectId);
+  const subprojectId =
+    typeof params.trigger.task_subproject_id === "string" && params.trigger.task_subproject_id.trim()
+      ? params.trigger.task_subproject_id.trim()
+      : makeSubprojectId(projectId, DEFAULT_SUBPROJECT_SLUG);
+  if (!params.trigger.task_subproject_id) {
+    const now = new Date().toISOString();
+    await dbAdmin
+      .collection("task_subprojects")
+      .doc(subprojectId)
+      .set(
+        {
+          workspace_id: params.workspaceId,
+          project_id: projectId,
+          name: DEFAULT_SUBPROJECT_NAME,
+          description: "Fluxo padrão do projeto.",
+          slug: DEFAULT_SUBPROJECT_SLUG,
+          order: 0,
+          created_at: now,
+          updated_at: now,
+          created_by: params.actor,
+        },
+        { merge: true }
+      );
+  }
+  await ensureTaskProjectStatuses(projectId, subprojectId);
 
-  const pendingStatus = await resolveStatusDoc(projectId, "pending");
+  const pendingStatus = await resolveStatusDoc(projectId, "pending", subprojectId);
 
   try {
     await dbAdmin.runTransaction(async (tx) => {
@@ -719,6 +832,8 @@ export async function ensureTaskFromOrigin(params: {
       const payload = {
         workspace_id: params.workspaceId,
         project_id: projectId,
+        subproject_id: subprojectId,
+        subprojectId,
         status_id: pendingStatus.id,
         status_slug: pendingStatus.slug,
         title: params.title,
@@ -855,12 +970,28 @@ export async function updateTaskDocument(params: {
     nextData.projectId = params.updates.projectId;
     nextData.project_id = params.updates.projectId;
   }
+  if (typeof params.updates.subprojectId === "string") {
+    nextData.subprojectId = params.updates.subprojectId;
+    nextData.subproject_id = params.updates.subprojectId;
+  }
+  if (typeof params.updates.subprojectName === "string") {
+    nextData.subprojectName = params.updates.subprojectName;
+    nextData.subproject_name = params.updates.subprojectName;
+  }
   if (typeof params.updates.status === "string") {
     const projectId =
-      typeof data.project_id === "string"
-        ? data.project_id
-        : await ensureDefaultTaskProject(params.context);
-    const statusDoc = await resolveStatusDoc(projectId, params.updates.status);
+      typeof nextData.project_id === "string"
+        ? nextData.project_id
+        : typeof data.project_id === "string"
+          ? data.project_id
+          : await ensureDefaultTaskProject(params.context);
+    const subprojectId =
+      typeof nextData.subproject_id === "string"
+        ? nextData.subproject_id
+        : typeof data.subproject_id === "string"
+          ? data.subproject_id
+          : undefined;
+    const statusDoc = await resolveStatusDoc(projectId, params.updates.status, subprojectId);
     nextData.status_id = statusDoc.id;
     nextData.status_slug = statusDoc.slug;
     nextData.status = params.updates.status === "reopened" ? "pending" : params.updates.status;
@@ -995,7 +1126,9 @@ export async function updateTaskStatus(params: {
     typeof data.project_id === "string"
       ? data.project_id
       : await ensureDefaultTaskProject(params.context);
-  const statusDoc = await resolveStatusDoc(projectId, params.status);
+  const subprojectId =
+    typeof data.subproject_id === "string" ? data.subproject_id : undefined;
+  const statusDoc = await resolveStatusDoc(projectId, params.status, subprojectId);
 
   let action: TaskHistoryItem["action"] = "status_changed";
   if (params.status === "completed") {

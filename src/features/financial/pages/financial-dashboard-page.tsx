@@ -62,7 +62,7 @@ function KpiCard({
         <Icon className="h-4 w-4 text-primary" />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+        <div className="text-xl font-bold">{value}</div>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </CardContent>
     </Card>
@@ -365,7 +365,7 @@ export function FinancialDashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Painel financeiro</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Painel financeiro</h1>
         <p className="text-muted-foreground">
           Visão consolidada do módulo financeiro para {user?.username ?? "o usuário atual"}.
         </p>
@@ -373,7 +373,7 @@ export function FinancialDashboardPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {loading ? (
-          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32 w-full" />)
+          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-28 w-full" />)
         ) : (
           <>
             <KpiCard

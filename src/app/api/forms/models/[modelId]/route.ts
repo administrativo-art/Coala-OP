@@ -11,8 +11,7 @@ export const dynamic = "force-dynamic";
 function canManageModels(context: Awaited<ReturnType<typeof requireUser>>) {
   return (
     context.isDefaultAdmin ||
-    context.permissions.forms.global.manage_templates ||
-    context.permissions.dp.checklists.manageTemplates
+    context.permissions.forms.global.manage_templates
   );
 }
 

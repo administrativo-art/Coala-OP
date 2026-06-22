@@ -10,7 +10,7 @@ import type { DPShiftDefinition, User } from '@/types';
 
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search } from 'lucide-react';
@@ -35,6 +35,7 @@ function CollaboratorCard({ user, shiftDefinitions }: { user: User; shiftDefinit
   return (
     <div className="flex items-start gap-4 py-4 px-1">
       <Avatar className="h-10 w-10 shrink-0">
+        <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
         <AvatarFallback className="text-sm">{initials(user.username)}</AvatarFallback>
       </Avatar>
 

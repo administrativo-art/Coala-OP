@@ -29,16 +29,19 @@ export async function PATCH(
       !body ||
       typeof body.project_id !== "string" ||
       !body.project_id ||
+      typeof body.subproject_id !== "string" ||
+      !body.subproject_id ||
       typeof body.name !== "string" ||
       !body.name.trim() ||
       typeof body.slug !== "string" ||
       !body.slug.trim()
     ) {
-      return NextResponse.json({ error: "Projeto, nome e slug são obrigatórios." }, { status: 400 });
+      return NextResponse.json({ error: "Projeto, subprojeto, nome e slug são obrigatórios." }, { status: 400 });
     }
 
     const patch = {
       project_id: body.project_id,
+      subproject_id: body.subproject_id,
       name: body.name.trim(),
       slug: body.slug.trim(),
       category: typeof body.category === "string" ? body.category : "active",
@@ -55,7 +58,7 @@ export async function PATCH(
       username: context.userDoc.username,
       module: "tasks",
       action: "status_updated",
-      metadata: { status_id: statusId, project_id: patch.project_id, slug: patch.slug },
+      metadata: { status_id: statusId, project_id: patch.project_id, subproject_id: patch.subproject_id, slug: patch.slug },
     });
 
     return NextResponse.json({ status: { id: statusId, ...(existing.data() ?? {}), ...patch } });

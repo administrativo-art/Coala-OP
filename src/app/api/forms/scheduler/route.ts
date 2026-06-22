@@ -73,8 +73,7 @@ function canRunScheduler(context: SchedulerContext) {
   return (
     context.isDefaultAdmin ||
     context.permissions.forms.global.manage_templates ||
-    context.permissions.forms.global.create_projects ||
-    context.permissions.dp.checklists.manageTemplates
+    context.permissions.forms.global.create_projects
   );
 }
 

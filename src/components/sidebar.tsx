@@ -97,10 +97,10 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             label: "Formulários",
             href: "/dashboard/forms",
             icon: FileText,
-            show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.dp?.checklists?.view || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.manageTemplates,
+            show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.forms.global.manage_templates || permissions.forms.global.view_analytics,
             children: [
-              { label: "Painel", href: "/dashboard/forms", icon: LayoutGrid, show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.dp?.checklists?.view || permissions.dp?.checklists?.manageTemplates },
-              { label: "Meus formulários", href: "/dashboard/forms/mine", icon: ClipboardCheck, show: permissions.forms.global.view_all_projects || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.view },
+              { label: "Painel", href: "/dashboard/forms", icon: LayoutGrid, show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.forms.global.manage_templates || permissions.forms.global.view_analytics },
+              { label: "Meus formulários", href: "/dashboard/forms/mine", icon: ClipboardCheck, show: permissions.forms.global.view_all_projects },
             ],
           },
           {
