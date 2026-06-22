@@ -83,6 +83,11 @@ function eventLabel(value: string) {
 
 function sizeLabel(value?: string | null) {
   const text = String(value ?? "").trim();
+  const normalized = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (normalized === "unico" || normalized === "tamanho unico") return "ÚNICO";
   return text || "Sem tamanho";
 }
 

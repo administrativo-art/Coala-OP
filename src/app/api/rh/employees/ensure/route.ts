@@ -5,7 +5,8 @@ import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import type { User } from "@/types";
-import { DEFAULT_COMPLEMENTARY_FIELDS } from "@/features/rh/lib/default-field-map";
+import { DEFAULT_COMPLEMENTARY_FIELDS, DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
+import type { FieldMapEntry, ProfileBlockConfig } from "@/types/rh";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,10 +32,12 @@ async function ensureFieldMap() {
   const current = fieldMapSnap.exists ? fieldMapSnap.data() : null;
   const currentFields =
     current?.fields && typeof current.fields === "object"
-      ? current.fields as Record<string, unknown>
+      ? current.fields as Record<string, FieldMapEntry>
       : {};
-  const missingEntries = Object.entries(DEFAULT_COMPLEMENTARY_FIELDS)
-    .filter(([key]) => currentFields[key] == null);
+  const currentBlocks =
+    current?.profile_blocks && typeof current.profile_blocks === "object"
+      ? current.profile_blocks as Record<string, ProfileBlockConfig>
+      : {};
 
   if (!fieldMapSnap.exists) {
     await fieldMapRef.set({
@@ -47,13 +50,35 @@ async function ensureFieldMap() {
     return;
   }
 
-  if (missingEntries.length === 0) return;
+  const defaultUpdates = Object.fromEntries(
+    Object.entries(DEFAULT_COMPLEMENTARY_FIELDS)
+      .map(([key, defaultEntry]) => {
+        const currentEntry = currentFields[key];
+        if (!currentEntry) return [key, defaultEntry] as const;
+        const nextEntry: FieldMapEntry = { ...currentEntry };
+        if (!nextEntry.group && defaultEntry.group) nextEntry.group = defaultEntry.group;
+        if (!nextEntry.subgroup && defaultEntry.subgroup) nextEntry.subgroup = defaultEntry.subgroup;
+        if (!nextEntry.repeatable && defaultEntry.repeatable) nextEntry.repeatable = defaultEntry.repeatable;
+        if ((!nextEntry.conditionals || nextEntry.conditionals.length === 0) && defaultEntry.conditionals?.length) {
+          nextEntry.conditionals = defaultEntry.conditionals;
+        }
+        const changed = !currentEntry || nextEntry.group !== currentEntry.group || nextEntry.subgroup !== currentEntry.subgroup || nextEntry.repeatable !== currentEntry.repeatable || nextEntry.conditionals !== currentEntry.conditionals;
+        return changed ? [key, nextEntry] as const : null;
+      })
+      .filter((entry): entry is readonly [string, FieldMapEntry] => entry !== null)
+  );
+  const blockUpdates = Object.fromEntries(
+    Object.entries(DEFAULT_PROFILE_BLOCKS).filter(([key]) => !currentBlocks[key])
+  );
+
+  if (Object.keys(defaultUpdates).length === 0 && Object.keys(blockUpdates).length === 0) return;
 
   await fieldMapRef.set(
     {
       version: current?.version ?? "coala-rh-v1.3",
       source: current?.source ?? "coala_internal",
-      fields: Object.fromEntries(missingEntries),
+      ...(Object.keys(defaultUpdates).length > 0 ? { fields: defaultUpdates } : {}),
+      ...(Object.keys(blockUpdates).length > 0 ? { profile_blocks: blockUpdates } : {}),
       updated_at: Timestamp.now(),
     },
     { merge: true },

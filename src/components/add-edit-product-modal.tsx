@@ -110,7 +110,17 @@ const WIZARD_STEPS = [
     { id: 4, label: 'Nutricional', icon: ImageIcon, description: 'Opcional — fotografe a embalagem; o assistente transcreve quando solicitado.' },
 ] as const;
 
-const APPAREL_SIZE_OPTIONS = ['Tamanho único', 'P', 'M', 'G', 'GG'] as const;
+const APPAREL_SIZE_OPTIONS = ['ÚNICO', 'P', 'M', 'G', 'GG'] as const;
+
+function normalizeApparelSizeOption(value?: string | null) {
+    const text = String(value ?? '').trim();
+    const normalized = text
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    if (normalized === 'unico' || normalized === 'tamanho unico') return 'ÚNICO';
+    return text;
+}
 
 export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
@@ -222,7 +232,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             form.setValue('packageType', 'Unidade', { shouldDirty: true, shouldValidate: true });
             form.setValue('packageSize', 1, { shouldDirty: true, shouldValidate: true });
             form.setValue('defaultCountingUnit', 'package', { shouldDirty: true, shouldValidate: true });
-            form.setValue('apparelSize', form.getValues('apparelSize') || 'Tamanho único', { shouldDirty: true });
+            form.setValue('apparelSize', normalizeApparelSizeOption(form.getValues('apparelSize')) || 'ÚNICO', { shouldDirty: true });
             form.setValue('enableLogistics', false, { shouldDirty: true });
         }
     };
@@ -257,7 +267,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     notes: productToEdit.notes || '',
                     baseProductId: productToEdit.baseProductId || '',
                     operationalCategoryId: productToEdit.operationalCategoryId || '',
-                    apparelSize: productToEdit.apparelSize === 'Único' ? 'Tamanho único' : productToEdit.apparelSize || '',
+                    apparelSize: normalizeApparelSizeOption(productToEdit.apparelSize),
                     apparelColor: productToEdit.apparelColor || '',
                     defaultCountingUnit: productToEdit.defaultCountingUnit || 'package',
                     // Switches

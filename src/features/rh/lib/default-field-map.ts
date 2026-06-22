@@ -1,4 +1,4 @@
-import type { FieldMapEntry, FieldType, FieldVisibility } from "@/types/rh";
+import type { FieldMapEntry, FieldType, FieldVisibility, ProfileBlockConfig } from "@/types/rh";
 
 type FieldConfig = {
   label: string;
@@ -10,6 +10,10 @@ type FieldConfig = {
   employeeEditable: boolean;
   order: number;
   options?: string[];
+  conditionals?: FieldMapEntry["conditionals"];
+  group?: FieldMapEntry["group"];
+  subgroup?: FieldMapEntry["subgroup"];
+  repeatable?: FieldMapEntry["repeatable"];
 };
 
 function field(config: FieldConfig): FieldMapEntry {
@@ -45,6 +49,10 @@ function field(config: FieldConfig): FieldMapEntry {
   };
   if (config.required !== undefined) entry.required = config.required;
   if (config.options !== undefined) entry.options = config.options;
+  if (config.conditionals !== undefined) entry.conditionals = config.conditionals;
+  if (config.group !== undefined) entry.group = config.group;
+  if (config.subgroup !== undefined) entry.subgroup = config.subgroup;
+  if (config.repeatable !== undefined) entry.repeatable = config.repeatable;
   return entry;
 }
 
@@ -52,6 +60,24 @@ const UF_OPTIONS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", 
 const YES_NO = ["Sim", "Nao"];
 const SHIRT_OPTIONS = ["PP", "P", "M", "G", "GG", "XG"];
 const SHOE_OPTIONS = ["33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45"];
+const CNH_GROUP: FieldMapEntry["group"] = { id: "documents_cnh", label: "CNH", order: 60 };
+const CNH_VALIDITY_SUBGROUP: FieldMapEntry["subgroup"] = { id: "documents_cnh_validity", label: "Validade da CNH", group_id: "documents_cnh", order: 10 };
+const HAS_CNH_CONDITION: FieldMapEntry["conditionals"] = [{ kind: "show_if", field: "employee.has_cnh", operator: "eq", value: true }];
+const DEPENDENT_GROUP: FieldMapEntry["group"] = {
+  id: "dependents_record",
+  label: "Dependente",
+  order: 10,
+  repeatable: { enabled: true, add_label: "Adicionar dependente", item_label: "Dependente" },
+};
+
+export const DEFAULT_PROFILE_BLOCKS: Record<string, ProfileBlockConfig> = {
+  "system.documents_codes": { id: "system.documents_codes", label: "Bizneo, PDV e códigos", order: 1000, employee_visible: false, locked: true },
+  "system.role_access": { id: "system.role_access", label: "Cargo, funções e acessos", order: 1010, employee_visible: false, locked: true },
+  "system.schedule_units": { id: "system.schedule_units", label: "Escala e unidades", order: 1020, employee_visible: false, locked: true },
+  "system.uniforms": { id: "system.uniforms", label: "Uniformes: entrega e devolução", order: 1030, employee_visible: false, locked: true },
+  "system.vacations": { id: "system.vacations", label: "Férias", order: 1040, employee_visible: false, locked: true },
+  "system.behavior": { id: "system.behavior", label: "Comportamento no sistema", order: 1050, employee_visible: false, locked: true },
+};
 
 export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.name": field({ label: "Nome Completo", section: "Dados Pessoais", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: false, order: 10 }),
@@ -72,9 +98,11 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.ctps_number": field({ label: "CTPS - Numero", section: "Documentos", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 30 }),
   "employee.ctps_series": field({ label: "CTPS - Serie", section: "Documentos", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40 }),
   "employee.ctps_date": field({ label: "CTPS - Data de Emissao", section: "Documentos", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 50 }),
-  "employee.cnh_number": field({ label: "CNH - Numero", section: "Documentos", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 60 }),
-  "employee.cnh_type": field({ label: "CNH - Tipo", section: "Documentos", type: "multi_select", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 70, options: ["A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"] }),
-  "employee.cnh_expiry": field({ label: "CNH - Validade", section: "Documentos", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 80 }),
+  "employee.has_cnh": field({ label: "Possui CNH?", section: "Documentos", type: "boolean", visibility: "public", employeeVisible: true, employeeEditable: true, order: 55 }),
+  "employee.cnh_number": field({ label: "Número de registro", section: "Documentos", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 60, group: CNH_GROUP, conditionals: HAS_CNH_CONDITION }),
+  "employee.cnh_type": field({ label: "Categoria", section: "Documentos", type: "multi_select", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 70, options: ["A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"], group: CNH_GROUP, conditionals: HAS_CNH_CONDITION }),
+  "employee.cnh_expiry": field({ label: "Data de validade", section: "Documentos", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 80, group: CNH_GROUP, subgroup: CNH_VALIDITY_SUBGROUP, conditionals: HAS_CNH_CONDITION }),
+  "employee.cnh_first_date": field({ label: "1ª habilitação", section: "Documentos", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 90, group: CNH_GROUP, subgroup: CNH_VALIDITY_SUBGROUP, conditionals: HAS_CNH_CONDITION }),
 
   "employee.employer_cnpj": field({ label: "CNPJ Empregador", section: "Dados Contratuais", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 10 }),
   "employee.employer_name": field({ label: "Razao Social", section: "Dados Contratuais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 20, options: ["CT Sorvetes Ltda", "Coala Shakes"] }),
@@ -106,10 +134,10 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.emergency_relation": field({ label: "Grau de Parentesco", section: "Contatos de Emergencia", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: true, order: 30, options: ["Mae/Pai", "Conjuge", "Filho(a)", "Irmao/Irmã", "Parente", "Amigo(a)", "Outro"] }),
   "employee.emergency_medical": field({ label: "Alergias e Dados Medicos", section: "Contatos de Emergencia", type: "multiline", visibility: "sensitive", employeeVisible: true, employeeEditable: true, order: 40 }),
 
-  "employee.dependent_name": field({ label: "Nome Dependente", section: "Dependentes", type: "text", visibility: "public", employeeVisible: false, employeeEditable: false, order: 10 }),
-  "employee.dependent_relation": field({ label: "Grau de Parentesco", section: "Dependentes", type: "single_select", visibility: "public", employeeVisible: false, employeeEditable: false, order: 20, options: ["Filho(a)", "Enteado(a)", "Conjuge", "Outro"] }),
-  "employee.dependent_cpf": field({ label: "CPF Dependente", section: "Dependentes", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 30 }),
-  "employee.dependent_rg": field({ label: "RG Dependente", section: "Dependentes", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.dependent_name": field({ label: "Nome Dependente", section: "Dependentes", type: "text", visibility: "public", employeeVisible: false, employeeEditable: false, order: 10, group: DEPENDENT_GROUP }),
+  "employee.dependent_relation": field({ label: "Grau de Parentesco", section: "Dependentes", type: "single_select", visibility: "public", employeeVisible: false, employeeEditable: false, order: 20, options: ["Filho(a)", "Enteado(a)", "Conjuge", "Outro"], group: DEPENDENT_GROUP }),
+  "employee.dependent_cpf": field({ label: "CPF Dependente", section: "Dependentes", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 30, group: DEPENDENT_GROUP }),
+  "employee.dependent_rg": field({ label: "RG Dependente", section: "Dependentes", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40, group: DEPENDENT_GROUP }),
 
   "employee.bank_name": field({ label: "Banco", section: "Dados Bancarios", type: "single_select", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 10, options: ["Banco do Brasil", "Bradesco", "Caixa", "Itau", "Santander", "Nubank", "Inter", "Outro"] }),
   "employee.bank_agency": field({ label: "Agencia", section: "Dados Bancarios", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 20 }),

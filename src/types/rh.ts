@@ -50,6 +50,38 @@ export type ConditionalRule =
   | { kind: 'show_if';    field: CoalaKey; operator: 'eq' | 'neq' | 'truthy'; value?: unknown }
   | { kind: 'required_if'; field: CoalaKey; operator: 'eq' | 'truthy'; value?: unknown };
 
+export type RepeatableConfig = {
+  enabled: boolean;
+  add_label?: string;
+  item_label?: string;
+  max_items?: number;
+};
+
+export type FieldGroupConfig = {
+  id: string;
+  label: string;
+  order?: number;
+  conditionals?: ConditionalRule[];
+  repeatable?: RepeatableConfig;
+};
+
+export type FieldSubgroupConfig = {
+  id: string;
+  label: string;
+  order?: number;
+  group_id?: string;
+  conditionals?: ConditionalRule[];
+};
+
+export type ProfileBlockConfig = {
+  id: string;
+  label: string;
+  order: number;
+  employee_visible: boolean;
+  employee_editable?: boolean;
+  locked?: boolean;
+};
+
 // ─── FieldMap ───────────────────────────────────────────────────────────────
 export type FieldMapEntry = {
   bizneo_id:         BizneoFieldId;
@@ -69,6 +101,9 @@ export type FieldMapEntry = {
   triggers?:         TriggerConfig[];
   validation?:       ValidationRule[];
   conditionals?:     ConditionalRule[];
+  group?:            FieldGroupConfig;
+  subgroup?:         FieldSubgroupConfig;
+  repeatable?:       RepeatableConfig;
   section:           string;
   label:             string;
   order:             number;
@@ -77,6 +112,8 @@ export type FieldMapEntry = {
 export type FieldMap = {
   version: string;
   fields:  Record<CoalaKey, FieldMapEntry>;
+  section_order?: Record<string, number>;
+  profile_blocks?: Record<string, ProfileBlockConfig>;
 };
 
 // ─── Employee ───────────────────────────────────────────────────────────────

@@ -26,16 +26,17 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useProfiles } from "@/hooks/use-profiles";
-import { useToast } from "@/hooks/use-toast";
 import { createAuditLog } from "@/features/audit/client";
 import type { DPVacationRecord, User } from "@/types";
 import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
-import { useEmployeeProfile } from "@/features/rh/hooks/useEmployeeProfile";
+import { useEmployeeProfile, useFieldMap } from "@/features/rh/hooks/useEmployeeProfile";
 import { SectionEditModal } from "@/features/rh/components/SectionEditModal";
 import type { EmployeeFieldValue, FieldMapEntry, RhRole } from "@/types/rh";
+import { canViewField } from "@/types/rh";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CYCLE_STATUS_CONFIG, getVacationCycleHistory } from "@/lib/utils/vacation-logic";
 import { FieldValue } from "@/features/rh/components/FieldValue";
+import { DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
 
 const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
 
@@ -58,30 +59,19 @@ const VACATION_STATUS: Record<string, { label: string; className: string }> = {
 };
 
 const RH_SECTION_LABELS: Record<string, string> = {
-  identity: "Identidade",
+  identity: "Identificação",
   contact: "Contato",
   address: "Endereço",
   documents: "Documentos",
-  employment: "Emprego",
-  compensation: "Remuneração",
+  employment: "Vínculo e Trabalho",
+  compensation: "Benefícios",
   banking: "Bancário",
-  health: "Saúde",
-  emergency: "Emergência",
+  health: "Saúde - ASOs",
+  emergency: "Contatos de Emergência",
   uniforms: "Uniformes",
   onboarding: "Onboarding",
   diversity: "Diversidade",
 };
-
-const PROFILE_NAV_ITEMS: Array<{ id: string; label: string; icon: React.ElementType }> = [
-  { id: "overview", label: "Visão geral", icon: UserRound },
-  { id: "rh-profile", label: "Perfil", icon: IdCard },
-  { id: "behavior", label: "Comportamento", icon: TrendingUp },
-  { id: "documents", label: "Documentos e códigos", icon: IdCard },
-  { id: "work", label: "Dados trabalhistas", icon: Briefcase },
-  { id: "schedule", label: "Escala e unidades", icon: Clock },
-  { id: "uniforms", label: "Uniformes", icon: Shirt },
-  { id: "vacations", label: "Férias", icon: Umbrella },
-];
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -137,6 +127,41 @@ function fieldHasValue(fv?: EmployeeFieldValue) {
   return fv.value_json !== undefined && fv.value_json !== null;
 }
 
+function profileFieldValue(fv?: EmployeeFieldValue) {
+  if (!fv) return undefined;
+  if (typeof fv.value_boolean === "boolean") return fv.value_boolean;
+  if (typeof fv.value_number === "number") return fv.value_number;
+  if (typeof fv.value_text === "string") return fv.value_text;
+  if (fv.value_date) return fv.value_date;
+  if (fv.value_json !== undefined) return fv.value_json;
+  return undefined;
+}
+
+function conditionalMatches(entry: FieldMapEntry, values: Record<string, EmployeeFieldValue>) {
+  const rules = entry.conditionals?.filter((rule) => rule.kind === "show_if") ?? [];
+  if (rules.length === 0) return true;
+  return rules.every((rule) => {
+    const value = profileFieldValue(values[rule.field]);
+    if (rule.operator === "truthy") return Boolean(value);
+    if (rule.operator === "eq") return value === rule.value;
+    if (rule.operator === "neq") return value !== rule.value;
+    return true;
+  });
+}
+
+function isLegacyUniformField(key: string, entry: FieldMapEntry) {
+  return key.startsWith("employee.uniform_") || entry.section.toLowerCase() === "uniforme";
+}
+
+function profileSectionDomId(section: string) {
+  return `profile-section-${section
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")}`;
+}
+
 function Panel({ title, icon: Icon, children, className = "" }: {
   title: string;
   icon: React.ElementType;
@@ -161,20 +186,6 @@ function InfoLine({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="border-b border-[#ececf0] py-4 last:border-b-0">
       <span className="block text-xs font-black uppercase text-[#9d9da9]">{label}</span>
       <span className="mt-2 block min-w-0 text-base font-black text-[#24242e]">{value || "-"}</span>
-    </div>
-  );
-}
-
-function CompactMetric({ label, value, score, color }: { label: string; value: string; score: number; color: string }) {
-  return (
-    <div className="min-w-0 rounded-2xl bg-[#f7f7f9] px-4 py-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-sm font-black text-[#555563]">{label}</span>
-        <span className="shrink-0 text-sm font-black text-[#1d1d26]">{value}</span>
-      </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#e7e7eb]">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(Math.max(score, 8), 100)}%` }} />
-      </div>
     </div>
   );
 }
@@ -495,11 +506,16 @@ function EmployeeProfileFields({ userId, bizneoEmployeeId }: { userId: string; b
   const sections = Object.entries(fieldMap.fields).reduce<
     Record<string, Array<{ key: string; entry: FieldMapEntry; fv?: EmployeeFieldValue }>>
   >((acc, [key, entry]) => {
+    if (isLegacyUniformField(key, entry)) return acc;
+    if (!canViewField(entry.visibility, role) || !conditionalMatches(entry, fieldValues)) return acc;
     const section = entry.section;
     if (!acc[section]) acc[section] = [];
     acc[section].push({ key, entry, fv: fieldValues[key] });
     return acc;
   }, {});
+  Object.values(sections).forEach((items) => {
+    items.sort((left, right) => (left.entry.order ?? 0) - (right.entry.order ?? 0));
+  });
 
   const sectionOrder = Object.keys(RH_SECTION_LABELS);
   const orderedSections = [
@@ -511,32 +527,32 @@ function EmployeeProfileFields({ userId, bizneoEmployeeId }: { userId: string; b
   const completionPct = allFields.length > 0 ? Math.round((filledFields / allFields.length) * 100) : employee.profile_completion;
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-[22px] border border-[#dedfe4] bg-white px-5 py-4 shadow-[0_2px_10px_rgba(15,23,42,0.06)]">
+    <div className="space-y-4">
+      <div className="rounded-[18px] border border-[#dedfe4] bg-white px-4 py-3 shadow-[0_2px_10px_rgba(15,23,42,0.06)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
             <div
-              className="grid h-16 w-16 place-items-center rounded-full"
+              className="grid h-14 w-14 place-items-center rounded-full"
               style={{ background: `conic-gradient(#df2f78 ${completionPct * 3.6}deg, #ececf0 0deg)` }}
             >
-              <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-sm font-black text-[#1d1d26]">
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-white text-sm font-black text-[#1d1d26]">
                 {completionPct}%
               </div>
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-xl font-black text-[#1d1d26]">Perfil completo</h2>
-                <span className={`rounded-full px-4 py-1.5 text-sm font-black ${completionPct >= 80 ? "bg-[#eafaf2] text-[#008963]" : "bg-[#ffe9ef] text-[#d9275f]"}`}>
+                <h2 className="text-lg font-black text-[#1d1d26]">Perfil completo</h2>
+                <span className={`rounded-full px-3 py-1 text-xs font-black ${completionPct >= 80 ? "bg-[#eafaf2] text-[#008963]" : "bg-[#ffe9ef] text-[#d9275f]"}`}>
                   {completionPct >= 80 ? "Completo" : "Incompleto"}
                 </span>
               </div>
-              <p className="mt-1 text-sm font-medium text-[#737381]">
+              <p className="mt-1 text-xs font-medium text-[#737381]">
                 {filledFields}/{allFields.length} campos preenchidos nas seções prioritárias.
               </p>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
-            {orderedSections.slice(0, 3).map((section) => {
+          <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
+            {orderedSections.slice(0, 6).map((section) => {
               const sectionFields = sections[section] ?? [];
               const sectionFilled = sectionFields.filter(({ fv }) => fieldHasValue(fv)).length;
               const pct = sectionFields.length > 0 ? Math.round((sectionFilled / sectionFields.length) * 100) : 0;
@@ -556,61 +572,77 @@ function EmployeeProfileFields({ userId, bizneoEmployeeId }: { userId: string; b
         </div>
       </div>
 
-      <div className="space-y-4">
-        {orderedSections.map((section) => {
-          const sectionFields = sections[section] ?? [];
-          const sectionFilled = sectionFields.filter(({ fv }) => fieldHasValue(fv)).length;
-          const done = sectionFilled === sectionFields.length && sectionFields.length > 0;
-          return (
-            <section key={section} className="rounded-[22px] border border-[#dedfe4] bg-white shadow-[0_2px_10px_rgba(15,23,42,0.06)]">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e8e8ec] px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff0f6] text-[#df2f78]">
-                    <IdCard className="h-5 w-5" />
+      <div className="grid gap-4 lg:grid-cols-[190px_minmax(0,1fr)]">
+        <aside className="space-y-1 lg:sticky lg:top-5 lg:self-start">
+          <p className="px-3 pb-2 text-[11px] font-black uppercase text-[#9d9da9]">Seções</p>
+          {orderedSections.map((section) => (
+            <button
+              key={section}
+              type="button"
+              onClick={() => document.getElementById(profileSectionDomId(section))?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm font-black text-[#737381] transition hover:bg-white hover:text-[#bd185c]"
+            >
+              <span className="truncate">{RH_SECTION_LABELS[section] ?? section}</span>
+            </button>
+          ))}
+        </aside>
+
+        <div className="space-y-4">
+          {orderedSections.map((section) => {
+            const sectionFields = sections[section] ?? [];
+            const sectionFilled = sectionFields.filter(({ fv }) => fieldHasValue(fv)).length;
+            const done = sectionFilled === sectionFields.length && sectionFields.length > 0;
+            return (
+              <section id={profileSectionDomId(section)} key={section} className="scroll-mt-24 rounded-[18px] border border-[#dedfe4] bg-white shadow-[0_2px_10px_rgba(15,23,42,0.06)]">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e8e8ec] px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fff0f6] text-[#df2f78]">
+                      <IdCard className="h-4 w-4" />
+                    </span>
+                    <h3 className="text-base font-black text-[#1d1d26]">{RH_SECTION_LABELS[section] ?? section}</h3>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-black ${done ? "bg-[#eafaf2] text-[#008963]" : "bg-[#fff8df] text-[#bd6b00]"}`}>
+                    {sectionFilled}/{sectionFields.length} preenchidos
                   </span>
-                  <h3 className="text-lg font-black text-[#1d1d26]">{RH_SECTION_LABELS[section] ?? section}</h3>
                 </div>
-                <span className={`rounded-full px-4 py-1.5 text-sm font-black ${done ? "bg-[#eafaf2] text-[#008963]" : "bg-[#fff8df] text-[#bd6b00]"}`}>
-                  {sectionFilled}/{sectionFields.length} preenchidos
-                </span>
-              </div>
-              <div className="grid gap-3 p-5 md:grid-cols-2">
-                {sectionFields.map(({ key, entry, fv }) => {
-                  const hasValue = fieldHasValue(fv);
-                  return (
-                    <div key={key} className="rounded-2xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-black uppercase text-[#9d9da9]">{entry.label}</p>
-                          <div className="mt-2 text-base font-black text-[#24242e]">
-                            {hasValue ? (
-                              <FieldValue fv={fv} type={entry.type} role={role} fieldKey={key} />
-                            ) : role !== "employee" ? (
-                              <button type="button" onClick={() => setEditKey(key)} className="text-[#df2f78]">
-                                + Adicionar
-                              </button>
-                            ) : (
-                              "-"
-                            )}
+                <div className="grid gap-3 p-4 md:grid-cols-2">
+                  {sectionFields.map(({ key, entry, fv }) => {
+                    const hasValue = fieldHasValue(fv);
+                    return (
+                      <div key={key} className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-black uppercase text-[#9d9da9]">{entry.label}</p>
+                            <div className="mt-1.5 text-sm font-black text-[#24242e]">
+                              {hasValue ? (
+                                <FieldValue fv={fv} type={entry.type} role={role} fieldKey={key} />
+                              ) : role !== "employee" ? (
+                                <button type="button" onClick={() => setEditKey(key)} className="text-[#df2f78]">
+                                  + Adicionar
+                                </button>
+                              ) : (
+                                "-"
+                              )}
+                            </div>
                           </div>
+                          {role !== "employee" && hasValue ? (
+                            <button
+                              type="button"
+                              onClick={() => setEditKey(key)}
+                              className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-[#df2f78] shadow-sm ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
+                            >
+                              Editar
+                            </button>
+                          ) : null}
                         </div>
-                        {role !== "employee" && hasValue ? (
-                          <button
-                            type="button"
-                            onClick={() => setEditKey(key)}
-                            className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#df2f78] shadow-sm ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
-                          >
-                            Editar
-                          </button>
-                        ) : null}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
       </div>
 
       {editKey && (
@@ -629,12 +661,10 @@ function EmployeeProfileFields({ userId, bizneoEmployeeId }: { userId: string; b
 
 export default function CollaboratorProfilePage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = use(params);
-  const { activeUsers, terminatedUsers, permissions, firebaseUser, resetPassword } = useAuth();
+  const { activeUsers, terminatedUsers, permissions, firebaseUser } = useAuth();
   const { profiles } = useProfiles();
   const { shiftDefinitions, units, vacations } = useDPBootstrap();
-  const { toast } = useToast();
-  const [resettingPassword, setResettingPassword] = useState(false);
-  const [activeSection, setActiveSection] = useState("overview");
+  const { fieldMap: profileLayout } = useFieldMap();
 
   const allUsers: User[] = [...activeUsers, ...terminatedUsers];
   const user = allUsers.find((entry) => entry.id === userId);
@@ -656,26 +686,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
       console.warn("[CollaboratorProfilePage] Falha ao registrar auditoria.", error);
     });
   }, [firebaseUser, user]);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top);
-        const first = visible[0]?.target;
-        if (first?.id) setActiveSection(first.id);
-      },
-      { threshold: 0.2, rootMargin: "-120px 0px -55% 0px" },
-    );
-
-    PROFILE_NAV_ITEMS.forEach((item) => {
-      const element = document.getElementById(item.id);
-      if (element) observer.observe(element);
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   if (!permissions.dp?.collaborators?.view) {
     return <p className="p-6 text-sm text-muted-foreground">Sem permissão para acessar este perfil.</p>;
@@ -702,349 +712,235 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     .filter((vacation) => vacation.status === "APPROVED")
     .reduce((sum, vacation) => sum + vacation.days, 0);
   const pendingVacations = userVacations.filter((vacation) => vacation.status === "PENDING").length;
-  const functionsCount = user.jobFunctionNames?.length ?? 0;
   const functionLabel = (user.jobFunctionNames ?? []).filter(Boolean).join(", ");
   const roleFunctionLabel = [user.jobRoleName, functionLabel].filter(Boolean).join(" | ") || (isTerminated ? "Desligado" : "Sem cargo");
   const userInitials = initials(user.username);
-  const completeness = [
-    user.email,
-    user.profileId,
-    user.jobRoleName,
-    user.registrationIdBizneo,
-    user.registrationIdPdv,
-    user.admissionDate,
-    user.birthDate,
-    user.shiftDefinitionId,
-    (user.unitIds ?? []).length > 0,
-  ].filter(Boolean).length;
-  const scrollToSection = (id: string) => {
-    setActiveSection(id);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const handleResetPassword = async (auditAction: "password_reset_email_sent" | "invite_resent") => {
-    if (!user.email || resettingPassword) return;
-    setResettingPassword(true);
-    const success = await resetPassword(user.email);
-    setResettingPassword(false);
-    if (success) {
-      if (firebaseUser) {
-        await createAuditLog(firebaseUser, {
-          module: "settings.users",
-          action: auditAction,
-          targetType: "user",
-          targetId: user.id,
-          targetName: user.username,
-          metadata: {
-            email: user.email,
-            source: "collaborator_detail",
-          },
-        }).catch((error) => {
-          console.warn("[CollaboratorProfilePage] Falha ao registrar auditoria.", error);
-        });
-      }
-      toast({
-        title: auditAction === "invite_resent" ? "Convite reenviado" : "E-mail de redefinição enviado",
-        description: `O link foi enviado para ${user.email}.`,
-      });
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Não foi possível enviar",
-        description: "Verifique o e-mail cadastrado e tente novamente.",
-      });
-    }
-  };
+  const profileBlocks = { ...DEFAULT_PROFILE_BLOCKS, ...(profileLayout?.profile_blocks ?? {}) };
+  const blockOrder = (id: keyof typeof DEFAULT_PROFILE_BLOCKS) => profileBlocks[id]?.order ?? DEFAULT_PROFILE_BLOCKS[id].order;
+  const systemBlocks = [
+    {
+      id: "system.documents_codes" as const,
+      className: "",
+      content: (
+        <Panel title="Documentos e códigos" icon={IdCard} className="h-full">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            <DocCard icon={Hash} label="Matrícula Bizneo" value={user.registrationIdBizneo ?? "-"} />
+            <DocCard icon={Hash} label="Matrícula PDV" value={user.registrationIdPdv ?? "-"} />
+            <DocCard icon={Mail} label="E-mail" value={user.email ?? "-"} />
+            <DocCard icon={BadgeCheck} label="Perfil de acesso" value={profile?.name ?? user.profileId ?? "-"} />
+          </div>
+        </Panel>
+      ),
+    },
+    {
+      id: "system.role_access" as const,
+      className: "",
+      content: (
+        <Panel title="Cargo, funções e acessos" icon={Briefcase} className="h-full">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+            <div className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+              <InfoLine label="Cargo" value={user.jobRoleName || "-"} />
+              <InfoLine label="Operacional" value={user.operacional ? "Sim" : "Não"} />
+              <InfoLine label="Metas" value={user.participatesInGoals ? "Participa" : "Não participa"} />
+            </div>
+            <div className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+              <p className="mb-3 text-xs font-black uppercase text-[#9d9da9]">Funções</p>
+              {user.jobFunctionNames && user.jobFunctionNames.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {user.jobFunctionNames.map((name) => (
+                    <Chip key={name} tone="good">{name}</Chip>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm font-semibold text-[#777784]">Nenhuma função vinculada.</p>
+              )}
+            </div>
+          </div>
+        </Panel>
+      ),
+    },
+    {
+      id: "system.schedule_units" as const,
+      className: "",
+      content: (
+        <Panel title="Escala e unidades" icon={Clock} className="h-full">
+          <div className="grid gap-3">
+            <div className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+              {shiftDef ? (
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-black text-[#1d1d26]">{shiftDef.name}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#817762]">
+                      {shiftDef.startTime} - {shiftDef.endTime}
+                      {shiftDef.breakStart && shiftDef.breakEnd ? ` | intervalo ${shiftDef.breakStart} - ${shiftDef.breakEnd}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <MonthSchedulePopover shiftDef={shiftDef} />
+                    <Chip tone="good">Ativa</Chip>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm font-semibold text-[#777784]">Sem turno atribuído.</p>
+              )}
+            </div>
+            <div className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+              <p className="mb-3 text-xs font-black uppercase text-[#9d9da9]">Unidades</p>
+              {userUnits.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {userUnits.map((unit) => (
+                    <span key={unit.id} className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-[#4f4f5b] ring-1 ring-[#ececf0]">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {unit.name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm font-semibold text-[#777784]">Nenhuma unidade vinculada.</p>
+              )}
+            </div>
+          </div>
+        </Panel>
+      ),
+    },
+    {
+      id: "system.uniforms" as const,
+      className: "xl:col-span-3",
+      content: (
+        <Panel title="Uniformes" icon={Shirt}>
+          <CollaboratorUniforms collaborator={user} />
+        </Panel>
+      ),
+    },
+    {
+      id: "system.vacations" as const,
+      className: "",
+      content: (
+        <Panel title="Férias" icon={Umbrella}>
+          <VacationCycleOverview admissionDate={admissionDate} vacations={userVacations} />
+          <div className="mb-4 grid grid-cols-3 gap-2">
+            <MiniStat label="Aprov." value={`${approvedVacationDays}d`} />
+            <MiniStat label="Pend." value={String(pendingVacations)} />
+            <MiniStat label="Reg." value={String(userVacations.length)} />
+          </div>
+          <VacationRows vacations={userVacations} />
+        </Panel>
+      ),
+    },
+    {
+      id: "system.behavior" as const,
+      className: "xl:col-span-2",
+      content: (
+        <Panel title="Comportamento no sistema" icon={TrendingUp}>
+          <div className="space-y-3">
+            {[
+              ["Usuário operacional", "Aparece nas escalas de trabalho e relatórios operacionais.", user.operacional],
+              ["Participa de metas", "Incluído no acompanhamento de metas do quiosque.", user.participatesInGoals],
+              ["Vale-transporte", "Colaborador tem direito a vale-transporte por dia trabalhado.", user.needsTransportVoucher],
+            ].map(([title, desc, active]) => (
+              <div key={String(title)} className="flex items-center justify-between gap-4 rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+                <div>
+                  <p className="text-sm font-black text-[#1d1d26]">{String(title)}</p>
+                  <p className="mt-1 text-xs font-medium text-[#777784]">{String(desc)}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  {String(title) === "Participa de metas" ? <GoalsSummaryPopover participates={Boolean(active)} /> : null}
+                  <span className={`h-6 w-11 rounded-full p-1 ${active ? "bg-pink-500" : "bg-slate-300"}`}>
+                    <span className={`block h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : ""}`} />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ),
+    },
+  ].sort((left, right) => blockOrder(left.id) - blockOrder(right.id));
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] bg-[#f1f1f3] px-4 py-5 text-[#1d1d26] md:px-5">
-      <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <Link href="/dashboard/dp/collaborators" className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:text-[#df2f78]">
+    <div className="min-h-[calc(100vh-8rem)] bg-[#eeeeef] px-4 py-5 text-[#1d1d26] md:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[1440px] space-y-4">
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/dp/collaborators" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:text-[#df2f78]">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <span className="text-base font-medium text-[#8f8f9b]">Departamento pessoal</span>
-          <ChevronRight className="h-5 w-5 text-[#b5b5bf]" />
-          <h1 className="text-2xl font-black leading-tight text-[#181820]">Painel DP</h1>
+          <span className="text-sm font-black text-[#8f8f9b]">Departamento pessoal</span>
+          <ChevronRight className="h-4 w-4 text-[#b5b5bf]" />
+          <h1 className="text-lg font-black leading-tight text-[#181820]">Painel DP</h1>
+          <Link href="/dashboard/settings?department=pessoal&tab=profile-fields" className="ml-auto rounded-xl bg-white px-3 py-2 text-xs font-black text-[#6f6f7c] shadow-sm ring-1 ring-[#dedfe4] hover:text-[#1d1d26]">
+            Editor de campos
+          </Link>
         </div>
-        <div className="flex flex-1 flex-col gap-3 md:flex-row md:justify-end">
-          <div className="relative md:w-[360px]">
-            <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#9d9da9]" />
-            <input
-              className="h-12 w-full rounded-2xl border-0 bg-white pl-12 pr-14 text-base font-medium text-[#4f4f5b] shadow-sm outline-none ring-1 ring-[#ebeaf0] placeholder:text-[#9d9da9]"
-              placeholder="Buscar..."
-              readOnly
-            />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 rounded-xl border border-[#dedfe4] bg-white px-2 py-1 text-sm font-black text-[#9d9da9]">
-              ⌘K
-            </span>
-          </div>
-          <div className="inline-flex rounded-2xl bg-[#e9e9ec] p-1 shadow-sm">
-            <span className="rounded-xl bg-white px-4 py-2.5 text-sm font-black shadow-sm">Perfil do colaborador</span>
-            <Link href="/dashboard/settings?department=pessoal&tab=profile-fields" className="rounded-xl px-4 py-2.5 text-sm font-black text-[#6f6f7c] hover:text-[#1d1d26]">
-              Editor de campos
-            </Link>
-          </div>
-          <button type="button" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-[#dedfe4] bg-white px-4 text-sm font-black text-[#4f4f5b] shadow-sm">
-            <Sparkles className="h-5 w-5 text-[#df2f78]" />
-            Anotações
-          </button>
-        </div>
-      </div>
 
-      <section className="mb-5 rounded-[24px] border border-[#dedfe4] bg-white px-5 py-5 shadow-[0_2px_12px_rgba(15,23,42,0.06)]">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
+        <section className="rounded-[18px] border border-[#dedfe4] bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.06)]">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
             <div className="relative shrink-0">
               {user.avatarUrl ? (
-                <img src={user.avatarUrl} alt={user.username} className="h-20 w-20 rounded-[18px] object-cover ring-4 ring-white" />
+                <img src={user.avatarUrl} alt={user.username} className="h-16 w-16 rounded-[16px] object-cover ring-4 ring-white" />
               ) : (
                 <div
-                  className={`flex h-20 w-20 items-center justify-center rounded-[18px] text-2xl font-black text-white ring-4 ring-white ${avatarColor(user.username)}`}
+                  className={`flex h-16 w-16 items-center justify-center rounded-[16px] text-xl font-black text-white ring-4 ring-white ${avatarColor(user.username)}`}
                   style={user.color ? { backgroundColor: user.color } : undefined}
                 >
                   {userInitials}
                 </div>
               )}
-              <span
-                className="absolute -bottom-3 left-2 max-w-[240px] truncate rounded-full bg-[#eafaf2] px-3 py-1 text-xs font-black text-[#008963] shadow-sm ring-2 ring-white"
-                title={roleFunctionLabel}
-              >
-                {roleFunctionLabel}
-              </span>
             </div>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-4">
-                <h2 className="break-words text-2xl font-black leading-tight text-[#181820]">{user.username}</h2>
-                {user.jobRoleName ? <Chip tone="good">{user.jobRoleName}</Chip> : null}
-                <span className="inline-flex items-center gap-2 rounded-full bg-[#f3f3f5] px-4 py-1.5 text-sm font-black text-[#6f6f7c]">
-                  <span className="h-4 w-4 rounded-full" style={{ backgroundColor: user.color || "#e92828" }} />
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h2 className="min-w-0 break-words text-xl font-black leading-tight text-[#181820]">{user.username}</h2>
+                <span
+                  className="inline-flex max-w-full items-center rounded-full bg-[#eafaf2] px-3 py-1 text-xs font-black text-[#008963] sm:max-w-[260px]"
+                  title={roleFunctionLabel}
+                >
+                  <span className="truncate">{roleFunctionLabel}</span>
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full bg-[#f3f3f5] px-3 py-1 text-xs font-black text-[#6f6f7c]">
+                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: user.color || "#e92828" }} />
                   Cor na escala
                 </span>
               </div>
-              <div className="mt-5 grid gap-4 text-sm font-black text-[#24242e] md:grid-cols-4">
+              <div className="mt-4 grid gap-x-8 gap-y-3 text-xs font-black text-[#24242e] md:grid-cols-4">
                 <span>
                   <span className="block text-xs uppercase text-[#9d9da9]">E-mail</span>
-                  <span className="mt-2 block truncate">{user.email}</span>
+                  <span className="mt-1 block max-w-[180px] truncate">{user.email}</span>
                 </span>
                 <span>
                   <span className="block text-xs uppercase text-[#9d9da9]">Telefone</span>
-                  <span className="mt-2 block">{(user as any).phone || "-"}</span>
+                  <span className="mt-1 block">{(user as any).phone || "-"}</span>
                 </span>
                 <span>
                   <span className="block text-xs uppercase text-[#9d9da9]">Último acesso</span>
-                  <span className="mt-2 block">{fmtDate((user as any).lastLoginAt)}</span>
+                  <span className="mt-1 block">{fmtDate((user as any).lastLoginAt)}</span>
                 </span>
                 <span>
                   <span className="block text-xs uppercase text-[#9d9da9]">Tempo de casa</span>
-                  <span className="mt-2 block">{tenure(user.admissionDate)}</span>
+                  <span className="mt-1 block">{tenure(user.admissionDate)}</span>
                 </span>
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-3">
-            <Link href="/dashboard/settings?department=pessoal&tab=users" className="inline-flex h-12 min-w-36 items-center justify-center rounded-2xl bg-[#df2f78] px-5 text-sm font-black text-white shadow-sm hover:bg-[#c92368]">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Link href="/dashboard/settings?department=pessoal&tab=users" className="inline-flex h-10 min-w-28 items-center justify-center rounded-xl bg-[#df2f78] px-4 text-xs font-black text-white shadow-sm hover:bg-[#c92368]">
               Editar dados
             </Link>
-            <button
-              type="button"
-              onClick={() => void handleResetPassword("password_reset_email_sent")}
-              disabled={resettingPassword || !user.email}
-              className="h-12 rounded-2xl border border-[#dedfe4] bg-white px-4 text-sm font-black text-[#6f6f7c] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {resettingPassword ? "Enviando..." : "Resetar senha"}
-            </button>
-            <button type="button" className="grid h-12 w-12 place-items-center rounded-2xl border border-[#dedfe4] bg-white text-[#777784]">
+            <button type="button" className="grid h-10 w-10 place-items-center rounded-xl border border-[#dedfe4] bg-white text-[#777784]">
               <MoreHorizontal className="h-5 w-5" />
             </button>
           </div>
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="space-y-2 xl:sticky xl:top-6 xl:self-start">
-          <p className="px-4 text-xs font-black uppercase text-[#9d9da9]">Seções</p>
-          {PROFILE_NAV_ITEMS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => scrollToSection(id)}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-base font-black transition ${
-                activeSection === id ? "bg-[#fdebf3] text-[#bd185c]" : "text-[#737381] hover:bg-white"
-              }`}
-            >
-              <Icon className="h-5 w-5 shrink-0" />
-              {label}
-            </button>
+        <EmployeeProfileFields userId={user.id} bizneoEmployeeId={user.registrationIdBizneo} />
+
+        <div className="grid gap-4 xl:grid-cols-3">
+          {systemBlocks.map((block) => (
+            <div key={block.id} className={block.className}>
+              {block.content}
+            </div>
           ))}
-        </aside>
-
-        <main className="space-y-5">
-          <div id="summary" className="sticky top-4 z-20 scroll-mt-24 rounded-[22px] border border-[#dedfe4] bg-white/95 p-3 shadow-[0_2px_10px_rgba(15,23,42,0.06)] backdrop-blur">
-            <div className="grid gap-2 sm:grid-cols-4">
-              <Summary label="Cadastro" value={`${completeness}/9`} />
-              <Summary label="Unidades" value={String((user.unitIds ?? []).length)} />
-              <Summary label="Funções" value={String(functionsCount)} />
-              <Summary label="Férias" value={`${approvedVacationDays}d`} />
-            </div>
-            <div className="mt-2 grid gap-2 md:grid-cols-4">
-              <CompactMetric label="Dados cadastrais" value={`${Math.round((completeness / 9) * 10)}/10`} score={(completeness / 9) * 100} color="bg-[#f0c84b]" />
-              <CompactMetric label="Vínculo" value={isTerminated ? "off" : "on"} score={isTerminated ? 30 : 92} color="bg-[#a8b85f]" />
-              <CompactMetric label="Escala" value={shiftDef ? "ok" : "-"} score={shiftDef ? 86 : 12} color="bg-[#b8d7ee]" />
-              <CompactMetric label="Acessos" value={user.loginRestrictionEnabled ? "restr." : "livre"} score={user.loginRestrictionEnabled ? 64 : 90} color="bg-[#e6a3d8]" />
-            </div>
-          </div>
-
-          <div id="overview" className="scroll-mt-24">
-          <Panel title="Identificação" icon={UserRound}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
-                <InfoLine label="Nome" value={user.username} />
-                <InfoLine label="E-mail" value={user.email} />
-                <InfoLine label="Telefone" value={(user as any).phone ?? "-"} />
-              </div>
-              <div className="rounded-2xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
-                <InfoLine label="Cor na escala" value={user.color ?? "-"} />
-                <InfoLine label="Bizneo" value={user.registrationIdBizneo} />
-                <InfoLine label="PDV" value={user.registrationIdPdv} />
-              </div>
-            </div>
-          </Panel>
-          </div>
-
-          <div id="rh-profile" className="scroll-mt-24">
-            <EmployeeProfileFields userId={user.id} bizneoEmployeeId={user.registrationIdBizneo} />
-          </div>
-
-          <div id="behavior" className="scroll-mt-24">
-          <Panel title="Comportamento no sistema" icon={TrendingUp}>
-            <div className="space-y-3">
-              {[
-                ["Usuario operacional", "Aparece nas escalas de trabalho e relatorios operacionais.", user.operacional],
-                ["Participa de metas", "Incluido no acompanhamento de metas do quiosque.", user.participatesInGoals],
-                ["Vale-transporte", "Colaborador tem direito a vale-transporte por dia trabalhado.", user.needsTransportVoucher],
-              ].map(([title, desc, active]) => (
-                <div key={String(title)} className="flex items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
-                  <div>
-                    <p className="text-sm font-black text-slate-950">{String(title)}</p>
-                    <p className="mt-1 text-xs font-medium text-slate-500">{String(desc)}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    {String(title) === "Participa de metas" ? <GoalsSummaryPopover participates={Boolean(active)} /> : null}
-                    <span className={`h-6 w-11 rounded-full p-1 ${active ? "bg-pink-500" : "bg-slate-300"}`}>
-                      <span className={`block h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : ""}`} />
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-          </div>
-
-          <div className="grid items-stretch gap-5 xl:grid-cols-3">
-            <div id="documents" className="h-full scroll-mt-24">
-            <Panel title="Documentos e códigos" icon={IdCard} className="h-full">
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                <DocCard icon={Hash} label="Matrícula Bizneo" value={user.registrationIdBizneo ?? "-"} />
-                <DocCard icon={Hash} label="Matrícula PDV" value={user.registrationIdPdv ?? "-"} />
-                <DocCard icon={Mail} label="E-mail" value={user.email ?? "-"} />
-                <DocCard icon={BadgeCheck} label="Perfil de acesso" value={profile?.name ?? user.profileId ?? "-"} />
-              </div>
-            </Panel>
-            </div>
-
-            <div id="work" className="h-full scroll-mt-24">
-            <Panel title="Cargo, funções e acessos" icon={Briefcase} className="h-full">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
-                  <InfoLine label="Cargo" value={user.jobRoleName} />
-                  <InfoLine label="Operacional" value={user.operacional ? "Sim" : "Não"} />
-                  <InfoLine label="Metas" value={user.participatesInGoals ? "Participa" : "Não participa"} />
-                </div>
-                <div className="rounded-2xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
-                  <p className="mb-3 text-xs font-black uppercase text-[#9d9da9]">Funções</p>
-                  {user.jobFunctionNames && user.jobFunctionNames.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {user.jobFunctionNames.map((name) => (
-                        <Chip key={name} tone="good">{name}</Chip>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm font-semibold text-[#777784]">Nenhuma função vinculada.</p>
-                  )}
-                </div>
-              </div>
-            </Panel>
-            </div>
-            <div id="schedule" className="h-full scroll-mt-24">
-          <Panel title="Escala e unidades" icon={Clock} className="h-full">
-            <div className="mb-4 grid gap-3 sm:grid-cols-2">
-              <Summary label="Turnos este mês" value={shiftDef ? "18" : "-"} />
-              <Summary label="Faltas justificadas" value="1" />
-            </div>
-            <div className="grid gap-4">
-              <div className="rounded-2xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
-                {shiftDef ? (
-                  <>
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-base font-black">{shiftDef.name}</p>
-                        <p className="mt-1 text-xs font-semibold text-[#817762]">
-                          {shiftDef.startTime} - {shiftDef.endTime}
-                          {shiftDef.breakStart && shiftDef.breakEnd ? ` - intervalo ${shiftDef.breakStart} - ${shiftDef.breakEnd}` : ""}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <MonthSchedulePopover shiftDef={shiftDef} />
-                        <Chip tone="good">Escala ativa</Chip>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm font-semibold text-[#777784]">Sem turno atribuído.</p>
-                )}
-              </div>
-              <div className="rounded-2xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
-                <p className="mb-3 text-xs font-black uppercase text-[#9d9da9]">Unidades</p>
-                {userUnits.length > 0 ? (
-                  <div className="space-y-2">
-                    {userUnits.map((unit) => (
-                      <div key={unit.id} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black ring-1 ring-[#ececf0]">
-                        <MapPin className="h-3.5 w-3.5" />
-                        {unit.name}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm font-semibold text-[#777784]">Nenhuma unidade vinculada.</p>
-                )}
-              </div>
-            </div>
-          </Panel>
-            </div>
-          </div>
-
-          <div id="uniforms" className="scroll-mt-24">
-          <Panel title="Uniformes" icon={Shirt}>
-            <CollaboratorUniforms collaborator={user} />
-          </Panel>
-          </div>
-
-          <div className="grid gap-5 xl:grid-cols-2">
-            <div id="vacations" className="scroll-mt-24">
-            <Panel title="Férias" icon={Umbrella}>
-              <VacationCycleOverview admissionDate={admissionDate} vacations={userVacations} />
-              <div className="mb-4 grid grid-cols-3 gap-2">
-                <MiniStat label="Aprov." value={`${approvedVacationDays}d`} />
-                <MiniStat label="Pend." value={String(pendingVacations)} />
-                <MiniStat label="Reg." value={String(userVacations.length)} />
-              </div>
-              <VacationRows vacations={userVacations} />
-            </Panel>
-            </div>
-
-          </div>
-        </main>
+        </div>
       </div>
     </div>
   );
