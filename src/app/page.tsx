@@ -1,30 +1,16 @@
-"use client";
+import { headers } from "next/headers";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth';
-import { Loader2 } from 'lucide-react';
+import VagasPage from "@/app/vagas/page";
+import { RootSystemRedirect } from "@/components/root-system-redirect";
 
-export default function RootPage() {
-  const { isAuthenticated, loading } = useAuth();
-  const router = useRouter();
+export const dynamic = "force-dynamic";
 
-  useEffect(() => {
-    if (!loading) {
-      if (isAuthenticated) {
-        router.replace('/dashboard');
-      } else {
-        router.replace('/login');
-      }
-    }
-  }, [isAuthenticated, loading, router]);
+export default async function RootPage() {
+  const host = (await headers()).get("host")?.split(":")[0]?.toLowerCase() ?? "";
 
-  return (
-    <div className="flex h-screen w-full items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="text-muted-foreground">Carregando...</p>
-      </div>
-    </div>
-  );
+  if (host === "vagas.coalashakes.com") {
+    return <VagasPage />;
+  }
+
+  return <RootSystemRedirect />;
 }
