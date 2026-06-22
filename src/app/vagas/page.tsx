@@ -228,6 +228,11 @@ function PageStyles() {
         --pe: #FFB39A;
         font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
+        max-width: 100vw;
+        overflow-x: hidden;
+      }
+      .vagas-publicas * {
+        min-width: 0;
       }
       .vagas-publicas .fd {
         font-family: 'Baloo 2', system-ui, sans-serif !important;
@@ -239,13 +244,14 @@ function PageStyles() {
         font-weight: 600;
       }
       .vagas-publicas .vagas-shell {
-        width: min(1280px, calc(100% - clamp(40px, 7vw, 120px)));
+        width: min(1280px, calc(100vw - clamp(40px, 7vw, 120px)));
+        max-width: calc(100vw - 40px);
         margin-left: auto;
         margin-right: auto;
       }
       .vagas-publicas .vagas-readable {
-        width: min(880px, calc(100% - clamp(40px, 7vw, 120px)));
-        max-width: 980px;
+        width: min(880px, calc(100vw - clamp(40px, 7vw, 120px)));
+        max-width: calc(100vw - 40px);
         margin-left: auto;
         margin-right: auto;
       }
@@ -325,6 +331,13 @@ function PageStyles() {
         .vagas-publicas .value-ghost-icon,
         .vagas-publicas .value-main-icon {
           animation: none !important;
+        }
+      }
+      @media (max-width: 640px) {
+        .vagas-publicas .vagas-shell,
+        .vagas-publicas .vagas-readable {
+          width: calc(100vw - 40px);
+          max-width: calc(100vw - 40px);
         }
       }
     ` }} />

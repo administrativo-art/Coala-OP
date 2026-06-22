@@ -23,7 +23,12 @@ export function RootHostSwitch() {
   const [isPublicRecruitmentHost, setIsPublicRecruitmentHost] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setIsPublicRecruitmentHost(window.location.hostname.toLowerCase() === PUBLIC_RECRUITMENT_HOST);
+    const isPublicHost = window.location.hostname.toLowerCase() === PUBLIC_RECRUITMENT_HOST;
+    setIsPublicRecruitmentHost(isPublicHost);
+
+    if (isPublicHost) {
+      document.title = "Vagas | Coala Shakes";
+    }
   }, []);
 
   if (isPublicRecruitmentHost === null) {
