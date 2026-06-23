@@ -4,6 +4,7 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
 import type { HrFormQuestion } from '@/types';
 import { createCandidateStageHistoryEntry } from '@/lib/recruitment-pipeline';
+import { getPublicRecruitmentQuestions } from '@/lib/recruitment-forms';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -125,6 +126,7 @@ function createQuestionSnapshot(questions: HrFormQuestion[]) {
     text: question.text,
     type: question.type,
     required: question.required,
+    active: question.active !== false,
     eliminatory: question.eliminatory,
     expectedAnswer: question.expectedAnswer === undefined ? null : question.expectedAnswer,
     weight: question.weight,
@@ -195,7 +197,7 @@ export async function POST(request: NextRequest) {
     return jsonError('O período de inscrições desta vaga está encerrado.', 403);
   }
   const formQuestions = Array.isArray(openingData.formQuestions)
-    ? openingData.formQuestions as HrFormQuestion[]
+    ? getPublicRecruitmentQuestions(openingData.formQuestions as HrFormQuestion[])
     : [];
   let formAnswers: Record<string, unknown>;
   try {

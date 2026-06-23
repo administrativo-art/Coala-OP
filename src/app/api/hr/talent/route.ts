@@ -7,6 +7,7 @@ import { createCandidateStageHistoryEntry, isCandidateStatus } from '@/lib/recru
 import {
   DEFAULT_TALENT_POOL_FORM,
   TALENT_POOL_FORM_ID,
+  getPublicRecruitmentQuestions,
   getRecruitmentQuestionOptions,
   hasRecruitmentAnswer,
   normalizeRecruitmentFormConfig,
@@ -124,6 +125,7 @@ function createQuestionSnapshot(questions: HrFormQuestion[]) {
     text: question.text,
     type: question.type,
     required: question.required,
+    active: question.active !== false,
     eliminatory: question.eliminatory,
     weight: question.weight,
     config: question.config ?? null,
@@ -166,7 +168,9 @@ export async function POST(request: NextRequest) {
   const formConfig = normalizeRecruitmentFormConfig(
     formDoc.exists ? { id: formDoc.id, ...formDoc.data() } : DEFAULT_TALENT_POOL_FORM
   );
-  const publicForm = formConfig.status === 'published' ? formConfig : DEFAULT_TALENT_POOL_FORM;
+  const publicForm = formConfig.status === 'published'
+    ? { ...formConfig, questions: getPublicRecruitmentQuestions(formConfig.questions) }
+    : DEFAULT_TALENT_POOL_FORM;
   let formAnswers: Record<string, unknown>;
   try {
     formAnswers = normalizeTalentFormAnswers(rawFormAnswers, publicForm.questions);

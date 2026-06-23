@@ -501,7 +501,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
   const role = roles.find(r => r.id === candidate.jobRoleId);
   const opening = openings.find(o => o.id === candidate.jobOpeningId);
   const formAnswers = candidate.latestApplication?.formAnswers ?? candidate.formAnswers ?? {};
-  const questionSnapshot = candidate.latestApplication?.formQuestionSnapshot ?? opening?.formQuestions ?? role?.formQuestions ?? [];
+  const questionSnapshot = candidate.latestApplication?.formQuestionSnapshot ?? candidate.formQuestionSnapshot ?? opening?.formQuestions ?? role?.formQuestions ?? [];
   const questionsById = new Map((questionSnapshot as HrFormQuestion[]).map(question => [question.id, question]));
   const answerEntries = Object.entries(formAnswers);
   const stageHistory = (
@@ -689,6 +689,29 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
               <p className="text-sm text-slate-500">—</p>
             )}
           </div>
+
+          {(candidate.talentPool?.rolePreference || candidate.talentPool?.unitPreference || candidate.talentPool?.formVersion) && (
+            <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/5 p-4">
+              <h3 className="text-xs font-bold text-cyan-200 uppercase tracking-wider">Banco de talentos</h3>
+              <div className="mt-3 grid gap-3 text-sm">
+                {candidate.talentPool?.rolePreference && (
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">Cargo de interesse</p>
+                    <p className="mt-0.5 text-slate-200">{candidate.talentPool.rolePreference}</p>
+                  </div>
+                )}
+                {candidate.talentPool?.unitPreference && (
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">Unidade preferida</p>
+                    <p className="mt-0.5 text-slate-200">{candidate.talentPool.unitPreference}</p>
+                  </div>
+                )}
+                {candidate.talentPool?.formVersion && (
+                  <p className="text-xs text-slate-600">Formulário v{candidate.talentPool.formVersion}</p>
+                )}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5">Observações</label>
@@ -1963,6 +1986,9 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
                       {candidate.name}
                     </button>
                     <p className="text-[11px] text-slate-500 truncate">{candidate.jobRoleName ?? '—'}</p>
+                    {candidate.talentPool?.unitPreference && (
+                      <p className="mt-0.5 text-[10px] text-slate-600 truncate">{candidate.talentPool.unitPreference}</p>
+                    )}
                   </div>
                 </div>
 
@@ -2017,6 +2043,7 @@ function RecruitmentFormsView({ getToken, canManage }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const activeQuestionCount = form.questions.filter(question => question.active !== false).length;
 
   const loadForm = useCallback(async () => {
     setLoading(true);
@@ -2100,6 +2127,7 @@ function RecruitmentFormsView({ getToken, canManage }: {
           text,
           type: questionDraft.type,
           required: questionDraft.required,
+          active: true,
           scored: false,
           weight: 'medium',
           eliminatory: questionDraft.eliminatory,
@@ -2255,13 +2283,20 @@ function RecruitmentFormsView({ getToken, canManage }: {
                 <h3 className="text-sm font-bold text-slate-950">Campos complementares</h3>
                 <p className="mt-1 text-xs text-slate-500">Esses campos aparecem abaixo dos dados básicos no site público.</p>
               </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">{form.questions.length} campos</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
+                {activeQuestionCount}/{form.questions.length} visíveis
+              </span>
             </div>
 
             <div className="mt-4 divide-y divide-slate-100 rounded-2xl border border-slate-100">
               {form.questions.map((question, index) => (
-                <div key={question.id} className="grid gap-3 p-4 md:grid-cols-[1fr_160px_auto] md:items-start">
+                <div key={question.id} className={`grid gap-3 p-4 md:grid-cols-[1fr_160px_auto] md:items-start ${question.active === false ? 'bg-slate-50/70 opacity-75' : ''}`}>
                   <div>
+                    {question.active === false && (
+                      <span className="mb-2 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        Oculto no site
+                      </span>
+                    )}
                     <input
                       value={question.text}
                       onChange={event => updateQuestion(question.id, { text: event.target.value })}
@@ -2277,6 +2312,24 @@ function RecruitmentFormsView({ getToken, canManage }: {
                           disabled={!canManage}
                         />
                         Obrigatório
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={question.active !== false}
+                          onChange={event => updateQuestion(question.id, { active: event.target.checked })}
+                          disabled={!canManage}
+                        />
+                        Exibir no site
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={question.eliminatory}
+                          onChange={event => updateQuestion(question.id, { eliminatory: event.target.checked })}
+                          disabled={!canManage}
+                        />
+                        Eliminatório
                       </label>
                       <label className="flex items-center gap-1.5">
                         <input
@@ -2364,6 +2417,14 @@ function RecruitmentFormsView({ getToken, canManage }: {
                       onChange={event => setQuestionDraft(prev => ({ ...prev, required: event.target.checked }))}
                     />
                     Obrigatório
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={questionDraft.eliminatory}
+                      onChange={event => setQuestionDraft(prev => ({ ...prev, eliminatory: event.target.checked }))}
+                    />
+                    Eliminatório
                   </label>
                   <button
                     type="button"

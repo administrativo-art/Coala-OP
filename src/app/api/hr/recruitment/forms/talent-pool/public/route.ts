@@ -4,6 +4,7 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import {
   DEFAULT_TALENT_POOL_FORM,
   TALENT_POOL_FORM_ID,
+  getPublicRecruitmentQuestions,
   normalizeRecruitmentFormConfig,
 } from '@/lib/recruitment-forms';
 
@@ -16,7 +17,9 @@ export async function GET() {
     doc.exists ? { id: doc.id, ...doc.data() } : DEFAULT_TALENT_POOL_FORM
   );
 
-  const publicForm = form.status === 'published' ? form : DEFAULT_TALENT_POOL_FORM;
+  const publicForm = form.status === 'published'
+    ? { ...form, questions: getPublicRecruitmentQuestions(form.questions) }
+    : DEFAULT_TALENT_POOL_FORM;
 
   return NextResponse.json(publicForm, {
     headers: {

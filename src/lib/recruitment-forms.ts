@@ -38,6 +38,7 @@ export const DEFAULT_TALENT_POOL_FORM: RecruitmentFormConfig = {
       text: "Cargo de interesse",
       type: "select",
       required: false,
+      active: true,
       scored: false,
       weight: "medium",
       eliminatory: false,
@@ -49,6 +50,7 @@ export const DEFAULT_TALENT_POOL_FORM: RecruitmentFormConfig = {
       text: "Unidade preferida",
       type: "select",
       required: false,
+      active: true,
       scored: false,
       weight: "medium",
       eliminatory: false,
@@ -60,6 +62,7 @@ export const DEFAULT_TALENT_POOL_FORM: RecruitmentFormConfig = {
       text: "Mensagem",
       type: "text",
       required: false,
+      active: true,
       scored: false,
       weight: "medium",
       eliminatory: false,
@@ -121,6 +124,7 @@ export function normalizeRecruitmentQuestions(value: unknown): HrFormQuestion[] 
         text,
         type,
         required: data.required === true,
+        active: data.active !== false,
         scored: false,
         weight: data.weight === "low" || data.weight === "high" ? data.weight : "medium",
         eliminatory: data.eliminatory === true,
@@ -169,6 +173,10 @@ export function getRecruitmentQuestionOptions(question: HrFormQuestion, dynamicO
   return Array.isArray(options)
     ? options.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
     : [];
+}
+
+export function getPublicRecruitmentQuestions(questions: HrFormQuestion[]) {
+  return questions.filter((question) => question.active !== false);
 }
 
 export function hasRecruitmentAnswer(value: unknown) {

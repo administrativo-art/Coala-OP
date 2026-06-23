@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
+import { getPublicRecruitmentQuestions } from '@/lib/recruitment-forms';
 import type { HrFormQuestion } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function toPublicQuestions(questions: HrFormQuestion[]) {
-  return questions.map(question => ({
+  return getPublicRecruitmentQuestions(questions).map(question => ({
     id: question.id,
     text: question.text,
     type: question.type,

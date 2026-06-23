@@ -796,6 +796,7 @@ export type HrFormQuestion = {
   text: string;
   type: HrQuestionType;
   required: boolean;
+  active?: boolean;
   scored: boolean;
   weight: HrQuestionWeight;
   eliminatory: boolean;
@@ -889,6 +890,14 @@ export type Candidate = {
   recruitmentHistory?: CandidateStageHistoryEntry[];
   notes?: string;
   formAnswers?: Record<string, unknown>;
+  formQuestionSnapshot?: HrFormQuestion[];
+  talentPool?: {
+    rolePreference?: string | null;
+    unitPreference?: string | null;
+    submittedAt?: string;
+    formId?: string;
+    formVersion?: number;
+  };
   rating?: number; // 1-5
   source?: string;
   appliedAt: string;
