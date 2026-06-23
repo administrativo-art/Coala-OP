@@ -34,9 +34,24 @@ import { useAuth } from "@/hooks/use-auth";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { updateHrFunction, updateHrRole } from "@/features/hr/lib/client";
+import {
+  DEFAULT_ONBOARDING_DOCUMENTS,
+  normalizeOnboardingDocumentTemplates,
+  normalizeOnboardingStages,
+} from "@/lib/recruitment-onboarding";
 import { normalizeRecruitmentStages } from "@/lib/recruitment-pipeline";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { CandidateStatus, JobDepartment, JobFunction, JobRole, RecruitmentStage, User } from "@/types";
+import type {
+  CandidateStatus,
+  JobDepartment,
+  JobFunction,
+  JobRole,
+  OnboardingDocumentTemplate,
+  OnboardingStage,
+  OnboardingStageId,
+  RecruitmentStage,
+  User,
+} from "@/types";
 
 interface OrgNode {
   role: JobRole;
@@ -166,6 +181,117 @@ function RecruitmentStageModelEditor({
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+const ONBOARDING_LABELS: Record<OnboardingStageId, string> = {
+  documents: "Documentos",
+  document_review: "Conferência",
+  contract: "Contrato",
+  system_access: "Usuário",
+  integration: "Integrações",
+  probation: "Experiência",
+  done: "Finalizado",
+};
+
+function OnboardingModelEditor({
+  stages,
+  documents,
+  onStagesChange,
+  onDocumentsChange,
+  accent = "indigo",
+}: {
+  stages: OnboardingStage[];
+  documents: OnboardingDocumentTemplate[];
+  onStagesChange: (stages: OnboardingStage[]) => void;
+  onDocumentsChange: (documents: OnboardingDocumentTemplate[]) => void;
+  accent?: "indigo" | "sky";
+}) {
+  const accentClass = accent === "sky"
+    ? "focus:border-sky-400 focus:ring-sky-100"
+    : "focus:border-indigo-400 focus:ring-indigo-100";
+
+  function updateStage(stageId: OnboardingStageId, patch: Partial<OnboardingStage>) {
+    onStagesChange(stages.map((stage) => stage.id === stageId ? { ...stage, ...patch } : stage));
+  }
+
+  function updateDocument(documentId: string, patch: Partial<OnboardingDocumentTemplate>) {
+    onDocumentsChange(documents.map((document) => document.id === documentId ? { ...document, ...patch } : document));
+  }
+
+  function addDocument() {
+    const nextId = `documento_${Date.now().toString(36)}`;
+    onDocumentsChange([
+      ...documents,
+      { id: nextId, label: "Novo documento", required: true, order: documents.length },
+    ]);
+  }
+
+  function removeDocument(documentId: string) {
+    onDocumentsChange(documents.filter((document) => document.id !== documentId).map((document, index) => ({ ...document, order: index })));
+  }
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-800">Modelo de onboarding</p>
+        <p className="mt-1 text-xs text-slate-500">Define as etapas e documentos ao aprovar contratação.</p>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        {stages.map((stage) => (
+          <div key={stage.id} className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{ONBOARDING_LABELS[stage.id]}</p>
+            <input
+              value={stage.label}
+              onChange={(event) => updateStage(stage.id, { label: event.target.value })}
+              className={`mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+            />
+            <label className="mt-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Prazo em dias
+              <input
+                type="number"
+                min="0"
+                value={stage.dueDays ?? ""}
+                onChange={(event) => updateStage(stage.id, { dueDays: event.target.value === "" ? null : Number(event.target.value) })}
+                className={`mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+              />
+            </label>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-slate-700">Documentos exigidos</p>
+          <button type="button" onClick={addDocument} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-white">
+            Adicionar
+          </button>
+        </div>
+        <div className="space-y-2">
+          {documents.map((document) => (
+            <div key={document.id} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+              <input
+                value={document.label}
+                onChange={(event) => updateDocument(document.id, { label: event.target.value })}
+                className={`h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+              />
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={document.required !== false}
+                  onChange={(event) => updateDocument(document.id, { required: event.target.checked })}
+                />
+                Obrigatório
+              </label>
+              <button type="button" onClick={() => removeDocument(document.id)} className="rounded-lg px-2 py-1 text-xs font-bold text-slate-400 hover:bg-red-50 hover:text-red-500">
+                Remover
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -362,6 +488,8 @@ function RoleEditModal({
     defaultProfileId: "",
     loginRestricted: false,
     pipelineStages: normalizeRecruitmentStages(null),
+    onboardingStages: normalizeOnboardingStages(null),
+    onboardingDocuments: normalizeOnboardingDocumentTemplates(DEFAULT_ONBOARDING_DOCUMENTS),
     isActive: true,
   });
 
@@ -375,6 +503,10 @@ function RoleEditModal({
       defaultProfileId: role.defaultProfileId ?? "",
       loginRestricted: role.loginRestricted ?? false,
       pipelineStages: normalizeRecruitmentStages(role.pipelineStages),
+      onboardingStages: normalizeOnboardingStages(role.onboardingStages),
+      onboardingDocuments: normalizeOnboardingDocumentTemplates(
+        role.onboardingDocuments?.length ? role.onboardingDocuments : DEFAULT_ONBOARDING_DOCUMENTS
+      ),
       isActive: role.isActive !== false,
     });
   }, [role]);
@@ -396,6 +528,8 @@ function RoleEditModal({
       defaultProfileId: values.defaultProfileId || undefined,
       loginRestricted: values.loginRestricted,
       pipelineStages: values.pipelineStages.map((stage, index) => ({ ...stage, order: index })),
+      onboardingStages: values.onboardingStages.map((stage, index) => ({ ...stage, order: index })),
+      onboardingDocuments: values.onboardingDocuments.map((document, index) => ({ ...document, order: index })),
       isActive: values.isActive,
     });
   }
@@ -475,6 +609,13 @@ function RoleEditModal({
             onChange={(pipelineStages) => setValues((current) => ({ ...current, pipelineStages }))}
           />
 
+          <OnboardingModelEditor
+            stages={values.onboardingStages}
+            documents={values.onboardingDocuments}
+            onStagesChange={(onboardingStages) => setValues((current) => ({ ...current, onboardingStages }))}
+            onDocumentsChange={(onboardingDocuments) => setValues((current) => ({ ...current, onboardingDocuments }))}
+          />
+
           <div className="grid gap-3 md:grid-cols-2">
             <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
               <span>
@@ -543,6 +684,8 @@ function FunctionEditModal({
     defaultProfileId: "",
     compatibleRoleIds: [] as string[],
     pipelineStages: normalizeRecruitmentStages(null),
+    onboardingStages: normalizeOnboardingStages(null),
+    onboardingDocuments: [] as OnboardingDocumentTemplate[],
     isActive: true,
   });
 
@@ -555,6 +698,8 @@ function FunctionEditModal({
       defaultProfileId: item.defaultProfileId ?? "",
       compatibleRoleIds: item.compatibleRoleIds ?? [],
       pipelineStages: normalizeRecruitmentStages(item.pipelineStages),
+      onboardingStages: normalizeOnboardingStages(item.onboardingStages),
+      onboardingDocuments: normalizeOnboardingDocumentTemplates(item.onboardingDocuments ?? []),
       isActive: item.isActive !== false,
     });
   }, [item]);
@@ -583,6 +728,8 @@ function FunctionEditModal({
       pipelineStages: stageModelDiffersFromDefault(values.pipelineStages)
         ? values.pipelineStages.map((stage, index) => ({ ...stage, order: index }))
         : [],
+      onboardingStages: values.onboardingStages.map((stage, index) => ({ ...stage, order: index })),
+      onboardingDocuments: values.onboardingDocuments.map((document, index) => ({ ...document, order: index })),
       isActive: values.isActive,
     });
   }
@@ -638,6 +785,14 @@ function FunctionEditModal({
             stages={values.pipelineStages}
             accent="sky"
             onChange={(pipelineStages) => setValues((current) => ({ ...current, pipelineStages }))}
+          />
+
+          <OnboardingModelEditor
+            stages={values.onboardingStages}
+            documents={values.onboardingDocuments}
+            accent="sky"
+            onStagesChange={(onboardingStages) => setValues((current) => ({ ...current, onboardingStages }))}
+            onDocumentsChange={(onboardingDocuments) => setValues((current) => ({ ...current, onboardingDocuments }))}
           />
 
           <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">

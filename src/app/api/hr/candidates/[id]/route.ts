@@ -4,6 +4,11 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
 import {
+  instantiateOnboardingDocuments,
+  mergeOnboardingDocumentModels,
+  mergeOnboardingStageModels,
+} from '@/lib/recruitment-onboarding';
+import {
   applicationStatusForCandidateStatus,
   createCandidateStageHistoryEntry,
   isCandidateDecisionAction,
@@ -185,6 +190,23 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (onboardingId) {
     const onboardingRef = hrDbAdmin.collection('onboardingProcesses').doc(onboardingId);
     const onboardingDoc = await onboardingRef.get();
+    const [roleDoc, functionDoc] = await Promise.all([
+      (candidateUpdatePatch.jobRoleId ?? before.jobRoleId)
+        ? hrDbAdmin.collection('jobRoles').doc(String(candidateUpdatePatch.jobRoleId ?? before.jobRoleId)).get()
+        : Promise.resolve(null),
+      (candidateUpdatePatch.functionId ?? before.functionId)
+        ? hrDbAdmin.collection('jobFunctions').doc(String(candidateUpdatePatch.functionId ?? before.functionId)).get()
+        : Promise.resolve(null),
+    ]);
+    const roleData = roleDoc?.data?.() ?? {};
+    const functionData = functionDoc?.data?.() ?? {};
+    const existingOnboarding = onboardingDoc.exists ? onboardingDoc.data() ?? {} : {};
+    const stages = mergeOnboardingStageModels(roleData.onboardingStages, functionData.onboardingStages);
+    const documentTemplates = mergeOnboardingDocumentModels(roleData.onboardingDocuments, functionData.onboardingDocuments);
+    const documents = instantiateOnboardingDocuments(
+      documentTemplates,
+      Array.isArray(existingOnboarding.documents) ? existingOnboarding.documents : undefined
+    );
     await onboardingRef.set({
       candidateId: id,
       candidateName: before.name ?? candidateUpdatePatch.name ?? null,
@@ -200,8 +222,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       shiftDefinitionId: candidateUpdatePatch.shiftDefinitionId ?? before.shiftDefinitionId ?? null,
       shiftDefinitionName: candidateUpdatePatch.shiftDefinitionName ?? before.shiftDefinitionName ?? null,
       source: 'recruitment',
-      status: 'pending_setup',
-      currentStage: 'approved_for_hire',
+      status: existingOnboarding.status ?? 'collecting_documents',
+      currentStage: existingOnboarding.currentStage ?? 'documents',
+      stages,
+      documents,
+      integrationAlerts: [
+        {
+          id: 'bizneo_id',
+          label: 'ID do Bizneo',
+          status: before.registrationIdBizneo || candidateUpdatePatch.registrationIdBizneo ? 'resolved' : 'pending',
+          message: 'Criar ou vincular colaborador no Bizneo.',
+        },
+        {
+          id: 'pdv_id',
+          label: 'ID do PDV Legal',
+          status: before.registrationIdPdv || candidateUpdatePatch.registrationIdPdv ? 'resolved' : 'pending',
+          message: 'Criar ou vincular código operacional no PDV Legal.',
+        },
+      ],
       approvedAt: before.hiredAt ?? now,
       approvedBy: access.decoded.uid,
       approvedByEmail: access.decoded.email ?? null,

@@ -20,6 +20,8 @@ import type {
   JobRole,
   JobOpening,
   JobOpeningStatus,
+  OnboardingDocument,
+  OnboardingProcess,
   RecruitmentFormConfig,
   RecruitmentStage,
 } from '@/types';
@@ -2595,6 +2597,314 @@ function RecruitmentFormsView({ getToken, canManage }: {
   );
 }
 
+// ─── OnboardingView ──────────────────────────────────────────────────────────
+
+const ONBOARDING_STATUS_LABELS: Record<OnboardingProcess['status'], string> = {
+  pending_setup: 'Pendente',
+  collecting_documents: 'Coletando documentos',
+  reviewing_documents: 'Conferindo documentos',
+  contract_pending: 'Contrato pendente',
+  ready_to_create_user: 'Criar colaborador',
+  active: 'Em andamento',
+  completed: 'Finalizado',
+  cancelled: 'Cancelado',
+};
+
+const ONBOARDING_DOCUMENT_STATUS_LABELS: Record<OnboardingDocument['status'], string> = {
+  pending: 'Pendente',
+  received: 'Recebido',
+  approved: 'Aprovado',
+  rejected: 'Recusado',
+};
+
+function OnboardingView({ processes, getToken, canManage, onRefresh }: {
+  processes: OnboardingProcess[];
+  getToken: () => Promise<string>;
+  canManage: boolean;
+  onRefresh: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const activeProcesses = processes.filter(process => process.status !== 'cancelled');
+  const filtered = activeProcesses.filter(process => {
+    const text = [
+      process.candidateName,
+      process.candidateEmail,
+      process.jobRoleName,
+      process.functionName,
+      process.unitName,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return !search || text.includes(search.toLowerCase());
+  });
+  const completed = processes.filter(process => process.status === 'completed').length;
+  const pendingCodes = activeProcesses.filter(process =>
+    (process.integrationAlerts ?? []).some(alert => alert.status === 'pending')
+  ).length;
+  const docsPending = activeProcesses.reduce((sum, process) =>
+    sum + (process.documents ?? []).filter(document => document.required !== false && document.status !== 'approved').length,
+    0
+  );
+
+  async function patchProcess(processId: string, body: Record<string, unknown>) {
+    setUpdating(`${processId}:${body.action ?? 'update'}`);
+    setError(null);
+    try {
+      await apiFetch(`/api/hr/onboarding/${processId}`, getToken, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+      onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao atualizar onboarding.');
+    } finally {
+      setUpdating(null);
+    }
+  }
+
+  function processDocProgress(process: OnboardingProcess) {
+    const documents = process.documents ?? [];
+    if (documents.length === 0) return { approved: 0, total: 0, percent: 0 };
+    const required = documents.filter(document => document.required !== false);
+    const base = required.length > 0 ? required : documents;
+    const approved = base.filter(document => document.status === 'approved').length;
+    return {
+      approved,
+      total: base.length,
+      percent: base.length > 0 ? Math.round((approved / base.length) * 100) : 0,
+    };
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Em onboarding</p>
+          <p className="text-3xl font-bold text-slate-950">{activeProcesses.filter(process => process.status !== 'completed').length}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Documentos pendentes</p>
+          <p className="text-3xl font-bold text-slate-950">{docsPending}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Alertas de integração</p>
+          <p className="text-3xl font-bold text-slate-950">{pendingCodes}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Finalizados</p>
+          <p className="text-3xl font-bold text-slate-950">{completed}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder="Buscar candidato, cargo ou unidade..."
+            className="w-80 rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Atualizar
+        </button>
+      </div>
+
+      {error && <ErrorLine msg={error} />}
+
+      {filtered.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center">
+          <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+          <p className="text-sm font-medium text-slate-500">Nenhum onboarding em andamento.</p>
+          <p className="mt-1 text-xs text-slate-400">Candidatos aprovados para contratação aparecem aqui.</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {filtered.map(process => {
+            const progress = processDocProgress(process);
+            const currentStage = (process.stages ?? []).find(stage => stage.id === process.currentStage);
+            const pendingAlerts = (process.integrationAlerts ?? []).filter(alert => alert.status === 'pending');
+            const canCreateCollaborator = canManage && !process.collaboratorUserId && process.status !== 'cancelled' && process.status !== 'completed';
+            const canComplete = canManage && !!process.collaboratorUserId && process.status !== 'completed' && process.status !== 'cancelled';
+
+            return (
+              <div key={process.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 p-5">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          {ONBOARDING_STATUS_LABELS[process.status] ?? process.status}
+                        </span>
+                        {currentStage && (
+                          <span className="rounded-full bg-pink-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-pink-600">
+                            {currentStage.label}
+                          </span>
+                        )}
+                      </div>
+                      <h2 className="mt-3 truncate text-lg font-bold text-slate-950">{process.candidateName ?? 'Candidato sem nome'}</h2>
+                      <p className="mt-1 truncate text-sm text-slate-500">{process.candidateEmail ?? 'E-mail não informado'}</p>
+                      <p className="mt-2 text-sm font-medium text-slate-700">
+                        {process.jobRoleName ?? 'Cargo não informado'}
+                        {process.functionName ? ` | ${process.functionName}` : ''}
+                        {process.unitName ? ` · ${process.unitName}` : ''}
+                      </p>
+                    </div>
+                    <div className="text-left md:text-right">
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Documentos</p>
+                      <p className="mt-1 text-2xl font-bold text-slate-950">{progress.approved}/{progress.total}</p>
+                      <div className="mt-2 h-2 w-36 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress.percent}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {(process.stages ?? []).length > 0 && (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {(process.stages ?? []).map(stage => (
+                        <button
+                          key={stage.id}
+                          type="button"
+                          disabled={!canManage || updating === `${process.id}:advance_stage`}
+                          onClick={() => patchProcess(process.id, { action: 'advance_stage', currentStage: stage.id })}
+                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                            process.currentStage === stage.id
+                              ? 'border-slate-950 bg-slate-950 text-white'
+                              : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-950'
+                          } disabled:opacity-50`}
+                        >
+                          {stage.label}
+                          {stage.dueDays ? <span className="ml-1 text-[10px] opacity-70">{stage.dueDays}d</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid gap-4 p-5 lg:grid-cols-[1.2fr_0.8fr]">
+                  <div>
+                    <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Documentação</p>
+                    <div className="space-y-2">
+                      {(process.documents ?? []).map(document => {
+                        const actionKey = `${process.id}:document_status`;
+                        return (
+                          <div key={document.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {document.label}
+                                  {document.required !== false && <span className="ml-1 text-pink-500">*</span>}
+                                </p>
+                                <p className="mt-0.5 text-xs text-slate-500">
+                                  {ONBOARDING_DOCUMENT_STATUS_LABELS[document.status] ?? document.status}
+                                </p>
+                              </div>
+                              {canManage && (
+                                <div className="flex gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={updating === actionKey}
+                                    onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'received' })}
+                                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-950 disabled:opacity-50"
+                                  >
+                                    Recebido
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={updating === actionKey}
+                                    onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
+                                    className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                                  >
+                                    Aprovar
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {(process.documents ?? []).length === 0 && (
+                        <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
+                          Nenhum documento configurado para este onboarding.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Integrações</p>
+                      <div className="space-y-2">
+                        {pendingAlerts.length > 0 ? pendingAlerts.map(alert => (
+                          <div key={alert.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                            <p className="text-sm font-bold text-amber-800">{alert.label}</p>
+                            <p className="mt-1 text-xs text-amber-700">{alert.message ?? 'Pendente de preenchimento.'}</p>
+                          </div>
+                        )) : (
+                          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                            <p className="text-sm font-bold text-emerald-800">Sem alertas pendentes</p>
+                            <p className="mt-1 text-xs text-emerald-700">Bizneo e PDV Legal podem ser conferidos no perfil do colaborador.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Rastreio</p>
+                      <p className="mt-2 text-xs text-slate-500">ID do onboarding</p>
+                      <p className="truncate text-sm font-mono text-slate-700">{process.id}</p>
+                      {process.jobOpeningId && (
+                        <>
+                          <p className="mt-2 text-xs text-slate-500">Vaga de origem</p>
+                          <p className="truncate text-sm font-mono text-slate-700">{process.jobOpeningId}</p>
+                        </>
+                      )}
+                    </div>
+
+                    {canManage && (
+                      <div className="flex flex-col gap-2">
+                        {canCreateCollaborator && (
+                          <button
+                            type="button"
+                            disabled={updating === `${process.id}:create_collaborator`}
+                            onClick={() => patchProcess(process.id, { action: 'create_collaborator' })}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                          >
+                            {updating === `${process.id}:create_collaborator` ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                            Criar colaborador
+                          </button>
+                        )}
+                        {canComplete && (
+                          <button
+                            type="button"
+                            disabled={updating === `${process.id}:complete`}
+                            onClick={() => patchProcess(process.id, { action: 'complete' })}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                          >
+                            {updating === `${process.id}:complete` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                            Finalizar onboarding
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── RecruitmentPage ──────────────────────────────────────────────────────────
 
 export default function RecruitmentPage() {
@@ -2605,11 +2915,12 @@ export default function RecruitmentPage() {
   const [units, setUnits] = useState<DPUnit[]>([]);
   const [shiftDefinitions, setShiftDefinitions] = useState<DPShiftDefinition[]>([]);
   const [openings, setOpenings] = useState<JobOpening[]>([]);
+  const [onboardingProcesses, setOnboardingProcesses] = useState<OnboardingProcess[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // View mode: kanban | list (triagem) | openings (por vaga) | talents | forms
-  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'openings' | 'talents' | 'forms'>('kanban');
+  // View mode: kanban | list (triagem) | openings (por vaga) | talents | forms | onboarding
+  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'openings' | 'talents' | 'forms' | 'onboarding'>('kanban');
 
   // Pipeline filters
   const [search, setSearch] = useState('');
@@ -2645,10 +2956,11 @@ export default function RecruitmentPage() {
     setError(null);
     try {
       const token = await getToken();
-      const [candidatesRes, rolesRes, openingsRes] = await Promise.all([
+      const [candidatesRes, rolesRes, openingsRes, onboardingRes] = await Promise.all([
         fetch('/api/hr/candidates', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
         fetchHrBootstrap(firebaseUser),
         fetch('/api/hr/openings', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+        fetch('/api/hr/onboarding', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       ]);
       setCandidates(candidatesRes as Candidate[]);
       setRoles(rolesRes.roles);
@@ -2656,6 +2968,7 @@ export default function RecruitmentPage() {
       setUnits(rolesRes.units ?? []);
       setShiftDefinitions(rolesRes.shiftDefinitions ?? []);
       setOpenings(openingsRes as JobOpening[]);
+      setOnboardingProcesses(Array.isArray(onboardingRes?.processes) ? onboardingRes.processes as OnboardingProcess[] : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar.');
     } finally {
@@ -2882,6 +3195,7 @@ export default function RecruitmentPage() {
               }
             : c
         ));
+        void loadData();
       }
     } catch {
       // Rollback
@@ -2896,6 +3210,7 @@ export default function RecruitmentPage() {
   const handleUpdated = (updated: Candidate) => {
     setCandidates(prev => prev.map(c => c.id === updated.id ? updated : c));
     setDetailCandidate(updated);
+    if (updated.status === 'hired') void loadData();
   };
 
   const handleDeleted = (id: string) => {
@@ -2960,8 +3275,15 @@ export default function RecruitmentPage() {
         <div className="flex items-center gap-2 flex-wrap">
           {/* View toggle */}
           <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
-            {(['kanban', 'list', 'openings', 'talents', 'forms'] as const).map((mode) => {
-              const labels: Record<string, string> = { kanban: 'Kanban', list: 'Triagem', openings: 'Por vaga', talents: 'Talentos', forms: 'Formulários' };
+            {(['kanban', 'list', 'openings', 'talents', 'forms', 'onboarding'] as const).map((mode) => {
+              const labels: Record<string, string> = {
+                kanban: 'Kanban',
+                list: 'Triagem',
+                openings: 'Por vaga',
+                talents: 'Talentos',
+                forms: 'Formulários',
+                onboarding: 'Onboarding',
+              };
               return (
                 <button key={mode} onClick={() => setViewMode(mode)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
@@ -2979,7 +3301,7 @@ export default function RecruitmentPage() {
           </div>
 
           {/* CTA */}
-          {canManage && viewMode !== 'openings' && viewMode !== 'talents' && viewMode !== 'forms' && (
+          {canManage && viewMode !== 'openings' && viewMode !== 'talents' && viewMode !== 'forms' && viewMode !== 'onboarding' && (
             <button onClick={() => setShowNewModal(true)}
               className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800">
               <UserPlus className="h-4 w-4" />
@@ -3090,7 +3412,7 @@ export default function RecruitmentPage() {
       )}
 
       {/* ─── Pipeline filters ─── */}
-      {viewMode !== 'openings' && viewMode !== 'talents' && viewMode !== 'forms' && (
+      {viewMode !== 'openings' && viewMode !== 'talents' && viewMode !== 'forms' && viewMode !== 'onboarding' && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
           <div className="mr-2 hidden items-center gap-2 border-r border-slate-100 pr-3 text-sm font-semibold text-slate-950 md:flex">
             <Kanban className="h-4 w-4 text-slate-500" />
@@ -3155,7 +3477,7 @@ export default function RecruitmentPage() {
         </div>
       )}
 
-      {viewMode !== 'openings' && viewMode !== 'talents' && viewMode !== 'forms' && selectedOpening && (
+      {viewMode !== 'openings' && viewMode !== 'talents' && viewMode !== 'forms' && viewMode !== 'onboarding' && selectedOpening && (
         <div className="rounded-2xl border border-pink-100 bg-pink-50/60 p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
@@ -3400,6 +3722,16 @@ export default function RecruitmentPage() {
         <RecruitmentFormsView
           getToken={getToken}
           canManage={canManage}
+        />
+      )}
+
+      {/* ─── Onboarding ─── */}
+      {viewMode === 'onboarding' && (
+        <OnboardingView
+          processes={onboardingProcesses}
+          getToken={getToken}
+          canManage={canManage}
+          onRefresh={loadData}
         />
       )}
 

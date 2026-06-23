@@ -2,6 +2,10 @@ import { randomUUID } from "crypto";
 
 import { z } from "zod";
 
+import {
+  normalizeOnboardingDocumentTemplates,
+  normalizeOnboardingStages,
+} from "@/lib/recruitment-onboarding";
 import { normalizeRecruitmentStages } from "@/lib/recruitment-pipeline";
 
 const stringListSchema = z.array(z.string().trim().min(1)).default([]);
@@ -62,6 +66,29 @@ const recruitmentStageSchema = z.object({
   dueDays: z.number().int().nonnegative().nullable().optional(),
 });
 
+const onboardingStageSchema = z.object({
+  id: z.enum([
+    "documents",
+    "document_review",
+    "contract",
+    "system_access",
+    "integration",
+    "probation",
+    "done",
+  ]),
+  label: z.string().trim().min(1).max(100),
+  order: z.number().int().nonnegative().optional(),
+  required: z.boolean().optional(),
+  dueDays: z.number().int().nonnegative().nullable().optional(),
+});
+
+const onboardingDocumentTemplateSchema = z.object({
+  id: z.string().trim().min(1).max(80).optional(),
+  label: z.string().trim().min(1).max(120),
+  required: z.boolean().default(true),
+  order: z.number().int().nonnegative().optional(),
+});
+
 export const jobDepartmentCreateSchema = z.object({
   name: z.string().trim().min(2).max(120),
   slug: z.string().trim().min(1).max(120).optional(),
@@ -95,6 +122,8 @@ const jobRoleBaseSchema = z.object({
   loginRestricted: z.boolean().default(false),
   formQuestions: z.array(formQuestionSchema).default([]),
   pipelineStages: z.array(recruitmentStageSchema).optional(),
+  onboardingStages: z.array(onboardingStageSchema).optional(),
+  onboardingDocuments: z.array(onboardingDocumentTemplateSchema).optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -115,6 +144,8 @@ const jobFunctionBaseSchema = z.object({
   defaultProfileId: z.string().trim().min(1).optional(),
   formQuestions: z.array(formQuestionSchema).default([]),
   pipelineStages: z.array(recruitmentStageSchema).optional(),
+  onboardingStages: z.array(onboardingStageSchema).optional(),
+  onboardingDocuments: z.array(onboardingDocumentTemplateSchema).optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -213,6 +244,21 @@ function normalizePipelineStageModel(
   return normalizeRecruitmentStages(stages);
 }
 
+function normalizeOnboardingStageModel(
+  stages?: Array<z.infer<typeof onboardingStageSchema>>
+) {
+  if (stages === undefined) return undefined;
+  if (stages.length === 0) return [];
+  return normalizeOnboardingStages(stages);
+}
+
+function normalizeOnboardingDocumentModel(
+  documents?: Array<z.infer<typeof onboardingDocumentTemplateSchema>>
+) {
+  if (documents === undefined) return undefined;
+  return normalizeOnboardingDocumentTemplates(documents);
+}
+
 export function normalizeJobRoleInput(
   input: z.infer<typeof jobRoleCreateSchema>
 ) {
@@ -230,6 +276,8 @@ export function normalizeJobRoleInput(
     benefits: normalizeStringList(input.benefits),
     formQuestions: normalizeFormQuestions(input.formQuestions),
     pipelineStages: normalizePipelineStageModel(input.pipelineStages),
+    onboardingStages: normalizeOnboardingStageModel(input.onboardingStages),
+    onboardingDocuments: normalizeOnboardingDocumentModel(input.onboardingDocuments),
   });
 }
 
@@ -284,6 +332,8 @@ export function normalizeJobRolePatch(
         ? undefined
         : normalizeFormQuestions(input.formQuestions),
     pipelineStages: normalizePipelineStageModel(input.pipelineStages),
+    onboardingStages: normalizeOnboardingStageModel(input.onboardingStages),
+    onboardingDocuments: normalizeOnboardingDocumentModel(input.onboardingDocuments),
   });
 }
 
@@ -301,6 +351,8 @@ export function normalizeJobFunctionInput(
     compatibleRoleIds: normalizeStringList(input.compatibleRoleIds),
     formQuestions: normalizeFormQuestions(input.formQuestions),
     pipelineStages: normalizePipelineStageModel(input.pipelineStages),
+    onboardingStages: normalizeOnboardingStageModel(input.onboardingStages),
+    onboardingDocuments: normalizeOnboardingDocumentModel(input.onboardingDocuments),
   });
 }
 
@@ -341,5 +393,7 @@ export function normalizeJobFunctionPatch(
         ? undefined
         : normalizeFormQuestions(input.formQuestions),
     pipelineStages: normalizePipelineStageModel(input.pipelineStages),
+    onboardingStages: normalizeOnboardingStageModel(input.onboardingStages),
+    onboardingDocuments: normalizeOnboardingDocumentModel(input.onboardingDocuments),
   });
 }

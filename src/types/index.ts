@@ -861,6 +861,72 @@ export type RecruitmentStage = {
   dueDays?: number | null;
 };
 
+export type OnboardingStageId =
+  | 'documents'
+  | 'document_review'
+  | 'contract'
+  | 'system_access'
+  | 'integration'
+  | 'probation'
+  | 'done';
+
+export type OnboardingStage = {
+  id: OnboardingStageId;
+  label: string;
+  order: number;
+  required?: boolean;
+  dueDays?: number | null;
+};
+
+export type OnboardingDocumentTemplate = {
+  id: string;
+  label: string;
+  required?: boolean;
+  order?: number;
+};
+
+export type OnboardingDocument = OnboardingDocumentTemplate & {
+  status: 'pending' | 'received' | 'approved' | 'rejected';
+  receivedAt?: string | null;
+  approvedAt?: string | null;
+  updatedAt?: string | null;
+  note?: string | null;
+};
+
+export type OnboardingProcess = {
+  id: string;
+  candidateId: string;
+  candidateName?: string | null;
+  candidateEmail?: string | null;
+  applicationId?: string | null;
+  jobOpeningId?: string | null;
+  jobRoleId?: string | null;
+  jobRoleName?: string | null;
+  functionId?: string | null;
+  functionName?: string | null;
+  unitId?: string | null;
+  unitName?: string | null;
+  shiftDefinitionId?: string | null;
+  shiftDefinitionName?: string | null;
+  collaboratorUserId?: string | null;
+  employeeId?: string | null;
+  status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'contract_pending' | 'ready_to_create_user' | 'active' | 'completed' | 'cancelled';
+  currentStage?: OnboardingStageId;
+  stages?: OnboardingStage[];
+  documents?: OnboardingDocument[];
+  integrationAlerts?: Array<{
+    id: string;
+    label: string;
+    status: 'pending' | 'resolved';
+    message?: string;
+  }>;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+};
+
 export type Candidate = {
   id: string;
   name: string;
@@ -976,6 +1042,8 @@ export type JobRole = {
   loginRestricted?: boolean;
   formQuestions?: HrFormQuestion[];
   pipelineStages?: RecruitmentStage[];
+  onboardingStages?: OnboardingStage[];
+  onboardingDocuments?: OnboardingDocumentTemplate[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -999,6 +1067,8 @@ export type JobFunction = {
   defaultProfileId?: string;
   formQuestions?: HrFormQuestion[];
   pipelineStages?: RecruitmentStage[];
+  onboardingStages?: OnboardingStage[];
+  onboardingDocuments?: OnboardingDocumentTemplate[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
