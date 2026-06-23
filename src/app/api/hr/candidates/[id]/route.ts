@@ -139,6 +139,20 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const statusChanged = !!status && status !== beforeStatus;
+  const latestApplicationId = typeof candidatePatch.latestApplicationId === 'string'
+    ? candidatePatch.latestApplicationId
+    : before.latestApplicationId;
+  const candidateUpdatePatch: Record<string, unknown> = { ...candidatePatch };
+  let onboardingId: string | null = null;
+
+  if (status === 'hired') {
+    onboardingId = typeof before.onboardingId === 'string' && before.onboardingId.trim()
+      ? before.onboardingId
+      : `onboarding_${id}_${latestApplicationId || 'direct'}`;
+    candidateUpdatePatch.onboardingId = onboardingId;
+    candidateUpdatePatch.hiredAt = before.hiredAt ?? now;
+  }
+
   const historyEntry = statusChanged
     ? createCandidateStageHistoryEntry({
         fromStatus: beforeStatus,
@@ -152,21 +166,47 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     : null;
 
   await hrDbAdmin.collection('candidates').doc(id).update({
-    ...candidatePatch,
+    ...candidateUpdatePatch,
     updatedAt: now,
     ...(historyEntry ? { recruitmentHistory: FieldValue.arrayUnion(historyEntry) } : {}),
   });
 
-  const latestApplicationId = typeof candidatePatch.latestApplicationId === 'string'
-    ? candidatePatch.latestApplicationId
-    : before.latestApplicationId;
   if (latestApplicationId && status) {
     await hrDbAdmin.collection('applications').doc(latestApplicationId).set({
       stage: status,
       status: applicationStatusForCandidateStatus(status),
+      ...(onboardingId ? { onboardingId, hiredAt: before.hiredAt ?? now } : {}),
       updatedAt: now,
       updatedBy: access.decoded.uid,
       ...(historyEntry ? { stageHistory: FieldValue.arrayUnion(historyEntry) } : {}),
+    }, { merge: true });
+  }
+
+  if (onboardingId) {
+    const onboardingRef = hrDbAdmin.collection('onboardingProcesses').doc(onboardingId);
+    const onboardingDoc = await onboardingRef.get();
+    await onboardingRef.set({
+      candidateId: id,
+      candidateName: before.name ?? candidateUpdatePatch.name ?? null,
+      candidateEmail: before.email ?? candidateUpdatePatch.email ?? null,
+      applicationId: latestApplicationId ?? null,
+      jobOpeningId: candidateUpdatePatch.jobOpeningId ?? before.jobOpeningId ?? null,
+      jobRoleId: candidateUpdatePatch.jobRoleId ?? before.jobRoleId ?? null,
+      jobRoleName: candidateUpdatePatch.jobRoleName ?? before.jobRoleName ?? null,
+      functionId: candidateUpdatePatch.functionId ?? before.functionId ?? null,
+      functionName: candidateUpdatePatch.functionName ?? before.functionName ?? null,
+      unitId: candidateUpdatePatch.unitId ?? before.unitId ?? null,
+      unitName: candidateUpdatePatch.unitName ?? before.unitName ?? null,
+      shiftDefinitionId: candidateUpdatePatch.shiftDefinitionId ?? before.shiftDefinitionId ?? null,
+      shiftDefinitionName: candidateUpdatePatch.shiftDefinitionName ?? before.shiftDefinitionName ?? null,
+      source: 'recruitment',
+      status: 'pending_setup',
+      currentStage: 'approved_for_hire',
+      approvedAt: before.hiredAt ?? now,
+      approvedBy: access.decoded.uid,
+      approvedByEmail: access.decoded.email ?? null,
+      createdAt: onboardingDoc.exists ? onboardingDoc.data()?.createdAt ?? now : now,
+      updatedAt: now,
     }, { merge: true });
   }
 
@@ -179,23 +219,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       target_type: 'candidate',
       target_id: id,
       target_name: before.name ?? before.email ?? id,
-      changed_fields: Object.keys(candidatePatch),
+      changed_fields: Object.keys(candidateUpdatePatch),
       decision_action: historyEntry?.action ?? null,
+      onboarding_id: onboardingId,
       before: {
         status: before.status ?? null,
         jobOpeningId: before.jobOpeningId ?? null,
         latestApplicationId: before.latestApplicationId ?? null,
       },
       after: {
-        status: candidatePatch.status ?? before.status ?? null,
-        jobOpeningId: candidatePatch.jobOpeningId ?? before.jobOpeningId ?? null,
+        status: candidateUpdatePatch.status ?? before.status ?? null,
+        jobOpeningId: candidateUpdatePatch.jobOpeningId ?? before.jobOpeningId ?? null,
         latestApplicationId,
       },
     },
     ttl_days: 365,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, onboardingId });
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {

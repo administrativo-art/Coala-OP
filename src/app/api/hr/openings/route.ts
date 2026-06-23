@@ -4,7 +4,7 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
 import { normalizeRecruitmentQuestions } from '@/lib/recruitment-forms';
-import { normalizeRecruitmentStages } from '@/lib/recruitment-pipeline';
+import { mergeRecruitmentStageModels, normalizeRecruitmentStages } from '@/lib/recruitment-pipeline';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -72,10 +72,13 @@ export async function POST(request: NextRequest) {
   let unitName: string | null = null;
   let shiftDefinitionName: string | null = null;
   let inheritedQuestions: unknown[] = [];
+  let rolePipelineStages: unknown;
+  let functionPipelineStages: unknown;
   try {
     const roleDoc = await hrDbAdmin.collection('jobRoles').doc(jobRoleId).get();
     const roleData = roleDoc.data();
     jobRoleName = roleData?.name;
+    rolePipelineStages = roleData?.pipelineStages;
     if (!Array.isArray(formQuestions) || formQuestions.length === 0) {
       if (Array.isArray(roleData?.formQuestions)) {
         inheritedQuestions = roleData.formQuestions;
@@ -86,6 +89,7 @@ export async function POST(request: NextRequest) {
       const functionDoc = await hrDbAdmin.collection('jobFunctions').doc(functionId).get();
       const functionData = functionDoc.data();
       functionName = typeof functionData?.name === 'string' ? functionData.name : null;
+      functionPipelineStages = functionData?.pipelineStages;
       const compatibleRoleIds = Array.isArray(functionData?.compatibleRoleIds) ? functionData.compatibleRoleIds : [];
       if (compatibleRoleIds.length > 0 && !compatibleRoleIds.includes(jobRoleId)) {
         return jsonError('Função incompatível com o cargo selecionado.');
@@ -111,6 +115,9 @@ export async function POST(request: NextRequest) {
   const resolvedQuestions = Array.isArray(formQuestions) && formQuestions.length > 0
     ? formQuestions
     : inheritedQuestions;
+  const resolvedPipelineStages = Array.isArray(pipelineStages) && pipelineStages.length > 0
+    ? normalizeRecruitmentStages(pipelineStages)
+    : mergeRecruitmentStageModels(rolePipelineStages, functionPipelineStages);
 
   const ref = await hrDbAdmin.collection('jobOpenings').add({
     title: title.trim(),
@@ -126,7 +133,7 @@ export async function POST(request: NextRequest) {
     description: description?.trim() || null,
     requirements: Array.isArray(requirements) ? requirements : [],
     formQuestions: normalizeRecruitmentQuestions(resolvedQuestions),
-    pipelineStages: normalizeRecruitmentStages(pipelineStages),
+    pipelineStages: resolvedPipelineStages,
     location: location?.trim() || null,
     workType: workType || null,
     slots: Number(slots) || 1,

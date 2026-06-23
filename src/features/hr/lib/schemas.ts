@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 
 import { z } from "zod";
 
+import { normalizeRecruitmentStages } from "@/lib/recruitment-pipeline";
+
 const stringListSchema = z.array(z.string().trim().min(1)).default([]);
 
 const salaryRangeSchema = z.object({
@@ -45,6 +47,21 @@ const formQuestionSchema = z.object({
   config: z.record(z.unknown()).optional(),
 });
 
+const recruitmentStageSchema = z.object({
+  id: z.enum([
+    "applied",
+    "screening",
+    "interview",
+    "technical_test",
+    "offer",
+    "hired",
+  ]),
+  label: z.string().trim().min(1).max(80),
+  order: z.number().int().nonnegative().optional(),
+  required: z.boolean().optional(),
+  dueDays: z.number().int().nonnegative().nullable().optional(),
+});
+
 export const jobDepartmentCreateSchema = z.object({
   name: z.string().trim().min(2).max(120),
   slug: z.string().trim().min(1).max(120).optional(),
@@ -77,6 +94,7 @@ const jobRoleBaseSchema = z.object({
   defaultProfileId: z.string().trim().min(1).optional(),
   loginRestricted: z.boolean().default(false),
   formQuestions: z.array(formQuestionSchema).default([]),
+  pipelineStages: z.array(recruitmentStageSchema).optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -96,6 +114,7 @@ const jobFunctionBaseSchema = z.object({
   compatibleRoleIds: z.array(z.string().trim().min(1)).default([]),
   defaultProfileId: z.string().trim().min(1).optional(),
   formQuestions: z.array(formQuestionSchema).default([]),
+  pipelineStages: z.array(recruitmentStageSchema).optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -186,6 +205,14 @@ function normalizeFormQuestions(
   );
 }
 
+function normalizePipelineStageModel(
+  stages?: Array<z.infer<typeof recruitmentStageSchema>>
+) {
+  if (stages === undefined) return undefined;
+  if (stages.length === 0) return [];
+  return normalizeRecruitmentStages(stages);
+}
+
 export function normalizeJobRoleInput(
   input: z.infer<typeof jobRoleCreateSchema>
 ) {
@@ -202,6 +229,7 @@ export function normalizeJobRoleInput(
     competencies: normalizeStringList(input.competencies),
     benefits: normalizeStringList(input.benefits),
     formQuestions: normalizeFormQuestions(input.formQuestions),
+    pipelineStages: normalizePipelineStageModel(input.pipelineStages),
   });
 }
 
@@ -255,6 +283,7 @@ export function normalizeJobRolePatch(
       input.formQuestions === undefined
         ? undefined
         : normalizeFormQuestions(input.formQuestions),
+    pipelineStages: normalizePipelineStageModel(input.pipelineStages),
   });
 }
 
@@ -271,6 +300,7 @@ export function normalizeJobFunctionInput(
     requirements: normalizeStringList(input.requirements),
     compatibleRoleIds: normalizeStringList(input.compatibleRoleIds),
     formQuestions: normalizeFormQuestions(input.formQuestions),
+    pipelineStages: normalizePipelineStageModel(input.pipelineStages),
   });
 }
 
@@ -310,5 +340,6 @@ export function normalizeJobFunctionPatch(
       input.formQuestions === undefined
         ? undefined
         : normalizeFormQuestions(input.formQuestions),
+    pipelineStages: normalizePipelineStageModel(input.pipelineStages),
   });
 }

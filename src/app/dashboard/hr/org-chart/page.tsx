@@ -34,8 +34,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { updateHrFunction, updateHrRole } from "@/features/hr/lib/client";
+import { normalizeRecruitmentStages } from "@/lib/recruitment-pipeline";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { JobDepartment, JobFunction, JobRole, User } from "@/types";
+import type { CandidateStatus, JobDepartment, JobFunction, JobRole, RecruitmentStage, User } from "@/types";
 
 interface OrgNode {
   role: JobRole;
@@ -70,6 +71,104 @@ function nodeMatchesSearch(node: OrgNode, search: string): boolean {
   if (node.role.publicTitle?.toLowerCase().includes(q)) return true;
   if (node.employees.some((e) => e.username.toLowerCase().includes(q))) return true;
   return node.children.some((c) => nodeMatchesSearch(c, search));
+}
+
+const STAGE_LABELS: Record<CandidateStatus, string> = {
+  applied: "Inscrição",
+  screening: "Triagem",
+  interview: "Entrevista",
+  technical_test: "Avaliação prática",
+  offer: "Proposta",
+  hired: "Contratação",
+  rejected: "Reprovado",
+  withdrawn: "Desistência",
+  talent_pool: "Banco de talentos",
+};
+
+function stageModelDiffersFromDefault(stages: RecruitmentStage[]) {
+  const defaults = normalizeRecruitmentStages(null);
+  return stages.some((stage, index) => {
+    const fallback = defaults[index];
+    return !fallback ||
+      stage.id !== fallback.id ||
+      stage.label !== fallback.label ||
+      stage.order !== fallback.order ||
+      stage.required !== fallback.required ||
+      stage.dueDays !== fallback.dueDays;
+  });
+}
+
+function RecruitmentStageModelEditor({
+  stages,
+  onChange,
+  accent = "indigo",
+}: {
+  stages: RecruitmentStage[];
+  onChange: (stages: RecruitmentStage[]) => void;
+  accent?: "indigo" | "sky";
+}) {
+  const accentClass = accent === "sky"
+    ? "focus:border-sky-400 focus:ring-sky-100"
+    : "focus:border-indigo-400 focus:ring-indigo-100";
+
+  function updateStage(stageId: CandidateStatus, patch: Partial<RecruitmentStage>) {
+    onChange(stages.map((stage) => stage.id === stageId ? { ...stage, ...patch } : stage));
+  }
+
+  function moveStage(stageId: CandidateStatus, direction: -1 | 1) {
+    const index = stages.findIndex((stage) => stage.id === stageId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= stages.length) return;
+    const next = [...stages];
+    const [item] = next.splice(index, 1);
+    next.splice(nextIndex, 0, item);
+    onChange(next.map((stage, stageIndex) => ({ ...stage, order: stageIndex })));
+  }
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-800">Modelo de etapas do recrutamento</p>
+        <p className="mt-1 text-xs text-slate-500">Usado como base ao abrir vaga para este cargo ou função.</p>
+      </div>
+      <div className="space-y-2">
+        {stages.map((stage, index) => (
+          <div key={stage.id} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[2rem_1fr_7rem_8rem] md:items-center">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-500">
+              {index + 1}
+            </div>
+            <div>
+              <input
+                value={stage.label}
+                onChange={(event) => updateStage(stage.id, { label: event.target.value })}
+                className={`h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+              />
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{STAGE_LABELS[stage.id]}</p>
+            </div>
+            <label className="space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Prazo</span>
+              <input
+                type="number"
+                min="0"
+                value={stage.dueDays ?? ""}
+                onChange={(event) => updateStage(stage.id, { dueDays: event.target.value === "" ? null : Number(event.target.value) })}
+                placeholder="dias"
+                className={`h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+              />
+            </label>
+            <div className="flex justify-end gap-1">
+              <button type="button" disabled={index === 0} onClick={() => moveStage(stage.id, -1)} className="rounded-lg px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                Subir
+              </button>
+              <button type="button" disabled={index === stages.length - 1} onClick={() => moveStage(stage.id, 1)} className="rounded-lg px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                Descer
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ─── Role Detail Modal ──────────────────────────────────────────────────────
@@ -262,6 +361,7 @@ function RoleEditModal({
     parentId: "",
     defaultProfileId: "",
     loginRestricted: false,
+    pipelineStages: normalizeRecruitmentStages(null),
     isActive: true,
   });
 
@@ -274,6 +374,7 @@ function RoleEditModal({
       parentId: role.parentId ?? role.reportsTo ?? "",
       defaultProfileId: role.defaultProfileId ?? "",
       loginRestricted: role.loginRestricted ?? false,
+      pipelineStages: normalizeRecruitmentStages(role.pipelineStages),
       isActive: role.isActive !== false,
     });
   }, [role]);
@@ -294,6 +395,7 @@ function RoleEditModal({
       reportsTo: values.parentId || null,
       defaultProfileId: values.defaultProfileId || undefined,
       loginRestricted: values.loginRestricted,
+      pipelineStages: values.pipelineStages.map((stage, index) => ({ ...stage, order: index })),
       isActive: values.isActive,
     });
   }
@@ -368,6 +470,11 @@ function RoleEditModal({
             </select>
           </label>
 
+          <RecruitmentStageModelEditor
+            stages={values.pipelineStages}
+            onChange={(pipelineStages) => setValues((current) => ({ ...current, pipelineStages }))}
+          />
+
           <div className="grid gap-3 md:grid-cols-2">
             <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
               <span>
@@ -435,6 +542,7 @@ function FunctionEditModal({
     departmentId: "",
     defaultProfileId: "",
     compatibleRoleIds: [] as string[],
+    pipelineStages: normalizeRecruitmentStages(null),
     isActive: true,
   });
 
@@ -446,6 +554,7 @@ function FunctionEditModal({
       departmentId: item.departmentId ?? "",
       defaultProfileId: item.defaultProfileId ?? "",
       compatibleRoleIds: item.compatibleRoleIds ?? [],
+      pipelineStages: normalizeRecruitmentStages(item.pipelineStages),
       isActive: item.isActive !== false,
     });
   }, [item]);
@@ -471,6 +580,9 @@ function FunctionEditModal({
       departmentName: department?.name ?? null,
       compatibleRoleIds: values.compatibleRoleIds,
       defaultProfileId: values.defaultProfileId || undefined,
+      pipelineStages: stageModelDiffersFromDefault(values.pipelineStages)
+        ? values.pipelineStages.map((stage, index) => ({ ...stage, order: index }))
+        : [],
       isActive: values.isActive,
     });
   }
@@ -521,6 +633,12 @@ function FunctionEditModal({
               ))}
             </div>
           </div>
+
+          <RecruitmentStageModelEditor
+            stages={values.pipelineStages}
+            accent="sky"
+            onChange={(pipelineStages) => setValues((current) => ({ ...current, pipelineStages }))}
+          />
 
           <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
             <span>

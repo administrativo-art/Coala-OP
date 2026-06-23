@@ -97,6 +97,46 @@ export function normalizeRecruitmentStages(value: unknown): RecruitmentStage[] {
     .map((stage, index) => ({ ...stage, order: index }));
 }
 
+function stageModelIds(value: unknown) {
+  const ids = new Set<CandidateStatus>();
+  if (!Array.isArray(value)) return ids;
+
+  value.forEach((item) => {
+    if (!item || typeof item !== 'object') return;
+    const id = (item as Record<string, unknown>).id;
+    if (isCandidateStatus(id) && RECRUITMENT_PIPELINE_STATUSES.includes(id)) {
+      ids.add(id);
+    }
+  });
+
+  return ids;
+}
+
+export function hasRecruitmentStageModel(value: unknown) {
+  return stageModelIds(value).size > 0;
+}
+
+export function mergeRecruitmentStageModels(
+  roleStages: unknown,
+  functionStages?: unknown
+): RecruitmentStage[] {
+  const roleIds = stageModelIds(roleStages);
+  const functionIds = stageModelIds(functionStages);
+  const base = roleIds.size > 0
+    ? normalizeRecruitmentStages(roleStages)
+    : normalizeRecruitmentStages(null);
+
+  if (functionIds.size === 0) return base;
+
+  const functionModel = normalizeRecruitmentStages(functionStages);
+  if (functionIds.size >= RECRUITMENT_PIPELINE_STATUSES.length) return functionModel;
+
+  const functionById = new Map(functionModel.map(stage => [stage.id, stage]));
+  return normalizeRecruitmentStages(base.map(stage =>
+    functionIds.has(stage.id) ? { ...stage, ...functionById.get(stage.id) } : stage
+  ));
+}
+
 export function inferCandidateDecisionAction(
   fromStatus: CandidateStatus | null,
   toStatus: CandidateStatus

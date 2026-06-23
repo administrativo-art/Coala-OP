@@ -882,6 +882,7 @@ export type Candidate = {
     id: string;
     stage?: CandidateStatus;
     status?: string;
+    onboardingId?: string | null;
     stageHistory?: CandidateStageHistoryEntry[];
     formAnswers?: Record<string, unknown>;
     formQuestionSnapshot?: HrFormQuestion[];
@@ -900,6 +901,8 @@ export type Candidate = {
   };
   rating?: number; // 1-5
   source?: string;
+  onboardingId?: string | null;
+  hiredAt?: string | null;
   appliedAt: string;
   updatedAt: string;
   createdBy: string;
@@ -972,6 +975,7 @@ export type JobRole = {
   defaultProfileId?: string;
   loginRestricted?: boolean;
   formQuestions?: HrFormQuestion[];
+  pipelineStages?: RecruitmentStage[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -994,6 +998,7 @@ export type JobFunction = {
   compatibleRoleIds?: string[];
   defaultProfileId?: string;
   formQuestions?: HrFormQuestion[];
+  pipelineStages?: RecruitmentStage[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

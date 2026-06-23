@@ -26,6 +26,7 @@ import type {
 import { DEFAULT_TALENT_POOL_FORM } from '@/lib/recruitment-forms';
 import {
   createCandidateStageHistoryEntry,
+  mergeRecruitmentStageModels,
   normalizeRecruitmentStages,
   RECRUITMENT_PIPELINE_STATUSES,
 } from '@/lib/recruitment-pipeline';
@@ -97,9 +98,47 @@ const EMPTY_QUESTION_DRAFT = {
   eliminatory: false,
 };
 
+const MS_DAY = 86_400_000;
+
 function dateInputToIso(value: string, endOfDay = false) {
   if (!value) return null;
   return new Date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`).toISOString();
+}
+
+function safeDateTime(value: unknown) {
+  if (typeof value !== 'string' || !value) return null;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function getCandidateStageStartedAt(candidate: Candidate, status = candidate.status) {
+  const history = [
+    ...(candidate.latestApplication?.stageHistory ?? []),
+    ...(candidate.recruitmentHistory ?? []),
+  ]
+    .filter((entry): entry is CandidateStageHistoryEntry => !!entry?.createdAt && entry.toStatus === status)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return safeDateTime(history[0]?.createdAt) ?? safeDateTime(candidate.appliedAt) ?? safeDateTime(candidate.updatedAt) ?? Date.now();
+}
+
+function getCandidateStageTiming(candidate: Candidate, stage?: RecruitmentStage, now = Date.now()) {
+  if (!stage || stage.dueDays === null || stage.dueDays === undefined) {
+    return { daysInStage: 0, daysLeft: null as number | null, overdueDays: 0, isOverdue: false };
+  }
+
+  const startedAt = getCandidateStageStartedAt(candidate, stage.id);
+  const daysInStage = Math.max(0, Math.floor((now - startedAt) / MS_DAY));
+  const deadline = startedAt + stage.dueDays * MS_DAY;
+  const rawDaysLeft = Math.ceil((deadline - now) / MS_DAY);
+  const overdueDays = rawDaysLeft < 0 ? Math.abs(rawDaysLeft) : 0;
+
+  return {
+    daysInStage,
+    daysLeft: rawDaysLeft,
+    overdueDays,
+    isOverdue: rawDaysLeft < 0,
+  };
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -464,10 +503,11 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
     setError(null);
     const now = new Date().toISOString();
     try {
-      await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
+      const result = await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
         method: 'PATCH',
         body: JSON.stringify({ status, decisionAction }),
       });
+      const onboardingId = typeof result?.onboardingId === 'string' ? result.onboardingId : candidate.onboardingId;
       const historyEntry = createCandidateStageHistoryEntry({
         fromStatus: candidate.status,
         toStatus: status,
@@ -479,12 +519,15 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
       const updated = {
         ...candidate,
         status,
+        onboardingId,
+        hiredAt: status === 'hired' ? candidate.hiredAt ?? now : candidate.hiredAt,
         updatedAt: now,
         recruitmentHistory: [...(candidate.recruitmentHistory ?? []), historyEntry],
         latestApplication: candidate.latestApplication
           ? {
               ...candidate.latestApplication,
               stage: status,
+              onboardingId,
               stageHistory: [...(candidate.latestApplication.stageHistory ?? []), historyEntry],
             }
           : candidate.latestApplication,
@@ -572,7 +615,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
                     className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/15 disabled:opacity-50"
                   >
                     {statusAction === 'hired' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                    Contratar
+                    Aprovar contratação
                   </button>
                 )}
                 {form.status !== TALENT_POOL_STATUS && (
@@ -861,7 +904,7 @@ const SOURCE_TAG_COLORS: Record<string, string> = {
   site:        'bg-white/75 text-violet-700 border-violet-100',
 };
 
-function DraggableCard({ candidate, onOpen }: { candidate: Candidate; onOpen: () => void }) {
+function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; stage?: RecruitmentStage; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: candidate.id,
     data: { candidate },
@@ -877,6 +920,7 @@ function DraggableCard({ candidate, onOpen }: { candidate: Candidate; onOpen: ()
     : null;
 
   const isNew = (Date.now() - new Date(candidate.appliedAt).getTime()) < 7 * 86_400_000;
+  const timing = getCandidateStageTiming(candidate, stage);
 
   return (
     <div
@@ -895,6 +939,21 @@ function DraggableCard({ candidate, onOpen }: { candidate: Candidate; onOpen: ()
               {isNew && (
                 <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-100 tracking-wide">
                   NOVO
+                </span>
+              )}
+              {stage?.dueDays !== null && stage?.dueDays !== undefined && (
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border tracking-wide ${
+                  timing.isOverdue
+                    ? 'border-red-100 bg-red-50 text-red-700'
+                    : timing.daysLeft === 0
+                      ? 'border-amber-100 bg-amber-50 text-amber-700'
+                      : 'border-slate-100 bg-white/75 text-slate-600'
+                }`}>
+                  {timing.isOverdue
+                    ? `${timing.overdueDays}d atraso`
+                    : timing.daysLeft === 0
+                      ? 'vence hoje'
+                      : `${timing.daysLeft}d restantes`}
                 </span>
               )}
             </div>
@@ -948,12 +1007,21 @@ function DroppableColumn({ status, stage, candidates, onCardOpen }: {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const cfg = STATUS_CONFIG[status];
   const accent = COLUMN_ACCENT[status];
+  const overdueCount = stage
+    ? candidates.filter(candidate => getCandidateStageTiming(candidate, stage).isOverdue).length
+    : 0;
 
   return (
     <div className={`flex-shrink-0 w-[270px] rounded-2xl border bg-gradient-to-b ${accent} p-2 shadow-sm flex flex-col`}>
       <div className="px-2.5 py-2.5 flex items-center gap-2">
         <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
-        <h3 className="font-bold text-slate-900 text-sm flex-1">{stage?.label ?? cfg.label}</h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-bold text-slate-900">{stage?.label ?? cfg.label}</h3>
+          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            {stage?.dueDays === null || stage?.dueDays === undefined ? 'Sem prazo' : `${stage.dueDays}d de prazo`}
+            {overdueCount > 0 ? ` · ${overdueCount} atrasado${overdueCount !== 1 ? 's' : ''}` : ''}
+          </p>
+        </div>
         <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-white/70 hover:text-slate-900">
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -971,7 +1039,7 @@ function DroppableColumn({ status, stage, candidates, onCardOpen }: {
         }`}
       >
         {candidates.map(c => (
-          <DraggableCard key={c.id} candidate={c} onOpen={() => onCardOpen(c)} />
+          <DraggableCard key={c.id} candidate={c} stage={stage} onOpen={() => onCardOpen(c)} />
         ))}
         {candidates.length === 0 && (
           <div className={`flex-1 min-h-[120px] flex items-center justify-center rounded-xl border border-dashed ${
@@ -1144,6 +1212,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
       ...(role?.formQuestions ?? []),
       ...(fn?.formQuestions ?? []),
     ];
+    const inheritedStages = mergeRecruitmentStageModels(role?.pipelineStages, fn?.pipelineStages);
 
     setForm(prev => ({
       ...prev,
@@ -1152,6 +1221,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
       requirements: prev.requirements.trim() || requirements.length === 0 ? prev.requirements : Array.from(new Set(requirements)).join('\n'),
     }));
     setQuestions(prev => prev.length > 0 || inheritedQuestions.length === 0 ? prev : inheritedQuestions);
+    setStages(inheritedStages);
   };
 
   const handleRoleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -2666,15 +2736,38 @@ export default function RecruitmentPage() {
 
   const stats = useMemo(() => {
     const now = Date.now();
-    const MS_DAY = 86_400_000;
+    const openOpenings = openings.filter(opening => opening.status === 'open').length;
+    const totalOpenings = openings.length;
     const applied = candidates.filter(c => c.status === 'applied').length;
     const screening = candidates.filter(c => c.status === 'screening').length;
     const hired = candidates.filter(c => c.status === 'hired').length;
+    const rejected = candidates.filter(c => c.status === 'rejected').length;
+    const talentPool = candidates.filter(c => c.status === TALENT_POOL_STATUS || c.source === 'talent_pool').length;
     const pipeline = candidates.filter(c => PIPELINE_STATUSES.includes(c.status));
     const avgDays = pipeline.length > 0
       ? Math.round(pipeline.reduce((sum, c) =>
           sum + (now - new Date(c.appliedAt).getTime()), 0) / pipeline.length / MS_DAY)
       : 0;
+    const hiredWithDates = candidates.filter(c => c.status === 'hired');
+    const avgHiringDays = hiredWithDates.length > 0
+      ? Math.round(hiredWithDates.reduce((sum, candidate) => {
+          const start = safeDateTime(candidate.appliedAt) ?? now;
+          const end = safeDateTime(candidate.hiredAt) ?? safeDateTime(candidate.updatedAt) ?? now;
+          return sum + Math.max(0, end - start);
+        }, 0) / hiredWithDates.length / MS_DAY)
+      : 0;
+    const conversionBase = hired + rejected;
+    const conversionRate = conversionBase > 0 ? Math.round((hired / conversionBase) * 100) : 0;
+    const overdueCandidates = pipeline.filter(candidate => {
+      const opening = openings.find(item => item.id === candidate.jobOpeningId);
+      const stage = normalizeRecruitmentStages(opening?.pipelineStages).find(item => item.id === candidate.status);
+      return getCandidateStageTiming(candidate, stage, now).isOverdue;
+    }).length;
+    const delayedOpenings = openings.filter(opening => {
+      if (opening.status !== 'open' || !opening.applicationEndAt) return false;
+      const end = safeDateTime(opening.applicationEndAt);
+      return end !== null && end < now;
+    }).length;
     // Sparkline: candidates applied per day for last 7 days
     const sparkData = Array.from({ length: 7 }, (_, i) => {
       const dayStart = now - (6 - i) * MS_DAY;
@@ -2698,8 +2791,25 @@ export default function RecruitmentPage() {
     const hiredThisMonth = candidates.filter(c =>
       c.status === 'hired' && (now - new Date(c.updatedAt).getTime()) < 30 * MS_DAY
     ).length;
-    return { applied, screening, hired, avgDays, sparkData, appliedTrend, hiredThisMonth };
-  }, [candidates]);
+    return {
+      applied,
+      screening,
+      hired,
+      rejected,
+      avgDays,
+      avgHiringDays,
+      sparkData,
+      appliedTrend,
+      hiredThisMonth,
+      openOpenings,
+      totalOpenings,
+      talentPool,
+      pipeline: pipeline.length,
+      overdueCandidates,
+      delayedOpenings,
+      conversionRate,
+    };
+  }, [candidates, openings]);
 
   // ── DnD handlers ──────────────────────────────────────────────────────────
 
@@ -2721,17 +2831,58 @@ export default function RecruitmentPage() {
 
     const candidate = candidates.find(c => c.id === active.id);
     if (!candidate || candidate.status === newStatus) return;
+    const now = new Date().toISOString();
+    const historyEntry = createCandidateStageHistoryEntry({
+      fromStatus: candidate.status,
+      toStatus: newStatus,
+      action: newStatus === 'hired' ? 'hired' : 'status_changed',
+      actorId: null,
+      actorEmail: null,
+      createdAt: now,
+    });
 
     // Optimistic update
     setCandidates(prev => prev.map(c =>
-      c.id === candidate.id ? { ...c, status: newStatus } : c
+      c.id === candidate.id
+        ? {
+            ...c,
+            status: newStatus,
+            updatedAt: now,
+            hiredAt: newStatus === 'hired' ? c.hiredAt ?? now : c.hiredAt,
+            recruitmentHistory: [...(c.recruitmentHistory ?? []), historyEntry],
+            latestApplication: c.latestApplication
+              ? {
+                  ...c.latestApplication,
+                  stage: newStatus,
+                  stageHistory: [...(c.latestApplication.stageHistory ?? []), historyEntry],
+                }
+              : c.latestApplication,
+          }
+        : c
     ));
 
     try {
-      await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
+      const result = await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
         method: 'PATCH',
-        body: JSON.stringify({ status: newStatus, decisionAction: 'status_changed' }),
+        body: JSON.stringify({
+          status: newStatus,
+          decisionAction: newStatus === 'hired' ? 'hired' : 'status_changed',
+        }),
       });
+      const onboardingId = typeof result?.onboardingId === 'string' ? result.onboardingId : undefined;
+      if (onboardingId) {
+        setCandidates(prev => prev.map(c =>
+          c.id === candidate.id
+            ? {
+                ...c,
+                onboardingId,
+                latestApplication: c.latestApplication
+                  ? { ...c.latestApplication, onboardingId }
+                  : c.latestApplication,
+              }
+            : c
+        ));
+      }
     } catch {
       // Rollback
       setCandidates(prev => prev.map(c =>
@@ -2839,16 +2990,21 @@ export default function RecruitmentPage() {
       </div>
 
       {/* ─── Stats row ─── */}
-      {viewMode === 'list' && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Inscritos — with sparkline */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Inscritos</p>
+      {(viewMode === 'list' || viewMode === 'kanban') && (
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">Vagas abertas</p>
+            <p className="text-3xl font-bold leading-none text-slate-950">{stats.openOpenings}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">{stats.totalOpenings} no total</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">Inscritos</p>
             <div className="flex items-end justify-between gap-2">
               <div>
-                <p className="text-3xl font-bold text-slate-950 leading-none">{stats.applied}</p>
+                <p className="text-3xl font-bold leading-none text-slate-950">{stats.applied}</p>
                 {stats.appliedTrend !== 0 && (
-                  <span className={`flex items-center gap-0.5 text-xs font-bold mt-1 ${stats.appliedTrend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <span className={`mt-1 flex items-center gap-0.5 text-xs font-bold ${stats.appliedTrend > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                     <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
                       {stats.appliedTrend > 0
                         ? <path d="M4 1L7 6H1L4 1Z" />
@@ -2858,14 +3014,12 @@ export default function RecruitmentPage() {
                   </span>
                 )}
               </div>
-              {/* Sparkline */}
-              <svg width="56" height="28" className="text-indigo-400 flex-shrink-0">
+              <svg width="48" height="28" className="flex-shrink-0 text-indigo-400">
                 {stats.sparkData.map((v, i) => {
                   const max = Math.max(...stats.sparkData, 1);
                   const bh = Math.max((v / max) * 24, 2);
-                  const bw = 6;
                   return (
-                    <rect key={i} x={i * 8} y={28 - bh} width={bw} height={bh}
+                    <rect key={i} x={i * 7} y={28 - bh} width={5} height={bh}
                       rx="1" fill="currentColor" opacity={0.3 + 0.7 * (v / max)} />
                   );
                 })}
@@ -2873,32 +3027,28 @@ export default function RecruitmentPage() {
             </div>
           </div>
 
-          {/* Em triagem */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Em triagem</p>
-            <p className="text-3xl font-bold text-slate-950 leading-none">{stats.screening}</p>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">No funil</p>
+            <p className="text-3xl font-bold leading-none text-slate-950">{stats.pipeline}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">{stats.screening} em triagem</p>
           </div>
 
-          {/* Contratados */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Contratados</p>
-            <div>
-              <p className="text-3xl font-bold text-slate-950 leading-none">{stats.hired}</p>
-              {stats.hiredThisMonth > 0 && (
-                <span className="flex items-center gap-0.5 text-xs font-bold mt-1 text-emerald-400">
-                  <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
-                    <path d="M4 1L7 6H1L4 1Z" />
-                  </svg>
-                  +{stats.hiredThisMonth} este mês
-                </span>
-              )}
-            </div>
+          <div className={`rounded-2xl border p-4 ${stats.overdueCandidates > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+            <p className={`mb-3 text-[11px] font-bold uppercase tracking-wider ${stats.overdueCandidates > 0 ? 'text-red-500' : 'text-slate-500'}`}>Em atraso</p>
+            <p className={`text-3xl font-bold leading-none ${stats.overdueCandidates > 0 ? 'text-red-700' : 'text-slate-950'}`}>{stats.overdueCandidates}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">{stats.delayedOpenings} vaga{stats.delayedOpenings !== 1 ? 's' : ''} com inscrição vencida</p>
           </div>
 
-          {/* Tempo médio */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Tempo médio</p>
-            <p className="text-3xl font-bold text-slate-950 leading-none">{stats.avgDays}d</p>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">Contratados</p>
+            <p className="text-3xl font-bold leading-none text-slate-950">{stats.hired}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">{stats.conversionRate}% de conversão</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">Banco talentos</p>
+            <p className="text-3xl font-bold leading-none text-slate-950">{stats.talentPool}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">Fechamento médio: {stats.avgHiringDays}d</p>
           </div>
         </div>
       )}
