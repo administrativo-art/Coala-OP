@@ -1869,9 +1869,10 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
 
 // ─── TalentsView ─────────────────────────────────────────────────────────────
 
-function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactivated }: {
+function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen, onReactivated }: {
   candidates: Candidate[];
   roles: JobRole[];
+  openings: JobOpening[];
   getToken: () => Promise<string>;
   canManage: boolean;
   onOpen: (c: Candidate) => void;
@@ -1881,8 +1882,12 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
   const [filterRole, setFilterRole] = useState('');
   const [filterRating, setFilterRating] = useState('');
   const [reactivating, setReactivating] = useState<string | null>(null);
+  const [reactivationTarget, setReactivationTarget] = useState<Candidate | null>(null);
+  const [reactivationOpeningId, setReactivationOpeningId] = useState('');
+  const [reactivationError, setReactivationError] = useState<string | null>(null);
 
   const talentPoolCandidates = candidates.filter(c => c.status === TALENT_POOL_STATUS || c.source === 'talent_pool');
+  const activeOpenings = openings.filter(opening => opening.status === 'open');
 
   const filtered = talentPoolCandidates.filter(c => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
@@ -1894,16 +1899,23 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
 
   const highRating = talentPoolCandidates.filter(c => (c.rating ?? 0) >= 4).length;
 
-  async function handleReactivate(candidate: Candidate) {
+  async function handleReactivate(candidate: Candidate, openingId: string) {
+    if (!openingId) {
+      setReactivationError('Selecione uma vaga para reativar o candidato.');
+      return;
+    }
     setReactivating(candidate.id);
+    setReactivationError(null);
     try {
       await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
         method: 'PATCH',
-        body: JSON.stringify({ status: 'applied' }),
+        body: JSON.stringify({ reactivateToOpeningId: openingId }),
       });
+      setReactivationTarget(null);
+      setReactivationOpeningId('');
       onReactivated();
-    } catch {
-      // silent
+    } catch (err) {
+      setReactivationError(err instanceof Error ? err.message : 'Falha ao reativar candidato.');
     } finally {
       setReactivating(null);
     }
@@ -2008,13 +2020,17 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
                 {/* Reactivate */}
                 {canManage && (
                   <button
-                    onClick={() => handleReactivate(candidate)}
+                    onClick={() => {
+                      setReactivationTarget(candidate);
+                      setReactivationOpeningId('');
+                      setReactivationError(null);
+                    }}
                     disabled={reactivating === candidate.id}
                     className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-indigo-400 border border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/15 rounded-xl transition-colors disabled:opacity-40">
                     {reactivating === candidate.id
                       ? <Loader2 className="h-3 w-3 animate-spin" />
                       : <ArrowRight className="h-3 w-3" />}
-                    Reativar para triagem
+                    Reativar em vaga
                   </button>
                 )}
               </div>
@@ -2026,6 +2042,72 @@ function TalentsView({ candidates, roles, getToken, canManage, onOpen, onReactiv
       {/* No results */}
       {talentPoolCandidates.length > 0 && filtered.length === 0 && (
         <div className="py-10 text-center text-slate-600 text-sm">Nenhum candidato encontrado com os filtros aplicados.</div>
+      )}
+
+      {reactivationTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setReactivationTarget(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Banco de talentos</p>
+                <h3 className="mt-1 text-lg font-bold text-white">Reativar candidato</h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Vincule <span className="font-semibold text-slate-200">{reactivationTarget.name}</span> a uma vaga aberta.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReactivationTarget(null)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400">Vaga aberta</label>
+                <select
+                  value={reactivationOpeningId}
+                  onChange={event => setReactivationOpeningId(event.target.value)}
+                  className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/30"
+                >
+                  <option value="">Selecione uma vaga</option>
+                  {activeOpenings.map(opening => (
+                    <option key={opening.id} value={opening.id}>
+                      {opening.title}{opening.unitName || opening.location ? ` · ${opening.unitName || opening.location}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {activeOpenings.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-300">Não há vagas abertas para receber este candidato.</p>
+                )}
+              </div>
+
+              {reactivationError && <ErrorLine msg={reactivationError} />}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReactivationTarget(null)}
+                  className="rounded-xl px-4 py-2 text-sm text-slate-400 hover:bg-slate-900 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleReactivate(reactivationTarget, reactivationOpeningId)}
+                  disabled={!reactivationOpeningId || !!reactivating}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  {reactivating === reactivationTarget.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  Reativar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -3155,6 +3237,7 @@ export default function RecruitmentPage() {
         <TalentsView
           candidates={candidates}
           roles={roles}
+          openings={openings}
           getToken={getToken}
           canManage={canManage}
           onOpen={setDetailCandidate}
