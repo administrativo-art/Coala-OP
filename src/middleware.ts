@@ -27,6 +27,7 @@ const PUBLIC_RECRUITMENT_API_PATHS = [
   '/api/hr/apply',
   '/api/hr/talent',
   '/api/hr/upload',
+  '/api/hr/onboarding/public',
 ];
 
 function isAllowedPublicRecruitmentApi(pathname: string) {
