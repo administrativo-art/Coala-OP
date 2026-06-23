@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
+import {
+  applicationStatusForCandidateStatus,
+  createCandidateStageHistoryEntry,
+  isCandidateStatus,
+} from '@/lib/recruitment-pipeline';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,6 +51,9 @@ export async function POST(request: NextRequest) {
   const email = normalizeEmail(body.email);
 
   if (!email) return jsonError('E-mail é obrigatório.');
+  if (body.status !== undefined && !isCandidateStatus(body.status)) {
+    return jsonError('Status inválido.');
+  }
 
   const existing = await hrDbAdmin
     .collection('candidates')
@@ -54,6 +63,19 @@ export async function POST(request: NextRequest) {
 
   const candidateRef = existing.empty ? hrDbAdmin.collection('candidates').doc() : existing.docs[0].ref;
   const existingData = existing.empty ? null : existing.docs[0].data();
+  const existingStatus = isCandidateStatus(existingData?.status) ? existingData.status : null;
+  const resolvedStatus = isCandidateStatus(body.status)
+    ? body.status
+    : (existingStatus ?? (body.jobOpeningId ? 'applied' : 'talent_pool'));
+  const historyEntry = createCandidateStageHistoryEntry({
+    fromStatus: existingStatus,
+    toStatus: resolvedStatus,
+    action: existing.empty ? 'created' : 'status_changed',
+    note: typeof body.notes === 'string' ? body.notes : null,
+    actorId: access.decoded.uid,
+    actorEmail: access.decoded.email ?? null,
+    createdAt: now,
+  });
   let latestApplicationId = body.latestApplicationId ?? existingData?.latestApplicationId ?? null;
 
   if (body.jobOpeningId) {
@@ -68,8 +90,8 @@ export async function POST(request: NextRequest) {
       jobOpeningId: body.jobOpeningId,
       jobRoleId: body.jobRoleId,
       jobRoleName: body.jobRoleName ?? null,
-      stage: body.status || 'applied',
-      status: 'active',
+      stage: resolvedStatus,
+      status: applicationStatusForCandidateStatus(resolvedStatus),
       source: body.source ?? 'manual',
       notes: body.notes ?? null,
       resumeUrl: body.resumeUrl ?? null,
@@ -77,13 +99,16 @@ export async function POST(request: NextRequest) {
       appliedAt: body.appliedAt || now,
       updatedAt: now,
       createdBy: access.decoded.uid,
+      stageHistory: FieldValue.arrayUnion(historyEntry),
     }, { merge: true });
   }
 
   await candidateRef.set({
     ...body,
     email,
+    status: resolvedStatus,
     latestApplicationId,
+    recruitmentHistory: FieldValue.arrayUnion(historyEntry),
     appliedAt: body.appliedAt || now,
     updatedAt: now,
     createdBy: existingData?.createdBy ?? access.decoded.uid,

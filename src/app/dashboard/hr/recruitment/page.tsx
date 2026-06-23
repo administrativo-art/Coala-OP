@@ -8,8 +8,24 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchHrBootstrap } from '@/features/hr/lib/client';
-import type { Candidate, CandidateStatus, HrFormQuestion, JobRole, JobOpening, JobOpeningStatus, RecruitmentFormConfig } from '@/types';
+import type {
+  Candidate,
+  CandidateDecisionAction,
+  CandidateStageHistoryEntry,
+  CandidateStatus,
+  HrFormQuestion,
+  JobRole,
+  JobOpening,
+  JobOpeningStatus,
+  RecruitmentFormConfig,
+  RecruitmentStage,
+} from '@/types';
 import { DEFAULT_TALENT_POOL_FORM } from '@/lib/recruitment-forms';
+import {
+  createCandidateStageHistoryEntry,
+  normalizeRecruitmentStages,
+  RECRUITMENT_PIPELINE_STATUSES,
+} from '@/lib/recruitment-pipeline';
 import {
   UserPlus, Search, Filter, MoreHorizontal, Mail, Phone,
   FileText, Calendar, Star, Clock, CheckCircle2, XCircle,
@@ -32,10 +48,20 @@ const STATUS_CONFIG: Record<CandidateStatus, { label: string; color: string; ico
   talent_pool:    { label: 'Banco de talentos', color: 'bg-cyan-500', icon: Star },
 };
 
-const PIPELINE_STATUSES: CandidateStatus[] = ['applied', 'screening', 'interview', 'technical_test', 'offer', 'hired'];
+const PIPELINE_STATUSES: CandidateStatus[] = [...RECRUITMENT_PIPELINE_STATUSES];
 const ARCHIVED_STATUSES: CandidateStatus[] = ['rejected', 'withdrawn'];
 const TALENT_POOL_STATUS: CandidateStatus = 'talent_pool';
 const ALL_STATUSES = Object.keys(STATUS_CONFIG) as CandidateStatus[];
+
+const DECISION_ACTION_LABELS: Record<CandidateDecisionAction, string> = {
+  created: 'Criado',
+  advanced: 'Avançou',
+  status_changed: 'Status alterado',
+  hired: 'Contratação',
+  rejected: 'Reprovação',
+  withdrawn: 'Desistência',
+  talent_pool: 'Banco de talentos',
+};
 
 const OPENING_STATUS_CONFIG: Record<JobOpeningStatus, { label: string; color: string; icon: React.ElementType }> = {
   open:   { label: 'Aberta',   color: 'text-green-400 bg-green-500/10 border-green-500/20',  icon: Globe },
@@ -388,6 +414,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
         phone: form.phone.trim() || null,
         notes: form.notes.trim() || null,
         status: form.status,
+        ...(form.status !== candidate.status ? { decisionAction: 'status_changed' as CandidateDecisionAction } : {}),
         rating: form.rating,
         source: form.source || null,
         ...(resumeUrl !== candidate.resumeUrl ? { resumeUrl } : {}),
@@ -424,18 +451,35 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
     }
   };
 
-  const handleStatusAction = async (status: CandidateStatus) => {
+  const handleStatusAction = async (status: CandidateStatus, decisionAction: CandidateDecisionAction) => {
     setStatusAction(status);
     setError(null);
+    const now = new Date().toISOString();
     try {
       await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
         method: 'PATCH',
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, decisionAction }),
+      });
+      const historyEntry = createCandidateStageHistoryEntry({
+        fromStatus: candidate.status,
+        toStatus: status,
+        action: decisionAction,
+        actorId: null,
+        actorEmail: null,
+        createdAt: now,
       });
       const updated = {
         ...candidate,
         status,
-        updatedAt: new Date().toISOString(),
+        updatedAt: now,
+        recruitmentHistory: [...(candidate.recruitmentHistory ?? []), historyEntry],
+        latestApplication: candidate.latestApplication
+          ? {
+              ...candidate.latestApplication,
+              stage: status,
+              stageHistory: [...(candidate.latestApplication.stageHistory ?? []), historyEntry],
+            }
+          : candidate.latestApplication,
       };
       setForm(prev => ({ ...prev, status }));
       onUpdated(updated);
@@ -452,6 +496,14 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
   const questionSnapshot = candidate.latestApplication?.formQuestionSnapshot ?? opening?.formQuestions ?? role?.formQuestions ?? [];
   const questionsById = new Map((questionSnapshot as HrFormQuestion[]).map(question => [question.id, question]));
   const answerEntries = Object.entries(formAnswers);
+  const stageHistory = (
+    candidate.latestApplication?.stageHistory?.length
+      ? candidate.latestApplication.stageHistory
+      : candidate.recruitmentHistory ?? []
+  )
+    .filter((entry): entry is CandidateStageHistoryEntry => !!entry && !!entry.createdAt)
+    .slice()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const hasChanges =
     form.name !== candidate.name || form.email !== candidate.email ||
     form.phone !== (candidate.phone ?? '') || form.notes !== (candidate.notes ?? '') ||
@@ -496,7 +548,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
                 {hasPipelineNext && nextPipelineStatus && (
                   <button
                     type="button"
-                    onClick={() => handleStatusAction(nextPipelineStatus)}
+                    onClick={() => handleStatusAction(nextPipelineStatus, 'advanced')}
                     disabled={!!statusAction}
                     className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50"
                   >
@@ -507,7 +559,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
                 {form.status !== 'hired' && (
                   <button
                     type="button"
-                    onClick={() => handleStatusAction('hired')}
+                    onClick={() => handleStatusAction('hired', 'hired')}
                     disabled={!!statusAction}
                     className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/15 disabled:opacity-50"
                   >
@@ -518,7 +570,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
                 {form.status !== TALENT_POOL_STATUS && (
                   <button
                     type="button"
-                    onClick={() => handleStatusAction(TALENT_POOL_STATUS)}
+                    onClick={() => handleStatusAction(TALENT_POOL_STATUS, 'talent_pool')}
                     disabled={!!statusAction}
                     className="flex items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-500/15 disabled:opacity-50"
                   >
@@ -529,7 +581,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
                 {form.status !== 'rejected' && (
                   <button
                     type="button"
-                    onClick={() => handleStatusAction('rejected')}
+                    onClick={() => handleStatusAction('rejected', 'rejected')}
                     disabled={!!statusAction}
                     className="flex items-center justify-center gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
                   >
@@ -540,7 +592,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
                 {form.status !== 'withdrawn' && (
                   <button
                     type="button"
-                    onClick={() => handleStatusAction('withdrawn')}
+                    onClick={() => handleStatusAction('withdrawn', 'withdrawn')}
                     disabled={!!statusAction}
                     className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
                   >
@@ -636,6 +688,34 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
               placeholder={canManage ? 'Anotações sobre o candidato…' : '—'}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none disabled:opacity-60" />
           </div>
+
+          {stageHistory.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Histórico do processo</h3>
+              <div className="space-y-2">
+                {stageHistory.slice(0, 8).map((entry) => (
+                  <div key={entry.id} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-100">
+                          {DECISION_ACTION_LABELS[entry.action] ?? 'Movimentação'}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {entry.fromStatus ? STATUS_CONFIG[entry.fromStatus]?.label ?? entry.fromStatus : 'Início'}
+                          {' → '}
+                          {STATUS_CONFIG[entry.toStatus]?.label ?? entry.toStatus}
+                        </p>
+                        {entry.note && <p className="mt-1 text-xs text-slate-400">{entry.note}</p>}
+                      </div>
+                      <span className="shrink-0 text-[10px] font-medium text-slate-600">
+                        {new Date(entry.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {answerEntries.length > 0 && (
             <div className="space-y-3">
@@ -828,8 +908,9 @@ function DraggableCard({ candidate, onOpen }: { candidate: Candidate; onOpen: ()
   );
 }
 
-function DroppableColumn({ status, candidates, onCardOpen }: {
+function DroppableColumn({ status, stage, candidates, onCardOpen }: {
   status: CandidateStatus;
+  stage?: RecruitmentStage;
   candidates: Candidate[];
   onCardOpen: (c: Candidate) => void;
 }) {
@@ -841,7 +922,7 @@ function DroppableColumn({ status, candidates, onCardOpen }: {
     <div className={`flex-shrink-0 w-[270px] rounded-2xl border bg-gradient-to-b ${accent} p-2 shadow-sm flex flex-col`}>
       <div className="px-2.5 py-2.5 flex items-center gap-2">
         <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
-        <h3 className="font-bold text-slate-900 text-sm flex-1">{cfg.label}</h3>
+        <h3 className="font-bold text-slate-900 text-sm flex-1">{stage?.label ?? cfg.label}</h3>
         <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-white/70 hover:text-slate-900">
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -985,6 +1066,7 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
     requirements: (opening?.requirements ?? []).join('\n'),
   });
   const [questions, setQuestions] = useState<HrFormQuestion[]>(opening?.formQuestions ?? []);
+  const [stages, setStages] = useState<RecruitmentStage[]>(normalizeRecruitmentStages(opening?.pipelineStages));
   const [questionDraft, setQuestionDraft] = useState(EMPTY_QUESTION_DRAFT);
   const [questionError, setQuestionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1024,6 +1106,22 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
       const [item] = next.splice(index, 1);
       next.splice(nextIndex, 0, item);
       return next;
+    });
+  };
+
+  const updateStage = (stageId: CandidateStatus, patch: Partial<RecruitmentStage>) => {
+    setStages(prev => prev.map(stage => stage.id === stageId ? { ...stage, ...patch } : stage));
+  };
+
+  const moveStage = (stageId: CandidateStatus, direction: -1 | 1) => {
+    setStages(prev => {
+      const index = prev.findIndex(stage => stage.id === stageId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next.map((stage, stageIndex) => ({ ...stage, order: stageIndex }));
     });
   };
 
@@ -1084,6 +1182,7 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
         status: form.status,
         requirements: form.requirements.split('\n').map(s => s.trim()).filter(Boolean),
         formQuestions: questions,
+        pipelineStages: stages.map((stage, index) => ({ ...stage, order: index })),
       };
       if (isEdit) {
         await apiFetch(`/api/hr/openings/${opening!.id}`, getToken, {
@@ -1177,6 +1276,62 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
               <textarea value={form.requirements} onChange={set('requirements')} rows={4}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none font-mono"
                 placeholder="Experiência com gestão de equipes&#10;Disponibilidade de horário&#10;Residir em SP" />
+            </div>
+            <div className="col-span-2 space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+              <div>
+                <h3 className="text-sm font-semibold text-white">Etapas do processo</h3>
+                <p className="mt-1 text-xs text-slate-500">Ordem e rótulos usados no Kanban desta vaga.</p>
+              </div>
+              <div className="space-y-2">
+                {stages.map((stage, index) => (
+                  <div key={stage.id} className="grid gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3 md:grid-cols-[2rem_1fr_8rem_8rem] md:items-center">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-slate-400">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <label className="sr-only">Nome da etapa</label>
+                      <input
+                        type="text"
+                        value={stage.label}
+                        onChange={event => updateStage(stage.id, { label: event.target.value })}
+                        className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                      />
+                      <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-600">{STATUS_CONFIG[stage.id].label}</p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600">Prazo</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={stage.dueDays ?? ''}
+                        onChange={event => updateStage(stage.id, {
+                          dueDays: event.target.value === '' ? null : Number(event.target.value),
+                        })}
+                        placeholder="dias"
+                        className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                      />
+                    </div>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={() => moveStage(stage.id, -1)}
+                        className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-white disabled:opacity-30"
+                      >
+                        Subir
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === stages.length - 1}
+                        onClick={() => moveStage(stage.id, 1)}
+                        className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-white disabled:opacity-30"
+                      >
+                        Descer
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="col-span-2 space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
               <div>
@@ -2183,6 +2338,12 @@ export default function RecruitmentPage() {
     return roles.find(role => role.id === selectedOpening.jobRoleId) ?? null;
   }, [roles, selectedOpening]);
 
+  const selectedOpeningPipelineStages = useMemo(
+    () => normalizeRecruitmentStages(selectedOpening?.pipelineStages),
+    [selectedOpening]
+  );
+  const visiblePipelineStages = selectedOpening ? selectedOpeningPipelineStages : normalizeRecruitmentStages(null);
+
   const selectedOpeningCandidates = useMemo(() =>
     selectedOpening ? candidates.filter(c => c.jobOpeningId === selectedOpening.id) : [],
     [candidates, selectedOpening]
@@ -2262,7 +2423,7 @@ export default function RecruitmentPage() {
     try {
       await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
         method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, decisionAction: 'status_changed' }),
       });
     } catch {
       // Rollback
@@ -2558,12 +2719,12 @@ export default function RecruitmentPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {PIPELINE_STATUSES.map(status => {
-                const cfg = STATUS_CONFIG[status];
+              {selectedOpeningPipelineStages.map(stage => {
+                const cfg = STATUS_CONFIG[stage.id];
                 return (
-                  <span key={status} className="rounded-xl border border-white bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
+                  <span key={stage.id} className="rounded-xl border border-white bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
                     <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${cfg.color}`} />
-                    {cfg.label}: {selectedOpeningStatusCounts[status]}
+                    {stage.label}: {selectedOpeningStatusCounts[stage.id]}
                   </span>
                 );
               })}
@@ -2594,11 +2755,12 @@ export default function RecruitmentPage() {
         <div className="flex-1 flex flex-col gap-4 overflow-y-auto min-h-0">
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="flex gap-4 overflow-x-auto rounded-2xl bg-slate-50/80 p-3 pb-4 custom-scrollbar">
-              {PIPELINE_STATUSES.map(status => (
+              {visiblePipelineStages.map(stage => (
                 <DroppableColumn
-                  key={status}
-                  status={status}
-                  candidates={pipelineCandidates.filter(c => c.status === status)}
+                  key={stage.id}
+                  status={stage.id}
+                  stage={stage}
+                  candidates={pipelineCandidates.filter(c => c.status === stage.id)}
                   onCardOpen={setDetailCandidate}
                 />
               ))}

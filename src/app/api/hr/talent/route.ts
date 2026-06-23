@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
 import type { HrFormQuestion } from '@/types';
+import { createCandidateStageHistoryEntry, isCandidateStatus } from '@/lib/recruitment-pipeline';
 import {
   DEFAULT_TALENT_POOL_FORM,
   TALENT_POOL_FORM_ID,
@@ -187,8 +189,17 @@ export async function POST(request: NextRequest) {
   const candidateRef = existing.empty ? hrDbAdmin.collection('candidates').doc() : existing.docs[0].ref;
   const existingData = existing.empty ? null : existing.docs[0].data();
   const jobRoleName = resolvedRolePreference || 'Banco de talentos';
-  const existingStatus = typeof existingData?.status === 'string' ? existingData.status : null;
+  const existingStatus = isCandidateStatus(existingData?.status) ? existingData.status : null;
   const status = existingStatus && existingStatus !== 'withdrawn' ? existingStatus : 'talent_pool';
+  const historyEntry = createCandidateStageHistoryEntry({
+    fromStatus: existingStatus,
+    toStatus: status,
+    action: existing.empty ? 'created' : 'talent_pool',
+    note: resolvedNotes || null,
+    actorId: 'public',
+    actorEmail: null,
+    createdAt: now,
+  });
 
   await candidateRef.set({
     name,
@@ -221,6 +232,7 @@ export async function POST(request: NextRequest) {
       ip: getClientKey(request),
       userAgent: request.headers.get('user-agent')?.slice(0, 300) || null,
     },
+    recruitmentHistory: FieldValue.arrayUnion(historyEntry),
     appliedAt: existingData?.appliedAt ?? now,
     updatedAt: now,
     createdBy: existingData?.createdBy ?? 'public',

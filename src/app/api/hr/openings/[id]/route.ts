@@ -3,6 +3,7 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
 import { normalizeRecruitmentQuestions } from '@/lib/recruitment-forms';
+import { normalizeRecruitmentStages } from '@/lib/recruitment-pipeline';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,13 +18,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { id } = await context.params;
   const body = await request.json();
-  const { title, description, requirements, location, workType, slots, status, closesAt, formQuestions } = body;
+  const { title, description, requirements, location, workType, slots, status, closesAt, formQuestions, pipelineStages } = body;
 
   const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if (title !== undefined) update.title = title;
   if (description !== undefined) update.description = description;
   if (requirements !== undefined) update.requirements = requirements;
   if (formQuestions !== undefined) update.formQuestions = normalizeRecruitmentQuestions(formQuestions);
+  if (pipelineStages !== undefined) update.pipelineStages = normalizeRecruitmentStages(pipelineStages);
   if (location !== undefined) update.location = location;
   if (workType !== undefined) update.workType = workType;
   if (slots !== undefined) update.slots = Number(slots);

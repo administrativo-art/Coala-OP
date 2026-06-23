@@ -832,6 +832,34 @@ export type JobRoleSalaryRange = {
 
 export type CandidateStatus = 'applied' | 'screening' | 'interview' | 'technical_test' | 'offer' | 'hired' | 'rejected' | 'withdrawn' | 'talent_pool';
 
+export type CandidateDecisionAction =
+  | 'created'
+  | 'advanced'
+  | 'status_changed'
+  | 'hired'
+  | 'rejected'
+  | 'withdrawn'
+  | 'talent_pool';
+
+export type CandidateStageHistoryEntry = {
+  id: string;
+  fromStatus?: CandidateStatus | null;
+  toStatus: CandidateStatus;
+  action: CandidateDecisionAction;
+  note?: string | null;
+  actorId?: string | null;
+  actorEmail?: string | null;
+  createdAt: string;
+};
+
+export type RecruitmentStage = {
+  id: CandidateStatus;
+  label: string;
+  order: number;
+  required?: boolean;
+  dueDays?: number | null;
+};
+
 export type Candidate = {
   id: string;
   name: string;
@@ -845,10 +873,14 @@ export type Candidate = {
   latestApplicationId?: string;
   latestApplication?: {
     id: string;
+    stage?: CandidateStatus;
+    status?: string;
+    stageHistory?: CandidateStageHistoryEntry[];
     formAnswers?: Record<string, unknown>;
     formQuestionSnapshot?: HrFormQuestion[];
   };
   status: CandidateStatus;
+  recruitmentHistory?: CandidateStageHistoryEntry[];
   notes?: string;
   formAnswers?: Record<string, unknown>;
   rating?: number; // 1-5
@@ -869,6 +901,7 @@ export type JobOpening = {
   description?: string;
   requirements?: string[];
   formQuestions?: HrFormQuestion[];
+  pipelineStages?: RecruitmentStage[];
   location?: string;
   workType?: 'presencial' | 'remoto' | 'hibrido';
   slots: number;

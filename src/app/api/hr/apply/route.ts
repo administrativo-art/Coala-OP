@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
 import type { HrFormQuestion } from '@/types';
+import { createCandidateStageHistoryEntry } from '@/lib/recruitment-pipeline';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -204,6 +206,15 @@ export async function POST(request: NextRequest) {
     return jsonError('Este e-mail já tem uma candidatura para esta vaga.', 409);
   }
 
+  const historyEntry = createCandidateStageHistoryEntry({
+    fromStatus: null,
+    toStatus: 'applied',
+    action: 'created',
+    actorId: 'public',
+    actorEmail: null,
+    createdAt: now,
+  });
+
   const applicationPayload = {
     candidateId: candidateRef.id,
     jobOpeningId: opening.id,
@@ -220,6 +231,7 @@ export async function POST(request: NextRequest) {
     appliedAt: now,
     updatedAt: now,
     createdBy: 'public',
+    stageHistory: [historyEntry],
   };
 
   const candidatePayload = {
@@ -247,6 +259,7 @@ export async function POST(request: NextRequest) {
       ip: getClientKey(request),
       userAgent: request.headers.get('user-agent')?.slice(0, 300) || null,
     },
+    recruitmentHistory: FieldValue.arrayUnion(historyEntry),
     appliedAt: now,
     updatedAt: now,
     createdBy: 'public',

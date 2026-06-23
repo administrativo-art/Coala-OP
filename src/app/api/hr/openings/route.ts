@@ -3,6 +3,7 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
 import { normalizeRecruitmentQuestions } from '@/lib/recruitment-forms';
+import { normalizeRecruitmentStages } from '@/lib/recruitment-pipeline';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
   if (!access) return jsonError('Sem permissão para gerenciar vagas.', 403);
 
   const body = await request.json();
-  const { title, jobRoleId, description, requirements, location, workType, slots, closesAt, formQuestions } = body;
+  const { title, jobRoleId, description, requirements, location, workType, slots, closesAt, formQuestions, pipelineStages } = body;
 
   if (!title?.trim() || !jobRoleId) {
     return jsonError('Título e cargo são obrigatórios.');
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
     description: description?.trim() || null,
     requirements: Array.isArray(requirements) ? requirements : [],
     formQuestions: normalizeRecruitmentQuestions(resolvedQuestions),
+    pipelineStages: normalizeRecruitmentStages(pipelineStages),
     location: location?.trim() || null,
     workType: workType || null,
     slots: Number(slots) || 1,

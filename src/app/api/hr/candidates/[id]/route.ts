@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
+import {
+  applicationStatusForCandidateStatus,
+  createCandidateStageHistoryEntry,
+  isCandidateDecisionAction,
+  isCandidateStatus,
+} from '@/lib/recruitment-pipeline';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,21 +26,43 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const now = new Date().toISOString();
   const currentDoc = await hrDbAdmin.collection('candidates').doc(id).get();
   const before = currentDoc.data() ?? {};
+  const { decisionAction, decisionNote, ...candidatePatch } = body;
+  const status = isCandidateStatus(candidatePatch.status) ? candidatePatch.status : null;
+
+  if (candidatePatch.status !== undefined && !status) {
+    return jsonError('Status inválido.');
+  }
+
+  const beforeStatus = isCandidateStatus(before.status) ? before.status : null;
+  const statusChanged = !!status && status !== beforeStatus;
+  const historyEntry = statusChanged
+    ? createCandidateStageHistoryEntry({
+        fromStatus: beforeStatus,
+        toStatus: status,
+        action: isCandidateDecisionAction(decisionAction) ? decisionAction : null,
+        note: typeof decisionNote === 'string' ? decisionNote : null,
+        actorId: access.decoded.uid,
+        actorEmail: access.decoded.email ?? null,
+        createdAt: now,
+      })
+    : null;
 
   await hrDbAdmin.collection('candidates').doc(id).update({
-    ...body,
+    ...candidatePatch,
     updatedAt: now,
+    ...(historyEntry ? { recruitmentHistory: FieldValue.arrayUnion(historyEntry) } : {}),
   });
 
-  const latestApplicationId = typeof body.latestApplicationId === 'string'
-    ? body.latestApplicationId
-    : currentDoc?.data()?.latestApplicationId;
-  const status = typeof body.status === 'string' ? body.status : null;
+  const latestApplicationId = typeof candidatePatch.latestApplicationId === 'string'
+    ? candidatePatch.latestApplicationId
+    : before.latestApplicationId;
   if (latestApplicationId && status) {
     await hrDbAdmin.collection('applications').doc(latestApplicationId).set({
       stage: status,
+      status: applicationStatusForCandidateStatus(status),
       updatedAt: now,
       updatedBy: access.decoded.uid,
+      ...(historyEntry ? { stageHistory: FieldValue.arrayUnion(historyEntry) } : {}),
     }, { merge: true });
   }
 
@@ -46,15 +75,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       target_type: 'candidate',
       target_id: id,
       target_name: before.name ?? before.email ?? id,
-      changed_fields: Object.keys(body),
+      changed_fields: Object.keys(candidatePatch),
+      decision_action: historyEntry?.action ?? null,
       before: {
         status: before.status ?? null,
         jobOpeningId: before.jobOpeningId ?? null,
         latestApplicationId: before.latestApplicationId ?? null,
       },
       after: {
-        status: body.status ?? before.status ?? null,
-        jobOpeningId: body.jobOpeningId ?? before.jobOpeningId ?? null,
+        status: candidatePatch.status ?? before.status ?? null,
+        jobOpeningId: candidatePatch.jobOpeningId ?? before.jobOpeningId ?? null,
         latestApplicationId,
       },
     },
