@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
 import type { HrFormQuestion } from '@/types';
 import { createCandidateStageHistoryEntry } from '@/lib/recruitment-pipeline';
-import { getPublicRecruitmentQuestions } from '@/lib/recruitment-forms';
+import { getPublicRecruitmentQuestions, hydrateRecruitmentQuestionDynamicOptions } from '@/lib/recruitment-forms';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,30 @@ function getQuestionOptions(question: HrFormQuestion) {
   return Array.isArray(options)
     ? options.filter((option): option is string => typeof option === 'string' && option.trim().length > 0)
     : [];
+}
+
+function isActiveRecord(data: FirebaseFirestore.DocumentData) {
+  return data.active !== false &&
+    data.isActive !== false &&
+    data.status !== 'inactive' &&
+    data.status !== 'inativo' &&
+    data.status !== 'terminated';
+}
+
+function normalizeUnitName(value: unknown) {
+  if (typeof value !== 'string') return '';
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+async function getPublicUnitOptions() {
+  const unitsSnap = await dbAdmin.collection('dp_units').get();
+  return Array.from(new Set(
+    unitsSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => normalizeUnitName(data.name))
+      .filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
 function hasAnswer(value: unknown) {
@@ -196,8 +221,12 @@ export async function POST(request: NextRequest) {
   if (!isInsideApplicationWindow(openingData, now)) {
     return jsonError('O período de inscrições desta vaga está encerrado.', 403);
   }
+  const publicUnits = await getPublicUnitOptions();
   const formQuestions = Array.isArray(openingData.formQuestions)
-    ? getPublicRecruitmentQuestions(openingData.formQuestions as HrFormQuestion[])
+    ? hydrateRecruitmentQuestionDynamicOptions(
+        getPublicRecruitmentQuestions(openingData.formQuestions as HrFormQuestion[]),
+        { units: publicUnits }
+      )
     : [];
   let formAnswers: Record<string, unknown>;
   try {

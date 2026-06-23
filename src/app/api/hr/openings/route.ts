@@ -3,7 +3,7 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
-import { normalizeRecruitmentQuestions } from '@/lib/recruitment-forms';
+import { resolveJobOpeningQuestions } from '@/lib/recruitment-forms';
 import { mergeRecruitmentStageModels, normalizeRecruitmentStages } from '@/lib/recruitment-pipeline';
 
 export const runtime = 'nodejs';
@@ -71,31 +71,26 @@ export async function POST(request: NextRequest) {
   let functionName: string | null = null;
   let unitName: string | null = null;
   let shiftDefinitionName: string | null = null;
-  let inheritedQuestions: unknown[] = [];
+  let roleFormQuestions: unknown;
+  let functionFormQuestions: unknown;
   let rolePipelineStages: unknown;
   let functionPipelineStages: unknown;
   try {
     const roleDoc = await hrDbAdmin.collection('jobRoles').doc(jobRoleId).get();
     const roleData = roleDoc.data();
     jobRoleName = roleData?.name;
+    roleFormQuestions = roleData?.formQuestions;
     rolePipelineStages = roleData?.pipelineStages;
-    if (!Array.isArray(formQuestions) || formQuestions.length === 0) {
-      if (Array.isArray(roleData?.formQuestions)) {
-        inheritedQuestions = roleData.formQuestions;
-      }
-    }
 
     if (functionId) {
       const functionDoc = await hrDbAdmin.collection('jobFunctions').doc(functionId).get();
       const functionData = functionDoc.data();
       functionName = typeof functionData?.name === 'string' ? functionData.name : null;
+      functionFormQuestions = functionData?.formQuestions;
       functionPipelineStages = functionData?.pipelineStages;
       const compatibleRoleIds = Array.isArray(functionData?.compatibleRoleIds) ? functionData.compatibleRoleIds : [];
       if (compatibleRoleIds.length > 0 && !compatibleRoleIds.includes(jobRoleId)) {
         return jsonError('Função incompatível com o cargo selecionado.');
-      }
-      if ((!Array.isArray(formQuestions) || formQuestions.length === 0) && Array.isArray(functionData?.formQuestions)) {
-        inheritedQuestions = [...inheritedQuestions, ...functionData.formQuestions];
       }
     }
 
@@ -112,9 +107,7 @@ export async function POST(request: NextRequest) {
     // best-effort
   }
 
-  const resolvedQuestions = Array.isArray(formQuestions) && formQuestions.length > 0
-    ? formQuestions
-    : inheritedQuestions;
+  const resolvedQuestions = resolveJobOpeningQuestions(formQuestions, roleFormQuestions, functionFormQuestions);
   const resolvedPipelineStages = Array.isArray(pipelineStages) && pipelineStages.length > 0
     ? normalizeRecruitmentStages(pipelineStages)
     : mergeRecruitmentStageModels(rolePipelineStages, functionPipelineStages);
@@ -132,7 +125,7 @@ export async function POST(request: NextRequest) {
     shiftDefinitionName,
     description: description?.trim() || null,
     requirements: Array.isArray(requirements) ? requirements : [],
-    formQuestions: normalizeRecruitmentQuestions(resolvedQuestions),
+    formQuestions: resolvedQuestions,
     pipelineStages: resolvedPipelineStages,
     location: location?.trim() || null,
     workType: workType || null,

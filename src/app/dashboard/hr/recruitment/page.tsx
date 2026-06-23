@@ -25,7 +25,7 @@ import type {
   RecruitmentFormConfig,
   RecruitmentStage,
 } from '@/types';
-import { DEFAULT_TALENT_POOL_FORM } from '@/lib/recruitment-forms';
+import { DEFAULT_TALENT_POOL_FORM, mergeRecruitmentQuestionModels } from '@/lib/recruitment-forms';
 import {
   createCandidateStageHistoryEntry,
   mergeRecruitmentStageModels,
@@ -1175,6 +1175,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     requirements: (opening?.requirements ?? []).join('\n'),
   });
   const [questions, setQuestions] = useState<HrFormQuestion[]>(opening?.formQuestions ?? []);
+  const [questionsTouched, setQuestionsTouched] = useState(isEdit);
   const [stages, setStages] = useState<RecruitmentStage[]>(normalizeRecruitmentStages(opening?.pipelineStages));
   const [questionDraft, setQuestionDraft] = useState(EMPTY_QUESTION_DRAFT);
   const [questionError, setQuestionError] = useState<string | null>(null);
@@ -1200,6 +1201,15 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
   });
   const selectedShiftDefinition = availableShiftDefinitions.find(shift => shift.id === form.shiftDefinitionId) ?? null;
 
+  const getModelQuestions = (role: JobRole | null, fn: JobFunction | null) =>
+    mergeRecruitmentQuestionModels(role?.formQuestions, fn?.formQuestions);
+
+  const reloadModelQuestions = () => {
+    setQuestions(getModelQuestions(selectedRole, selectedFunction));
+    setQuestionsTouched(false);
+    setQuestionError(null);
+  };
+
   const applyDefaults = (role: JobRole | null, fn: JobFunction | null) => {
     const nextTitle = fn?.publicTitle || fn?.name || role?.publicTitle || role?.name || '';
     const descriptions = [
@@ -1210,10 +1220,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
       ...(role?.publicRequirements?.length ? role.publicRequirements : role?.requirements ?? []),
       ...(fn?.requirements ?? []),
     ];
-    const inheritedQuestions = [
-      ...(role?.formQuestions ?? []),
-      ...(fn?.formQuestions ?? []),
-    ];
+    const inheritedQuestions = getModelQuestions(role, fn);
     const inheritedStages = mergeRecruitmentStageModels(role?.pipelineStages, fn?.pipelineStages);
 
     setForm(prev => ({
@@ -1222,7 +1229,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
       description: prev.description.trim() || descriptions.length === 0 ? prev.description : descriptions.join('\n\n'),
       requirements: prev.requirements.trim() || requirements.length === 0 ? prev.requirements : Array.from(new Set(requirements)).join('\n'),
     }));
-    setQuestions(prev => prev.length > 0 || inheritedQuestions.length === 0 ? prev : inheritedQuestions);
+    setQuestions(prev => questionsTouched ? prev : inheritedQuestions);
     setStages(inheritedStages);
   };
 
@@ -1256,10 +1263,12 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
   };
 
   const updateQuestion = (questionId: string, patch: Partial<HrFormQuestion>) => {
+    setQuestionsTouched(true);
     setQuestions(prev => prev.map(question => question.id === questionId ? { ...question, ...patch } : question));
   };
 
   const updateQuestionOptions = (questionId: string, optionsText: string) => {
+    setQuestionsTouched(true);
     const options = optionsText
       .split('\n')
       .map(option => option.trim())
@@ -1277,6 +1286,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
   };
 
   const moveQuestion = (questionId: string, direction: -1 | 1) => {
+    setQuestionsTouched(true);
     setQuestions(prev => {
       const index = prev.findIndex(question => question.id === questionId);
       const nextIndex = index + direction;
@@ -1337,6 +1347,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         config: options.length > 0 ? { options } : undefined,
       },
     ]);
+    setQuestionsTouched(true);
     setQuestionDraft(EMPTY_QUESTION_DRAFT);
     setQuestionError(null);
   };
@@ -1567,9 +1578,27 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
               </div>
             </div>
             <div className="col-span-2 space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
-              <div>
-                <h3 className="text-sm font-semibold text-white">Formulário de triagem</h3>
-                <p className="mt-1 text-xs text-slate-500">Perguntas exibidas na candidatura pública desta vaga.</p>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Formulário de triagem</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Perguntas exibidas na candidatura pública desta vaga. O modelo combina cargo e função.
+                  </p>
+                  {questionsTouched && (
+                    <p className="mt-1 text-[11px] font-medium text-amber-300">
+                      Este formulário foi editado manualmente e não será sobrescrito ao trocar cargo/função.
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={reloadModelQuestions}
+                  disabled={!selectedRole}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  Recarregar cargo + função
+                </button>
               </div>
 
               {questions.length > 0 && (
@@ -1654,7 +1683,10 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                           </button>
                           <button
                             type="button"
-                            onClick={() => setQuestions(prev => prev.filter(item => item.id !== question.id))}
+                            onClick={() => {
+                              setQuestionsTouched(true);
+                              setQuestions(prev => prev.filter(item => item.id !== question.id));
+                            }}
                             className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-800 hover:text-white"
                           >
                             Remover

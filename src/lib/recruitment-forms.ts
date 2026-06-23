@@ -138,6 +138,41 @@ export function normalizeRecruitmentQuestions(value: unknown): HrFormQuestion[] 
     .slice(0, 40);
 }
 
+export function mergeRecruitmentQuestionModels(
+  roleQuestions: unknown,
+  functionQuestions?: unknown
+) {
+  const merged = normalizeRecruitmentQuestions(roleQuestions);
+  const functionModel = normalizeRecruitmentQuestions(functionQuestions);
+
+  for (const question of functionModel) {
+    const existingIndex = merged.findIndex(item => item.id === question.id);
+    if (existingIndex >= 0) {
+      const existing = merged[existingIndex];
+      merged[existingIndex] = {
+        ...existing,
+        ...question,
+        tags: Array.from(new Set([...(existing.tags ?? []), ...(question.tags ?? [])])),
+      };
+    } else {
+      merged.push(question);
+    }
+  }
+
+  return normalizeRecruitmentQuestions(merged);
+}
+
+export function resolveJobOpeningQuestions(
+  openingQuestions: unknown,
+  roleQuestions: unknown,
+  functionQuestions?: unknown
+) {
+  const customQuestions = normalizeRecruitmentQuestions(openingQuestions);
+  return customQuestions.length > 0
+    ? customQuestions
+    : mergeRecruitmentQuestionModels(roleQuestions, functionQuestions);
+}
+
 export function normalizeRecruitmentFormConfig(
   value: unknown,
   fallback: RecruitmentFormConfig = DEFAULT_TALENT_POOL_FORM
@@ -173,6 +208,22 @@ export function getRecruitmentQuestionOptions(question: HrFormQuestion, dynamicO
   return Array.isArray(options)
     ? options.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
     : [];
+}
+
+export function hydrateRecruitmentQuestionDynamicOptions(
+  questions: HrFormQuestion[],
+  dynamicOptions?: { units?: string[] }
+) {
+  return questions.map((question) => {
+    if (question.config?.source !== "public_units") return question;
+    return {
+      ...question,
+      config: {
+        ...(question.config ?? {}),
+        options: dynamicOptions?.units ?? [],
+      },
+    };
+  });
 }
 
 export function getPublicRecruitmentQuestions(questions: HrFormQuestion[]) {

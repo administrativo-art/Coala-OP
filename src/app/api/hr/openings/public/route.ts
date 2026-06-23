@@ -1,14 +1,39 @@
 import { NextResponse } from 'next/server';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
-import { getPublicRecruitmentQuestions } from '@/lib/recruitment-forms';
+import { getPublicRecruitmentQuestions, hydrateRecruitmentQuestionDynamicOptions } from '@/lib/recruitment-forms';
 import type { HrFormQuestion } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function toPublicQuestions(questions: HrFormQuestion[]) {
-  return getPublicRecruitmentQuestions(questions).map(question => ({
+function isActiveRecord(data: FirebaseFirestore.DocumentData) {
+  return data.active !== false &&
+    data.isActive !== false &&
+    data.status !== 'inactive' &&
+    data.status !== 'inativo' &&
+    data.status !== 'terminated';
+}
+
+function normalizeUnitName(value: unknown) {
+  if (typeof value !== 'string') return '';
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+async function getPublicUnitOptions() {
+  const unitsSnap = await dbAdmin.collection('dp_units').get();
+  return Array.from(new Set(
+    unitsSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => normalizeUnitName(data.name))
+      .filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function toPublicQuestions(questions: HrFormQuestion[], units: string[]) {
+  return hydrateRecruitmentQuestionDynamicOptions(getPublicRecruitmentQuestions(questions), { units }).map(question => ({
     id: question.id,
     text: question.text,
     type: question.type,
@@ -41,17 +66,20 @@ export async function GET() {
 
     // Evita índice composto: filtra por status sem orderBy no Firestore,
     // ordena no servidor pelo createdAt.
-    const snapshot = await hrDbAdmin
-      .collection('jobOpenings')
-      .where('status', '==', 'open')
-      .get();
+    const [snapshot, publicUnits] = await Promise.all([
+      hrDbAdmin
+        .collection('jobOpenings')
+        .where('status', '==', 'open')
+        .get(),
+      getPublicUnitOptions(),
+    ]);
 
     const now = new Date().toISOString();
     const openings = snapshot.docs
       .map(doc => {
         const data = doc.data();
         const formQuestions = Array.isArray(data.formQuestions)
-          ? toPublicQuestions(data.formQuestions as HrFormQuestion[])
+          ? toPublicQuestions(data.formQuestions as HrFormQuestion[], publicUnits)
           : [];
         return {
           id: doc.id,
