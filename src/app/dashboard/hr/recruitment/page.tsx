@@ -361,6 +361,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
   });
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [statusAction, setStatusAction] = useState<CandidateStatus | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -423,6 +424,28 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
     }
   };
 
+  const handleStatusAction = async (status: CandidateStatus) => {
+    setStatusAction(status);
+    setError(null);
+    try {
+      await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      const updated = {
+        ...candidate,
+        status,
+        updatedAt: new Date().toISOString(),
+      };
+      setForm(prev => ({ ...prev, status }));
+      onUpdated(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao atualizar etapa.');
+    } finally {
+      setStatusAction(null);
+    }
+  };
+
   const role = roles.find(r => r.id === candidate.jobRoleId);
   const opening = openings.find(o => o.id === candidate.jobOpeningId);
   const formAnswers = candidate.latestApplication?.formAnswers ?? candidate.formAnswers ?? {};
@@ -436,6 +459,10 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
     form.source !== (candidate.source ?? '') || !!resumeFile;
 
   const currentResume = resumeFile ? null : candidate.resumeUrl;
+  const nextPipelineStatus = PIPELINE_STATUSES.includes(form.status)
+    ? PIPELINE_STATUSES[PIPELINE_STATUSES.indexOf(form.status) + 1] ?? null
+    : 'applied';
+  const hasPipelineNext = nextPipelineStatus && nextPipelineStatus !== form.status;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -456,6 +483,75 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {canManage && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/55 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Decisão do processo</p>
+                  <p className="mt-0.5 text-sm font-semibold text-white">{STATUS_CONFIG[form.status].label}</p>
+                </div>
+                <StatusBadge status={form.status} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {hasPipelineNext && nextPipelineStatus && (
+                  <button
+                    type="button"
+                    onClick={() => handleStatusAction(nextPipelineStatus)}
+                    disabled={!!statusAction}
+                    className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    {statusAction === nextPipelineStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                    Avançar para {STATUS_CONFIG[nextPipelineStatus].label}
+                  </button>
+                )}
+                {form.status !== 'hired' && (
+                  <button
+                    type="button"
+                    onClick={() => handleStatusAction('hired')}
+                    disabled={!!statusAction}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/15 disabled:opacity-50"
+                  >
+                    {statusAction === 'hired' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    Contratar
+                  </button>
+                )}
+                {form.status !== TALENT_POOL_STATUS && (
+                  <button
+                    type="button"
+                    onClick={() => handleStatusAction(TALENT_POOL_STATUS)}
+                    disabled={!!statusAction}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-500/15 disabled:opacity-50"
+                  >
+                    {statusAction === TALENT_POOL_STATUS ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Star className="h-3.5 w-3.5" />}
+                    Banco de talentos
+                  </button>
+                )}
+                {form.status !== 'rejected' && (
+                  <button
+                    type="button"
+                    onClick={() => handleStatusAction('rejected')}
+                    disabled={!!statusAction}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
+                  >
+                    {statusAction === 'rejected' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                    Reprovar
+                  </button>
+                )}
+                {form.status !== 'withdrawn' && (
+                  <button
+                    type="button"
+                    onClick={() => handleStatusAction('withdrawn')}
+                    disabled={!!statusAction}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {statusAction === 'withdrawn' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                    Desistência
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Status</label>
