@@ -132,6 +132,19 @@ function createQuestionSnapshot(questions: HrFormQuestion[]) {
   }));
 }
 
+function isInsideApplicationWindow(data: FirebaseFirestore.DocumentData, now: string) {
+  const start = typeof data.applicationStartAt === 'string' ? data.applicationStartAt : null;
+  const end = typeof data.applicationEndAt === 'string'
+    ? data.applicationEndAt
+    : typeof data.closesAt === 'string'
+      ? data.closesAt
+      : null;
+
+  if (start && start > now) return false;
+  if (end && end < now) return false;
+  return true;
+}
+
 export async function POST(request: NextRequest) {
   const flags = await getFeatureFlags();
   if (flags.kill_recruitment_public_landing) {
@@ -177,6 +190,10 @@ export async function POST(request: NextRequest) {
 
   const opening = snapshot.docs[0];
   const openingData = opening.data();
+  const now = new Date().toISOString();
+  if (!isInsideApplicationWindow(openingData, now)) {
+    return jsonError('O período de inscrições desta vaga está encerrado.', 403);
+  }
   const formQuestions = Array.isArray(openingData.formQuestions)
     ? openingData.formQuestions as HrFormQuestion[]
     : [];
@@ -194,7 +211,6 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .get();
 
-  const now = new Date().toISOString();
   const candidateRef = existingCandidate.empty
     ? hrDbAdmin.collection('candidates').doc()
     : existingCandidate.docs[0].ref;
@@ -220,6 +236,12 @@ export async function POST(request: NextRequest) {
     jobOpeningId: opening.id,
     jobRoleId: openingData.jobRoleId,
     jobRoleName: openingData.jobRoleName,
+    functionId: openingData.functionId ?? null,
+    functionName: openingData.functionName ?? null,
+    unitId: openingData.unitId ?? null,
+    unitName: openingData.unitName ?? null,
+    shiftDefinitionId: openingData.shiftDefinitionId ?? null,
+    shiftDefinitionName: openingData.shiftDefinitionName ?? null,
     stage: 'applied',
     status: 'active',
     source,
@@ -240,6 +262,12 @@ export async function POST(request: NextRequest) {
     phone: phone || null,
     jobRoleId: openingData.jobRoleId,
     jobRoleName: openingData.jobRoleName,
+    functionId: openingData.functionId ?? null,
+    functionName: openingData.functionName ?? null,
+    unitId: openingData.unitId ?? null,
+    unitName: openingData.unitName ?? null,
+    shiftDefinitionId: openingData.shiftDefinitionId ?? null,
+    shiftDefinitionName: openingData.shiftDefinitionName ?? null,
     jobOpeningId: opening.id,
     latestApplicationId: applicationRef.id,
     status: 'applied',

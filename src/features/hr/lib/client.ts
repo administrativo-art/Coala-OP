@@ -1,4 +1,4 @@
-import type { JobDepartment, JobFunction, JobRole } from "@/types";
+import type { DPShiftDefinition, DPUnit, JobDepartment, JobFunction, JobRole } from "@/types";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import type {
   LoginRestrictionEvaluation,
@@ -12,6 +12,8 @@ export type HrBootstrapPayload = {
   departments: JobDepartment[];
   roles: JobRole[];
   functions: JobFunction[];
+  units: DPUnit[];
+  shiftDefinitions: DPShiftDefinition[];
   access: {
     canView: boolean;
     canManageCatalog: boolean;

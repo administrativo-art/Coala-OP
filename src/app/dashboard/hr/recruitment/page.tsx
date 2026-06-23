@@ -13,7 +13,10 @@ import type {
   CandidateDecisionAction,
   CandidateStageHistoryEntry,
   CandidateStatus,
+  DPShiftDefinition,
+  DPUnit,
   HrFormQuestion,
+  JobFunction,
   JobRole,
   JobOpening,
   JobOpeningStatus,
@@ -93,6 +96,11 @@ const EMPTY_QUESTION_DRAFT = {
   required: false,
   eliminatory: false,
 };
+
+function dateInputToIso(value: string, endOfDay = false) {
+  if (!value) return null;
+  return new Date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`).toISOString();
+}
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
@@ -1045,9 +1053,12 @@ function DeleteConfirmModal({ candidate, getToken, onClose, onDeleted }: {
 
 // ─── OpeningModal ─────────────────────────────────────────────────────────────
 
-function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
+function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getToken, onClose, onSaved }: {
   opening?: JobOpening;
   roles: JobRole[];
+  functions: JobFunction[];
+  units: DPUnit[];
+  shiftDefinitions: DPShiftDefinition[];
   getToken: () => Promise<string>;
   onClose: () => void;
   onSaved: () => void;
@@ -1057,10 +1068,15 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
   const [form, setForm] = useState({
     title: opening?.title ?? '',
     jobRoleId: opening?.jobRoleId ?? '',
+    functionId: opening?.functionId ?? '',
+    unitId: opening?.unitId ?? '',
+    shiftDefinitionId: opening?.shiftDefinitionId ?? '',
     description: opening?.description ?? '',
     location: opening?.location ?? '',
     workType: opening?.workType ?? '',
     slots: String(opening?.slots ?? 1),
+    applicationStartAt: opening?.applicationStartAt ? opening.applicationStartAt.split('T')[0] : '',
+    applicationEndAt: opening?.applicationEndAt ? opening.applicationEndAt.split('T')[0] : '',
     closesAt: opening?.closesAt ? opening.closesAt.split('T')[0] : '',
     status: opening?.status ?? 'open',
     requirements: (opening?.requirements ?? []).join('\n'),
@@ -1075,6 +1091,74 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
   const set = (field: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(prev => ({ ...prev, [field]: e.target.value }));
+
+  const selectedRole = roles.find(role => role.id === form.jobRoleId) ?? null;
+  const compatibleFunctions = functions.filter(fn => {
+    if (fn.isActive === false) return false;
+    if (!form.jobRoleId) return true;
+    return !fn.compatibleRoleIds?.length || fn.compatibleRoleIds.includes(form.jobRoleId);
+  });
+  const selectedFunction = compatibleFunctions.find(fn => fn.id === form.functionId) ?? null;
+  const selectedUnit = units.find(unit => unit.id === form.unitId) ?? null;
+  const availableShiftDefinitions = shiftDefinitions.filter(shift => {
+    if (!form.unitId) return true;
+    const unitIds = shift.unitIds ?? (shift.unitId ? [shift.unitId] : []);
+    return unitIds.length === 0 || unitIds.includes(form.unitId);
+  });
+  const selectedShiftDefinition = availableShiftDefinitions.find(shift => shift.id === form.shiftDefinitionId) ?? null;
+
+  const applyDefaults = (role: JobRole | null, fn: JobFunction | null) => {
+    const nextTitle = fn?.publicTitle || fn?.name || role?.publicTitle || role?.name || '';
+    const descriptions = [
+      role?.publicDescription || role?.description,
+      fn?.publicDescription || fn?.description,
+    ].filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+    const requirements = [
+      ...(role?.publicRequirements?.length ? role.publicRequirements : role?.requirements ?? []),
+      ...(fn?.requirements ?? []),
+    ];
+    const inheritedQuestions = [
+      ...(role?.formQuestions ?? []),
+      ...(fn?.formQuestions ?? []),
+    ];
+
+    setForm(prev => ({
+      ...prev,
+      title: prev.title.trim() || !nextTitle ? prev.title : nextTitle,
+      description: prev.description.trim() || descriptions.length === 0 ? prev.description : descriptions.join('\n\n'),
+      requirements: prev.requirements.trim() || requirements.length === 0 ? prev.requirements : Array.from(new Set(requirements)).join('\n'),
+    }));
+    setQuestions(prev => prev.length > 0 || inheritedQuestions.length === 0 ? prev : inheritedQuestions);
+  };
+
+  const handleRoleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const jobRoleId = event.target.value;
+    const role = roles.find(item => item.id === jobRoleId) ?? null;
+    const currentFunction = functions.find(item => item.id === form.functionId) ?? null;
+    const functionStillCompatible = currentFunction && (
+      !currentFunction.compatibleRoleIds?.length || currentFunction.compatibleRoleIds.includes(jobRoleId)
+    );
+    setForm(prev => ({ ...prev, jobRoleId, functionId: functionStillCompatible ? prev.functionId : '' }));
+    applyDefaults(role, functionStillCompatible ? currentFunction : null);
+  };
+
+  const handleFunctionChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const functionId = event.target.value;
+    const fn = functions.find(item => item.id === functionId) ?? null;
+    setForm(prev => ({ ...prev, functionId }));
+    applyDefaults(selectedRole, fn);
+  };
+
+  const handleUnitChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const unitId = event.target.value;
+    const unit = units.find(item => item.id === unitId) ?? null;
+    setForm(prev => ({
+      ...prev,
+      unitId,
+      shiftDefinitionId: '',
+      location: prev.location.trim() || !unit?.name ? prev.location : unit.name,
+    }));
+  };
 
   const updateQuestion = (questionId: string, patch: Partial<HrFormQuestion>) => {
     setQuestions(prev => prev.map(question => question.id === questionId ? { ...question, ...patch } : question));
@@ -1168,17 +1252,29 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
       setError('Título e cargo são obrigatórios.');
       return;
     }
+    if (form.applicationStartAt && form.applicationEndAt && form.applicationEndAt < form.applicationStartAt) {
+      setError('A data final de inscrição precisa ser posterior à data inicial.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const body = {
         title: form.title.trim(),
         jobRoleId: form.jobRoleId,
+        functionId: form.functionId || null,
+        functionName: selectedFunction?.name ?? null,
+        unitId: form.unitId || null,
+        unitName: selectedUnit?.name ?? null,
+        shiftDefinitionId: form.shiftDefinitionId || null,
+        shiftDefinitionName: selectedShiftDefinition?.name ?? null,
         description: form.description.trim() || null,
         location: form.location.trim() || null,
         workType: form.workType || null,
         slots: Number(form.slots) || 1,
-        closesAt: form.closesAt ? new Date(form.closesAt).toISOString() : null,
+        applicationStartAt: dateInputToIso(form.applicationStartAt),
+        applicationEndAt: dateInputToIso(form.applicationEndAt, true),
+        closesAt: dateInputToIso(form.closesAt, true),
         status: form.status,
         requirements: form.requirements.split('\n').map(s => s.trim()).filter(Boolean),
         formQuestions: questions,
@@ -1221,7 +1317,7 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Cargo *</label>
-              <select value={form.jobRoleId} onChange={set('jobRoleId')} required
+              <select value={form.jobRoleId} onChange={handleRoleChange} required
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Selecione</option>
                 {roles.filter(r => r.isActive !== false).map(r => (
@@ -1230,9 +1326,41 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
               </select>
             </div>
             <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Função</label>
+              <select value={form.functionId} onChange={handleFunctionChange}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                <option value="">Sem função específica</option>
+                {compatibleFunctions.map(fn => (
+                  <option key={fn.id} value={fn.id}>{fn.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Nº de vagas</label>
               <input type="number" min="1" value={form.slots} onChange={set('slots')}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Unidade</label>
+              <select value={form.unitId} onChange={handleUnitChange}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                <option value="">Não especificada</option>
+                {units.map(unit => (
+                  <option key={unit.id} value={unit.id}>{unit.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Turno</label>
+              <select value={form.shiftDefinitionId} onChange={set('shiftDefinitionId')}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                <option value="">Não especificado</option>
+                {availableShiftDefinitions.map(shift => (
+                  <option key={shift.id} value={shift.id}>
+                    {shift.name}{shift.startTime && shift.endTime ? ` (${shift.startTime}-${shift.endTime})` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Localidade</label>
@@ -1246,6 +1374,16 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
                 <option value="">Não especificado</option>
                 {WORK_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Início das inscrições</label>
+              <input type="date" value={form.applicationStartAt} onChange={set('applicationStartAt')}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Fim das inscrições</label>
+              <input type="date" value={form.applicationEndAt} onChange={set('applicationEndAt')}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Encerra em</label>
@@ -1523,9 +1661,12 @@ function OpeningModal({ opening, roles, getToken, onClose, onSaved }: {
 
 // ─── OpeningsView ─────────────────────────────────────────────────────────────
 
-function OpeningsView({ openings, roles, candidates, getToken, canManage, onRefresh, onCandidatesFilter }: {
+function OpeningsView({ openings, roles, functions, units, shiftDefinitions, candidates, getToken, canManage, onRefresh, onCandidatesFilter }: {
   openings: JobOpening[];
   roles: JobRole[];
+  functions: JobFunction[];
+  units: DPUnit[];
+  shiftDefinitions: DPShiftDefinition[];
   candidates: Candidate[];
   getToken: () => Promise<string>;
   canManage: boolean;
@@ -1598,13 +1739,27 @@ function OpeningsView({ openings, roles, candidates, getToken, canManage, onRefr
                             {cfg.label}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 mb-2">{role?.name ?? opening.jobRoleName}</p>
+                        <p className="text-xs text-slate-500 mb-2">
+                          {role?.name ?? opening.jobRoleName}
+                          {opening.functionName ? ` · ${opening.functionName}` : ''}
+                        </p>
                         <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-                          {opening.location && <span>{opening.location}</span>}
+                          {(opening.unitName || opening.location) && <span>{opening.unitName || opening.location}</span>}
+                          {opening.shiftDefinitionName && <span>{opening.shiftDefinitionName}</span>}
                           {opening.workType && <span>{{ presencial: 'Presencial', remoto: 'Remoto', hibrido: 'Híbrido' }[opening.workType]}</span>}
                           <span>{opening.slots} vaga{opening.slots !== 1 ? 's' : ''}</span>
                           <span>{openingCandidates.length} inscrito{openingCandidates.length !== 1 ? 's' : ''}</span>
                           {hiredCount > 0 && <span className="text-emerald-600">{hiredCount} contratado{hiredCount !== 1 ? 's' : ''}</span>}
+                          {opening.applicationStartAt && (
+                            <span>
+                              inscrições desde {new Date(opening.applicationStartAt).toLocaleDateString('pt-BR')}
+                            </span>
+                          )}
+                          {opening.applicationEndAt && (
+                            <span className="text-amber-600">
+                              inscrições até {new Date(opening.applicationEndAt).toLocaleDateString('pt-BR')}
+                            </span>
+                          )}
                           {opening.closesAt && (
                             <span className="text-amber-600">
                               até {new Date(opening.closesAt).toLocaleDateString('pt-BR')}
@@ -1657,6 +1812,9 @@ function OpeningsView({ openings, roles, candidates, getToken, canManage, onRefr
         <OpeningModal
           opening={modal === 'new' ? undefined : modal}
           roles={roles}
+          functions={functions}
+          units={units}
+          shiftDefinitions={shiftDefinitions}
           getToken={getToken}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); onRefresh(); }}
@@ -2230,6 +2388,9 @@ export default function RecruitmentPage() {
   const { firebaseUser, permissions, loading: authLoading } = useAuth();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [roles, setRoles] = useState<JobRole[]>([]);
+  const [functions, setFunctions] = useState<JobFunction[]>([]);
+  const [units, setUnits] = useState<DPUnit[]>([]);
+  const [shiftDefinitions, setShiftDefinitions] = useState<DPShiftDefinition[]>([]);
   const [openings, setOpenings] = useState<JobOpening[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2278,6 +2439,9 @@ export default function RecruitmentPage() {
       ]);
       setCandidates(candidatesRes as Candidate[]);
       setRoles(rolesRes.roles);
+      setFunctions(rolesRes.functions ?? []);
+      setUnits(rolesRes.units ?? []);
+      setShiftDefinitions(rolesRes.shiftDefinitions ?? []);
       setOpenings(openingsRes as JobOpening[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar.');
@@ -2914,6 +3078,9 @@ export default function RecruitmentPage() {
         <OpeningsView
           openings={openings}
           roles={roles}
+          functions={functions}
+          units={units}
+          shiftDefinitions={shiftDefinitions}
           candidates={candidates}
           getToken={getToken}
           canManage={canManage}

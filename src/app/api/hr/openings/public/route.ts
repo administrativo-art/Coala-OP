@@ -18,6 +18,19 @@ function toPublicQuestions(questions: HrFormQuestion[]) {
   }));
 }
 
+function isInsideApplicationWindow(data: FirebaseFirestore.DocumentData, now: string) {
+  const start = typeof data.applicationStartAt === 'string' ? data.applicationStartAt : null;
+  const end = typeof data.applicationEndAt === 'string'
+    ? data.applicationEndAt
+    : typeof data.closesAt === 'string'
+      ? data.closesAt
+      : null;
+
+  if (start && start > now) return false;
+  if (end && end < now) return false;
+  return true;
+}
+
 export async function GET() {
   try {
     const flags = await getFeatureFlags();
@@ -32,6 +45,7 @@ export async function GET() {
       .where('status', '==', 'open')
       .get();
 
+    const now = new Date().toISOString();
     const openings = snapshot.docs
       .map(doc => {
         const data = doc.data();
@@ -41,20 +55,29 @@ export async function GET() {
         return {
           id: doc.id,
           jobRoleId: data.jobRoleId ?? null,
+          functionId: data.functionId ?? null,
+          unitId: data.unitId ?? null,
+          shiftDefinitionId: data.shiftDefinitionId ?? null,
           title: data.title ?? '',
           slug: data.slug ?? '',
           jobRoleName: data.jobRoleName ?? null,
+          functionName: data.functionName ?? null,
           description: data.description ?? null,
           requirements: Array.isArray(data.requirements) ? data.requirements : [],
           formQuestions,
-          location: data.location ?? null,
+          location: data.unitName ?? data.location ?? null,
+          unitName: data.unitName ?? null,
+          shiftDefinitionName: data.shiftDefinitionName ?? null,
           workType: data.workType ?? null,
           slots: data.slots ?? 1,
+          applicationStartAt: data.applicationStartAt ?? null,
+          applicationEndAt: data.applicationEndAt ?? null,
           closesAt: data.closesAt ?? null,
           createdAt: data.createdAt ?? '',
+          isReceivingApplications: isInsideApplicationWindow(data, now),
         };
       })
-      .filter(o => o.slug && o.title)
+      .filter(o => o.slug && o.title && o.isReceivingApplications)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     return NextResponse.json(openings);

@@ -48,6 +48,19 @@ function isRateLimited(key: string) {
   return current.count > UPLOAD_LIMIT_MAX;
 }
 
+function isInsideApplicationWindow(data: FirebaseFirestore.DocumentData, now: string) {
+  const start = typeof data.applicationStartAt === 'string' ? data.applicationStartAt : null;
+  const end = typeof data.applicationEndAt === 'string'
+    ? data.applicationEndAt
+    : typeof data.closesAt === 'string'
+      ? data.closesAt
+      : null;
+
+  if (start && start > now) return false;
+  if (end && end < now) return false;
+  return true;
+}
+
 async function assertPublicUploadAllowed(request: NextRequest, formData: FormData) {
   const flags = await getFeatureFlags();
   if (flags.kill_recruitment_public_landing) {
@@ -76,6 +89,9 @@ async function assertPublicUploadAllowed(request: NextRequest, formData: FormDat
     .get();
 
   if (opening.empty) return jsonError('Vaga não encontrada ou não está aberta.', 404);
+  if (!isInsideApplicationWindow(opening.docs[0].data(), new Date().toISOString())) {
+    return jsonError('O período de inscrições desta vaga está encerrado.', 403);
+  }
   return null;
 }
 

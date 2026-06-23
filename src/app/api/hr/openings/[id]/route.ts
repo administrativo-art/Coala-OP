@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
@@ -18,10 +19,75 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { id } = await context.params;
   const body = await request.json();
-  const { title, description, requirements, location, workType, slots, status, closesAt, formQuestions, pipelineStages } = body;
+  const {
+    title,
+    jobRoleId,
+    functionId,
+    unitId,
+    shiftDefinitionId,
+    description,
+    requirements,
+    location,
+    workType,
+    slots,
+    status,
+    applicationStartAt,
+    applicationEndAt,
+    closesAt,
+    formQuestions,
+    pipelineStages,
+  } = body;
+
+  const currentDoc = await hrDbAdmin.collection('jobOpenings').doc(id).get();
+  const before = currentDoc.data() ?? {};
+  const resolvedApplicationStartAt = applicationStartAt !== undefined ? applicationStartAt : before.applicationStartAt;
+  const resolvedApplicationEndAt = applicationEndAt !== undefined ? applicationEndAt : before.applicationEndAt;
+
+  if (resolvedApplicationStartAt && resolvedApplicationEndAt && String(resolvedApplicationEndAt) < String(resolvedApplicationStartAt)) {
+    return jsonError('Período de inscrição inválido.');
+  }
 
   const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if (title !== undefined) update.title = title;
+  if (jobRoleId !== undefined) {
+    update.jobRoleId = jobRoleId;
+    const roleDoc = await hrDbAdmin.collection('jobRoles').doc(jobRoleId).get();
+    update.jobRoleName = roleDoc.data()?.name ?? null;
+  }
+  if (functionId !== undefined) {
+    update.functionId = functionId || null;
+    update.functionName = null;
+    if (functionId) {
+      const functionDoc = await hrDbAdmin.collection('jobFunctions').doc(functionId).get();
+      const functionData = functionDoc.data();
+      const compatibleRoleIds = Array.isArray(functionData?.compatibleRoleIds) ? functionData.compatibleRoleIds : [];
+      const resolvedJobRoleId = typeof jobRoleId === 'string'
+        ? jobRoleId
+        : typeof before.jobRoleId === 'string'
+          ? before.jobRoleId
+          : undefined;
+      if (resolvedJobRoleId && compatibleRoleIds.length > 0 && !compatibleRoleIds.includes(resolvedJobRoleId)) {
+        return jsonError('Função incompatível com o cargo selecionado.');
+      }
+      update.functionName = functionData?.name ?? null;
+    }
+  }
+  if (unitId !== undefined) {
+    update.unitId = unitId || null;
+    update.unitName = null;
+    if (unitId) {
+      const unitDoc = await dbAdmin.collection('dp_units').doc(unitId).get();
+      update.unitName = unitDoc.data()?.name ?? null;
+    }
+  }
+  if (shiftDefinitionId !== undefined) {
+    update.shiftDefinitionId = shiftDefinitionId || null;
+    update.shiftDefinitionName = null;
+    if (shiftDefinitionId) {
+      const shiftDoc = await dbAdmin.collection('dp_shiftDefinitions').doc(shiftDefinitionId).get();
+      update.shiftDefinitionName = shiftDoc.data()?.name ?? null;
+    }
+  }
   if (description !== undefined) update.description = description;
   if (requirements !== undefined) update.requirements = requirements;
   if (formQuestions !== undefined) update.formQuestions = normalizeRecruitmentQuestions(formQuestions);
@@ -30,10 +96,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (workType !== undefined) update.workType = workType;
   if (slots !== undefined) update.slots = Number(slots);
   if (status !== undefined) update.status = status;
+  if (applicationStartAt !== undefined) update.applicationStartAt = applicationStartAt;
+  if (applicationEndAt !== undefined) update.applicationEndAt = applicationEndAt;
   if (closesAt !== undefined) update.closesAt = closesAt;
 
-  const currentDoc = await hrDbAdmin.collection('jobOpenings').doc(id).get();
-  const before = currentDoc.data() ?? {};
   await hrDbAdmin.collection('jobOpenings').doc(id).update(update);
   await logAction({
     user_id: access.decoded.uid,
@@ -50,12 +116,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         status: before.status ?? null,
         slots: before.slots ?? null,
         location: before.location ?? null,
+        functionId: before.functionId ?? null,
+        unitId: before.unitId ?? null,
+        shiftDefinitionId: before.shiftDefinitionId ?? null,
       },
       after: {
         title: update.title ?? before.title ?? null,
         status: update.status ?? before.status ?? null,
         slots: update.slots ?? before.slots ?? null,
         location: update.location ?? before.location ?? null,
+        functionId: update.functionId ?? before.functionId ?? null,
+        unitId: update.unitId ?? before.unitId ?? null,
+        shiftDefinitionId: update.shiftDefinitionId ?? before.shiftDefinitionId ?? null,
       },
     },
     ttl_days: 365,

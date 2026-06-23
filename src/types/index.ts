@@ -869,6 +869,12 @@ export type Candidate = {
   resumePath?: string;
   jobRoleId: string;
   jobRoleName?: string;
+  functionId?: string | null;
+  functionName?: string | null;
+  unitId?: string | null;
+  unitName?: string | null;
+  shiftDefinitionId?: string | null;
+  shiftDefinitionName?: string | null;
   jobOpeningId?: string;
   latestApplicationId?: string;
   latestApplication?: {
@@ -896,6 +902,12 @@ export type JobOpening = {
   id: string;
   jobRoleId: string;
   jobRoleName?: string;
+  functionId?: string | null;
+  functionName?: string | null;
+  unitId?: string | null;
+  unitName?: string | null;
+  shiftDefinitionId?: string | null;
+  shiftDefinitionName?: string | null;
   title: string;
   slug: string;
   description?: string;
@@ -906,6 +918,8 @@ export type JobOpening = {
   workType?: 'presencial' | 'remoto' | 'hibrido';
   slots: number;
   status: JobOpeningStatus;
+  applicationStartAt?: string | null;
+  applicationEndAt?: string | null;
   closesAt?: string;
   createdAt: string;
   updatedAt: string;

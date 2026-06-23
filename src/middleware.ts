@@ -20,15 +20,33 @@ const BLOCKED_SYSTEM_PREFIXES = [
   '/admin',
 ];
 
+const PUBLIC_RECRUITMENT_API_PATHS = [
+  '/api/hr/openings/public',
+  '/api/hr/public-stats',
+  '/api/hr/recruitment/forms/talent-pool/public',
+  '/api/hr/apply',
+  '/api/hr/talent',
+  '/api/hr/upload',
+];
+
+function isAllowedPublicRecruitmentApi(pathname: string) {
+  return PUBLIC_RECRUITMENT_API_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
 export function middleware(req: NextRequest) {
   if (!isPublicRecruitmentRequest(req.headers)) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
   const normalizedPathname = pathname.toLowerCase();
 
-  // APIs, assets do Next e arquivos estáticos passam intactos.
+  if (normalizedPathname.startsWith('/api')) {
+    return isAllowedPublicRecruitmentApi(normalizedPathname)
+      ? NextResponse.next()
+      : new NextResponse('Not found', { status: 404 });
+  }
+
+  // Assets do Next e arquivos estáticos passam intactos.
   if (
-    normalizedPathname.startsWith('/api') ||
     normalizedPathname.startsWith('/_next') ||
     /\.[a-zA-Z0-9]+$/.test(pathname)
   ) {

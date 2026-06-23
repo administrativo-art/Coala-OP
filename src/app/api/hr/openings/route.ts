@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
@@ -35,7 +36,23 @@ export async function POST(request: NextRequest) {
   if (!access) return jsonError('Sem permissão para gerenciar vagas.', 403);
 
   const body = await request.json();
-  const { title, jobRoleId, description, requirements, location, workType, slots, closesAt, formQuestions, pipelineStages } = body;
+  const {
+    title,
+    jobRoleId,
+    functionId,
+    unitId,
+    shiftDefinitionId,
+    description,
+    requirements,
+    location,
+    workType,
+    slots,
+    applicationStartAt,
+    applicationEndAt,
+    closesAt,
+    formQuestions,
+    pipelineStages,
+  } = body;
 
   if (!title?.trim() || !jobRoleId) {
     return jsonError('Título e cargo são obrigatórios.');
@@ -45,8 +62,15 @@ export async function POST(request: NextRequest) {
   const baseSlug = slugify(title.trim());
   const slug = `${baseSlug}-${Date.now().toString(36)}`;
 
-  // Resolve role name and inherit formQuestions if none provided
+  if (applicationStartAt && applicationEndAt && String(applicationEndAt) < String(applicationStartAt)) {
+    return jsonError('Período de inscrição inválido.');
+  }
+
+  // Resolve role/function/unit/shift names and inherit model questions when needed.
   let jobRoleName: string | undefined;
+  let functionName: string | null = null;
+  let unitName: string | null = null;
+  let shiftDefinitionName: string | null = null;
   let inheritedQuestions: unknown[] = [];
   try {
     const roleDoc = await hrDbAdmin.collection('jobRoles').doc(jobRoleId).get();
@@ -56,6 +80,29 @@ export async function POST(request: NextRequest) {
       if (Array.isArray(roleData?.formQuestions)) {
         inheritedQuestions = roleData.formQuestions;
       }
+    }
+
+    if (functionId) {
+      const functionDoc = await hrDbAdmin.collection('jobFunctions').doc(functionId).get();
+      const functionData = functionDoc.data();
+      functionName = typeof functionData?.name === 'string' ? functionData.name : null;
+      const compatibleRoleIds = Array.isArray(functionData?.compatibleRoleIds) ? functionData.compatibleRoleIds : [];
+      if (compatibleRoleIds.length > 0 && !compatibleRoleIds.includes(jobRoleId)) {
+        return jsonError('Função incompatível com o cargo selecionado.');
+      }
+      if ((!Array.isArray(formQuestions) || formQuestions.length === 0) && Array.isArray(functionData?.formQuestions)) {
+        inheritedQuestions = [...inheritedQuestions, ...functionData.formQuestions];
+      }
+    }
+
+    if (unitId) {
+      const unitDoc = await dbAdmin.collection('dp_units').doc(unitId).get();
+      unitName = typeof unitDoc.data()?.name === 'string' ? unitDoc.data()?.name : null;
+    }
+
+    if (shiftDefinitionId) {
+      const shiftDoc = await dbAdmin.collection('dp_shiftDefinitions').doc(shiftDefinitionId).get();
+      shiftDefinitionName = typeof shiftDoc.data()?.name === 'string' ? shiftDoc.data()?.name : null;
     }
   } catch {
     // best-effort
@@ -70,6 +117,12 @@ export async function POST(request: NextRequest) {
     slug,
     jobRoleId,
     jobRoleName,
+    functionId: functionId || null,
+    functionName,
+    unitId: unitId || null,
+    unitName,
+    shiftDefinitionId: shiftDefinitionId || null,
+    shiftDefinitionName,
     description: description?.trim() || null,
     requirements: Array.isArray(requirements) ? requirements : [],
     formQuestions: normalizeRecruitmentQuestions(resolvedQuestions),
@@ -78,6 +131,8 @@ export async function POST(request: NextRequest) {
     workType: workType || null,
     slots: Number(slots) || 1,
     status: 'open',
+    applicationStartAt: applicationStartAt || null,
+    applicationEndAt: applicationEndAt || null,
     closesAt: closesAt || null,
     createdAt: now,
     updatedAt: now,
@@ -95,6 +150,12 @@ export async function POST(request: NextRequest) {
       target_name: title.trim(),
       job_role_id: jobRoleId,
       job_role_name: jobRoleName ?? null,
+      function_id: functionId || null,
+      function_name: functionName,
+      unit_id: unitId || null,
+      unit_name: unitName,
+      shift_definition_id: shiftDefinitionId || null,
+      shift_definition_name: shiftDefinitionName,
       slots: Number(slots) || 1,
       status: 'open',
     },
