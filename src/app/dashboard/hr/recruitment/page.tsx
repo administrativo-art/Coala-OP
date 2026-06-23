@@ -167,6 +167,28 @@ type ResumeUpload = {
   path?: string;
 };
 
+type CandidateProfileApplication = {
+  id: string;
+  jobOpeningId?: string | null;
+  jobRoleName?: string | null;
+  functionName?: string | null;
+  unitName?: string | null;
+  stage?: CandidateStatus;
+  status?: string | null;
+  source?: string | null;
+  notes?: string | null;
+  appliedAt?: string | null;
+  updatedAt?: string | null;
+  formAnswers?: Record<string, unknown>;
+  formQuestionSnapshot?: HrFormQuestion[];
+};
+
+type CandidateProfilePayload = {
+  candidate: Candidate;
+  applications: CandidateProfileApplication[];
+  onboardingProcesses: OnboardingProcess[];
+};
+
 async function uploadResume(file: File, getToken: () => Promise<string>): Promise<ResumeUpload> {
   const token = await getToken();
   const fd = new FormData();
@@ -440,6 +462,26 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<CandidateProfilePayload | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setProfileLoading(true);
+    setProfileError(null);
+    apiFetch(`/api/hr/candidates/${candidate.id}/profile`, getToken)
+      .then((payload: CandidateProfilePayload) => {
+        if (alive) setProfile(payload);
+      })
+      .catch((err) => {
+        if (alive) setProfileError(err instanceof Error ? err.message : 'Falha ao carregar perfil completo.');
+      })
+      .finally(() => {
+        if (alive) setProfileLoading(false);
+      });
+    return () => { alive = false; };
+  }, [candidate.id, getToken]);
 
   const set = (field: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -557,6 +599,8 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
     .filter((entry): entry is CandidateStageHistoryEntry => !!entry && !!entry.createdAt)
     .slice()
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const profileApplications = profile?.applications ?? [];
+  const profileOnboarding = profile?.onboardingProcesses ?? [];
   const hasChanges =
     form.name !== candidate.name || form.email !== candidate.email ||
     form.phone !== (candidate.phone ?? '') || form.notes !== (candidate.notes ?? '') ||
@@ -757,6 +801,96 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
               </div>
             </div>
           )}
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/45 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Perfil completo</h3>
+                <p className="mt-0.5 text-xs text-slate-600">Histórico consolidado do recrutamento e onboarding.</p>
+              </div>
+              {profileLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
+            </div>
+            {profileError ? <ErrorLine msg={profileError} /> : null}
+            {!profileLoading && !profileError && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Inscrições</p>
+                    <p className="mt-1 text-xl font-bold text-white">{profileApplications.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Onboarding</p>
+                    <p className="mt-1 text-xl font-bold text-white">{profileOnboarding.length}</p>
+                  </div>
+                </div>
+
+                {profileApplications.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Histórico de vagas</p>
+                    {profileApplications.slice(0, 5).map(application => {
+                      const stage = application.stage && STATUS_CONFIG[application.stage] ? application.stage : null;
+                      const title = [
+                        application.jobRoleName,
+                        application.functionName,
+                      ].filter(Boolean).join(' | ') || 'Vaga sem cargo informado';
+                      return (
+                        <div key={application.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-slate-100">{title}</p>
+                              <p className="mt-0.5 truncate text-xs text-slate-500">{application.unitName || application.source || 'Origem não informada'}</p>
+                            </div>
+                            {stage ? <StatusBadge status={stage} /> : null}
+                          </div>
+                          {application.notes ? <p className="mt-2 text-xs text-slate-400">{application.notes}</p> : null}
+                          <p className="mt-2 text-[10px] font-medium text-slate-600">
+                            {application.appliedAt
+                              ? new Date(application.appliedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+                              : 'Data não informada'}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {profileOnboarding.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Onboarding vinculado</p>
+                    {profileOnboarding.slice(0, 3).map(process => (
+                      <div key={process.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-100">
+                              {process.jobRoleName ?? 'Cargo não informado'}
+                              {process.functionName ? ` | ${process.functionName}` : ''}
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-500">{ONBOARDING_STATUS_LABELS[process.status] ?? process.status}</p>
+                          </div>
+                          {process.publicToken ? (
+                            <a
+                              href={`${PUBLIC_RECRUITMENT_URL}/onboarding/${process.publicToken}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-700 px-2 py-1 text-[10px] font-bold text-slate-300 hover:bg-slate-800"
+                            >
+                              <ExternalLink className="h-3 w-3" /> Público
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {profileApplications.length === 0 && profileOnboarding.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-500">
+                    Nenhum histórico adicional encontrado para este candidato.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5">Observações</label>
@@ -1988,10 +2122,15 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
   const [reactivating, setReactivating] = useState<string | null>(null);
   const [reactivationTarget, setReactivationTarget] = useState<Candidate | null>(null);
   const [reactivationOpeningId, setReactivationOpeningId] = useState('');
+  const [reactivationStage, setReactivationStage] = useState<CandidateStatus>('applied');
+  const [reactivationReuseData, setReactivationReuseData] = useState(true);
+  const [reactivationNote, setReactivationNote] = useState('');
   const [reactivationError, setReactivationError] = useState<string | null>(null);
 
   const talentPoolCandidates = candidates.filter(c => c.status === TALENT_POOL_STATUS || c.source === 'talent_pool');
   const activeOpenings = openings.filter(opening => opening.status === 'open');
+  const selectedReactivationOpening = activeOpenings.find(opening => opening.id === reactivationOpeningId) ?? null;
+  const reactivationStages = normalizeRecruitmentStages(selectedReactivationOpening?.pipelineStages);
 
   const filtered = talentPoolCandidates.filter(c => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
@@ -2013,10 +2152,18 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
     try {
       await apiFetch(`/api/hr/candidates/${candidate.id}`, getToken, {
         method: 'PATCH',
-        body: JSON.stringify({ reactivateToOpeningId: openingId }),
+        body: JSON.stringify({
+          reactivateToOpeningId: openingId,
+          reactivateToStage: reactivationStage,
+          reuseCandidateData: reactivationReuseData,
+          decisionNote: reactivationNote.trim() || undefined,
+        }),
       });
       setReactivationTarget(null);
       setReactivationOpeningId('');
+      setReactivationStage('applied');
+      setReactivationReuseData(true);
+      setReactivationNote('');
       onReactivated();
     } catch (err) {
       setReactivationError(err instanceof Error ? err.message : 'Falha ao reativar candidato.');
@@ -2127,6 +2274,9 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
                     onClick={() => {
                       setReactivationTarget(candidate);
                       setReactivationOpeningId('');
+                      setReactivationStage('applied');
+                      setReactivationReuseData(true);
+                      setReactivationNote('');
                       setReactivationError(null);
                     }}
                     disabled={reactivating === candidate.id}
@@ -2174,7 +2324,13 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
                 <label className="mb-1.5 block text-xs font-medium text-slate-400">Vaga aberta</label>
                 <select
                   value={reactivationOpeningId}
-                  onChange={event => setReactivationOpeningId(event.target.value)}
+                  onChange={event => {
+                    const openingId = event.target.value;
+                    const opening = activeOpenings.find(item => item.id === openingId) ?? null;
+                    const stages = normalizeRecruitmentStages(opening?.pipelineStages);
+                    setReactivationOpeningId(openingId);
+                    setReactivationStage(stages[0]?.id ?? 'applied');
+                  }}
                   className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/30"
                 >
                   <option value="">Selecione uma vaga</option>
@@ -2187,6 +2343,47 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
                 {activeOpenings.length === 0 && (
                   <p className="mt-2 text-xs text-amber-300">Não há vagas abertas para receber este candidato.</p>
                 )}
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400">Etapa inicial</label>
+                <select
+                  value={reactivationStage}
+                  onChange={event => setReactivationStage(event.target.value as CandidateStatus)}
+                  disabled={!reactivationOpeningId}
+                  className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50"
+                >
+                  {reactivationStages.map(stage => (
+                    <option key={stage.id} value={stage.id}>{stage.label}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-600">
+                  O candidato pode voltar direto para triagem, entrevista ou outra etapa definida na vaga.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                <input
+                  type="checkbox"
+                  checked={reactivationReuseData}
+                  onChange={event => setReactivationReuseData(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-950"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-200">Reaproveitar dados anteriores</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">Mantém currículo, respostas do formulário e histórico como base desta nova candidatura.</span>
+                </span>
+              </label>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-400">Nota do reaproveitamento</label>
+                <textarea
+                  value={reactivationNote}
+                  onChange={event => setReactivationNote(event.target.value)}
+                  rows={3}
+                  placeholder="Ex: Retomar pela entrevista com liderança."
+                  className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/30"
+                />
               </div>
 
               {reactivationError && <ErrorLine msg={reactivationError} />}
@@ -2837,6 +3034,16 @@ function OnboardingView({ processes, getToken, canManage, onRefresh }: {
                                 <p className="mt-0.5 text-xs text-slate-500">
                                   {ONBOARDING_DOCUMENT_STATUS_LABELS[document.status] ?? document.status}
                                 </p>
+                                {document.fileUrl ? (
+                                  <a
+                                    href={document.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500"
+                                  >
+                                    <ExternalLink className="h-3 w-3" /> Ver arquivo enviado
+                                  </a>
+                                ) : null}
                               </div>
                               {canManage && (
                                 <div className="flex gap-1">
@@ -2898,6 +3105,25 @@ function OnboardingView({ processes, getToken, canManage, onRefresh }: {
                           <p className="truncate text-sm font-mono text-slate-700">{process.jobOpeningId}</p>
                         </>
                       )}
+                      {process.publicToken ? (
+                        <>
+                          <p className="mt-3 text-xs text-slate-500">Formulário público</p>
+                          <a
+                            href={`${PUBLIC_RECRUITMENT_URL}/onboarding/${process.publicToken}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Abrir formulário do candidato
+                          </a>
+                          {process.publicFormSubmittedAt ? (
+                            <p className="mt-2 text-xs text-emerald-700">
+                              Enviado em {new Date(process.publicFormSubmittedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : null}
                     </div>
 
                     {canManage && (

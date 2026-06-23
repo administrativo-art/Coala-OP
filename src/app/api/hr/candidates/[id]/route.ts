@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
@@ -13,6 +14,7 @@ import {
   createCandidateStageHistoryEntry,
   isCandidateDecisionAction,
   isCandidateStatus,
+  normalizeRecruitmentStages,
 } from '@/lib/recruitment-pipeline';
 
 export const runtime = 'nodejs';
@@ -20,6 +22,10 @@ export const dynamic = 'force-dynamic';
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function createPublicToken() {
+  return randomUUID().replace(/-/g, '');
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -32,7 +38,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const currentDoc = await hrDbAdmin.collection('candidates').doc(id).get();
   if (!currentDoc.exists) return jsonError('Candidato não encontrado.', 404);
   const before = currentDoc.data() ?? {};
-  const { decisionAction, decisionNote, reactivateToOpeningId, ...candidatePatch } = body;
+  const { decisionAction, decisionNote, reactivateToOpeningId, reactivateToStage, reuseCandidateData, ...candidatePatch } = body;
   const status = isCandidateStatus(candidatePatch.status) ? candidatePatch.status : null;
 
   if (candidatePatch.status !== undefined && !status) {
@@ -46,6 +52,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!openingDoc.exists) return jsonError('Vaga não encontrada.', 404);
     const opening = openingDoc.data() ?? {};
     if (opening.status !== 'open') return jsonError('A vaga selecionada não está aberta.');
+    const stageModels = normalizeRecruitmentStages(opening.pipelineStages);
+    const allowedStages = new Set(stageModels.map(stage => stage.id));
+    const targetStage = isCandidateStatus(reactivateToStage) && allowedStages.has(reactivateToStage)
+      ? reactivateToStage
+      : 'applied';
+    const shouldReuseData = reuseCandidateData !== false;
 
     const applicationRef = hrDbAdmin.collection('applications').doc(`${id}_${openingDoc.id}`);
     const applicationDoc = await applicationRef.get();
@@ -55,7 +67,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const historyEntry = createCandidateStageHistoryEntry({
       fromStatus: beforeStatus,
-      toStatus: 'applied',
+      toStatus: targetStage,
       action: 'advanced',
       note: typeof decisionNote === 'string' && decisionNote.trim()
         ? decisionNote
@@ -76,18 +88,23 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       unitName: opening.unitName ?? null,
       shiftDefinitionId: opening.shiftDefinitionId ?? null,
       shiftDefinitionName: opening.shiftDefinitionName ?? null,
-      stage: 'applied',
-      status: 'active',
+      stage: targetStage,
+      status: applicationStatusForCandidateStatus(targetStage),
       source: 'talent_pool',
       notes: historyEntry.note,
-      resumeUrl: before.resumeUrl ?? null,
-      resumePath: before.resumePath ?? null,
-      formAnswers: before.formAnswers ?? {},
-      formQuestionSnapshot: before.formQuestionSnapshot ?? [],
+      resumeUrl: shouldReuseData ? before.resumeUrl ?? null : null,
+      resumePath: shouldReuseData ? before.resumePath ?? null : null,
+      formAnswers: shouldReuseData ? before.formAnswers ?? {} : {},
+      formQuestionSnapshot: shouldReuseData
+        ? before.formQuestionSnapshot ?? opening.formQuestions ?? []
+        : opening.formQuestions ?? [],
       appliedAt: now,
       updatedAt: now,
       createdBy: access.decoded.uid,
       stageHistory: [historyEntry],
+      reactivatedFromTalentPool: true,
+      reactivatedAt: now,
+      reactivatedBy: access.decoded.uid,
     };
 
     const candidateUpdate = {
@@ -101,11 +118,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       shiftDefinitionName: opening.shiftDefinitionName ?? null,
       jobOpeningId: openingDoc.id,
       latestApplicationId: applicationRef.id,
-      status: 'applied',
+      status: targetStage,
       source: 'talent_pool',
       updatedAt: now,
       appliedAt: now,
       firstAppliedAt: before.firstAppliedAt ?? before.appliedAt ?? now,
+      resumeUrl: shouldReuseData ? before.resumeUrl ?? null : null,
+      resumePath: shouldReuseData ? before.resumePath ?? null : null,
+      formAnswers: shouldReuseData ? before.formAnswers ?? {} : {},
+      formQuestionSnapshot: shouldReuseData
+        ? before.formQuestionSnapshot ?? opening.formQuestions ?? []
+        : opening.formQuestions ?? [],
       recruitmentHistory: FieldValue.arrayUnion(historyEntry),
     };
 
@@ -132,15 +155,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           latestApplicationId: before.latestApplicationId ?? null,
         },
         after: {
-          status: 'applied',
+          status: targetStage,
           jobOpeningId: openingDoc.id,
           latestApplicationId: applicationRef.id,
         },
+        reuse_candidate_data: shouldReuseData,
       },
       ttl_days: 365,
     });
 
-    return NextResponse.json({ ok: true, latestApplicationId: applicationRef.id });
+    return NextResponse.json({ ok: true, latestApplicationId: applicationRef.id, status: targetStage });
   }
 
   const statusChanged = !!status && status !== beforeStatus;
@@ -222,6 +246,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       shiftDefinitionId: candidateUpdatePatch.shiftDefinitionId ?? before.shiftDefinitionId ?? null,
       shiftDefinitionName: candidateUpdatePatch.shiftDefinitionName ?? before.shiftDefinitionName ?? null,
       source: 'recruitment',
+      publicToken: existingOnboarding.publicToken ?? createPublicToken(),
       status: existingOnboarding.status ?? 'collecting_documents',
       currentStage: existingOnboarding.currentStage ?? 'documents',
       stages,

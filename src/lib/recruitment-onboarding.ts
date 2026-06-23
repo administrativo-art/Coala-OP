@@ -164,6 +164,8 @@ export function instantiateOnboardingDocuments(
     ...template,
     order: index,
     status: existingById.get(template.id)?.status ?? 'pending',
+    fileUrl: existingById.get(template.id)?.fileUrl ?? null,
+    filePath: existingById.get(template.id)?.filePath ?? null,
     receivedAt: existingById.get(template.id)?.receivedAt ?? null,
     approvedAt: existingById.get(template.id)?.approvedAt ?? null,
     updatedAt: existingById.get(template.id)?.updatedAt ?? null,

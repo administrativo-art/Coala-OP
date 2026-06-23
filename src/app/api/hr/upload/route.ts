@@ -15,6 +15,8 @@ const ALLOWED_MIME = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg',
+  'image/png',
 ]);
 const UPLOAD_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const UPLOAD_LIMIT_MAX = 5;
@@ -74,6 +76,21 @@ async function assertPublicUploadAllowed(request: NextRequest, formData: FormDat
   const website = trimText(formData.get('website'), 200);
   if (website) return jsonError('Envio não aceito.', 400);
 
+  const onboardingToken = trimText(formData.get('onboardingToken'), 120);
+  if (onboardingToken) {
+    const onboarding = await hrDbAdmin
+      .collection('onboardingProcesses')
+      .where('publicToken', '==', onboardingToken)
+      .limit(1)
+      .get();
+    if (onboarding.empty) return jsonError('Onboarding não encontrado.', 404);
+    const data = onboarding.docs[0].data();
+    if (data.status === 'cancelled' || data.status === 'completed') {
+      return jsonError('Este onboarding não está aceitando documentos.', 403);
+    }
+    return null;
+  }
+
   if (trimText(formData.get('talentPool'), 20) === 'true') {
     return null;
   }
@@ -108,12 +125,15 @@ export async function POST(request: NextRequest) {
 
   if (!(file instanceof File)) return jsonError('Arquivo ausente.');
   if (file.size > HR_RESUME_MAX_BYTES) return jsonError('Arquivo acima do limite de 10 MB.');
-  if (!ALLOWED_MIME.has(file.type)) return jsonError('Somente PDF, DOC e DOCX são aceitos.');
+  if (!ALLOWED_MIME.has(file.type)) return jsonError('Somente PDF, DOC, DOCX, JPG e PNG são aceitos.');
 
   const token = randomUUID();
   const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_').slice(0, 80);
+  const onboardingToken = trimText(formData.get('onboardingToken'), 120).replace(/[^a-zA-Z0-9_-]/g, '');
   const scope = access ? 'internal' : 'public';
-  const objectPath = `hr/resumes/${scope}/${Date.now()}-${token}-${safeName}`;
+  const objectPath = onboardingToken
+    ? `hr/onboarding/${onboardingToken}/${Date.now()}-${token}-${safeName}`
+    : `hr/resumes/${scope}/${Date.now()}-${token}-${safeName}`;
 
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const buffer = Buffer.from(await file.arrayBuffer());

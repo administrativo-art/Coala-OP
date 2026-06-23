@@ -887,6 +887,8 @@ export type OnboardingDocumentTemplate = {
 
 export type OnboardingDocument = OnboardingDocumentTemplate & {
   status: 'pending' | 'received' | 'approved' | 'rejected';
+  fileUrl?: string | null;
+  filePath?: string | null;
   receivedAt?: string | null;
   approvedAt?: string | null;
   updatedAt?: string | null;
@@ -910,6 +912,9 @@ export type OnboardingProcess = {
   shiftDefinitionName?: string | null;
   collaboratorUserId?: string | null;
   employeeId?: string | null;
+  publicToken?: string | null;
+  publicFormAnswers?: Record<string, unknown>;
+  publicFormSubmittedAt?: string | null;
   status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'contract_pending' | 'ready_to_create_user' | 'active' | 'completed' | 'cancelled';
   currentStage?: OnboardingStageId;
   stages?: OnboardingStage[];
