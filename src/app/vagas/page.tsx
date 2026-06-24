@@ -95,7 +95,7 @@ const VALUE_CARDS = [
   },
   {
     emoji: "💸",
-    title: "Salário em dia, sempre.",
+    title: "Salário sem atrasos, sempre.",
     text: "Bonificações, day-off de aniversário, VT integral, refeições de acordo com a jornada e plano odontológico.",
     footer: "Pagamento no 5º dia útil",
     color: "#9A7200",
@@ -114,8 +114,8 @@ const BENEFITS = [
 const PROCESS_STEPS = [
   { color: "#EE6FA8", title: "Você se inscreve", text: "Formulário rápido + currículo opcional. A gente lê tudo." },
   { color: "#3FBCD9", title: "Triagem", text: "Nosso time de RH avalia o perfil e confirma os próximos passos." },
-  { color: "#F7D154", textColor: "#2A1F2A", title: "Conversa rápida", text: "Papo sobre rotina, expectativas e disponibilidade." },
-  { color: "#FFB39A", title: "Dia de loja", text: "Quando fizer sentido, você sente na prática como é a operação." },
+  { color: "#F7D154", textColor: "#2A1F2A", title: "Conversa rápida", text: "Papo sobre rotina, expectativas e disponibilidade. Dependendo do cargo, se precisar, agendamos mais uma conversa." },
+  { color: "#FFB39A", title: "Dia de loja", text: "Um dia de loja: você sente na prática a operação enquanto a gente avalia o que precisa ser melhorado para personalizar a integração." },
   { color: "#C7E8C8", textColor: "#2A1F2A", title: "Proposta", text: "Se rolar match, mandamos tudo por escrito. Sem surpresa." },
   { color: "#EE6FA8", title: "Contratação", text: "Documentação, integração e primeiro turno. Do oi ao crachá." },
 ];
@@ -606,12 +606,12 @@ export default function VagasPage() {
             ))}
           </div>
 
-          <div className="stk rounded-3xl bg-white p-6">
+          <div className="stk mx-auto max-w-[1180px] rounded-3xl bg-white p-6">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
               <h3 className="fd text-[22px]">Benefícios na prática</h3>
               <span className="hidden text-[11.5px] text-[#5B4C5B] sm:block">vale pra todo mundo, do estagiário ao gerente</span>
             </div>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
               {BENEFITS.map((benefit) => {
                 const Icon = benefit.icon;
                 return (
