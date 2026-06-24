@@ -28,6 +28,8 @@ import {
   Pencil,
   Save,
   ShieldCheck,
+  FileText,
+  ClipboardCheck,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -43,6 +45,7 @@ import { normalizeRecruitmentStages } from "@/lib/recruitment-pipeline";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type {
   CandidateStatus,
+  HrFormQuestion,
   JobDepartment,
   JobFunction,
   JobRole,
@@ -236,7 +239,7 @@ function OnboardingModelEditor({
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div>
-        <p className="text-sm font-semibold text-slate-800">Modelo de onboarding</p>
+        <p className="text-sm font-semibold text-slate-800">Modelo de integração</p>
         <p className="mt-1 text-xs text-slate-500">Define as etapas e documentos ao aprovar contratação.</p>
       </div>
 
@@ -297,6 +300,67 @@ function OnboardingModelEditor({
   );
 }
 
+type RecruitmentModelCarrier = {
+  formQuestions?: HrFormQuestion[];
+  pipelineStages?: RecruitmentStage[];
+  onboardingStages?: OnboardingStage[];
+  onboardingDocuments?: OnboardingDocumentTemplate[];
+};
+
+function getRecruitmentModelSummary(item: RecruitmentModelCarrier, options?: { useDefaultDocuments?: boolean }) {
+  const questions = item.formQuestions ?? [];
+  const visibleQuestions = questions.filter((question) => question.active !== false).length;
+  const pipelineStages = normalizeRecruitmentStages(item.pipelineStages);
+  const integrationStages = normalizeOnboardingStages(item.onboardingStages);
+  const documentSource = item.onboardingDocuments?.length
+    ? item.onboardingDocuments
+    : options?.useDefaultDocuments
+      ? DEFAULT_ONBOARDING_DOCUMENTS
+      : [];
+  const integrationDocuments = normalizeOnboardingDocumentTemplates(documentSource);
+
+  return {
+    questions: questions.length,
+    visibleQuestions,
+    pipelineStages: pipelineStages.length,
+    integrationStages: integrationStages.length,
+    integrationDocuments: integrationDocuments.length,
+  };
+}
+
+function ModelSummaryCards({ summary }: { summary: ReturnType<typeof getRecruitmentModelSummary> }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <FileText className="h-3.5 w-3.5" />
+          <span>Formulário</span>
+        </div>
+        <p className="text-sm font-bold text-slate-900">
+          {summary.visibleQuestions}/{summary.questions}
+        </p>
+        <p className="mt-0.5 text-[11px] text-slate-500">campos visíveis</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <ListChecks className="h-3.5 w-3.5" />
+          <span>Vaga</span>
+        </div>
+        <p className="text-sm font-bold text-slate-900">{summary.pipelineStages}</p>
+        <p className="mt-0.5 text-[11px] text-slate-500">etapas do Kanban</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <ClipboardCheck className="h-3.5 w-3.5" />
+          <span>Integração</span>
+        </div>
+        <p className="text-sm font-bold text-slate-900">{summary.integrationDocuments}</p>
+        <p className="mt-0.5 text-[11px] text-slate-500">{summary.integrationStages} etapas</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Role Detail Modal ──────────────────────────────────────────────────────
 
 function RoleDetailModal({
@@ -317,6 +381,8 @@ function RoleDetailModal({
   onClose: () => void;
 }) {
   if (!role) return null;
+  const roleModelSummary = getRecruitmentModelSummary(role, { useDefaultDocuments: true });
+
   return (
     <Dialog open={!!role} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-lg border border-slate-200 bg-white text-slate-900">
@@ -393,6 +459,52 @@ function RoleDetailModal({
               </div>
             </div>
           )}
+
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-500">
+                <FileText className="h-3 w-3" />
+                <span>Modelos vinculados</span>
+              </div>
+              <a
+                href="/dashboard/settings?department=pessoal&tab=recruitment"
+                className="text-xs font-bold text-pink-600 hover:text-pink-500"
+              >
+                Gerenciar
+              </a>
+            </div>
+            <ModelSummaryCards summary={roleModelSummary} />
+
+            {functions.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Funções</p>
+                {functions.map((item) => {
+                  const summary = getRecruitmentModelSummary(item);
+                  return (
+                    <div key={item.id} className="rounded-xl border border-sky-100 bg-sky-50/70 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-sky-800">{item.name}</span>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => onEditFunction(item)}
+                            className="text-[11px] font-bold text-sky-700 hover:text-sky-600"
+                          >
+                            Editar
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-600">
+                        <span className="rounded-full bg-white px-2 py-1 shadow-sm">{summary.visibleQuestions}/{summary.questions} campos</span>
+                        <span className="rounded-full bg-white px-2 py-1 shadow-sm">{summary.pipelineStages} etapas</span>
+                        <span className="rounded-full bg-white px-2 py-1 shadow-sm">{summary.integrationDocuments} docs</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {role.responsibilities && role.responsibilities.length > 0 && (
             <div>
@@ -858,6 +970,7 @@ function DraggableDroppableCard({
   };
 
   const isDropTarget = isOver || isDraggingOver;
+  const modelSummary = getRecruitmentModelSummary(node.role, { useDefaultDocuments: true });
 
   const employeeFunctions = (employee: User) =>
     functions.filter((item) => {
@@ -923,6 +1036,21 @@ function DraggableDroppableCard({
                 <Pencil className="h-4 w-4" />
               </button>
             )}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-sm">
+          <div className="rounded-xl bg-slate-50 px-2 py-2 text-center">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Campos</p>
+            <p className="mt-0.5 text-xs font-black text-slate-800">{modelSummary.visibleQuestions}/{modelSummary.questions}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-2 py-2 text-center">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Etapas</p>
+            <p className="mt-0.5 text-xs font-black text-slate-800">{modelSummary.pipelineStages}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-2 py-2 text-center">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Integração</p>
+            <p className="mt-0.5 text-xs font-black text-slate-800">{modelSummary.integrationDocuments}</p>
           </div>
         </div>
 

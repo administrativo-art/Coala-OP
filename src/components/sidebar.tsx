@@ -169,7 +169,14 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           { label: "Colaboradores", href: "/dashboard/dp/collaborators", icon: Users, show: permissions.dp?.collaborators?.view },
           { label: "Controle de uniformes", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
           { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Network, show: permissions.dp?.view },
-          { label: "Recrutamento", href: "/dashboard/hr/recruitment", icon: Users, show: permissions.dp?.view },
+          {
+            label: "Recrutamento", href: "__group:recruitment", icon: Users, show: permissions.dp?.view,
+            children: [
+              { label: "Gestão da vaga", href: "/dashboard/hr/recruitment", icon: LayoutGrid, show: permissions.dp?.view },
+              { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: permissions.dp?.view },
+              { label: "Banco de talentos", href: "/dashboard/hr/recruitment/talents", icon: Users, show: permissions.dp?.view },
+            ],
+          },
           { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
           { label: "Férias da equipe", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
         ],

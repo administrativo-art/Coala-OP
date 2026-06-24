@@ -140,6 +140,38 @@ function compactCurrency(value: number) {
   }).format(value)
 }
 
+function getSalesReportRevenue(report: SalesReport) {
+  return report.items.reduce((sum, item) => sum + item.quantity * (item.unitPrice ?? 0), 0)
+}
+
+function getProjectedRevenue(reports: SalesReport[], today: Date) {
+  const reference = reports[0]
+  if (!reference) {
+    return { value: 0, detail: "sem relatórios no período" }
+  }
+
+  const daysInMonth = endOfMonth(new Date(reference.year, reference.month - 1, 1)).getDate()
+  const isCurrentMonth = reference.month === today.getMonth() + 1 && reference.year === today.getFullYear()
+  const revenue = reports.reduce((sum, report) => sum + getSalesReportRevenue(report), 0)
+
+  if (!isCurrentMonth) {
+    return { value: revenue, detail: "período fechado" }
+  }
+
+  const reportedDays = new Set(
+    reports
+      .filter((report) => typeof report.day === "number")
+      .map(getReportDateKey)
+  )
+  const elapsedDays = Math.max(1, reportedDays.size || Math.min(today.getDate(), daysInMonth))
+  const projected = (revenue / elapsedDays) * daysInMonth
+
+  return {
+    value: projected,
+    detail: `média de ${elapsedDays} dia(s) x ${daysInMonth} dias`,
+  }
+}
+
 function getInitials(value: string) {
   return value
     .split(/\s|\.|-/)
@@ -278,11 +310,13 @@ function ManagementDashboard() {
 
   const currentRevenue = useMemo(
     () =>
-      visibleSalesReports.reduce(
-        (sum, report) => sum + report.items.reduce((itemSum, item) => itemSum + item.quantity * (item.unitPrice ?? 0), 0),
-        0
-      ),
+      visibleSalesReports.reduce((sum, report) => sum + getSalesReportRevenue(report), 0),
     [visibleSalesReports]
+  )
+
+  const projectedRevenue = useMemo(
+    () => getProjectedRevenue(visibleSalesReports, today),
+    [today, visibleSalesReports]
   )
 
   const currentGoals = useMemo(() => getCurrentGoalPeriods(periods, today), [periods, today])
@@ -517,7 +551,7 @@ function ManagementDashboard() {
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
         {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
-          <DashboardCard title="Metas e faturamento" description="Meta geral, realizado e metas atuais por quiosque." href="/dashboard/goals/tracking" icon={Target} className="order-1" hideDetailsLink>
+          <DashboardCard title="Metas e faturamento" description="Meta geral, projeção e metas atuais por quiosque." href="/dashboard/goals/tracking" icon={Target} className="order-1" hideDetailsLink>
             <div className="grid gap-3 md:grid-cols-3">
               <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={`${visibleSalesReports.length} relatório(s) em ${formatSalesPeriod(visibleSalesReports)}`} />
               <Metric
@@ -526,9 +560,9 @@ function ManagementDashboard() {
                 detail={goalsLoading ? "Carregando metas..." : `${currentGoals.length} meta(s) ativa(s)`}
               />
               <Metric
-                label="Realizado nas metas"
-                value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.currentValue || 0), 0))}
-                detail="Somatório dos períodos ativos"
+                label="Projetado"
+                value={compactCurrency(projectedRevenue.value)}
+                detail={projectedRevenue.detail}
               />
             </div>
             {goalRows.length === 0 ? (
@@ -900,7 +934,7 @@ function ManagementDashboard() {
             <div className="mb-6 grid gap-3 md:grid-cols-3">
               <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={formatSalesPeriod(visibleSalesReports)} />
               <Metric label="Meta geral atual" value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0))} detail={`${currentGoals.length} meta(s) ativa(s)`} />
-              <Metric label="Realizado nas metas" value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.currentValue || 0), 0))} detail="Somatório dos períodos ativos" />
+              <Metric label="Projetado" value={compactCurrency(projectedRevenue.value)} detail={projectedRevenue.detail} />
             </div>
             <div className="space-y-5">
               {goalRows.map((goal) => (

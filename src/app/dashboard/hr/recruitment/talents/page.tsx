@@ -2,6 +2,6 @@
 
 import { RecruitmentShell } from "@/components/hr/recruitment/recruitment-shell";
 
-export default function RecruitmentPage() {
-  return <RecruitmentShell section="jobs" />;
+export default function RecruitmentTalentsPage() {
+  return <RecruitmentShell section="talents" />;
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Box, ChevronRight, Group, Menu, Package, Settings2, SlidersHorizontal, Users2, UsersRound } from "lucide-react";
+import { ArrowLeft, Box, ChevronRight, Group, Loader2, Menu, Package, Settings2, SlidersHorizontal, Users2, UsersRound } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
@@ -140,6 +141,10 @@ const AssetBarcodeLabelsPanel = dynamic(
   () => import("@/components/assets/asset-barcode-labels-panel").then((m) => m.AssetBarcodeLabelsPanel),
   { ssr: false }
 );
+const RecruitmentFormsView = dynamic(
+  () => import("@/components/hr/recruitment/recruitment-shell").then((m) => m.RecruitmentFormsView),
+  { ssr: false }
+);
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -157,6 +162,44 @@ function EmptySection({ label }: { label: string }) {
       <p className="text-sm font-medium">Configurações de {label}</p>
       <p className="text-xs opacity-60">Em breve disponíveis aqui.</p>
     </div>
+  );
+}
+
+function RecruitmentFormsSettingsPanel() {
+  const { firebaseUser, permissions } = useAuth();
+  const { roles, functions, loading, error, refresh } = useHrBootstrap();
+  const canManage = !!(permissions.settings.manageUsers || permissions.dp?.collaborators?.edit);
+
+  const getToken = useCallback(async () => {
+    const token = await firebaseUser?.getIdToken();
+    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+    return token;
+  }, [firebaseUser]);
+
+  if (!firebaseUser || loading) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-2xl border bg-white">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-700">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <RecruitmentFormsView
+      getToken={getToken}
+      canManage={canManage}
+      roles={roles}
+      functions={functions}
+      onModelsUpdated={refresh}
+    />
   );
 }
 
@@ -561,6 +604,13 @@ export default function SettingsPage() {
       content: <FieldConfigPage />,
     },
     {
+      value: "recruitment",
+      label: "Recrutamento",
+      title: "Recrutamento",
+      description: "Gerencie formulários públicos e modelos de questionário por cargo e função.",
+      content: <RecruitmentFormsSettingsPanel />,
+    },
+    {
       value: "audit",
       label: "Auditoria",
       title: "Auditoria",
@@ -615,6 +665,13 @@ export default function SettingsPage() {
       return !!(
         permissions.settings.manageUsers ||
         permissions.dp?.collaborators?.edit
+      );
+    }
+    if (tab.value === "recruitment") {
+      return !!(
+        permissions.settings.manageUsers ||
+        permissions.dp?.collaborators?.edit ||
+        permissions.dp?.view
       );
     }
     if (tab.value === "audit") {
