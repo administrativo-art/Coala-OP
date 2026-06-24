@@ -16,6 +16,8 @@ import {
   PurchasingEmptyState,
   PurchasingFilterChip,
   PurchasingHeader,
+  PurchasingKanbanCard,
+  PurchasingKanbanColumn,
   PurchasingMetricCard,
   PurchasingPageFrame,
   PurchasingPeriodControl,
@@ -176,29 +178,28 @@ export default function ReceiptsPage() {
               ].map((column) => {
                 const columnCards = cards.filter((entry) => entry.cfg.label === column.label || (column.label === 'Em conferência' && entry.receipt.status === 'stocked_with_divergence'));
                 return (
-                  <div key={column.label} className="flex h-[calc(100vh-360px)] min-h-[380px] flex-col rounded-[14px] border border-zinc-200 bg-white/70 p-3">
-                    <div className="mb-3 flex items-center justify-between">
-                      <PurchasingStatusBadge label={column.label} tone={column.tone} />
-                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-zinc-500">{columnCards.length}</span>
-                    </div>
-                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-                      {columnCards.map(({ receipt }) => (
-                        <Link key={receipt.id} href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
-                          <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
+                  <PurchasingKanbanColumn key={column.label} label={column.label} tone={column.tone} count={columnCards.length}>
+                    {columnCards.map(({ receipt, cfg }) => (
+                      <PurchasingKanbanCard
+                        key={receipt.id}
+                        href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`}
+                        tone={cfg.tone}
+                        code={receiptCode(receipt.purchaseOrderId)}
+                        title={receipt.supplierName || 'Recebimento de compra'}
+                        meta={
+                          <span className="flex items-center justify-between gap-2">
                             <span>Compra {new Date(purchaseDateById.get(receipt.purchaseOrderId) ?? receipt.createdAt).toLocaleDateString('pt-BR')}</span>
-                            {receipt.expectedDate && <span>Receb. prev. {new Date(receipt.expectedDate).toLocaleDateString('pt-BR')}</span>}
-                          </div>
-                          <span className="mt-0.5 block font-mono text-[11px] font-black text-zinc-500">{receiptCode(receipt.purchaseOrderId)}</span>
-                          <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{receipt.supplierName || 'Recebimento de compra'}</p>
-                          <PurchasingItemsPreview receiptId={receipt.id} />
-                          <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-                            <span>{receipt.receiptMode === 'immediate_pickup' ? 'Retirada' : 'Entrega'}</span>
-                            <span className="font-mono font-black text-zinc-900">{purchasingCompactMoney(receiptDisplayTotal(receipt))}</span>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
+                            {receipt.expectedDate ? <span>Prev. {new Date(receipt.expectedDate).toLocaleDateString('pt-BR')}</span> : null}
+                          </span>
+                        }
+                        badges={<PurchasingStatusBadge label={cfg.label} tone={cfg.tone} />}
+                        footerLeft={receipt.receiptMode === 'immediate_pickup' ? 'Retirada' : 'Entrega'}
+                        amount={purchasingCompactMoney(receiptDisplayTotal(receipt))}
+                      >
+                        <PurchasingItemsPreview receiptId={receipt.id} />
+                      </PurchasingKanbanCard>
+                    ))}
+                  </PurchasingKanbanColumn>
                 );
               })}
             </div>

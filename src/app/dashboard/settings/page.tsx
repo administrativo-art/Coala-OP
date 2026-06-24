@@ -371,6 +371,7 @@ type NestedTab = {
   title: string;
   description: string;
   content: React.ReactNode;
+  children?: NestedTab[];
 };
 
 type DepartmentTab = {
@@ -426,26 +427,61 @@ function DepartmentSubtabs({
   emptyLabel: string;
   requestedValue?: string | null;
 }) {
-  const defaultTab = tabs[0]?.value;
-  const [activeSubTab, setActiveSubTab] = useState(defaultTab ?? "");
+  const resolveTab = useCallback(
+    (value?: string | null) => {
+      if (!tabs.length) return null;
+      if (value) {
+        for (const tab of tabs) {
+          if (tab.value === value) {
+            return { group: tab, leaf: tab.children?.[0] ?? tab };
+          }
+          const child = tab.children?.find((item) => item.value === value);
+          if (child) {
+            return { group: tab, leaf: child };
+          }
+        }
+      }
+      const group = tabs[0];
+      return { group, leaf: group.children?.[0] ?? group };
+    },
+    [tabs]
+  );
+
+  const defaultMatch = resolveTab(requestedValue);
+  const [activeSubTab, setActiveSubTab] = useState(defaultMatch?.group.value ?? "");
+  const [activeLeafTab, setActiveLeafTab] = useState(defaultMatch?.leaf.value ?? "");
 
   useEffect(() => {
-    if (requestedValue && tabs.some((tab) => tab.value === requestedValue)) {
-      setActiveSubTab(requestedValue);
+    const match = resolveTab(requestedValue);
+    if (match) {
+      setActiveSubTab(match.group.value);
+      setActiveLeafTab(match.leaf.value);
       return;
     }
-    setActiveSubTab(defaultTab ?? "");
-  }, [defaultTab, requestedValue, tabs]);
+    setActiveSubTab("");
+    setActiveLeafTab("");
+  }, [requestedValue, resolveTab]);
 
-  if (!defaultTab) {
+  if (!tabs.length) {
     return <EmptySection label={emptyLabel} />;
   }
 
-  const activeTab = tabs.find((tab) => tab.value === activeSubTab) ?? tabs[0];
+  const activeGroup = tabs.find((tab) => tab.value === activeSubTab) ?? tabs[0];
+  const childTabs = activeGroup.children ?? [];
+  const activeTab = childTabs.find((tab) => tab.value === activeLeafTab) ?? childTabs[0] ?? activeGroup;
+
+  const handleGroupChange = (value: string) => {
+    const nextGroup = tabs.find((tab) => tab.value === value) ?? tabs[0];
+    setActiveSubTab(nextGroup.value);
+    setActiveLeafTab((nextGroup.children?.[0] ?? nextGroup).value);
+  };
 
   return (
     <div className="space-y-6">
-      <SegmentedTabs tabs={tabs} value={activeTab.value} onChange={setActiveSubTab} />
+      <SegmentedTabs tabs={tabs} value={activeGroup.value} onChange={handleGroupChange} />
+      {childTabs.length > 1 ? (
+        <SegmentedTabs tabs={childTabs} value={activeTab.value} onChange={setActiveLeafTab} />
+      ) : null}
       <div className="space-y-4">
         <SectionHeader title={activeTab.title} description={activeTab.description} />
         {activeTab.content}
@@ -545,7 +581,7 @@ export default function SettingsPage() {
     return false;
   });
 
-  const personalTabs: NestedTab[] = [
+  const personalLeafTabs: NestedTab[] = [
     {
       value: "users",
       label: "Usuários",
@@ -688,6 +724,51 @@ export default function SettingsPage() {
     }
     return false;
   });
+
+  const pickPersonalTabs = (values: string[]) => personalLeafTabs.filter((tab) => values.includes(tab.value));
+
+  const personalTabs: NestedTab[] = [
+    {
+      value: "team-structure",
+      label: "Equipe e organograma",
+      title: "Equipe e organograma",
+      description: "Gerencie usuários, cargos, funções e a estrutura organizacional.",
+      content: null,
+      children: pickPersonalTabs(["users", "roles", "organogram"]),
+    },
+    {
+      value: "collaborator-profile",
+      label: "Perfil do colaborador",
+      title: "Perfil do colaborador",
+      description: "Configure os campos e a composição do perfil dos colaboradores.",
+      content: null,
+      children: pickPersonalTabs(["profile-fields"]),
+    },
+    {
+      value: "journey",
+      label: "Jornada",
+      title: "Jornada",
+      description: "Configure turnos, calendários e regras de acesso por escala.",
+      content: null,
+      children: pickPersonalTabs(["shifts", "calendars", "login-access"]),
+    },
+    {
+      value: "recruitment",
+      label: "Recrutamento",
+      title: "Recrutamento",
+      description: "Gerencie formulários públicos e modelos de questionário por cargo e função.",
+      content: null,
+      children: pickPersonalTabs(["recruitment"]),
+    },
+    {
+      value: "governance",
+      label: "Governança",
+      title: "Governança",
+      description: "Centralize privacidade, auditoria e controles internos do departamento pessoal.",
+      content: null,
+      children: pickPersonalTabs(["privacy", "audit"]),
+    },
+  ].filter((tab) => (tab.children?.length ?? 0) > 0);
 
   const financialTabs: NestedTab[] = [
     {

@@ -301,6 +301,77 @@ export function PurchasingStatusBadge({ label, tone = 'blue' }: { label: string;
   );
 }
 
+export function PurchasingKanbanColumn({
+  label,
+  tone = 'blue',
+  count,
+  children,
+  className,
+}: {
+  label: string;
+  tone?: PurchasingTone;
+  count: number;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex h-[calc(100vh-360px)] min-h-[380px] flex-col rounded-[14px] bg-zinc-50/75 p-2', className)}>
+      <div className="mb-2 flex items-center gap-2 border-b border-zinc-200/80 px-1.5 pb-2.5 pt-1">
+        <span className={cn('h-2 w-2 shrink-0 rounded-full', toneClasses[tone].bg)} />
+        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">{label}</h3>
+        <span className="text-xs font-semibold tabular-nums text-zinc-500">{count}</span>
+      </div>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-0.5 pb-1 pr-1">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function PurchasingKanbanCard({
+  href,
+  tone = 'blue',
+  code,
+  title,
+  meta,
+  badges,
+  children,
+  footerLeft,
+  amount,
+}: {
+  href: string;
+  tone?: PurchasingTone;
+  code: string;
+  title: string;
+  meta?: ReactNode;
+  badges?: ReactNode;
+  children?: ReactNode;
+  footerLeft?: ReactNode;
+  amount?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group relative block overflow-hidden rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 hover:shadow-md"
+    >
+      <span className={cn('absolute inset-x-0 top-0 h-0.5', toneClasses[tone].bg)} />
+      {meta ? <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">{meta}</div> : null}
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate font-mono text-[11px] font-black text-zinc-500">{code}</span>
+        {badges}
+      </div>
+      <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{title}</p>
+      {children}
+      {(footerLeft || amount) ? (
+        <div className="mt-3 flex items-center justify-between gap-3 text-xs text-zinc-500">
+          <span className="min-w-0 truncate">{footerLeft}</span>
+          {amount ? <span className="shrink-0 font-mono font-black text-zinc-900">{amount}</span> : null}
+        </div>
+      ) : null}
+    </Link>
+  );
+}
+
 export function PurchasingProgressSegments({
   value,
   total = 8,

@@ -103,17 +103,11 @@ const EMPTY_QUESTION_DRAFT = {
 type RecruitmentSection = 'jobs' | 'talents' | 'integration';
 type RecruitmentJobViewMode = 'kanban' | 'list' | 'openings';
 
-const RECRUITMENT_SECTION_NAV: Array<{ section: RecruitmentSection; label: string; href: string }> = [
-  { section: 'jobs', label: 'Gestão da vaga', href: '/dashboard/hr/recruitment' },
-  { section: 'talents', label: 'Banco de talentos', href: '/dashboard/hr/recruitment/talents' },
-  { section: 'integration', label: 'Integração', href: '/dashboard/hr/recruitment/integration' },
-];
-
 const RECRUITMENT_SECTION_META: Record<RecruitmentSection, { eyebrow: string; title: string; description: string }> = {
   jobs: {
     eyebrow: 'Gestão da vaga',
     title: 'Recrutamento',
-    description: 'Acompanhe vagas, triagem, Kanban e candidatos por processo seletivo.',
+    description: 'Crie vagas, filtre processos em andamento e abra o Kanban de cada vaga.',
   },
   talents: {
     eyebrow: 'Banco de talentos',
@@ -1018,30 +1012,6 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
 
 // ─── Kanban DnD ───────────────────────────────────────────────────────────────
 
-const COLUMN_ACCENT: Record<CandidateStatus, string> = {
-  applied:        'from-sky-50 to-blue-50 border-blue-100',
-  screening:      'from-violet-50 to-indigo-50 border-indigo-100',
-  interview:      'from-fuchsia-50 to-pink-50 border-pink-100',
-  technical_test: 'from-amber-50 to-orange-50 border-orange-100',
-  offer:          'from-emerald-50 to-teal-50 border-teal-100',
-  hired:          'from-lime-50 to-green-50 border-green-100',
-  rejected:       'from-rose-50 to-red-50 border-red-100',
-  withdrawn:      'from-slate-50 to-zinc-50 border-slate-200',
-  talent_pool:    'from-cyan-50 to-sky-50 border-cyan-100',
-};
-
-const CARD_ACCENT: Record<CandidateStatus, string> = {
-  applied:        'bg-blue-100/80 border-blue-200 text-blue-950',
-  screening:      'bg-violet-100/80 border-violet-200 text-violet-950',
-  interview:      'bg-pink-100/80 border-pink-200 text-pink-950',
-  technical_test: 'bg-orange-100/80 border-orange-200 text-orange-950',
-  offer:          'bg-emerald-100/80 border-emerald-200 text-emerald-950',
-  hired:          'bg-cyan-100/80 border-cyan-200 text-cyan-950',
-  rejected:       'bg-rose-100/80 border-rose-200 text-rose-950',
-  withdrawn:      'bg-slate-100 border-slate-200 text-slate-950',
-  talent_pool:    'bg-cyan-100/80 border-cyan-200 text-cyan-950',
-};
-
 function CandidateInitials({ name }: { name: string }) {
   const initials = name.split(' ').slice(0, 2).map(s => s[0]).join('').toUpperCase();
   const colors = [
@@ -1084,12 +1054,14 @@ function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; sta
 
   const isNew = (Date.now() - new Date(candidate.appliedAt).getTime()) < 7 * 86_400_000;
   const timing = getCandidateStageTiming(candidate, stage);
+  const statusCfg = STATUS_CONFIG[candidate.status];
 
   return (
     <div
       ref={setNodeRef} style={style} {...attributes}
-      className={`rounded-2xl border p-3 shadow-sm transition-all group hover:-translate-y-0.5 hover:shadow-md ${CARD_ACCENT[candidate.status]}`}
+      className={`group relative overflow-hidden rounded-[10px] border border-slate-200 bg-white p-3 text-slate-900 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50 hover:shadow-md ${isDragging ? 'ring-2 ring-indigo-200' : ''}`}
     >
+      <span className={`absolute inset-x-0 top-0 h-0.5 ${statusCfg.color}`} />
       <button onClick={onOpen} className="w-full text-left">
         <div className="mb-3 flex items-start gap-2.5">
           <div className="flex-1 min-w-0 pt-0.5">
@@ -1120,15 +1092,15 @@ function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; sta
                 </span>
               )}
             </div>
-            <h4 className="font-semibold transition-colors text-sm leading-snug">
+            <h4 className="font-semibold text-sm leading-snug text-slate-950 transition-colors">
               {candidate.name}
             </h4>
-            <p className="text-[11px] opacity-70 truncate mt-1">{candidate.jobRoleName}</p>
+            <p className="mt-1 truncate text-[11px] text-slate-500">{candidate.jobRoleName}</p>
           </div>
           <div
             {...listeners}
             onClick={e => e.stopPropagation()}
-            className="cursor-grab active:cursor-grabbing p-1 text-current/35 hover:text-current/60 flex-shrink-0 mt-0.5"
+            className="mt-0.5 flex-shrink-0 cursor-grab p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
           >
             <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor">
               <circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/>
@@ -1141,7 +1113,7 @@ function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; sta
         <div className="mb-3 flex items-center gap-2">
           <RatingStars value={candidate.rating ?? 0} readonly />
           {candidate.resumeUrl && (
-            <span className="flex items-center gap-1 text-[10px] text-current/55 bg-white/65 px-1.5 py-0.5 rounded-md">
+            <span className="flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
               <Paperclip className="h-2.5 w-2.5" /> CV
             </span>
           )}
@@ -1151,7 +1123,7 @@ function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; sta
           <div className="flex -space-x-2">
             <CandidateInitials name={candidate.name} />
           </div>
-          <span className="text-[10px] text-current/55 flex items-center gap-1 rounded-md bg-white/65 px-2 py-1">
+          <span className="flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[10px] text-slate-500">
             <Calendar className="h-2.5 w-2.5" />
             {new Date(candidate.appliedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
           </span>
@@ -1169,44 +1141,38 @@ function DroppableColumn({ status, stage, candidates, onCardOpen }: {
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const cfg = STATUS_CONFIG[status];
-  const accent = COLUMN_ACCENT[status];
   const overdueCount = stage
     ? candidates.filter(candidate => getCandidateStageTiming(candidate, stage).isOverdue).length
     : 0;
 
   return (
-    <div className={`flex-shrink-0 w-[270px] rounded-2xl border bg-gradient-to-b ${accent} p-2 shadow-sm flex flex-col`}>
-      <div className="px-2.5 py-2.5 flex items-center gap-2">
-        <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
+    <div className="flex w-[282px] flex-shrink-0 flex-col rounded-[14px] bg-slate-50/80 p-2 shadow-sm">
+      <div className="mb-2 flex items-center gap-2 border-b border-slate-200/80 px-1.5 pb-2.5 pt-1">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${cfg.color}`} />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-bold text-slate-900">{stage?.label ?? cfg.label}</h3>
-          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             {stage?.dueDays === null || stage?.dueDays === undefined ? 'Sem prazo' : `${stage.dueDays}d de prazo`}
             {overdueCount > 0 ? ` · ${overdueCount} atrasado${overdueCount !== 1 ? 's' : ''}` : ''}
           </p>
         </div>
-        <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-white/70 hover:text-slate-900">
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-        <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-white/70 hover:text-slate-900">
-          <MoreHorizontal className="h-3.5 w-3.5" />
-        </button>
+        <span className="text-xs font-semibold tabular-nums text-slate-500">{candidates.length}</span>
       </div>
 
       <div
         ref={setNodeRef}
-        className={`flex flex-col gap-3 p-1 min-h-[420px] rounded-xl transition-colors ${
+        className={`flex min-h-[420px] flex-col gap-2 rounded-[10px] p-0.5 transition-colors ${
           isOver
-            ? 'bg-white/70 ring-2 ring-indigo-200'
-            : 'bg-white/25'
+            ? 'bg-indigo-50 ring-2 ring-indigo-200'
+            : 'bg-transparent'
         }`}
       >
         {candidates.map(c => (
           <DraggableCard key={c.id} candidate={c} stage={stage} onOpen={() => onCardOpen(c)} />
         ))}
         {candidates.length === 0 && (
-          <div className={`flex-1 min-h-[120px] flex items-center justify-center rounded-xl border border-dashed ${
-            isOver ? 'border-indigo-300 bg-indigo-50/70' : 'border-slate-200 bg-white/35'
+          <div className={`flex min-h-[120px] flex-1 items-center justify-center rounded-[10px] border border-dashed ${
+            isOver ? 'border-indigo-300 bg-indigo-50/70' : 'border-slate-200 bg-white/40'
           }`}>
             <UserPlus className="h-4 w-4 text-slate-400" />
           </div>
@@ -1964,6 +1930,10 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
   const [modal, setModal] = useState<'new' | JobOpening | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<JobOpening | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState<JobOpeningStatus | ''>('');
+  const [filterRole, setFilterRole] = useState('');
+  const [filterUnit, setFilterUnit] = useState('');
 
   const handleDelete = async (o: JobOpening) => {
     setDeleting(true);
@@ -1976,8 +1946,52 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
     }
   };
 
+  const unitOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    openings.forEach(opening => {
+      const id = opening.unitId || opening.unitName || opening.location;
+      const label = opening.unitName || opening.location;
+      if (id && label) byId.set(id, label);
+    });
+    units.forEach(unit => {
+      if (unit.id && unit.name) byId.set(unit.id, unit.name);
+    });
+    return Array.from(byId.entries()).map(([id, label]) => ({ id, label }));
+  }, [openings, units]);
+
+  const filteredOpenings = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return openings.filter(opening => {
+      const role = roles.find(item => item.id === opening.jobRoleId);
+      const unitLabel = opening.unitName || opening.location || '';
+      const searchable = [
+        opening.title,
+        opening.slug,
+        role?.name,
+        opening.jobRoleName,
+        opening.functionName,
+        unitLabel,
+        opening.shiftDefinitionName,
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      if (normalizedSearch && !searchable.includes(normalizedSearch)) return false;
+      if (filterStatus && opening.status !== filterStatus) return false;
+      if (filterRole && opening.jobRoleId !== filterRole) return false;
+      if (filterUnit) {
+        const matchesUnit =
+          opening.unitId === filterUnit ||
+          opening.unitName === filterUnit ||
+          opening.location === filterUnit ||
+          unitLabel === unitOptions.find(unit => unit.id === filterUnit)?.label;
+        if (!matchesUnit) return false;
+      }
+      return true;
+    });
+  }, [filterRole, filterStatus, filterUnit, openings, roles, search, unitOptions]);
+
   const grouped: Record<JobOpeningStatus, JobOpening[]> = { open: [], paused: [], closed: [] };
-  openings.forEach(o => grouped[o.status].push(o));
+  filteredOpenings.forEach(o => grouped[o.status].push(o));
+  const activeFilters = [search.trim(), filterStatus, filterRole, filterUnit].filter(Boolean).length;
 
   return (
     <div className="space-y-6">
@@ -1991,10 +2005,75 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
         )}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
+        <div className="relative min-w-[240px] flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder="Buscar vaga, cargo ou unidade…"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          />
+        </div>
+        <select
+          value={filterStatus}
+          onChange={event => setFilterStatus(event.target.value as JobOpeningStatus | '')}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+        >
+          <option value="">Todos os status</option>
+          <option value="open">Abertas</option>
+          <option value="paused">Pausadas</option>
+          <option value="closed">Encerradas</option>
+        </select>
+        <select
+          value={filterRole}
+          onChange={event => setFilterRole(event.target.value)}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+        >
+          <option value="">Todos os cargos</option>
+          {roles.filter(role => role.isActive !== false).map(role => (
+            <option key={role.id} value={role.id}>{role.name}</option>
+          ))}
+        </select>
+        <select
+          value={filterUnit}
+          onChange={event => setFilterUnit(event.target.value)}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+        >
+          <option value="">Todas as unidades</option>
+          {unitOptions.map(unit => (
+            <option key={unit.id} value={unit.id}>{unit.label}</option>
+          ))}
+        </select>
+        {activeFilters > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setFilterStatus('');
+              setFilterRole('');
+              setFilterUnit('');
+            }}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
+
       {openings.length === 0 && (
         <div className="py-16 text-center">
           <Briefcase className="h-10 w-10 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500">Nenhuma vaga cadastrada.</p>
+        </div>
+      )}
+
+      {openings.length > 0 && filteredOpenings.length === 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center shadow-sm">
+          <SlidersHorizontal className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+          <p className="text-sm font-semibold text-slate-700">Nenhuma vaga encontrada com esses filtros.</p>
+          <p className="mt-1 text-sm text-slate-500">Ajuste a busca ou limpe os filtros para ver todas as vagas.</p>
         </div>
       )}
 
@@ -3946,46 +4025,12 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
-            {RECRUITMENT_SECTION_NAV.map(item => (
-              <a
-                key={item.section}
-                href={item.href}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
-                  section === item.section ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                {item.label}
-              </a>
-            ))}
-            <a href={PUBLIC_RECRUITMENT_URL} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 transition-all hover:text-slate-900">
-              <Globe className="h-3.5 w-3.5" />
-              Página pública
-            </a>
-          </div>
-
-          {section === 'jobs' && (
-            <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
-              {(['openings', 'kanban', 'list'] as const).map((mode) => {
-                const labels: Record<RecruitmentJobViewMode, string> = {
-                  openings: 'Vagas',
-                  kanban: 'Kanban',
-                  list: 'Triagem',
-                };
-              return (
-                <button key={mode} onClick={() => setViewMode(mode)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    viewMode === mode ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                  }`}>
-                  {labels[mode]}
-                </button>
-              );
-            })}
-            </div>
-          )}
-
+        <div className="flex flex-wrap items-center gap-2">
+          <a href={PUBLIC_RECRUITMENT_URL} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 transition-all hover:border-slate-300 hover:bg-white hover:text-slate-950">
+            <Globe className="h-3.5 w-3.5" />
+            Página pública
+          </a>
           {section === 'jobs' && viewMode !== 'openings' && selectedOpening && (
             <button
               type="button"
