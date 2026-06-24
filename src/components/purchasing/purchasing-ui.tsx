@@ -84,39 +84,57 @@ export function PurchasingPeriodControl({
   onChange: (value: PurchasingPeriodFilter) => void;
   years: number[];
 }) {
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth();
+  const currentYear = currentDate.getFullYear();
+
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-zinc-200 bg-white p-1.5">
-      <button
-        type="button"
-        onClick={() => onChange({ ...value, mode: 'recent' })}
-        className={cn(
-          'inline-flex h-9 items-center rounded-[8px] px-3 text-sm font-bold transition-colors',
-          value.mode === 'recent' ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900',
-        )}
-      >
-        <CalendarDays className="mr-2 h-4 w-4" />
-        180 dias
-      </button>
-      <div className={cn('flex items-center gap-1 rounded-[8px] px-2', value.mode === 'month' ? 'bg-zinc-100' : 'bg-transparent')}>
-        <select
-          value={value.month}
-          onChange={(event) => onChange({ ...value, mode: 'month', month: Number(event.target.value) })}
-          className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+      <div className="flex items-center gap-1 rounded-[8px] bg-zinc-100 p-1">
+        <button
+          type="button"
+          onClick={() => onChange({ ...value, mode: 'recent' })}
+          className={cn(
+            'inline-flex h-9 items-center rounded-[7px] px-3 text-sm font-bold transition-colors',
+            value.mode === 'recent' ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-500 hover:bg-white hover:text-zinc-900',
+          )}
         >
-          {purchasingMonthLabels.map((label, index) => (
-            <option key={label} value={index}>{label}</option>
-          ))}
-        </select>
-        <select
-          value={value.year}
-          onChange={(event) => onChange({ ...value, mode: 'month', year: Number(event.target.value) })}
-          className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+          <CalendarDays className="mr-2 h-4 w-4" />
+          180 dias
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ mode: 'month', month: currentMonth, year: currentYear })}
+          className={cn(
+            'inline-flex h-9 items-center rounded-[7px] px-3 text-sm font-bold transition-colors',
+            value.mode === 'month' ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-500 hover:bg-white hover:text-zinc-900',
+          )}
         >
-          {years.map((year) => (
-            <option key={year} value={year}>{year}</option>
-          ))}
-        </select>
+          Mês
+        </button>
       </div>
+      {value.mode === 'month' ? (
+        <div className="flex items-center gap-1 rounded-[8px] bg-zinc-100 px-2">
+          <select
+            value={value.month}
+            onChange={(event) => onChange({ ...value, mode: 'month', month: Number(event.target.value) })}
+            className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+          >
+            {purchasingMonthLabels.map((label, index) => (
+              <option key={label} value={index}>{label}</option>
+            ))}
+          </select>
+          <select
+            value={value.year}
+            onChange={(event) => onChange({ ...value, mode: 'month', year: Number(event.target.value) })}
+            className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+          >
+            {years.map((year) => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
     </div>
   );
 }
