@@ -11,6 +11,7 @@ import { normalizeRecruitmentStages } from "@/lib/recruitment-pipeline";
 const stringListSchema = z.array(z.string().trim().min(1)).default([]);
 
 const salaryRangeSchema = z.object({
+  label: z.string().trim().max(80).optional(),
   min: z.number().nonnegative().optional(),
   max: z.number().nonnegative().optional(),
   currency: z.string().trim().min(3).max(8),

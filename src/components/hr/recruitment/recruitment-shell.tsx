@@ -189,31 +189,19 @@ function textToList(value: string) {
     .filter(Boolean);
 }
 
-function numberInputToOptionalNumber(value: string) {
-  const normalized = value.trim().replace(/\./g, '').replace(',', '.');
-  if (!normalized) return undefined;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function salaryRangeFromInputs(min: string, max: string, visible: boolean): JobRoleSalaryRange | undefined {
-  const minValue = numberInputToOptionalNumber(min);
-  const maxValue = numberInputToOptionalNumber(max);
-  if (minValue === undefined && maxValue === undefined && !visible) return undefined;
+function salaryRangeFromText(label: string, visible: boolean): JobRoleSalaryRange | undefined {
+  const trimmed = label.trim();
+  if (!trimmed && !visible) return undefined;
   return {
     currency: 'BRL',
     visible,
-    ...(minValue !== undefined ? { min: minValue } : {}),
-    ...(maxValue !== undefined ? { max: maxValue } : {}),
+    ...(trimmed ? { label: trimmed } : {}),
   };
-}
-
-function salaryInputValue(value?: number) {
-  return value === undefined ? '' : String(value);
 }
 
 function formatSalaryRange(range?: JobRoleSalaryRange) {
   if (!range?.visible) return '';
+  if (range.label?.trim()) return range.label.trim();
   const formatter = new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: range.currency || 'BRL',
@@ -225,6 +213,10 @@ function formatSalaryRange(range?: JobRoleSalaryRange) {
   if (range.min !== undefined) return `a partir de ${formatter.format(range.min)}`;
   if (range.max !== undefined) return `até ${formatter.format(range.max)}`;
   return 'Salário a combinar';
+}
+
+function salaryTextFromRange(range?: JobRoleSalaryRange) {
+  return range?.label?.trim() || formatSalaryRange(range);
 }
 
 function withQuestionScoring(
@@ -2726,8 +2718,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     compositionPreset: (opening?.compositionPreset ?? 'role_70_function_30') as RecruitmentCompositionPreset,
     requirements: (opening?.requirements ?? []).join('\n'),
     benefits: listToText(opening?.benefits),
-    salaryMin: salaryInputValue(opening?.publicSalaryRange?.min),
-    salaryMax: salaryInputValue(opening?.publicSalaryRange?.max),
+    salaryLabel: salaryTextFromRange(opening?.publicSalaryRange),
     salaryVisible: opening?.publicSalaryRange?.visible !== false,
     applyButtonLabel: opening?.applyButtonLabel ?? 'Enviar candidatura',
   });
@@ -2776,9 +2767,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
   ]));
   const finalRequirements = textToList(form.requirements);
   const finalBenefits = textToList(form.benefits);
-  const openingSalaryPreview = formatSalaryRange(
-    salaryRangeFromInputs(form.salaryMin, form.salaryMax, form.salaryVisible)
-  );
+  const openingSalaryPreview = formatSalaryRange(salaryRangeFromText(form.salaryLabel, form.salaryVisible));
   const openingButtonText = form.applyButtonLabel.trim() || 'Enviar candidatura';
   const scoringPreview = useMemo(
     () => applyRecruitmentScoring(questions, form.functionId ? form.compositionPreset : 'role_100'),
@@ -2823,7 +2812,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     const inheritedStages = mergeRecruitmentStageModels(role?.pipelineStages, fn?.pipelineStages);
 
     setForm(prev => {
-      const hasSalary = Boolean(prev.salaryMin.trim() || prev.salaryMax.trim());
+      const hasSalary = Boolean(prev.salaryLabel.trim());
       return {
         ...prev,
         title: prev.title.trim() || !nextTitle ? prev.title : nextTitle,
@@ -2834,8 +2823,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         workType: prev.workType || recruitmentDisplay.workType || '',
         contractTypeLabel: prev.contractTypeLabel.trim() || !displayContractType ? prev.contractTypeLabel : displayContractType,
         workSchedule: prev.workSchedule.trim() || !inheritedWorkSchedule ? prev.workSchedule : inheritedWorkSchedule,
-        salaryMin: hasSalary || publicSalaryRange?.min === undefined ? prev.salaryMin : salaryInputValue(publicSalaryRange.min),
-        salaryMax: hasSalary || publicSalaryRange?.max === undefined ? prev.salaryMax : salaryInputValue(publicSalaryRange.max),
+        salaryLabel: hasSalary || !publicSalaryRange ? prev.salaryLabel : salaryTextFromRange(publicSalaryRange),
         salaryVisible: hasSalary || publicSalaryRange === undefined ? prev.salaryVisible : publicSalaryRange.visible !== false,
         applyButtonLabel: prev.applyButtonLabel.trim() || !displayButton ? prev.applyButtonLabel : displayButton,
       };
@@ -3017,7 +3005,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         scoringAlertJustification: scoringWarningAlerts.length > 0 ? scoringAlertJustification.trim() : '',
         requirements: form.requirements.split('\n').map(s => s.trim()).filter(Boolean),
         benefits: finalBenefits,
-        publicSalaryRange: salaryRangeFromInputs(form.salaryMin, form.salaryMax, form.salaryVisible),
+        publicSalaryRange: salaryRangeFromText(form.salaryLabel, form.salaryVisible),
         applyButtonLabel: openingButtonText,
         formQuestions: questions,
         pipelineStages: stages.map((stage, index) => ({ ...stage, order: index })),
@@ -3281,28 +3269,16 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Salário mínimo</label>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Salário</label>
               <input
                 type="text"
-                inputMode="decimal"
-                value={form.salaryMin}
-                onChange={set('salaryMin')}
-                placeholder="Ex: 1800"
+                value={form.salaryLabel}
+                onChange={set('salaryLabel')}
+                placeholder="Ex: R$ 1.800, R$ 1.800 a R$ 2.750 ou A combinar"
                 className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Salário máximo</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={form.salaryMax}
-                onChange={set('salaryMax')}
-                placeholder="Ex: 2750"
-                className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-              />
-            </div>
-            <div className="col-span-2 flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-end gap-4">
               <label className="flex items-center gap-2 text-sm text-slate-400">
                 <input
                   type="checkbox"
@@ -4396,8 +4372,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
     publicRequirements: '',
     benefits: '',
     workSchedule: '',
-    salaryMin: '',
-    salaryMax: '',
+    salaryLabel: '',
     salaryVisible: true,
     locationLabel: '',
     workType: '',
@@ -4496,8 +4471,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
       ),
       benefits: listToText(selected?.benefits),
       workSchedule: selected?.workSchedule || '',
-      salaryMin: salaryInputValue(selected?.publicSalaryRange?.min),
-      salaryMax: salaryInputValue(selected?.publicSalaryRange?.max),
+      salaryLabel: salaryTextFromRange(selected?.publicSalaryRange),
       salaryVisible: selected?.publicSalaryRange?.visible !== false,
       locationLabel: selected?.recruitmentDisplay?.locationLabel || '',
       workType: selected?.recruitmentDisplay?.workType || '',
@@ -4610,7 +4584,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
           publicRequirements: textToList(modelText.publicRequirements),
           benefits: textToList(modelText.benefits),
           workSchedule: modelText.workSchedule.trim(),
-          publicSalaryRange: salaryRangeFromInputs(modelText.salaryMin, modelText.salaryMax, modelText.salaryVisible),
+          publicSalaryRange: salaryRangeFromText(modelText.salaryLabel, modelText.salaryVisible),
           recruitmentDisplay: {
             locationLabel: modelText.locationLabel.trim(),
             workType: modelText.workType || undefined,
@@ -4633,9 +4607,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
   const modelBenefits = textToList(modelText.benefits);
   const modelRequirements = textToList(modelText.publicRequirements);
   const modelResponsibilities = textToList(modelText.publicResponsibilities);
-  const modelSalaryPreview = formatSalaryRange(
-    salaryRangeFromInputs(modelText.salaryMin, modelText.salaryMax, modelText.salaryVisible)
-  );
+  const modelSalaryPreview = formatSalaryRange(salaryRangeFromText(modelText.salaryLabel, modelText.salaryVisible));
   const modelWorkTypeLabel = WORK_TYPE_OPTIONS.find(option => option.value === modelText.workType)?.label;
   const modelContractTypeLabel = modelText.contractTypeLabel.trim();
   const modelButtonText = modelText.buttonText.trim() || 'Enviar candidatura';
@@ -4852,35 +4824,23 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Chip de prazo padrão</label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Período de inscrições padrão</label>
               <input
                 value={modelText.deadlineLabel}
                 onChange={event => setModelText(prev => ({ ...prev, deadlineLabel: event.target.value }))}
                 disabled={!canManage}
                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                placeholder="Ex: Encerra em 12 dias"
+                placeholder="Ex: Inscrições de 01/07 a 15/07"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Salário mínimo</label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Salário</label>
               <input
-                value={modelText.salaryMin}
-                onChange={event => setModelText(prev => ({ ...prev, salaryMin: event.target.value }))}
+                value={modelText.salaryLabel}
+                onChange={event => setModelText(prev => ({ ...prev, salaryLabel: event.target.value }))}
                 disabled={!canManage}
-                inputMode="decimal"
                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                placeholder="Ex: 1800"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Salário máximo</label>
-              <input
-                value={modelText.salaryMax}
-                onChange={event => setModelText(prev => ({ ...prev, salaryMax: event.target.value }))}
-                disabled={!canManage}
-                inputMode="decimal"
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                placeholder="Ex: 2750"
+                placeholder="Ex: R$ 1.800, R$ 1.800 a R$ 2.750 ou A combinar"
               />
             </div>
             <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">

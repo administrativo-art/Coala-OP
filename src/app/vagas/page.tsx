@@ -19,6 +19,7 @@ import {
   TramFront,
   Users,
 } from "lucide-react";
+import type { JobRoleSalaryRange } from "@/types";
 
 type WorkType = "presencial" | "remoto" | "hibrido";
 
@@ -28,6 +29,7 @@ interface PublicOpening {
   slug: string;
   jobRoleName?: string;
   description?: string;
+  publicSalaryRange?: JobRoleSalaryRange | null;
   location?: string;
   workType?: WorkType;
   slots: number;
@@ -40,6 +42,22 @@ const WORK_TYPE_LABELS: Record<WorkType, string> = {
   remoto: "Remoto",
   hibrido: "Híbrido",
 };
+
+function formatPublicSalaryRange(range?: JobRoleSalaryRange | null) {
+  if (!range?.visible) return "A combinar";
+  if (range.label?.trim()) return range.label.trim();
+  const formatter = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: range.currency || "BRL",
+    maximumFractionDigits: 0,
+  });
+  if (range.min !== undefined && range.max !== undefined) {
+    return `${formatter.format(range.min)}-${formatter.format(range.max)}`;
+  }
+  if (range.min !== undefined) return `a partir de ${formatter.format(range.min)}`;
+  if (range.max !== undefined) return `até ${formatter.format(range.max)}`;
+  return "A combinar";
+}
 
 const FALLBACK_ROLES = [
   "Atendente",
@@ -735,6 +753,7 @@ export default function VagasPage() {
                     const meta = getRoleMeta(role);
                     const location = getLocationLabel(opening.location);
                     const closingDays = daysUntil(opening.closesAt);
+                    const salaryLabel = formatPublicSalaryRange(opening.publicSalaryRange);
                     const isNew = index < 3;
                     const urgent = closingDays != null && closingDays <= 7;
                     return (
@@ -768,7 +787,7 @@ export default function VagasPage() {
                           </div>
                         </div>
                         <div className="flex items-center justify-between border-t border-[#2A1F2A]/10 bg-[#F4ECD8]/40 px-6 py-3.5">
-                          <span className="fm text-[13px]">A combinar</span>
+                          <span className="fm text-[13px]">{salaryLabel}</span>
                           <span className="inline-flex items-center gap-1 text-[12px] font-bold text-[#5B4C5B]">
                             ver vaga <ChevronRight className="h-3.5 w-3.5" />
                           </span>

@@ -96,6 +96,7 @@ function daysUntil(date?: string) {
 
 function formatPublicSalaryRange(range?: JobRoleSalaryRange | null) {
   if (!range?.visible) return null;
+  if (range.label?.trim()) return range.label.trim();
   const formatter = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: range.currency || "BRL",

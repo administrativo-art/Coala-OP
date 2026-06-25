@@ -951,6 +951,7 @@ export type RecruitmentFormConfig = {
 };
 
 export type JobRoleSalaryRange = {
+  label?: string;
   min?: number;
   max?: number;
   currency: string;
