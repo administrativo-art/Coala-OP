@@ -4344,6 +4344,42 @@ type QuestionModelOption = {
   searchText: string;
 };
 
+function hasModelText(value?: string | null) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasModelList(value?: string[]) {
+  return Array.isArray(value) && value.some(item => hasModelText(item));
+}
+
+function hasSalaryModelContent(value?: JobRoleSalaryRange) {
+  return Boolean(value && (hasModelText(value.label) || value.min !== undefined || value.max !== undefined));
+}
+
+function hasRecruitmentDisplayModelContent(display?: JobRole['recruitmentDisplay']) {
+  return Boolean(display && (
+    hasModelText(display.locationLabel) ||
+    Boolean(display.workType) ||
+    hasModelText(display.contractTypeLabel) ||
+    hasModelText(display.deadlineLabel) ||
+    hasModelText(display.buttonText)
+  ));
+}
+
+function hasSavedQuestionModelContent(item: JobRole | JobFunction) {
+  return Boolean(
+    (item.formQuestions?.length ?? 0) > 0 ||
+    (hasModelText(item.publicTitle) && item.publicTitle.trim() !== item.name.trim()) ||
+    hasModelText(item.publicDescription) ||
+    hasModelList(item.publicResponsibilities) ||
+    hasModelList(item.publicRequirements) ||
+    hasModelList(item.benefits) ||
+    hasModelText(item.workSchedule) ||
+    hasSalaryModelContent(item.publicSalaryRange) ||
+    hasRecruitmentDisplayModelContent(item.recruitmentDisplay)
+  );
+}
+
 function cloneRecruitmentQuestions(questions: HrFormQuestion[] | undefined) {
   return (questions ?? []).map((question, index) => ({
     ...question,
@@ -4446,7 +4482,26 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
   const visibleQuestionCount = questions.filter(question => question.active !== false).length;
   const getModelOptionQuestions = (option: QuestionModelOption) =>
     option.key === selectedOption?.key ? questions : (option.item.formQuestions ?? []);
-  const configuredModelOptions = modelOptions.filter(option => getModelOptionQuestions(option).length > 0);
+  const hasCurrentModelContent = () => Boolean(
+    savedAt ||
+    questions.length > 0 ||
+    (hasModelText(modelText.publicTitle) && selected && modelText.publicTitle.trim() !== selected.name.trim()) ||
+    hasModelText(modelText.publicDescription) ||
+    hasModelText(modelText.publicResponsibilities) ||
+    hasModelText(modelText.publicRequirements) ||
+    hasModelText(modelText.benefits) ||
+    hasModelText(modelText.workSchedule) ||
+    hasModelText(modelText.salaryLabel) ||
+    !modelText.salaryVisible ||
+    hasModelText(modelText.locationLabel) ||
+    Boolean(modelText.workType) ||
+    hasModelText(modelText.contractTypeLabel) ||
+    hasModelText(modelText.deadlineLabel) ||
+    (hasModelText(modelText.buttonText) && modelText.buttonText.trim() !== 'Enviar candidatura')
+  );
+  const getModelOptionHasModel = (option: QuestionModelOption) =>
+    option.key === selectedOption?.key ? hasCurrentModelContent() : hasSavedQuestionModelContent(option.item);
+  const configuredModelOptions = modelOptions.filter(option => getModelOptionHasModel(option));
 
   useEffect(() => {
     if (modelOptions.length === 0) {
@@ -4664,6 +4719,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 <div className="absolute z-30 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
                   {filteredModelOptions.length > 0 ? filteredModelOptions.map(option => {
                     const optionQuestionCount = getModelOptionQuestions(option).length;
+                    const optionHasModel = getModelOptionHasModel(option);
                     const isSelected = option.key === selectedOption?.key;
                     return (
                       <button
@@ -4686,9 +4742,9 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                           </span>
                         </span>
                         <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
-                          isSelected ? 'bg-white/15 text-white' : optionQuestionCount > 0 ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'
+                          isSelected ? 'bg-white/15 text-white' : optionHasModel ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'
                         }`}>
-                          {optionQuestionCount > 0 ? pluralizePt(optionQuestionCount, 'pergunta', 'perguntas') : 'sem modelo'}
+                          {optionQuestionCount > 0 ? pluralizePt(optionQuestionCount, 'pergunta', 'perguntas') : optionHasModel ? 'modelo' : 'sem modelo'}
                         </span>
                       </button>
                     );
@@ -5129,6 +5185,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                   {configuredModelOptions.map(option => {
                     const optionQuestions = getModelOptionQuestions(option);
                     const isSelected = option.key === selectedOption?.key;
+                    const primaryQuestions = optionQuestions.filter(question => !question.parentQuestionId).length;
                     return (
                       <button
                         key={option.key}
@@ -5159,7 +5216,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
                           isSelected ? 'bg-white/15 text-white' : 'bg-indigo-50 text-indigo-600'
                         }`}>
-                          {pluralizePt(optionQuestions.filter(question => !question.parentQuestionId).length, 'pergunta', 'perguntas')}
+                          {primaryQuestions > 0 ? pluralizePt(primaryQuestions, 'pergunta', 'perguntas') : 'Informações gerais'}
                         </span>
                       </button>
                     );
