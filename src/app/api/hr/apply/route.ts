@@ -5,7 +5,12 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
 import type { HrFormQuestion } from '@/types';
 import { createCandidateStageHistoryEntry } from '@/lib/recruitment-pipeline';
-import { getPublicRecruitmentQuestions, hydrateRecruitmentQuestionDynamicOptions } from '@/lib/recruitment-forms';
+import {
+  getConditionallyVisibleRecruitmentQuestions,
+  getPublicRecruitmentQuestions,
+  hydrateRecruitmentQuestionDynamicOptions,
+} from '@/lib/recruitment-forms';
+import { applyRecruitmentScoring, calculateRecruitmentScore } from '@/lib/recruitment-scoring';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -150,12 +155,20 @@ function createQuestionSnapshot(questions: HrFormQuestion[]) {
     id: question.id,
     text: question.text,
     type: question.type,
+    sectionId: question.sectionId ?? null,
+    sectionTitle: question.sectionTitle ?? null,
+    sectionOrder: question.sectionOrder ?? null,
+    parentQuestionId: question.parentQuestionId ?? null,
+    subquestionOrder: question.subquestionOrder ?? null,
     required: question.required,
     active: question.active !== false,
+    scored: question.scored,
     eliminatory: question.eliminatory,
     expectedAnswer: question.expectedAnswer === undefined ? null : question.expectedAnswer,
     weight: question.weight,
     config: question.config ?? null,
+    conditions: question.conditions ?? null,
+    scoring: question.scoring ?? null,
   }));
 }
 
@@ -228,13 +241,27 @@ export async function POST(request: NextRequest) {
         { units: publicUnits }
       )
     : [];
+  const rawAnswerMap = rawFormAnswers && typeof rawFormAnswers === 'object' && !Array.isArray(rawFormAnswers)
+    ? rawFormAnswers as Record<string, unknown>
+    : {};
+  let visibleFormQuestions = getConditionallyVisibleRecruitmentQuestions(formQuestions, rawAnswerMap);
   let formAnswers: Record<string, unknown>;
   try {
-    formAnswers = normalizeFormAnswers(rawFormAnswers, formQuestions);
+    formAnswers = normalizeFormAnswers(rawFormAnswers, visibleFormQuestions);
+    visibleFormQuestions = getConditionallyVisibleRecruitmentQuestions(formQuestions, formAnswers);
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'Respostas do formulário inválidas.');
   }
-  const formQuestionSnapshot = createQuestionSnapshot(formQuestions);
+  const formQuestionSnapshot = createQuestionSnapshot(visibleFormQuestions);
+  const recruitmentScoring = openingData.recruitmentScoring && typeof openingData.recruitmentScoring === 'object'
+    ? openingData.recruitmentScoring
+    : applyRecruitmentScoring(formQuestions, openingData.compositionPreset).snapshot;
+  const recruitmentScore = calculateRecruitmentScore({
+    questions: visibleFormQuestions,
+    answers: formAnswers,
+    snapshot: recruitmentScoring,
+    calculatedAt: now,
+  });
 
   const existingCandidate = await hrDbAdmin
     .collection('candidates')
@@ -281,6 +308,10 @@ export async function POST(request: NextRequest) {
     resumePath,
     formAnswers,
     formQuestionSnapshot,
+    recruitmentScoring,
+    recruitmentScore,
+    eligibilityStatus: recruitmentScore.status,
+    rankingEligible: recruitmentScore.rankingEligible,
     appliedAt: now,
     updatedAt: now,
     createdBy: 'public',
@@ -307,6 +338,11 @@ export async function POST(request: NextRequest) {
     resumeUrl,
     resumePath,
     formAnswers,
+    formQuestionSnapshot,
+    recruitmentScoring,
+    recruitmentScore,
+    eligibilityStatus: recruitmentScore.status,
+    rankingEligible: recruitmentScore.rankingEligible,
     rating: 0,
     consent: {
       accepted: true,

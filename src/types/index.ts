@@ -738,6 +738,7 @@ export type User = {
   jobRoleName?: string;
   jobFunctionIds?: string[];
   jobFunctionNames?: string[];
+  responsibleUnitIds?: string[];
   jobRoleProfileSyncDisabled?: boolean;
   mustChangePassword?: boolean;
   passwordChangedAt?: Timestamp;
@@ -789,12 +790,135 @@ export type HrQuestionType =
   | "location"
   | "file_upload";
 
-export type HrQuestionWeight = "low" | "medium" | "high";
+export type HrQuestionWeight = "low" | "medium" | "high" | "critical";
+
+export type RecruitmentCriterionCategory =
+  | "availability"
+  | "experience"
+  | "technical"
+  | "behavioral"
+  | "interest"
+  | "retention"
+  | "differentials";
+
+export type RecruitmentQuestionScoringUse = "informational" | "scored" | "eliminatory";
+export type RecruitmentScoringSourceLayer = "role" | "function" | "opening";
+export type RecruitmentCompositionPreset =
+  | "role_100"
+  | "role_70_function_30"
+  | "role_60_function_40"
+  | "role_50_function_50";
+export type RecruitmentQuestionConditionOperator =
+  | "equals"
+  | "not_equals"
+  | "includes"
+  | "answered"
+  | "not_answered";
+
+export type RecruitmentQuestionCondition = {
+  questionId: string;
+  operator: RecruitmentQuestionConditionOperator;
+  value?: unknown;
+};
+
+export type RecruitmentQuestionScoringConfig = {
+  criterionCode?: string;
+  criterionLabel?: string;
+  category?: RecruitmentCriterionCategory;
+  groupId?: string;
+  groupName?: string;
+  use?: RecruitmentQuestionScoringUse;
+  importance?: HrQuestionWeight;
+  justification?: string;
+  sourceLayer?: RecruitmentScoringSourceLayer;
+  answerFactors?: Record<string, number>;
+  finalWeight?: number;
+  rubric?: Array<{
+    factor: number;
+    label: string;
+    description?: string;
+  }>;
+};
+
+export type RecruitmentQuestionScoringSnapshot = RecruitmentQuestionScoringConfig & {
+  finalWeight: number;
+  layerWeight: number;
+  originalLayerWeight: number;
+  duplicateOf?: string | null;
+  duplicateStrategy?: string | null;
+  alerts?: string[];
+};
+
+export type RecruitmentScoringAlertSeverity = "info" | "warning" | "blocking";
+
+export type RecruitmentScoringAlert = {
+  code: string;
+  message: string;
+  severity: RecruitmentScoringAlertSeverity;
+  questionId?: string;
+  criterionCode?: string;
+};
+
+export type RecruitmentScoringSnapshot = {
+  version: number;
+  preset: RecruitmentCompositionPreset;
+  totalPoints: number;
+  layerWeights: Record<RecruitmentScoringSourceLayer, number>;
+  questionWeights: Record<string, RecruitmentQuestionScoringSnapshot>;
+  categoryTotals: Partial<Record<RecruitmentCriterionCategory, number>>;
+  duplicateCriteria: Array<{
+    criterionCode: string;
+    keptQuestionId: string;
+    mergedQuestionIds: string[];
+    strategy: string;
+  }>;
+  alerts: RecruitmentScoringAlert[];
+  createdAt: string;
+};
+
+export type RecruitmentScoringAlertAcknowledgement = {
+  note: string;
+  alertCodes: string[];
+  acknowledgedAt: string;
+  acknowledgedBy: string;
+};
+
+export type RecruitmentEligibilityStatus = "eligible" | "not_eligible" | "not_evaluated";
+
+export type RecruitmentQuestionScore = {
+  questionId: string;
+  criterionCode?: string;
+  category?: RecruitmentCriterionCategory;
+  label: string;
+  weight: number;
+  factor: number;
+  points: number;
+  answer?: unknown;
+  eliminatory: boolean;
+  failedEliminatory: boolean;
+};
+
+export type RecruitmentScoreResult = {
+  status: RecruitmentEligibilityStatus;
+  rankingEligible: boolean;
+  score: number;
+  maxScore: number;
+  percentage: number;
+  failedEliminatory: RecruitmentQuestionScore[];
+  questionScores: RecruitmentQuestionScore[];
+  categoryScores: Partial<Record<RecruitmentCriterionCategory, { points: number; max: number; percentage: number }>>;
+  calculatedAt: string;
+};
 
 export type HrFormQuestion = {
   id: string;
   text: string;
   type: HrQuestionType;
+  sectionId?: string;
+  sectionTitle?: string;
+  sectionOrder?: number;
+  parentQuestionId?: string;
+  subquestionOrder?: number;
   required: boolean;
   active?: boolean;
   scored: boolean;
@@ -803,6 +927,8 @@ export type HrFormQuestion = {
   expectedAnswer?: unknown;
   tags?: string[];
   config?: Record<string, unknown>;
+  conditions?: RecruitmentQuestionCondition[];
+  scoring?: RecruitmentQuestionScoringConfig;
 };
 
 export type RecruitmentFormKind = 'talent_pool' | 'job_opening';
@@ -829,6 +955,13 @@ export type JobRoleSalaryRange = {
   max?: number;
   currency: string;
   visible?: boolean;
+};
+
+export type RecruitmentDisplaySettings = {
+  locationLabel?: string;
+  workType?: 'presencial' | 'remoto' | 'hibrido';
+  deadlineLabel?: string;
+  buttonText?: string;
 };
 
 export type CandidateStatus = 'applied' | 'screening' | 'interview' | 'technical_test' | 'offer' | 'hired' | 'rejected' | 'withdrawn' | 'talent_pool';
@@ -957,12 +1090,20 @@ export type Candidate = {
     stageHistory?: CandidateStageHistoryEntry[];
     formAnswers?: Record<string, unknown>;
     formQuestionSnapshot?: HrFormQuestion[];
+    recruitmentScoring?: RecruitmentScoringSnapshot;
+    recruitmentScore?: RecruitmentScoreResult;
+    eligibilityStatus?: RecruitmentEligibilityStatus;
+    rankingEligible?: boolean;
   };
   status: CandidateStatus;
   recruitmentHistory?: CandidateStageHistoryEntry[];
   notes?: string;
   formAnswers?: Record<string, unknown>;
   formQuestionSnapshot?: HrFormQuestion[];
+  recruitmentScoring?: RecruitmentScoringSnapshot;
+  recruitmentScore?: RecruitmentScoreResult;
+  eligibilityStatus?: RecruitmentEligibilityStatus;
+  rankingEligible?: boolean;
   talentPool?: {
     rolePreference?: string | null;
     unitPreference?: string | null;
@@ -995,7 +1136,13 @@ export type JobOpening = {
   slug: string;
   description?: string;
   requirements?: string[];
+  benefits?: string[];
+  publicSalaryRange?: JobRoleSalaryRange;
+  applyButtonLabel?: string;
   formQuestions?: HrFormQuestion[];
+  recruitmentScoring?: RecruitmentScoringSnapshot;
+  compositionPreset?: RecruitmentCompositionPreset;
+  recruitmentScoringAlertAcknowledgement?: RecruitmentScoringAlertAcknowledgement | null;
   pipelineStages?: RecruitmentStage[];
   location?: string;
   workType?: 'presencial' | 'remoto' | 'hibrido';
@@ -1043,9 +1190,11 @@ export type JobRole = {
   workSchedule?: string;
   salaryRange?: JobRoleSalaryRange;
   publicSalaryRange?: JobRoleSalaryRange;
+  recruitmentDisplay?: RecruitmentDisplaySettings;
   defaultProfileId?: string;
   loginRestricted?: boolean;
   formQuestions?: HrFormQuestion[];
+  compositionPreset?: RecruitmentCompositionPreset;
   pipelineStages?: RecruitmentStage[];
   onboardingStages?: OnboardingStage[];
   onboardingDocuments?: OnboardingDocumentTemplate[];
@@ -1068,9 +1217,15 @@ export type JobFunction = {
   responsibilities?: string[];
   publicResponsibilities?: string[];
   requirements?: string[];
+  publicRequirements?: string[];
+  benefits?: string[];
+  workSchedule?: string;
+  publicSalaryRange?: JobRoleSalaryRange;
+  recruitmentDisplay?: RecruitmentDisplaySettings;
   compatibleRoleIds?: string[];
   defaultProfileId?: string;
   formQuestions?: HrFormQuestion[];
+  compositionPreset?: RecruitmentCompositionPreset;
   pipelineStages?: RecruitmentStage[];
   onboardingStages?: OnboardingStage[];
   onboardingDocuments?: OnboardingDocumentTemplate[];

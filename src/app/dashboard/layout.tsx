@@ -237,8 +237,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-[#f8fafc] dark:bg-[#0f172a]">
-       <div className="fixed inset-0 bg-[radial-gradient(at_0%_0%,rgba(124,58,237,0.03)_0,transparent_50%),radial-gradient(at_100%_100%,rgba(236,72,153,0.03)_0,transparent_50%)] pointer-events-none" />
+    <div className="flex min-h-screen w-full flex-col bg-[var(--bg)]">
       <GlassSidebar open={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
       <div className="flex flex-col flex-1 lg:pl-[112px]">
         <Header tasks={taskNotifications} onMenuClick={() => setIsSidebarOpen(true)} />

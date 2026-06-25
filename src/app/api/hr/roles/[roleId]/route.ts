@@ -10,6 +10,10 @@ import {
   serializeHrValue,
 } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import {
+  applyRecruitmentScoring,
+  getRecruitmentScoringBlockMessage,
+} from "@/lib/recruitment-scoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +35,15 @@ export async function PATCH(
     const payload = normalizeJobRolePatch(
       jobRolePatchSchema.parse(await request.json())
     );
+    if (payload.formQuestions !== undefined) {
+      const scoringBlock = getRecruitmentScoringBlockMessage(
+        applyRecruitmentScoring(payload.formQuestions, "role_100").snapshot
+      );
+      if (scoringBlock) {
+        return NextResponse.json({ error: scoringBlock }, { status: 400 });
+      }
+    }
+
     if (payload.parentId === roleId || payload.reportsTo === roleId) {
       return NextResponse.json(
         { error: "Um cargo não pode ser pai dele mesmo." },

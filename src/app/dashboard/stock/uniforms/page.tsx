@@ -7,7 +7,7 @@ import { BackButton } from "@/components/navigation/back-button";
 
 export default function UniformsPage() {
   return (
-    <div className="min-h-[calc(100vh-8rem)] space-y-7 rounded-[28px] bg-[#f1f1f4] p-5 sm:p-7">
+    <div className="min-h-[calc(100vh-8rem)] space-y-7 rounded-[28px] bg-[var(--bg)] p-5 sm:p-7">
       <div className="flex items-start gap-4">
         <BackButton
           fallbackHref="/dashboard/stock"

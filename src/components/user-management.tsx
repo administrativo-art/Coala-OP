@@ -249,6 +249,7 @@ const userSchema = z.object({
   registrationIdPdv: z.string().optional(),
   jobRoleId: z.string().optional(),
   jobFunctionIds: z.array(z.string()).optional(),
+  responsibleUnitIds: z.array(z.string()).optional(),
   admissionDate: z.string().optional(),
   birthDate: z.string().optional(),
   shiftDefinitionId: z.string().optional(),
@@ -282,6 +283,7 @@ const USER_AUDIT_FIELDS = [
   'jobRoleName',
   'jobFunctionIds',
   'jobFunctionNames',
+  'responsibleUnitIds',
   'admissionDate',
   'birthDate',
   'shiftDefinitionId',
@@ -315,7 +317,7 @@ export function UserManagement() {
   const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
-  const { roles, functions, loading: hrLoading } = useHrBootstrap();
+  const { roles, functions, units, loading: hrLoading } = useHrBootstrap();
   const { shiftDefinitions, vacations } = useDP();
   const { toast } = useToast();
   
@@ -361,6 +363,7 @@ export function UserManagement() {
         registrationIdPdv: '',
         jobRoleId: '',
         jobFunctionIds: [],
+        responsibleUnitIds: [],
         admissionDate: '',
         birthDate: '',
         shiftDefinitionId: '',
@@ -418,6 +421,10 @@ export function UserManagement() {
   const compatibleFunctionOptions = useMemo(
     () => compatibleFunctions.map((item) => ({ value: item.id, label: item.name })),
     [compatibleFunctions]
+  );
+  const responsibleUnitOptions = useMemo(
+    () => units.map((unit) => ({ value: unit.id, label: unit.name })),
+    [units]
   );
   const effectiveDefaultProfileId = useMemo(
     () =>
@@ -510,6 +517,7 @@ export function UserManagement() {
       registrationIdPdv: '',
       jobRoleId: '',
       jobFunctionIds: [],
+      responsibleUnitIds: [],
       admissionDate: '',
       birthDate: '',
       shiftDefinitionId: '',
@@ -536,6 +544,7 @@ export function UserManagement() {
       registrationIdPdv: user.registrationIdPdv ?? '',
       jobRoleId: user.jobRoleId ?? '',
       jobFunctionIds: user.jobFunctionIds ?? [],
+      responsibleUnitIds: user.responsibleUnitIds ?? [],
       admissionDate: timestampToDateInput(user.admissionDate),
       birthDate: timestampToDateInput(user.birthDate),
       shiftDefinitionId: user.shiftDefinitionId ?? '',
@@ -694,6 +703,7 @@ export function UserManagement() {
           jobRoleName: selectedRole?.name,
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
+          responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           admissionDate,
           birthDate,
           shiftDefinitionId: values.shiftDefinitionId || undefined,
@@ -736,6 +746,7 @@ export function UserManagement() {
           jobRoleName: selectedRole?.name,
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
+          responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           admissionDate,
           birthDate,
       }, values.email, values.password);
@@ -1019,6 +1030,24 @@ export function UserManagement() {
                         </FormItem>
                       )} />
                     </div>
+                    <FormField control={form.control} name="responsibleUnitIds" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Unidades sob responsabilidade</FormLabel>
+                        <FormControl>
+                          <MultiSelect
+                            options={responsibleUnitOptions}
+                            selected={field.value ?? []}
+                            onChange={field.onChange}
+                            placeholder="Vazio = geral/remanescentes"
+                            className={responsibleUnitOptions.length > 0 ? '' : 'opacity-70'}
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Use para líderes/superiores. Sem seleção, responde pelo fluxo geral ou pelas unidades remanescentes.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField control={form.control} name="profileId" render={() => (
                         <FormItem>

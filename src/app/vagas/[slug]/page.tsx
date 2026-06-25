@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  Banknote,
   CheckCircle2,
   ChevronLeft,
   Coffee,
@@ -17,7 +18,13 @@ import {
   Users,
   X,
 } from "lucide-react";
-import type { HrFormQuestion } from "@/types";
+import type { HrFormQuestion, JobRoleSalaryRange } from "@/types";
+import {
+  buildRecruitmentQuestionTree,
+  getConditionallyVisibleRecruitmentQuestions,
+  groupRecruitmentQuestionsBySection,
+  type RecruitmentQuestionTreeNode,
+} from "@/lib/recruitment-forms";
 
 type WorkType = "presencial" | "remoto" | "hibrido";
 
@@ -28,6 +35,9 @@ interface PublicOpening {
   jobRoleName?: string;
   description?: string;
   requirements?: string[];
+  benefits?: string[];
+  publicSalaryRange?: JobRoleSalaryRange | null;
+  applyButtonLabel?: string | null;
   formQuestions?: HrFormQuestion[];
   location?: string;
   workType?: WorkType;
@@ -49,6 +59,8 @@ const BENEFITS = [
   { emoji: "🏥", title: "Plano Sulamérica" },
   { emoji: "🎉", title: "Day-off aniversário" },
 ];
+
+const BENEFIT_EMOJIS = ["🥤", "🚌", "💰", "🎓", "🏥", "🎉"];
 
 function getQuestionOptions(question: HrFormQuestion) {
   const options = question.config?.options;
@@ -78,6 +90,21 @@ function daysUntil(date?: string) {
   const diff = new Date(date).getTime() - Date.now();
   if (!Number.isFinite(diff)) return null;
   return Math.max(0, Math.ceil(diff / 86_400_000));
+}
+
+function formatPublicSalaryRange(range?: JobRoleSalaryRange | null) {
+  if (!range?.visible) return null;
+  const formatter = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: range.currency || "BRL",
+    maximumFractionDigits: 0,
+  });
+  if (range.min !== undefined && range.max !== undefined) {
+    return `${formatter.format(range.min)}-${formatter.format(range.max)}`;
+  }
+  if (range.min !== undefined) return `a partir de ${formatter.format(range.min)}`;
+  if (range.max !== undefined) return `até ${formatter.format(range.max)}`;
+  return "Salário a combinar";
 }
 
 function Logo({ size = 26 }: { size?: number }) {
@@ -292,6 +319,38 @@ function FormQuestionField({
   );
 }
 
+function FormQuestionNode({
+  node,
+  answers,
+  onAnswer,
+}: {
+  node: RecruitmentQuestionTreeNode;
+  answers: Record<string, unknown>;
+  onAnswer: (questionId: string, value: unknown) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <FormQuestionField
+        question={node.question}
+        value={answers[node.question.id]}
+        onChange={(value) => onAnswer(node.question.id, value)}
+      />
+      {node.subquestions.length > 0 ? (
+        <div className="ml-3 space-y-4 border-l-2 border-[#2A1F2A]/10 pl-4">
+          {node.subquestions.map((subquestion) => (
+            <FormQuestionNode
+              key={subquestion.question.id}
+              node={subquestion}
+              answers={answers}
+              onAnswer={onAnswer}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function VagaDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
 
@@ -306,6 +365,21 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const visibleQuestions = opening
+    ? getConditionallyVisibleRecruitmentQuestions(opening.formQuestions ?? [], answers)
+    : [];
+  const visibleQuestionSections = groupRecruitmentQuestionsBySection(visibleQuestions, "Perguntas de triagem");
+  const handleQuestionAnswer = (questionId: string, value: unknown) => {
+    if (!opening) return;
+    setAnswers((current) => {
+      const next = { ...current, [questionId]: value };
+      const nextVisible = getConditionallyVisibleRecruitmentQuestions(opening.formQuestions ?? [], next);
+      const nextVisibleIds = new Set(nextVisible.map((entry) => entry.id));
+      return Object.fromEntries(
+        Object.entries(next).filter(([entryQuestionId]) => nextVisibleIds.has(entryQuestionId))
+      );
+    });
+  };
 
   useEffect(() => {
     fetch("/api/hr/openings/public")
@@ -335,8 +409,12 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
 
     try {
       if (!opening) throw new Error("Vaga não encontrada ou encerrada.");
-      const missingQuestion = (opening.formQuestions ?? []).find((question) => question.required && !hasAnswer(answers[question.id]));
+      const missingQuestion = visibleQuestions.find((question) => question.required && !hasAnswer(answers[question.id]));
       if (missingQuestion) throw new Error(`Responda a pergunta obrigatória: ${missingQuestion.text}`);
+      const visibleQuestionIds = new Set(visibleQuestions.map((question) => question.id));
+      const visibleAnswers = Object.fromEntries(
+        Object.entries(answers).filter(([questionId]) => visibleQuestionIds.has(questionId))
+      );
 
       const payload: Record<string, unknown> = {
         slug,
@@ -345,7 +423,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
         phone: form.phone.trim(),
         message: form.message.trim(),
         source: "site",
-        formAnswers: answers,
+        formAnswers: visibleAnswers,
       };
 
       if (resumeFile) {
@@ -406,12 +484,18 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
 
   const location = getLocationLabel(opening.location);
   const closingDays = daysUntil(opening.closesAt);
-  const badges = [
+  const salaryLabel = formatPublicSalaryRange(opening.publicSalaryRange);
+  const benefitItems = opening.benefits?.length
+    ? opening.benefits.map((title, index) => ({ emoji: BENEFIT_EMOJIS[index % BENEFIT_EMOJIS.length], title }))
+    : BENEFITS;
+  const applyButtonLabel = opening.applyButtonLabel?.trim() || "Enviar candidatura";
+  const badges: Array<{ icon: typeof MapPin; label: string }> = [
     { icon: MapPin, label: `Coala ${location}` },
-    opening.workType ? { icon: Monitor, label: WORK_TYPE_LABELS[opening.workType] } : null,
-    opening.slots > 1 ? { icon: Users, label: `${opening.slots} vagas` } : null,
-    closingDays != null ? { icon: Coffee, label: `Encerra em ${closingDays} dias` } : null,
-  ].filter((item): item is { icon: typeof MapPin; label: string } => Boolean(item));
+    ...(opening.workType ? [{ icon: Monitor, label: WORK_TYPE_LABELS[opening.workType] }] : []),
+    ...(salaryLabel ? [{ icon: Banknote, label: salaryLabel }] : []),
+    ...(opening.slots > 1 ? [{ icon: Users, label: `${opening.slots} vagas` }] : []),
+    ...(closingDays != null ? [{ icon: Coffee, label: `Encerra em ${closingDays} dias` }] : []),
+  ];
 
   return (
     <div className="vaga-publica min-h-screen bg-[#F4ECD8] text-[#2A1F2A]">
@@ -426,7 +510,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
             <Logo />
           </Link>
           <a href="#apply-form" className="btn ml-auto inline-flex h-10 items-center gap-1.5 bg-[#EE6FA8] px-5 text-[13px] font-bold text-white">
-            Candidatar-se <ArrowRight className="h-3.5 w-3.5" />
+            {applyButtonLabel} <ArrowRight className="h-3.5 w-3.5" />
           </a>
         </div>
       </header>
@@ -482,7 +566,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
             <div className="stk rounded-[30px] bg-[#FCDFEB] p-7 md:p-8">
               <div className="mb-6 text-[11px] font-bold uppercase tracking-[0.18em] text-[#EE6FA8]">Benefícios</div>
               <div className="grid gap-x-10 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-                {BENEFITS.map((benefit) => (
+                {benefitItems.map((benefit) => (
                   <div key={benefit.title} className="flex items-center gap-3 text-[15px] font-bold">
                     <span>{benefit.emoji}</span>{benefit.title}
                   </div>
@@ -547,16 +631,25 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
                   <textarea value={form.message} onChange={set("message")} rows={4} placeholder="Conte um pouco sobre você..." className="fld resize-none" />
                 </div>
 
-                {(opening.formQuestions ?? []).length > 0 ? (
+                {visibleQuestionSections.length > 0 ? (
                   <div className="space-y-4 border-t border-[#2A1F2A]/10 pt-5">
                     <h3 className="fd text-[18px]">Perguntas de triagem</h3>
-                    {(opening.formQuestions ?? []).map((question) => (
-                      <FormQuestionField
-                        key={question.id}
-                        question={question}
-                        value={answers[question.id]}
-                        onChange={(value) => setAnswers((current) => ({ ...current, [question.id]: value }))}
-                      />
+                    {visibleQuestionSections.map((section) => (
+                      <div key={section.id} className="space-y-4">
+                        {visibleQuestionSections.length > 1 || !section.isFallback ? (
+                          <h4 className="border-b border-[#2A1F2A]/10 pb-2 text-[12px] font-bold uppercase tracking-[0.14em] text-[#5B4C5B]">
+                            {section.title}
+                          </h4>
+                        ) : null}
+                        {buildRecruitmentQuestionTree(section.questions).map((node) => (
+                          <FormQuestionNode
+                            key={node.question.id}
+                            node={node}
+                            answers={answers}
+                            onAnswer={handleQuestionAnswer}
+                          />
+                        ))}
+                      </div>
                     ))}
                   </div>
                 ) : null}
@@ -585,7 +678,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
                   className="btn inline-flex h-[52px] w-full items-center justify-center gap-2 bg-[#EE6FA8] text-[15px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  {submitting ? "Enviando..." : "Enviar candidatura"}
+                  {submitting ? "Enviando..." : applyButtonLabel}
                 </button>
 
                 <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-[#5B4C5B]">

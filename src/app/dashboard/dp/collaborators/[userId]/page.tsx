@@ -858,7 +858,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   ].sort((left, right) => blockOrder(left.id) - blockOrder(right.id));
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] bg-[#eeeeef] px-4 py-5 text-[#1d1d26] md:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-8rem)] bg-[var(--bg)] px-4 py-5 text-[#1d1d26] md:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-[1440px] space-y-4">
         <div className="flex items-center gap-3">
           <Link href="/dashboard/dp/collaborators" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:text-[#df2f78]">

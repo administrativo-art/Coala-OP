@@ -5,8 +5,11 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, ChevronDown, ChevronRight, Instagram, Loader2, Mail, Paperclip, Send, X } from "lucide-react";
 import type { HrFormQuestion, RecruitmentFormConfig } from "@/types";
 import {
+  buildRecruitmentQuestionTree,
   DEFAULT_TALENT_POOL_FORM,
   getRecruitmentQuestionOptions,
+  groupRecruitmentQuestionsBySection,
+  type RecruitmentQuestionTreeNode,
 } from "@/lib/recruitment-forms";
 
 const FALLBACK_PUBLIC_UNITS = [
@@ -225,6 +228,46 @@ function TalentQuestionField({
   );
 }
 
+function TalentQuestionNode({
+  node,
+  formAnswers,
+  units,
+  onAnswer,
+}: {
+  node: RecruitmentQuestionTreeNode;
+  formAnswers: Record<string, unknown>;
+  units: string[];
+  onAnswer: (questionId: string, value: unknown) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <TalentQuestionField
+        question={node.question}
+        value={formAnswers[node.question.id]}
+        units={units}
+        onChange={(value) => onAnswer(node.question.id, value)}
+      />
+      {node.subquestions.length > 0 ? (
+        <div className="ml-3 grid gap-4 border-l-2 border-[#2A1F2A]/10 pl-4 sm:grid-cols-2">
+          {node.subquestions.map((subquestion) => (
+            <div
+              key={subquestion.question.id}
+              className={subquestion.subquestions.length > 0 || subquestion.question.config?.multiline === true || subquestion.question.type === "multi_select" ? "sm:col-span-2" : ""}
+            >
+              <TalentQuestionNode
+                node={subquestion}
+                formAnswers={formAnswers}
+                units={units}
+                onAnswer={onAnswer}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function BancoDeTalentosPage() {
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
   const [formConfig, setFormConfig] = useState<RecruitmentFormConfig>(DEFAULT_TALENT_POOL_FORM);
@@ -235,6 +278,10 @@ export default function BancoDeTalentosPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [units, setUnits] = useState<string[]>(FALLBACK_PUBLIC_UNITS);
+  const questionSections = groupRecruitmentQuestionsBySection(formConfig.questions, "Perfil e preferências");
+  const handleQuestionAnswer = (questionId: string, value: unknown) => {
+    setFormAnswers((current) => ({ ...current, [questionId]: value }));
+  };
 
   useEffect(() => {
     fetch("/api/hr/public-stats")
@@ -386,18 +433,32 @@ export default function BancoDeTalentosPage() {
                   <input required type="email" value={form.email} onChange={set("email")} placeholder="email@exemplo.com" className="fld" />
                 </div>
 
-                {formConfig.questions.length > 0 ? (
+                {questionSections.length > 0 ? (
                   <div className="border-t border-[#2A1F2A]/10 pt-5">
                     <h3 className="fd mb-4 text-[18px]">Perfil e preferências</h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {formConfig.questions.map((question) => (
-                        <div key={question.id} className={question.config?.multiline === true || question.type === "multi_select" ? "sm:col-span-2" : ""}>
-                          <TalentQuestionField
-                            question={question}
-                            value={formAnswers[question.id]}
-                            units={units}
-                            onChange={(value) => setFormAnswers((current) => ({ ...current, [question.id]: value }))}
-                          />
+                    <div className="space-y-6">
+                      {questionSections.map((section) => (
+                        <div key={section.id} className="space-y-4">
+                          {questionSections.length > 1 || !section.isFallback ? (
+                            <h4 className="border-b border-[#2A1F2A]/10 pb-2 text-[12px] font-bold uppercase tracking-[0.14em] text-[#5B4C5B]">
+                              {section.title}
+                            </h4>
+                          ) : null}
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            {buildRecruitmentQuestionTree(section.questions).map((node) => (
+                              <div
+                                key={node.question.id}
+                                className={node.subquestions.length > 0 || node.question.config?.multiline === true || node.question.type === "multi_select" ? "sm:col-span-2" : ""}
+                              >
+                                <TalentQuestionNode
+                                  node={node}
+                                  formAnswers={formAnswers}
+                                  units={units}
+                                  onAnswer={handleQuestionAnswer}
+                                />
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>

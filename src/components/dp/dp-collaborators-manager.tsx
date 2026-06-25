@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useDP } from '@/components/dp-context';
 import { useHrBootstrap } from '@/hooks/use-hr-bootstrap';
-import type { DPShiftDefinition, JobFunction, JobRole, User } from '@/types';
+import type { DPShiftDefinition, DPUnit, JobFunction, JobRole, User } from '@/types';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,6 +73,7 @@ const collaboratorSchema = z.object({
   registrationIdPdv: z.string().optional(),
   jobRoleId: z.string().optional(),
   jobFunctionIds: z.array(z.string()).optional(),
+  responsibleUnitIds: z.array(z.string()).optional(),
   jobRoleProfileSyncDisabled: z.boolean().optional(),
   admissionDate: z.string().optional(),
   birthDate: z.string().optional(),
@@ -125,6 +126,7 @@ interface EditSheetProps {
   shiftDefinitions: DPShiftDefinition[];
   roles: JobRole[];
   functionsCatalog: JobFunction[];
+  units: DPUnit[];
   hrLoading: boolean;
   hrError: string | null;
 }
@@ -136,6 +138,7 @@ function EditSheet({
   shiftDefinitions,
   roles,
   functionsCatalog,
+  units,
   hrLoading,
   hrError,
 }: EditSheetProps) {
@@ -150,6 +153,7 @@ function EditSheet({
       registrationIdPdv: '',
       jobRoleId: '',
       jobFunctionIds: [],
+      responsibleUnitIds: [],
       jobRoleProfileSyncDisabled: false,
       admissionDate: '',
       birthDate: '',
@@ -168,6 +172,7 @@ function EditSheet({
         registrationIdPdv: user.registrationIdPdv ?? '',
         jobRoleId: user.jobRoleId ?? '',
         jobFunctionIds: user.jobFunctionIds ?? [],
+        responsibleUnitIds: user.responsibleUnitIds ?? [],
         jobRoleProfileSyncDisabled: user.jobRoleProfileSyncDisabled ?? false,
         admissionDate: timestampToDateInput(user.admissionDate),
         birthDate: timestampToDateInput(user.birthDate),
@@ -221,6 +226,11 @@ function EditSheet({
     });
   }, [functionsCatalog, selectedRoleId]);
 
+  const unitOptions = useMemo(
+    () => units.map((unit) => ({ value: unit.id, label: unit.name })),
+    [units]
+  );
+
   React.useEffect(() => {
     const selectedFunctionIds = form.getValues('jobFunctionIds') ?? [];
     const allowedFunctionIds = new Set(compatibleFunctions.map((item) => item.id));
@@ -247,6 +257,7 @@ function EditSheet({
         jobRoleName: selectedRole?.name,
         jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
         jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
+        responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
         jobRoleProfileSyncDisabled: values.jobRoleProfileSyncDisabled ?? false,
         shiftDefinitionId: values.shiftDefinitionId || undefined,
         loginRestrictionEnabled: values.loginRestrictionEnabled ?? false,
@@ -371,6 +382,29 @@ function EditSheet({
                     </FormControl>
                     <p className="text-xs text-muted-foreground">
                       A seleção respeita a compatibilidade configurada no catálogo de RH.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="responsibleUnitIds"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Unidades sob responsabilidade</FormLabel>
+                    <FormControl>
+                      <MultiSelect
+                        options={unitOptions}
+                        selected={field.value ?? []}
+                        onChange={field.onChange}
+                        placeholder="Vazio = geral/remanescentes"
+                        className={unitOptions.length > 0 ? '' : 'opacity-70'}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Use para líderes/superiores. Sem seleção, o colaborador responde pelo fluxo geral ou unidades remanescentes.
                     </p>
                     <FormMessage />
                   </FormItem>
@@ -830,7 +864,7 @@ function CollaboratorRow({ user, onEdit, onTerminate, canEdit, canTerminate, shi
 export function DPCollaboratorsManager() {
   const { activeUsers, permissions, updateUser, firebaseUser } = useAuth();
   const { shiftDefinitions, shiftDefsLoading, shiftDefsError } = useDP();
-  const { roles, functions, loading: hrLoading, error: hrError } = useHrBootstrap();
+  const { roles, functions, units, loading: hrLoading, error: hrError } = useHrBootstrap();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [editUser, setEditUser] = useState<User | null>(null);
@@ -971,6 +1005,7 @@ export function DPCollaboratorsManager() {
         shiftDefinitions={shiftDefinitions}
         roles={roles}
         functionsCatalog={functions}
+        units={units}
         hrLoading={hrLoading}
         hrError={hrError}
         onOpenChange={open => { if (!open) setEditUser(null); }}

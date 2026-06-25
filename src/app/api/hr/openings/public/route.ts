@@ -37,10 +37,16 @@ function toPublicQuestions(questions: HrFormQuestion[], units: string[]) {
     id: question.id,
     text: question.text,
     type: question.type,
+    sectionId: question.sectionId,
+    sectionTitle: question.sectionTitle,
+    sectionOrder: question.sectionOrder,
+    parentQuestionId: question.parentQuestionId,
+    subquestionOrder: question.subquestionOrder,
     required: question.required,
     eliminatory: question.eliminatory,
     weight: question.weight,
     config: question.config,
+    conditions: question.conditions,
   }));
 }
 
@@ -93,6 +99,9 @@ export async function GET() {
           functionName: data.functionName ?? null,
           description: data.description ?? null,
           requirements: Array.isArray(data.requirements) ? data.requirements : [],
+          benefits: Array.isArray(data.benefits) ? data.benefits : [],
+          publicSalaryRange: data.publicSalaryRange ?? null,
+          applyButtonLabel: data.applyButtonLabel ?? null,
           formQuestions,
           location: data.unitName ?? data.location ?? null,
           unitName: data.unitName ?? null,

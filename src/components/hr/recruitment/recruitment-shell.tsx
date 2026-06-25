@@ -16,16 +16,36 @@ import type {
   DPShiftDefinition,
   DPUnit,
   HrFormQuestion,
+  HrQuestionWeight,
   JobFunction,
   JobRole,
+  JobRoleSalaryRange,
   JobOpening,
   JobOpeningStatus,
   OnboardingDocument,
   OnboardingProcess,
+  RecruitmentCompositionPreset,
+  RecruitmentQuestionCondition,
+  RecruitmentQuestionConditionOperator,
+  RecruitmentQuestionScoringUse,
   RecruitmentFormConfig,
   RecruitmentStage,
 } from '@/types';
-import { DEFAULT_TALENT_POOL_FORM, mergeRecruitmentQuestionModels } from '@/lib/recruitment-forms';
+import {
+  buildRecruitmentQuestionTree,
+  DEFAULT_TALENT_POOL_FORM,
+  groupRecruitmentQuestionsBySection,
+  makeRecruitmentSectionId,
+  mergeRecruitmentQuestionModels,
+  type RecruitmentQuestionTreeNode,
+} from '@/lib/recruitment-forms';
+import {
+  applyRecruitmentScoring,
+  RECRUITMENT_CATEGORY_LABELS,
+  RECRUITMENT_COMPOSITION_PRESETS,
+  RECRUITMENT_DEFAULT_RUBRICS,
+  STANDARD_RECRUITMENT_CRITERIA,
+} from '@/lib/recruitment-scoring';
 import {
   createCandidateStageHistoryEntry,
   mergeRecruitmentStageModels,
@@ -92,16 +112,412 @@ const QUESTION_TYPES: Array<{ value: HrFormQuestion['type']; label: string }> = 
   { value: 'number_range', label: 'Número' },
 ];
 
+type QuestionDraftConditionValue = 'true' | 'false' | 'always';
+
 const EMPTY_QUESTION_DRAFT = {
   text: '',
   type: 'text' as HrFormQuestion['type'],
+  sectionTitle: '',
+  parentQuestionId: '',
+  conditionValue: 'true' as QuestionDraftConditionValue,
   optionsText: '',
   required: false,
   eliminatory: false,
 };
 
+type QuestionDraft = typeof EMPTY_QUESTION_DRAFT;
+
+const SCORING_USE_OPTIONS: Array<{ value: RecruitmentQuestionScoringUse; label: string }> = [
+  { value: 'informational', label: 'Informativa' },
+  { value: 'scored', label: 'Pontuável' },
+  { value: 'eliminatory', label: 'Eliminatória' },
+];
+
+const IMPORTANCE_OPTIONS: Array<{ value: HrQuestionWeight; label: string }> = [
+  { value: 'low', label: 'Baixa' },
+  { value: 'medium', label: 'Média' },
+  { value: 'high', label: 'Alta' },
+  { value: 'critical', label: 'Crítica' },
+];
+
+const COMPOSITION_PRESET_OPTIONS = Object.entries(RECRUITMENT_COMPOSITION_PRESETS)
+  .map(([value, config]) => ({ value: value as RecruitmentCompositionPreset, label: config.label }));
+
+function getQuestionScoringUse(question: HrFormQuestion): RecruitmentQuestionScoringUse {
+  if (question.eliminatory || question.scoring?.use === 'eliminatory') return 'eliminatory';
+  if (question.scored || question.scoring?.use === 'scored') return 'scored';
+  return question.scoring?.use ?? 'informational';
+}
+
+function getQuestionImportance(question: HrFormQuestion): HrQuestionWeight {
+  return question.scoring?.importance ?? question.weight ?? 'medium';
+}
+
+function formatAnswerFactors(factors?: Record<string, number>) {
+  if (!factors || typeof factors !== 'object') return '';
+  return Object.entries(factors as Record<string, number>)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+}
+
+function parseAnswerFactors(value: string) {
+  const entries = value
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const [rawKey, rawValue] = line.split('=');
+      const key = rawKey?.trim();
+      const number = Number(rawValue?.trim());
+      if (!key || !Number.isFinite(number)) return null;
+      return [key, Math.max(0, Math.min(1, number))] as const;
+    })
+    .filter((entry): entry is readonly [string, number] => !!entry);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function listToText(value?: string[]) {
+  return (value ?? []).join('\n');
+}
+
+function textToList(value: string) {
+  return value
+    .split('\n')
+    .map(entry => entry.trim())
+    .filter(Boolean);
+}
+
+function numberInputToOptionalNumber(value: string) {
+  const normalized = value.trim().replace(/\./g, '').replace(',', '.');
+  if (!normalized) return undefined;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function salaryRangeFromInputs(min: string, max: string, visible: boolean): JobRoleSalaryRange | undefined {
+  const minValue = numberInputToOptionalNumber(min);
+  const maxValue = numberInputToOptionalNumber(max);
+  if (minValue === undefined && maxValue === undefined && !visible) return undefined;
+  return {
+    currency: 'BRL',
+    visible,
+    ...(minValue !== undefined ? { min: minValue } : {}),
+    ...(maxValue !== undefined ? { max: maxValue } : {}),
+  };
+}
+
+function salaryInputValue(value?: number) {
+  return value === undefined ? '' : String(value);
+}
+
+function formatSalaryRange(range?: JobRoleSalaryRange) {
+  if (!range?.visible) return '';
+  const formatter = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: range.currency || 'BRL',
+    maximumFractionDigits: 0,
+  });
+  if (range.min !== undefined && range.max !== undefined) {
+    return `${formatter.format(range.min)}-${formatter.format(range.max)}`;
+  }
+  if (range.min !== undefined) return `a partir de ${formatter.format(range.min)}`;
+  if (range.max !== undefined) return `até ${formatter.format(range.max)}`;
+  return 'Salário a combinar';
+}
+
+function withQuestionScoring(
+  question: HrFormQuestion,
+  patch: Partial<NonNullable<HrFormQuestion['scoring']>>
+): Partial<HrFormQuestion> {
+  const scoring = { ...(question.scoring ?? {}), ...patch };
+  const use = patch.use ?? scoring.use ?? getQuestionScoringUse(question);
+  const importance = patch.importance ?? scoring.importance ?? getQuestionImportance(question);
+  return {
+    scoring: {
+      ...scoring,
+      use,
+      importance,
+    },
+    scored: use === 'scored',
+    eliminatory: use === 'eliminatory',
+    weight: importance,
+  };
+}
+
+function scoringFromCriterion(question: HrFormQuestion, criterionCode: string): Partial<HrFormQuestion> {
+  const criterion = STANDARD_RECRUITMENT_CRITERIA.find(item => item.code === criterionCode);
+  if (!criterion) {
+    return withQuestionScoring(question, {
+      criterionCode: undefined,
+      criterionLabel: undefined,
+      category: undefined,
+      rubric: undefined,
+    });
+  }
+  return withQuestionScoring(question, {
+    criterionCode: criterion.code,
+    criterionLabel: criterion.label,
+    category: criterion.category,
+    groupName: question.scoring?.groupName || RECRUITMENT_CATEGORY_LABELS[criterion.category],
+    groupId: question.scoring?.groupId || criterion.category,
+    rubric: RECRUITMENT_DEFAULT_RUBRICS[criterion.code],
+  });
+}
+
+function getQuestionOptions(question: HrFormQuestion) {
+  const options = question.config?.options;
+  return Array.isArray(options)
+    ? options.filter((option): option is string => typeof option === 'string' && option.trim().length > 0)
+    : [];
+}
+
+function conditionValueToInput(value: unknown) {
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
+function parseConditionValue(parent: HrFormQuestion | undefined, value: string) {
+  if (parent?.type === 'yes_no') return value === 'true';
+  if (parent?.type === 'number_range') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : value;
+  }
+  return value;
+}
+
+function QuestionConditionEditor({
+  question,
+  availableQuestions,
+  onChange,
+  canManage = true,
+  variant = 'dark',
+}: {
+  question: HrFormQuestion;
+  availableQuestions: HrFormQuestion[];
+  onChange: (patch: Partial<HrFormQuestion>) => void;
+  canManage?: boolean;
+  variant?: 'dark' | 'light';
+}) {
+  const condition = question.conditions?.[0] ?? null;
+  const parentQuestion = condition
+    ? availableQuestions.find(item => item.id === condition.questionId)
+    : undefined;
+  const parentOptions = parentQuestion ? getQuestionOptions(parentQuestion) : [];
+  const isDark = variant === 'dark';
+  const fieldClass = isDark
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+  const labelClass = isDark
+    ? 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600'
+    : 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
+  const mutedClass = isDark ? 'text-slate-500' : 'text-slate-500';
+  const operator = condition?.operator ?? 'equals';
+  const needsValue = operator !== 'answered' && operator !== 'not_answered';
+
+  const patchCondition = (patch: Partial<RecruitmentQuestionCondition>) => {
+    const next: RecruitmentQuestionCondition = {
+      questionId: patch.questionId ?? condition?.questionId ?? '',
+      operator: patch.operator ?? condition?.operator ?? 'equals',
+      value: patch.value ?? condition?.value,
+    };
+    if (!next.questionId) {
+      onChange({ conditions: undefined });
+      return;
+    }
+    onChange({ conditions: [next] });
+  };
+
+  return (
+    <details className={`group mt-3 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900/25' : 'border-slate-100 bg-white'}`}>
+      <summary className={`flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+        <span className="truncate">
+          Condicional: {condition ? `depende de "${parentQuestion?.text ?? 'pergunta'}"` : 'sempre exibir'}
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 text-slate-400 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className={`border-t p-3 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+        <div className="grid gap-3 md:grid-cols-[1fr_0.8fr_1fr]">
+        <div>
+          <label className={labelClass}>Exibição condicional</label>
+          <select
+            value={condition?.questionId ?? ''}
+            onChange={event => {
+              const parent = availableQuestions.find(item => item.id === event.target.value);
+              const options = parent ? getQuestionOptions(parent) : [];
+              patchCondition({
+                questionId: event.target.value,
+                operator: 'equals',
+                value: parent?.type === 'yes_no' ? true : options[0] ?? '',
+              });
+            }}
+            disabled={!canManage || availableQuestions.length === 0}
+            className={`${fieldClass} w-full`}
+          >
+            <option value="">Sempre exibir</option>
+            {availableQuestions.map(item => (
+              <option key={item.id} value={item.id}>{item.text}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Regra</label>
+          <select
+            value={operator}
+            onChange={event => patchCondition({ operator: event.target.value as RecruitmentQuestionConditionOperator })}
+            disabled={!canManage || !condition}
+            className={`${fieldClass} w-full`}
+          >
+            <option value="equals">Resposta igual a</option>
+            <option value="not_equals">Resposta diferente de</option>
+            <option value="includes">Contém opção</option>
+            <option value="answered">Está respondida</option>
+            <option value="not_answered">Não está respondida</option>
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Resposta</label>
+          {parentQuestion?.type === 'yes_no' ? (
+            <select
+              value={conditionValueToInput(condition?.value)}
+              onChange={event => patchCondition({ value: parseConditionValue(parentQuestion, event.target.value) })}
+              disabled={!canManage || !condition || !needsValue}
+              className={`${fieldClass} w-full`}
+            >
+              <option value="true">Sim</option>
+              <option value="false">Não</option>
+            </select>
+          ) : parentOptions.length > 0 ? (
+            <select
+              value={conditionValueToInput(condition?.value)}
+              onChange={event => patchCondition({ value: parseConditionValue(parentQuestion, event.target.value) })}
+              disabled={!canManage || !condition || !needsValue}
+              className={`${fieldClass} w-full`}
+            >
+              <option value="">Selecione</option>
+              {parentOptions.map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={conditionValueToInput(condition?.value)}
+              onChange={event => patchCondition({ value: parseConditionValue(parentQuestion, event.target.value) })}
+              disabled={!canManage || !condition || !needsValue}
+              placeholder={needsValue ? 'Valor esperado' : 'Sem valor'}
+              className={`${fieldClass} w-full`}
+            />
+          )}
+        </div>
+        </div>
+        <p className={`mt-2 text-[10px] ${mutedClass}`}>
+          Use para mostrar esta pergunta apenas quando uma resposta anterior justificar o campo.
+        </p>
+      </div>
+    </details>
+  );
+}
+
+function questionSectionPatch(value: string): Pick<HrFormQuestion, 'sectionId' | 'sectionTitle'> {
+  const sectionTitle = value.trim().slice(0, 120);
+  return {
+    sectionTitle: sectionTitle || undefined,
+    sectionId: sectionTitle ? makeRecruitmentSectionId(sectionTitle) : undefined,
+  };
+}
+
+function questionSectionFromDraft(sectionTitle: string): Pick<HrFormQuestion, 'sectionId' | 'sectionTitle'> {
+  return questionSectionPatch(sectionTitle);
+}
+
+function conditionFromDraft(parent: HrFormQuestion | undefined, value: QuestionDraftConditionValue) {
+  if (!parent || value === 'always') return undefined;
+  return [{
+    questionId: parent.id,
+    operator: 'equals' as RecruitmentQuestionConditionOperator,
+    value: parseConditionValue(parent, value),
+  }];
+}
+
+function QuestionSectionEditor({
+  question,
+  onChange,
+  canManage = true,
+  variant = 'dark',
+}: {
+  question: HrFormQuestion;
+  onChange: (patch: Partial<HrFormQuestion>) => void;
+  canManage?: boolean;
+  variant?: 'dark' | 'light';
+}) {
+  const isDark = variant === 'dark';
+  const labelClass = isDark
+    ? 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600'
+    : 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
+  const fieldClass = isDark
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+
+  return (
+    <div className="mt-2">
+      <label className={labelClass}>Seção</label>
+      <input
+        value={question.sectionTitle ?? ''}
+        onChange={event => onChange(questionSectionPatch(event.target.value))}
+        disabled={!canManage}
+        placeholder="Ex: Disponibilidade, Experiência, Preferências"
+        className={`${fieldClass} w-full`}
+      />
+    </div>
+  );
+}
+
+function questionParentPatch(value: string): Pick<HrFormQuestion, 'parentQuestionId'> {
+  return { parentQuestionId: value.trim() || undefined };
+}
+
+function QuestionParentEditor({
+  question,
+  availableQuestions,
+  onChange,
+  canManage = true,
+  variant = 'dark',
+}: {
+  question: HrFormQuestion;
+  availableQuestions: HrFormQuestion[];
+  onChange: (patch: Partial<HrFormQuestion>) => void;
+  canManage?: boolean;
+  variant?: 'dark' | 'light';
+}) {
+  const isDark = variant === 'dark';
+  const labelClass = isDark
+    ? 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600'
+    : 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
+  const fieldClass = isDark
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+
+  return (
+    <div className="mt-2">
+      <label className={labelClass}>Subpergunta de</label>
+      <select
+        value={question.parentQuestionId ?? ''}
+        onChange={event => onChange(questionParentPatch(event.target.value))}
+        disabled={!canManage || availableQuestions.length === 0}
+        className={`${fieldClass} w-full`}
+      >
+        <option value="">Pergunta principal</option>
+        {availableQuestions.map(item => (
+          <option key={item.id} value={item.id}>{item.text}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 type RecruitmentSection = 'jobs' | 'talents' | 'integration';
 type RecruitmentJobViewMode = 'kanban' | 'list' | 'openings';
+type CandidateEligibilityFilter = '' | 'eligible' | 'not_eligible' | 'scored';
+type CandidateSortMode = 'recent' | 'score_desc' | 'score_asc' | 'name';
 
 const RECRUITMENT_SECTION_META: Record<RecruitmentSection, { eyebrow: string; title: string; description: string }> = {
   jobs: {
@@ -265,11 +681,881 @@ function ErrorLine({ msg }: { msg: string }) {
   );
 }
 
+function QuestionScoringEditor({
+  question,
+  onChange,
+  canManage = true,
+  sourceLayer,
+  variant = 'dark',
+}: {
+  question: HrFormQuestion;
+  onChange: (patch: Partial<HrFormQuestion>) => void;
+  canManage?: boolean;
+  sourceLayer?: 'role' | 'function' | 'opening';
+  variant?: 'dark' | 'light';
+}) {
+  const criterion = question.scoring?.criterionCode
+    ? STANDARD_RECRUITMENT_CRITERIA.find(item => item.code === question.scoring?.criterionCode)
+    : null;
+  const category = question.scoring?.category ?? criterion?.category;
+  const rubric = question.scoring?.rubric ?? (question.scoring?.criterionCode ? RECRUITMENT_DEFAULT_RUBRICS[question.scoring.criterionCode] : undefined);
+  const isDark = variant === 'dark';
+  const fieldClass = isDark
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+  const labelClass = isDark
+    ? 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600'
+    : 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
+  const mutedClass = isDark ? 'text-slate-500' : 'text-slate-500';
+
+  function patchScoring(patch: Partial<NonNullable<HrFormQuestion['scoring']>>) {
+    onChange(withQuestionScoring(question, {
+      sourceLayer: sourceLayer ?? question.scoring?.sourceLayer,
+      ...patch,
+    }));
+  }
+
+  return (
+    <details className={`group mt-3 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900/35' : 'border-slate-100 bg-slate-50/60'}`}>
+      <summary className={`flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+        <span className="truncate">
+          Score: {SCORING_USE_OPTIONS.find(option => option.value === getQuestionScoringUse(question))?.label ?? 'Informativa'}
+          {criterion ? ` · ${criterion.label}` : ''}
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 text-slate-400 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className={`border-t p-3 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+        <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_0.8fr]">
+        <div>
+          <label className={labelClass}>Critério</label>
+          <select
+            value={question.scoring?.criterionCode ?? ''}
+            onChange={event => onChange({
+              ...scoringFromCriterion(question, event.target.value),
+              scoring: {
+                ...(question.scoring ?? {}),
+                ...(scoringFromCriterion(question, event.target.value).scoring ?? {}),
+                sourceLayer: sourceLayer ?? question.scoring?.sourceLayer,
+              },
+            })}
+            disabled={!canManage}
+            className={`${fieldClass} w-full`}
+          >
+            <option value="">Sem critério</option>
+            {STANDARD_RECRUITMENT_CRITERIA.map(item => (
+              <option key={item.code} value={item.code}>{item.label}</option>
+            ))}
+          </select>
+          {category ? (
+            <p className={`mt-1 text-[10px] ${mutedClass}`}>
+              Categoria: {RECRUITMENT_CATEGORY_LABELS[category]}
+            </p>
+          ) : null}
+        </div>
+        <div>
+          <label className={labelClass}>Uso</label>
+          <select
+            value={getQuestionScoringUse(question)}
+            onChange={event => patchScoring({ use: event.target.value as RecruitmentQuestionScoringUse })}
+            disabled={!canManage}
+            className={`${fieldClass} w-full`}
+          >
+            {SCORING_USE_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Importância</label>
+          <select
+            value={getQuestionImportance(question)}
+            onChange={event => patchScoring({ importance: event.target.value as HrQuestionWeight })}
+            disabled={!canManage || getQuestionScoringUse(question) === 'informational'}
+            className={`${fieldClass} w-full`}
+          >
+            {IMPORTANCE_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Grupo</label>
+          <input
+            value={question.scoring?.groupName ?? ''}
+            onChange={event => patchScoring({
+              groupName: event.target.value,
+              groupId: event.target.value.toLowerCase().replace(/[^a-z0-9]+/gi, '-'),
+            })}
+            disabled={!canManage}
+            placeholder="Ex: Aderência à escala"
+            className={`${fieldClass} w-full`}
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className={labelClass}>Justificativa</label>
+          <input
+            value={question.scoring?.justification ?? ''}
+            onChange={event => patchScoring({ justification: event.target.value })}
+            disabled={!canManage}
+            placeholder="Obrigatória para alta, crítica ou eliminatória"
+            className={`${fieldClass} w-full`}
+          />
+        </div>
+        {(question.type === 'select' || question.type === 'multi_select' || question.type === 'yes_no') && (
+          <div className="md:col-span-3">
+            <label className={labelClass}>Fator por resposta</label>
+            <textarea
+              value={formatAnswerFactors(question.scoring?.answerFactors)}
+              onChange={event => patchScoring({ answerFactors: parseAnswerFactors(event.target.value) })}
+              disabled={!canManage || getQuestionScoringUse(question) !== 'scored'}
+              rows={2}
+              placeholder={'Sim=1\nParcialmente=0.7\nNão=0'}
+              className={`${fieldClass} w-full resize-none`}
+            />
+            <p className={`mt-1 text-[10px] ${mutedClass}`}>Use valores entre 0 e 1. O peso final continua calculado pelo sistema.</p>
+          </div>
+        )}
+        {rubric?.length ? (
+          <div className="md:col-span-3">
+            <label className={labelClass}>Rubrica objetiva</label>
+            <div className={`grid gap-2 rounded-xl border p-2 ${isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-200 bg-white'}`}>
+              {rubric.map(item => (
+                <div key={`${item.factor}-${item.label}`} className="grid gap-1 text-[11px] md:grid-cols-[3rem_8rem_1fr]">
+                  <span className={isDark ? 'font-bold text-slate-300' : 'font-bold text-slate-700'}>{item.factor}</span>
+                  <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>{item.label}</span>
+                  <span className={mutedClass}>{item.description}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+type QuestionEditorVariant = 'dark' | 'light';
+
+type RecruitmentQuestionsDesignerProps = {
+  questions: HrFormQuestion[];
+  canManage?: boolean;
+  variant?: QuestionEditorVariant;
+  fallbackSectionTitle: string;
+  emptyLabel: string;
+  activeLabel?: string;
+  showActiveToggle?: boolean;
+  showScoring?: boolean;
+  optionPlaceholder?: string;
+  onUpdateQuestion: (questionId: string, patch: Partial<HrFormQuestion>) => void;
+  onUpdateQuestionOptions: (questionId: string, optionsText: string) => void;
+  onMoveQuestion: (questionId: string, direction: -1 | 1) => void;
+  onRemoveQuestion: (questionId: string) => void;
+  onPrepareAddQuestion?: (patch: { sectionTitle?: string; parentQuestionId?: string }) => void;
+  inlineDraft?: QuestionDraft;
+  onInlineDraftChange?: (patch: Partial<QuestionDraft>) => void;
+  onInlineDraftAdd?: () => void;
+  onInlineDraftCancel?: () => void;
+  sourceLayerResolver?: (question: HrFormQuestion) => 'role' | 'function' | 'opening';
+};
+
+function countTreeSubquestions(node: RecruitmentQuestionTreeNode): number {
+  return node.subquestions.reduce((total, child) => total + 1 + countTreeSubquestions(child), 0);
+}
+
+function questionTypeLabel(type: HrFormQuestion['type']) {
+  const label = QUESTION_TYPES.find(item => item.value === type)?.label ?? 'Campo';
+  return label === 'Seleção única' ? 'Seleção' : label;
+}
+
+function pluralizePt(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function RecruitmentMetricCard({
+  label,
+  value,
+  description,
+  tone = 'slate',
+}: {
+  label: string;
+  value: string | number;
+  description?: string;
+  tone?: 'slate' | 'violet' | 'emerald' | 'pink';
+}) {
+  const toneClass = {
+    slate: 'text-slate-950',
+    violet: 'text-violet-600',
+    emerald: 'text-emerald-600',
+    pink: 'text-pink-600',
+  }[tone];
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+      <p className={`mt-1 text-2xl font-bold leading-none ${toneClass}`}>{value}</p>
+      {description ? <p className="mt-2 text-[11px] text-slate-400">{description}</p> : null}
+    </div>
+  );
+}
+
+function formatConditionValue(value: unknown) {
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
+  if (value === null || value === undefined || value === '') return 'valor';
+  return String(value);
+}
+
+function conditionSummary(
+  question: HrFormQuestion,
+  questionsById: Map<string, HrFormQuestion>
+): { label: string; tone: 'emerald' | 'red' | 'slate' } | null {
+  const condition = question.conditions?.[0];
+  if (!condition) return question.parentQuestionId ? { label: 'Sem regra', tone: 'slate' } : null;
+  const parent = questionsById.get(condition.questionId);
+  const value = formatConditionValue(condition.value);
+  const prefix = condition.operator === 'not_equals'
+    ? 'Se não for'
+    : condition.operator === 'includes'
+      ? 'Se contém'
+      : condition.operator === 'answered'
+        ? 'Se respondida'
+        : condition.operator === 'not_answered'
+          ? 'Se vazia'
+          : 'Se';
+  const label = condition.operator === 'answered' || condition.operator === 'not_answered'
+    ? prefix
+    : `${prefix} ${value}`;
+  const tone = condition.value === false || condition.operator === 'not_equals' || condition.operator === 'not_answered'
+    ? 'red'
+    : parent || condition.value === true
+      ? 'emerald'
+      : 'slate';
+  return { label, tone };
+}
+
+function conditionBadgeClass(tone: 'emerald' | 'red' | 'slate', isDark: boolean) {
+  if (tone === 'emerald') {
+    return isDark
+      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+      : 'border-emerald-100 bg-emerald-50 text-emerald-700';
+  }
+  if (tone === 'red') {
+    return isDark
+      ? 'border-red-500/20 bg-red-500/10 text-red-300'
+      : 'border-red-100 bg-red-50 text-red-600';
+  }
+  return isDark
+    ? 'border-slate-800 bg-slate-900 text-slate-500'
+    : 'border-slate-100 bg-slate-50 text-slate-500';
+}
+
+const RECRUITMENT_SECTION_TONES = [
+  {
+    header: 'border-pink-100 bg-pink-50/80',
+    circle: 'bg-pink-600 text-white',
+    text: 'text-pink-700',
+    chip: 'bg-pink-50 text-pink-700',
+    progress: 'bg-pink-600',
+  },
+  {
+    header: 'border-violet-100 bg-violet-50/80',
+    circle: 'bg-violet-600 text-white',
+    text: 'text-violet-700',
+    chip: 'bg-violet-50 text-violet-700',
+    progress: 'bg-violet-600',
+  },
+  {
+    header: 'border-sky-100 bg-sky-50/80',
+    circle: 'bg-sky-600 text-white',
+    text: 'text-sky-700',
+    chip: 'bg-sky-50 text-sky-700',
+    progress: 'bg-sky-600',
+  },
+  {
+    header: 'border-emerald-100 bg-emerald-50/80',
+    circle: 'bg-emerald-600 text-white',
+    text: 'text-emerald-700',
+    chip: 'bg-emerald-50 text-emerald-700',
+    progress: 'bg-emerald-600',
+  },
+] as const;
+
+function recruitmentSectionTone(index: number, isDark: boolean) {
+  if (isDark) {
+    return {
+      header: 'border-slate-800 bg-slate-900/70',
+      circle: 'bg-slate-800 text-slate-200',
+      text: 'text-slate-200',
+      chip: 'bg-slate-900 text-slate-400',
+      progress: 'bg-indigo-500',
+    };
+  }
+  return RECRUITMENT_SECTION_TONES[index % RECRUITMENT_SECTION_TONES.length];
+}
+
+function RecruitmentQuestionsDesigner({
+  questions,
+  canManage = true,
+  variant = 'light',
+  fallbackSectionTitle,
+  emptyLabel,
+  activeLabel = 'Exibir no formulário',
+  showActiveToggle = true,
+  showScoring = false,
+  optionPlaceholder = 'Opções, uma por linha\nSim\nNão\nTalvez',
+  onUpdateQuestion,
+  onUpdateQuestionOptions,
+  onMoveQuestion,
+  onRemoveQuestion,
+  onPrepareAddQuestion,
+  inlineDraft,
+  onInlineDraftChange,
+  onInlineDraftAdd,
+  onInlineDraftCancel,
+  sourceLayerResolver,
+}: RecruitmentQuestionsDesignerProps) {
+  const isDark = variant === 'dark';
+  const sections = groupRecruitmentQuestionsBySection(questions, fallbackSectionTitle);
+  const indexById = new Map(questions.map((question, index) => [question.id, index]));
+  const questionsById = new Map(questions.map(question => [question.id, question]));
+  const checkboxClass = isDark
+    ? 'h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500 disabled:opacity-40'
+    : 'h-4 w-4 rounded border-slate-300 text-slate-950 disabled:opacity-40';
+  const inputClass = isDark
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+  const labelClass = isDark
+    ? 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500'
+    : 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
+
+  const renderQuestionNode = (
+    node: RecruitmentQuestionTreeNode,
+    depth: number,
+    sectionTitle: string,
+    sectionTone: ReturnType<typeof recruitmentSectionTone>
+  ): React.ReactNode => {
+    const question = node.question;
+    const index = indexById.get(question.id) ?? 0;
+    const availableQuestions = questions.slice(0, index);
+    const subquestionCount = countTreeSubquestions(node);
+    const condition = conditionSummary(question, questionsById);
+    const isSubquestion = depth > 0;
+    const rowClass = isDark
+      ? isSubquestion
+        ? 'border-slate-800 bg-slate-950/35'
+        : 'border-slate-800 bg-slate-950/70'
+      : isSubquestion
+        ? 'border-slate-100 bg-white'
+        : 'border-slate-100 bg-white shadow-sm';
+    const summaryClass = isDark
+      ? 'text-slate-200 hover:bg-slate-900/70'
+      : 'text-slate-900 hover:bg-slate-50/80';
+    const editorBorderClass = isDark ? 'border-slate-800' : 'border-slate-100';
+
+    return (
+      <div key={question.id} className={isSubquestion ? 'pl-5' : ''}>
+        <details className={`group rounded-xl border open:border-indigo-300 open:ring-1 open:ring-indigo-200 ${rowClass} ${question.active === false ? 'opacity-65' : ''}`}>
+          <summary className={`flex cursor-pointer list-none items-center gap-3 px-3 py-2.5 text-left transition [&::-webkit-details-marker]:hidden ${summaryClass}`}>
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${
+              isSubquestion
+                ? isDark ? 'bg-slate-900 text-slate-500' : 'bg-slate-50 text-slate-400'
+                : sectionTone.chip
+            }`}>
+              {isSubquestion ? (
+                <span className={`h-1.5 w-1.5 rounded-full ${isDark ? 'bg-slate-600' : 'bg-slate-300'}`} />
+              ) : index + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="truncate text-sm font-semibold">{question.text || 'Pergunta sem título'}</span>
+                {question.active === false && (
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                    isDark ? 'bg-slate-900 text-slate-500' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    Oculta
+                  </span>
+                )}
+              </div>
+              {subquestionCount > 0 && (
+                <p className={isDark ? 'mt-0.5 text-[11px] font-medium text-indigo-300' : 'mt-0.5 text-[11px] font-medium text-indigo-500'}>
+                  {pluralizePt(subquestionCount, 'subpergunta', 'subperguntas')}
+                </p>
+              )}
+            </div>
+            {condition && (
+              <span className={`hidden shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-bold sm:inline-flex ${conditionBadgeClass(condition.tone, isDark)}`}>
+                {condition.label}
+              </span>
+            )}
+            <span className={`hidden shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-semibold sm:inline-flex ${
+              isDark ? 'border-slate-800 bg-slate-900 text-slate-400' : 'border-slate-100 bg-slate-50 text-slate-500'
+            }`}>
+              {questionTypeLabel(question.type)}
+            </span>
+            {question.required && (
+              <span className={`hidden shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-bold sm:inline-flex ${
+                isDark ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300' : 'border-indigo-100 bg-indigo-50 text-indigo-600'
+              }`}>
+                Obr.
+              </span>
+            )}
+            {question.eliminatory && (
+              <span className={`hidden shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-bold sm:inline-flex ${
+                isDark ? 'border-red-500/20 bg-red-500/10 text-red-300' : 'border-red-100 bg-red-50 text-red-600'
+              }`}>
+                Elim.
+              </span>
+            )}
+            <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
+          </summary>
+
+          <div className={`border-t px-3 pb-3 pt-3 ${editorBorderClass}`}>
+            <div className="grid gap-3 md:grid-cols-[1fr_170px]">
+              <div className="md:col-span-2">
+                <label className={labelClass}>Pergunta</label>
+                <input
+                  type="text"
+                  value={question.text}
+                  onChange={event => onUpdateQuestion(question.id, { text: event.target.value })}
+                  disabled={!canManage}
+                  className={`${inputClass} w-full font-semibold`}
+                />
+              </div>
+              <QuestionSectionEditor
+                question={question}
+                onChange={(patch) => onUpdateQuestion(question.id, patch)}
+                canManage={canManage}
+                variant={variant}
+              />
+              <QuestionParentEditor
+                question={question}
+                availableQuestions={availableQuestions}
+                onChange={(patch) => onUpdateQuestion(question.id, patch)}
+                canManage={canManage}
+                variant={variant}
+              />
+              <div>
+                <label className={labelClass}>Tipo</label>
+                <select
+                  value={question.type}
+                  onChange={event => onUpdateQuestion(question.id, { type: event.target.value as HrFormQuestion['type'] })}
+                  disabled={!canManage}
+                  className={`${inputClass} w-full`}
+                >
+                  {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-end gap-3 pb-1">
+                <label className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                  <input
+                    type="checkbox"
+                    checked={question.required}
+                    onChange={event => onUpdateQuestion(question.id, { required: event.target.checked })}
+                    disabled={!canManage}
+                    className={checkboxClass}
+                  />
+                  Obrigatório
+                </label>
+                {showActiveToggle && (
+                  <label className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                    <input
+                      type="checkbox"
+                      checked={question.active !== false}
+                      onChange={event => onUpdateQuestion(question.id, { active: event.target.checked })}
+                      disabled={!canManage}
+                      className={checkboxClass}
+                    />
+                    {activeLabel}
+                  </label>
+                )}
+                <label className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                  <input
+                    type="checkbox"
+                    checked={question.eliminatory}
+                    onChange={event => onUpdateQuestion(question.id, withQuestionScoring(question, {
+                      use: event.target.checked ? 'eliminatory' : 'informational',
+                      sourceLayer: sourceLayerResolver?.(question),
+                    }))}
+                    disabled={!canManage}
+                    className={checkboxClass}
+                  />
+                  Eliminatório
+                </label>
+                <label className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                  <input
+                    type="checkbox"
+                    checked={question.config?.multiline === true}
+                    onChange={event => onUpdateQuestion(question.id, {
+                      config: { ...(question.config ?? {}), multiline: event.target.checked },
+                    })}
+                    disabled={!canManage || question.type !== 'text'}
+                    className={checkboxClass}
+                  />
+                  Texto longo
+                </label>
+              </div>
+              {(question.type === 'select' || question.type === 'multi_select') && (
+                question.config?.source === 'public_units' ? (
+                  <p className={`md:col-span-2 rounded-xl border px-3 py-2 text-xs font-medium ${
+                    isDark ? 'border-slate-800 bg-slate-900/70 text-slate-500' : 'border-slate-100 bg-slate-50 text-slate-500'
+                  }`}>
+                    Opções atualizadas automaticamente pelas unidades ativas do site público.
+                  </p>
+                ) : (
+                  <div className="md:col-span-2">
+                    <label className={labelClass}>Opções</label>
+                    <textarea
+                      value={Array.isArray(question.config?.options) ? question.config.options.join('\n') : ''}
+                      onChange={event => onUpdateQuestionOptions(question.id, event.target.value)}
+                      disabled={!canManage}
+                      rows={3}
+                      placeholder={optionPlaceholder}
+                      className={`${inputClass} w-full resize-none text-xs`}
+                    />
+                  </div>
+                )
+              )}
+            </div>
+
+            {showScoring && (
+              <QuestionScoringEditor
+                question={question}
+                sourceLayer={sourceLayerResolver?.(question)}
+                onChange={(patch) => onUpdateQuestion(question.id, patch)}
+                canManage={canManage}
+                variant={variant}
+              />
+            )}
+            <QuestionConditionEditor
+              question={question}
+              availableQuestions={availableQuestions}
+              onChange={(patch) => onUpdateQuestion(question.id, patch)}
+              canManage={canManage}
+              variant={variant}
+            />
+
+            <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 ${editorBorderClass}`}>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={!canManage || index === 0}
+                  onClick={() => onMoveQuestion(question.id, -1)}
+                  className={`rounded-lg px-2 py-1 text-xs disabled:opacity-30 ${
+                    isDark ? 'text-slate-500 hover:bg-slate-800 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  Subir
+                </button>
+                <button
+                  type="button"
+                  disabled={!canManage || index === questions.length - 1}
+                  onClick={() => onMoveQuestion(question.id, 1)}
+                  className={`rounded-lg px-2 py-1 text-xs disabled:opacity-30 ${
+                    isDark ? 'text-slate-500 hover:bg-slate-800 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  Descer
+                </button>
+              </div>
+              <button
+                type="button"
+                disabled={!canManage}
+                onClick={() => onRemoveQuestion(question.id)}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium disabled:opacity-30 ${
+                  isDark ? 'text-red-300 hover:bg-red-500/10' : 'text-red-500 hover:bg-red-50'
+                }`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Remover {isSubquestion ? 'subpergunta' : 'pergunta'}
+              </button>
+            </div>
+          </div>
+        </details>
+
+        {node.subquestions.length > 0 && (
+          <div className={`ml-4 mt-2 space-y-2 border-l pl-3 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+            {node.subquestions.map(child => renderQuestionNode(child, depth + 1, sectionTitle, sectionTone))}
+          </div>
+        )}
+        {depth === 0 && canManage && onPrepareAddQuestion && (
+          inlineDraft?.parentQuestionId === question.id && onInlineDraftChange && onInlineDraftAdd && onInlineDraftCancel ? (
+            <div className={`ml-8 mt-2 rounded-xl border p-3 ${
+              isDark ? 'border-indigo-500/25 bg-indigo-500/5' : 'border-indigo-200 bg-indigo-50/35'
+            }`}>
+              <p className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${
+                isDark ? 'text-indigo-300' : 'text-indigo-600'
+              }`}>
+                Nova subpergunta
+              </p>
+              <div className="grid gap-2 md:grid-cols-[1fr_130px]">
+                <input
+                  value={inlineDraft.text}
+                  onChange={event => onInlineDraftChange({ text: event.target.value })}
+                  placeholder="Texto da subpergunta..."
+                  className={`h-9 rounded-lg border px-3 text-xs outline-none focus:ring-2 ${
+                    isDark
+                      ? 'border-slate-800 bg-slate-950 text-slate-100 placeholder-slate-600 focus:ring-indigo-500/30'
+                      : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:ring-indigo-200'
+                  }`}
+                />
+                <select
+                  value={inlineDraft.type}
+                  onChange={event => onInlineDraftChange({ type: event.target.value as HrFormQuestion['type'] })}
+                  className={`h-9 rounded-lg border px-3 text-xs outline-none focus:ring-2 ${
+                    isDark
+                      ? 'border-slate-800 bg-slate-950 text-slate-100 focus:ring-indigo-500/30'
+                      : 'border-slate-200 bg-white text-slate-700 focus:ring-indigo-200'
+                  }`}
+                >
+                  {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                </select>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className={isDark ? 'text-[11px] text-slate-500' : 'text-[11px] text-slate-500'}>
+                  Exibir se resposta =
+                </span>
+                {([
+                  { value: 'true', label: 'Sim' },
+                  { value: 'false', label: 'Não' },
+                  { value: 'always', label: 'Sempre' },
+                ] as const).map(item => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => onInlineDraftChange({ conditionValue: item.value })}
+                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${
+                      inlineDraft.conditionValue === item.value
+                        ? 'bg-slate-950 text-white'
+                        : isDark
+                          ? 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                          : 'bg-white text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={onInlineDraftAdd}
+                  className="ml-0 inline-flex h-8 items-center rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-500 sm:ml-2"
+                >
+                  + Adicionar
+                </button>
+                <button
+                  type="button"
+                  onClick={onInlineDraftCancel}
+                  className={`inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold ${
+                    isDark ? 'text-slate-500 hover:text-slate-200' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onPrepareAddQuestion({
+                sectionTitle: question.sectionTitle || sectionTitle,
+                parentQuestionId: question.id,
+              })}
+              className={`ml-8 mt-2 text-xs font-medium ${
+                isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-700'
+              }`}
+            >
+              + Sub-pergunta
+            </button>
+          )
+        )}
+      </div>
+    );
+  };
+
+  if (questions.length === 0) {
+    return (
+      <div className={`rounded-2xl border border-dashed px-4 py-10 text-center text-sm ${
+        isDark ? 'border-slate-800 bg-slate-950/40 text-slate-500' : 'border-slate-200 bg-slate-50 text-slate-500'
+      }`}>
+        <div className={`mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full ${
+          isDark ? 'bg-slate-900 text-slate-500' : 'bg-pink-50 text-pink-600'
+        }`}>
+          <Plus className="h-4 w-4" />
+        </div>
+        <p className="font-semibold">{emptyLabel}</p>
+        {canManage && onPrepareAddQuestion && (
+          <button
+            type="button"
+            onClick={() => onPrepareAddQuestion({ sectionTitle: fallbackSectionTitle })}
+            className={`mt-4 inline-flex h-9 items-center justify-center rounded-xl border px-3 text-xs font-semibold ${
+              isDark
+                ? 'border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+            }`}
+          >
+            Preparar primeira pergunta
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {sections.map((section, sectionIndex) => {
+        const tree = buildRecruitmentQuestionTree(section.questions);
+        const subquestionCount = section.questions.length - tree.length;
+        const sectionTone = recruitmentSectionTone(sectionIndex, isDark);
+        const sectionPercent = questions.length > 0
+          ? Math.max(8, Math.round((section.questions.length / questions.length) * 100))
+          : 0;
+        return (
+          <section
+            key={section.id}
+            className={`overflow-hidden rounded-2xl border shadow-sm ${
+              isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-200 bg-white'
+            }`}
+          >
+            <div className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${
+              isDark ? sectionTone.header : sectionTone.header
+            }`}>
+              <div className="flex min-w-0 items-center gap-3">
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${sectionTone.circle}`}>
+                  {sectionIndex + 1}
+                </span>
+                <div className="min-w-0">
+                  <h4 className={`truncate text-base font-bold ${sectionTone.text}`}>
+                    {section.title}
+                  </h4>
+                  {subquestionCount > 0 && (
+                    <p className={isDark ? 'mt-0.5 text-[11px] text-slate-400' : 'mt-0.5 text-[11px] text-slate-500'}>
+                      {pluralizePt(subquestionCount, 'subpergunta', 'subperguntas')}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <div className={isDark ? 'hidden h-2 w-28 rounded-full bg-slate-800 md:block' : 'hidden h-2 w-28 rounded-full bg-slate-100 md:block'}>
+                  <div className={`h-full rounded-full ${sectionTone.progress}`} style={{ width: `${sectionPercent}%` }} />
+                </div>
+                <span className={`text-xs font-bold ${sectionTone.text}`}>
+                  {pluralizePt(tree.length, 'pergunta', 'perguntas')}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-3 p-4">
+              {tree.map(node => renderQuestionNode(node, 0, section.title, sectionTone))}
+              {canManage && onPrepareAddQuestion && (
+                <button
+                  type="button"
+                  onClick={() => onPrepareAddQuestion({ sectionTitle: section.title })}
+                  className={`flex w-full items-center justify-start rounded-xl border border-dashed px-3 py-2 text-xs font-medium ${
+                    isDark
+                      ? 'border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'
+                      : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-700'
+                  }`}
+                >
+                  + Adicionar pergunta
+                </button>
+              )}
+            </div>
+          </section>
+        );
+      })}
+      {canManage && onPrepareAddQuestion && (
+        <button
+          type="button"
+          onClick={() => onPrepareAddQuestion({ sectionTitle: '' })}
+          className={`flex w-full items-center justify-center rounded-2xl border border-dashed px-3 py-3 text-xs font-medium ${
+            isDark
+              ? 'border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'
+              : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-700'
+          }`}
+        >
+          + Adicionar seção
+        </button>
+      )}
+    </div>
+  );
+}
+
 function formatFormAnswer(value: unknown) {
   if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
   if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—';
   return String(value);
+}
+
+function getCandidateScore(candidate: Candidate) {
+  return candidate.latestApplication?.recruitmentScore ?? candidate.recruitmentScore ?? null;
+}
+
+function getCandidateScoreValue(candidate: Candidate) {
+  return getCandidateScore(candidate)?.percentage ?? null;
+}
+
+function EligibilityBadge({ candidate }: { candidate: Candidate }) {
+  const score = getCandidateScore(candidate);
+  const status = candidate.latestApplication?.eligibilityStatus ?? candidate.eligibilityStatus ?? score?.status;
+  if (status === 'not_eligible') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+        <AlertTriangle className="h-3 w-3" /> Não atende requisito mínimo
+      </span>
+    );
+  }
+  if (score && status === 'eligible') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+        {score.percentage}/100
+      </span>
+    );
+  }
+  return null;
+}
+
+function getOpeningScoringSummary(opening: JobOpening) {
+  const snapshot = opening.recruitmentScoring ?? null;
+  const questionWeights = Object.values(snapshot?.questionWeights ?? {});
+  const scoredCount = questionWeights.filter(item => item.finalWeight > 0).length;
+  const eliminatoryCount = (opening.formQuestions ?? []).filter(question =>
+    question.eliminatory || question.scoring?.use === 'eliminatory'
+  ).length;
+  const preset = snapshot?.preset ?? opening.compositionPreset ?? 'role_100';
+  const categoryEntries = Object.entries(snapshot?.categoryTotals ?? {})
+    .filter(([, value]) => typeof value === 'number' && value > 0)
+    .sort(([, a], [, b]) => Number(b) - Number(a));
+
+  return {
+    presetLabel: RECRUITMENT_COMPOSITION_PRESETS[preset]?.label ?? 'Cargo 100%',
+    scoredCount,
+    eliminatoryCount,
+    alertCount: snapshot?.alerts?.length ?? 0,
+    blockingAlertCount: snapshot?.alerts?.filter(alert => alert.severity === 'blocking').length ?? 0,
+    categoryEntries,
+  };
+}
+
+function candidateMatchesEligibility(candidate: Candidate, filter: CandidateEligibilityFilter) {
+  if (!filter) return true;
+  const score = getCandidateScore(candidate);
+  const status = candidate.latestApplication?.eligibilityStatus ?? candidate.eligibilityStatus ?? score?.status;
+  if (filter === 'eligible') return status === 'eligible';
+  if (filter === 'not_eligible') return status === 'not_eligible';
+  return !!score;
+}
+
+function sortCandidatesByMode(candidates: Candidate[], sortMode: CandidateSortMode) {
+  return [...candidates].sort((a, b) => {
+    if (sortMode === 'score_desc' || sortMode === 'score_asc') {
+      const scoreA = getCandidateScoreValue(a) ?? -1;
+      const scoreB = getCandidateScoreValue(b) ?? -1;
+      return sortMode === 'score_desc' ? scoreB - scoreA : scoreA - scoreB;
+    }
+    if (sortMode === 'name') {
+      return a.name.localeCompare(b.name, 'pt-BR');
+    }
+    return new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime();
+  });
 }
 
 function ResumeInput({ value, onChange }: { value: File | null; onChange: (f: File | null) => void }) {
@@ -608,10 +1894,16 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
 
   const role = roles.find(r => r.id === candidate.jobRoleId);
   const opening = openings.find(o => o.id === candidate.jobOpeningId);
+  const recruitmentScore = getCandidateScore(candidate);
   const formAnswers = candidate.latestApplication?.formAnswers ?? candidate.formAnswers ?? {};
   const questionSnapshot = candidate.latestApplication?.formQuestionSnapshot ?? candidate.formQuestionSnapshot ?? opening?.formQuestions ?? role?.formQuestions ?? [];
   const questionsById = new Map((questionSnapshot as HrFormQuestion[]).map(question => [question.id, question]));
   const answerEntries = Object.entries(formAnswers);
+  const answeredQuestionSections = groupRecruitmentQuestionsBySection(
+    (questionSnapshot as HrFormQuestion[]).filter(question => Object.prototype.hasOwnProperty.call(formAnswers, question.id)),
+    'Respostas do formulário'
+  );
+  const answerEntriesWithoutQuestion = answerEntries.filter(([questionId]) => !questionsById.has(questionId));
   const stageHistory = (
     candidate.latestApplication?.stageHistory?.length
       ? candidate.latestApplication.stageHistory
@@ -633,6 +1925,19 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
     ? PIPELINE_STATUSES[PIPELINE_STATUSES.indexOf(form.status) + 1] ?? null
     : 'applied';
   const hasPipelineNext = nextPipelineStatus && nextPipelineStatus !== form.status;
+  const renderAnswerNode = (node: ReturnType<typeof buildRecruitmentQuestionTree>[number]): React.ReactNode => (
+    <div key={node.question.id} className="space-y-2">
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+        <p className="text-xs font-medium text-slate-400">{node.question.text}</p>
+        <p className="mt-1 text-sm text-slate-200">{formatFormAnswer(formAnswers[node.question.id])}</p>
+      </div>
+      {node.subquestions.length > 0 ? (
+        <div className="ml-3 space-y-2 border-l-2 border-slate-800 pl-3">
+          {node.subquestions.map(renderAnswerNode)}
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -719,6 +2024,36 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
                   </button>
                 )}
               </div>
+            </div>
+          )}
+
+          {recruitmentScore && (
+            <div className={`rounded-2xl border p-4 ${
+              recruitmentScore.status === 'not_eligible'
+                ? 'border-red-500/20 bg-red-500/10'
+                : 'border-emerald-500/20 bg-emerald-500/10'
+            }`}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Triagem automática</p>
+                  <p className="mt-1 text-sm font-semibold text-white">
+                    {recruitmentScore.status === 'not_eligible' ? 'Não atende requisito mínimo' : 'Elegível para ranking'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-white">{recruitmentScore.percentage}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">/100</p>
+                </div>
+              </div>
+              {recruitmentScore.failedEliminatory.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {recruitmentScore.failedEliminatory.slice(0, 3).map(item => (
+                    <p key={item.questionId} className="text-xs text-red-200">
+                      {item.label}: {formatFormAnswer(item.answer)}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -952,15 +2287,22 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
             <div className="space-y-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Respostas do formulário</h3>
               <div className="space-y-2">
-                {answerEntries.map(([questionId, answer]) => {
-                  const question = questionsById.get(questionId);
-                  return (
-                    <div key={questionId} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-                      <p className="text-xs font-medium text-slate-400">{question?.text ?? 'Pergunta removida'}</p>
-                      <p className="mt-1 text-sm text-slate-200">{formatFormAnswer(answer)}</p>
-                    </div>
-                  );
-                })}
+                {answeredQuestionSections.map(section => (
+                  <div key={section.id} className="space-y-2">
+                    {answeredQuestionSections.length > 1 || !section.isFallback ? (
+                      <p className="pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                        {section.title}
+                      </p>
+                    ) : null}
+                    {buildRecruitmentQuestionTree(section.questions).map(renderAnswerNode)}
+                  </div>
+                ))}
+                {answerEntriesWithoutQuestion.map(([questionId, answer]) => (
+                  <div key={questionId} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+                    <p className="text-xs font-medium text-slate-400">Pergunta removida</p>
+                    <p className="mt-1 text-sm text-slate-200">{formatFormAnswer(answer)}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1055,6 +2397,7 @@ function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; sta
   const isNew = (Date.now() - new Date(candidate.appliedAt).getTime()) < 7 * 86_400_000;
   const timing = getCandidateStageTiming(candidate, stage);
   const statusCfg = STATUS_CONFIG[candidate.status];
+  const score = getCandidateScore(candidate);
 
   return (
     <div
@@ -1076,6 +2419,7 @@ function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; sta
                   NOVO
                 </span>
               )}
+              <EligibilityBadge candidate={candidate} />
               {stage?.dueDays !== null && stage?.dueDays !== undefined && (
                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border tracking-wide ${
                   timing.isOverdue
@@ -1118,6 +2462,21 @@ function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; sta
             </span>
           )}
         </div>
+
+        {score && score.status === 'eligible' && (
+          <div className="mb-3">
+            <div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-slate-500">
+              <span>Score</span>
+              <span>{score.percentage}/100</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-emerald-500"
+                style={{ width: `${Math.max(0, Math.min(100, score.percentage))}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-2">
           <div className="flex -space-x-2">
@@ -1299,13 +2658,22 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     applicationEndAt: opening?.applicationEndAt ? opening.applicationEndAt.split('T')[0] : '',
     closesAt: opening?.closesAt ? opening.closesAt.split('T')[0] : '',
     status: opening?.status ?? 'open',
+    compositionPreset: (opening?.compositionPreset ?? 'role_70_function_30') as RecruitmentCompositionPreset,
     requirements: (opening?.requirements ?? []).join('\n'),
+    benefits: listToText(opening?.benefits),
+    salaryMin: salaryInputValue(opening?.publicSalaryRange?.min),
+    salaryMax: salaryInputValue(opening?.publicSalaryRange?.max),
+    salaryVisible: opening?.publicSalaryRange?.visible !== false,
+    applyButtonLabel: opening?.applyButtonLabel ?? 'Enviar candidatura',
   });
   const [questions, setQuestions] = useState<HrFormQuestion[]>(opening?.formQuestions ?? []);
   const [questionsTouched, setQuestionsTouched] = useState(isEdit);
   const [stages, setStages] = useState<RecruitmentStage[]>(normalizeRecruitmentStages(opening?.pipelineStages));
   const [questionDraft, setQuestionDraft] = useState(EMPTY_QUESTION_DRAFT);
   const [questionError, setQuestionError] = useState<string | null>(null);
+  const [scoringAlertJustification, setScoringAlertJustification] = useState(
+    opening?.recruitmentScoringAlertAcknowledgement?.note ?? ''
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1327,6 +2695,32 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     return unitIds.length === 0 || unitIds.includes(form.unitId);
   });
   const selectedShiftDefinition = availableShiftDefinitions.find(shift => shift.id === form.shiftDefinitionId) ?? null;
+  const rolePublicRequirements = selectedRole?.publicRequirements?.length
+    ? selectedRole.publicRequirements
+    : selectedRole?.requirements ?? [];
+  const functionPublicRequirements = selectedFunction?.publicRequirements?.length
+    ? selectedFunction.publicRequirements
+    : selectedFunction?.requirements ?? [];
+  const inheritedDescriptionParts = [
+    selectedRole?.publicDescription || selectedRole?.description,
+    selectedFunction?.publicDescription || selectedFunction?.description,
+  ].filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+  const inheritedRequirements = Array.from(new Set([
+    ...rolePublicRequirements,
+    ...functionPublicRequirements,
+  ]));
+  const finalRequirements = textToList(form.requirements);
+  const finalBenefits = textToList(form.benefits);
+  const openingSalaryPreview = formatSalaryRange(
+    salaryRangeFromInputs(form.salaryMin, form.salaryMax, form.salaryVisible)
+  );
+  const openingButtonText = form.applyButtonLabel.trim() || 'Enviar candidatura';
+  const scoringPreview = useMemo(
+    () => applyRecruitmentScoring(questions, form.functionId ? form.compositionPreset : 'role_100'),
+    [form.compositionPreset, form.functionId, questions]
+  );
+  const scoringBlockingAlerts = scoringPreview.snapshot.alerts.filter(alert => alert.severity === 'blocking');
+  const scoringWarningAlerts = scoringPreview.snapshot.alerts.filter(alert => alert.severity === 'warning');
 
   const getModelQuestions = (role: JobRole | null, fn: JobFunction | null) =>
     mergeRecruitmentQuestionModels(role?.formQuestions, fn?.formQuestions);
@@ -1345,17 +2739,38 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     ].filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
     const requirements = [
       ...(role?.publicRequirements?.length ? role.publicRequirements : role?.requirements ?? []),
-      ...(fn?.requirements ?? []),
+      ...(fn?.publicRequirements?.length ? fn.publicRequirements : fn?.requirements ?? []),
     ];
+    const benefits = Array.from(new Set([
+      ...(role?.benefits ?? []),
+      ...(fn?.benefits ?? []),
+    ]));
+    const publicSalaryRange = fn?.publicSalaryRange ?? role?.publicSalaryRange;
+    const recruitmentDisplay = {
+      ...(role?.recruitmentDisplay ?? {}),
+      ...(fn?.recruitmentDisplay ?? {}),
+    };
+    const displayLocation = recruitmentDisplay.locationLabel?.trim();
+    const displayButton = recruitmentDisplay.buttonText?.trim();
     const inheritedQuestions = getModelQuestions(role, fn);
     const inheritedStages = mergeRecruitmentStageModels(role?.pipelineStages, fn?.pipelineStages);
 
-    setForm(prev => ({
-      ...prev,
-      title: prev.title.trim() || !nextTitle ? prev.title : nextTitle,
-      description: prev.description.trim() || descriptions.length === 0 ? prev.description : descriptions.join('\n\n'),
-      requirements: prev.requirements.trim() || requirements.length === 0 ? prev.requirements : Array.from(new Set(requirements)).join('\n'),
-    }));
+    setForm(prev => {
+      const hasSalary = Boolean(prev.salaryMin.trim() || prev.salaryMax.trim());
+      return {
+        ...prev,
+        title: prev.title.trim() || !nextTitle ? prev.title : nextTitle,
+        description: prev.description.trim() || descriptions.length === 0 ? prev.description : descriptions.join('\n\n'),
+        requirements: prev.requirements.trim() || requirements.length === 0 ? prev.requirements : Array.from(new Set(requirements)).join('\n'),
+        benefits: prev.benefits.trim() || benefits.length === 0 ? prev.benefits : benefits.join('\n'),
+        location: prev.location.trim() || !displayLocation ? prev.location : displayLocation,
+        workType: prev.workType || recruitmentDisplay.workType || '',
+        salaryMin: hasSalary || publicSalaryRange?.min === undefined ? prev.salaryMin : salaryInputValue(publicSalaryRange.min),
+        salaryMax: hasSalary || publicSalaryRange?.max === undefined ? prev.salaryMax : salaryInputValue(publicSalaryRange.max),
+        salaryVisible: hasSalary || publicSalaryRange === undefined ? prev.salaryVisible : publicSalaryRange.visible !== false,
+        applyButtonLabel: prev.applyButtonLabel.trim() || !displayButton ? prev.applyButtonLabel : displayButton,
+      };
+    });
     setQuestions(prev => questionsTouched ? prev : inheritedQuestions);
     setStages(inheritedStages);
   };
@@ -1460,17 +2875,27 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `question-${Date.now()}`;
+    const parentQuestion = questions.find(question => question.id === questionDraft.parentQuestionId);
+    const conditions = conditionFromDraft(parentQuestion, questionDraft.conditionValue);
     setQuestions(prev => [
       ...prev,
       {
         id,
         text,
         type: questionDraft.type,
+        ...questionSectionFromDraft(questionDraft.sectionTitle),
+        parentQuestionId: questionDraft.parentQuestionId || undefined,
+        ...(conditions ? { conditions } : {}),
         required: questionDraft.required,
         scored: false,
         weight: 'medium',
         eliminatory: questionDraft.eliminatory,
-        tags: [],
+        tags: ['role'],
+        scoring: {
+          use: questionDraft.eliminatory ? 'eliminatory' : 'informational',
+          importance: 'medium',
+          sourceLayer: 'role',
+        },
         config: options.length > 0 ? { options } : undefined,
       },
     ]);
@@ -1487,6 +2912,14 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     }
     if (form.applicationStartAt && form.applicationEndAt && form.applicationEndAt < form.applicationStartAt) {
       setError('A data final de inscrição precisa ser posterior à data inicial.');
+      return;
+    }
+    if (scoringBlockingAlerts.length > 0) {
+      setError(`Revise a pontuação do formulário: ${scoringBlockingAlerts[0].message}`);
+      return;
+    }
+    if (scoringWarningAlerts.length > 0 && !scoringAlertJustification.trim()) {
+      setError('Justifique os alertas de pontuação antes de salvar.');
       return;
     }
     setSaving(true);
@@ -1509,7 +2942,12 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         applicationEndAt: dateInputToIso(form.applicationEndAt, true),
         closesAt: dateInputToIso(form.closesAt, true),
         status: form.status,
+        compositionPreset: form.compositionPreset,
+        scoringAlertJustification: scoringWarningAlerts.length > 0 ? scoringAlertJustification.trim() : '',
         requirements: form.requirements.split('\n').map(s => s.trim()).filter(Boolean),
+        benefits: finalBenefits,
+        publicSalaryRange: salaryRangeFromInputs(form.salaryMin, form.salaryMax, form.salaryVisible),
+        applyButtonLabel: openingButtonText,
         formQuestions: questions,
         pipelineStages: stages.map((stage, index) => ({ ...stage, order: index })),
       };
@@ -1567,6 +3005,97 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                   <option key={fn.id} value={fn.id}>{fn.name}</option>
                 ))}
               </select>
+            </div>
+            {(selectedRole || selectedFunction) && (
+              <details className="group col-span-2 rounded-xl border border-slate-800 bg-slate-900/40">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Texto herdado dos modelos</p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      Cargo{selectedFunction ? ' + função' : ''} alimentam a vaga; revise o texto final abaixo.
+                    </p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="grid gap-3 border-t border-slate-800 p-4 md:grid-cols-2">
+                  {selectedRole && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Cargo</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-100">{selectedRole.publicTitle || selectedRole.name}</p>
+                      <p className="mt-2 line-clamp-3 text-xs text-slate-500">{selectedRole.publicDescription || selectedRole.description || 'Sem descrição pública.'}</p>
+                    </div>
+                  )}
+                  {selectedFunction && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Função</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-100">{selectedFunction.publicTitle || selectedFunction.name}</p>
+                      <p className="mt-2 line-clamp-3 text-xs text-slate-500">{selectedFunction.publicDescription || selectedFunction.description || 'Sem descrição pública.'}</p>
+                    </div>
+                  )}
+                  {inheritedRequirements.length > 0 && (
+                    <div className="md:col-span-2">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-600">Requisitos herdados</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {inheritedRequirements.slice(0, 8).map(requirement => (
+                          <span key={requirement} className="rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-[10px] text-slate-400">
+                            {requirement}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Composição do score</label>
+              <select
+                value={form.functionId ? form.compositionPreset : 'role_100'}
+                onChange={event => setForm(prev => ({ ...prev, compositionPreset: event.target.value as RecruitmentCompositionPreset }))}
+                disabled={!form.functionId}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-60"
+              >
+                {COMPOSITION_PRESET_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-slate-500">
+                O sistema usa presets controlados. Não há peso livre por pergunta.
+              </p>
+              {scoringPreview.snapshot.alerts.length > 0 && (
+                <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Alertas do score
+                  </p>
+                  <div className="mt-2 space-y-1.5">
+                    {scoringPreview.snapshot.alerts.slice(0, 4).map((alert, alertIndex) => (
+                      <p
+                        key={`${alert.code}-${alert.questionId ?? alertIndex}`}
+                        className={`flex items-start gap-2 text-xs ${
+                          alert.severity === 'blocking' ? 'text-red-300' : 'text-amber-300'
+                        }`}
+                      >
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        {alert.message}
+                      </p>
+                    ))}
+                  </div>
+                  {scoringWarningAlerts.length > 0 && scoringBlockingAlerts.length === 0 && (
+                    <div className="mt-3">
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                        Justificativa para publicar com alerta
+                      </label>
+                      <textarea
+                        value={scoringAlertJustification}
+                        onChange={event => setScoringAlertJustification(event.target.value)}
+                        rows={2}
+                        placeholder="Explique por que a vaga pode ser publicada mesmo com estes alertas."
+                        className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Nº de vagas</label>
@@ -1648,6 +3177,126 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none font-mono"
                 placeholder="Experiência com gestão de equipes&#10;Disponibilidade de horário&#10;Residir em SP" />
             </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                Benefícios <span className="text-slate-600 font-normal">(um por linha)</span>
+              </label>
+              <textarea
+                value={form.benefits}
+                onChange={set('benefits')}
+                rows={3}
+                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                placeholder="Vale-transporte&#10;Bonificações&#10;Day-off aniversário"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Salário mínimo</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.salaryMin}
+                onChange={set('salaryMin')}
+                placeholder="Ex: 1800"
+                className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Salário máximo</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.salaryMax}
+                onChange={set('salaryMax')}
+                placeholder="Ex: 2750"
+                className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+              />
+            </div>
+            <div className="col-span-2 flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={form.salaryVisible}
+                  onChange={event => setForm(prev => ({ ...prev, salaryVisible: event.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500"
+                />
+                Mostrar salário na vaga pública
+              </label>
+              <div className="min-w-[220px] flex-1">
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Texto do botão público</label>
+                <input
+                  type="text"
+                  value={form.applyButtonLabel}
+                  onChange={set('applyButtonLabel')}
+                  className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  placeholder="Enviar candidatura"
+                />
+              </div>
+            </div>
+            <details className="group col-span-2 rounded-xl border border-slate-800 bg-slate-900/40">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Prévia da vaga pública</p>
+                  <p className="mt-0.5 text-xs text-slate-400">Confira o texto final antes de publicar.</p>
+                </div>
+                <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-slate-800 p-4">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+                  <div className="flex flex-wrap gap-2">
+                    {(selectedUnit?.name || form.location) && (
+                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-semibold text-slate-400">
+                        {selectedUnit?.name || form.location}
+                      </span>
+                    )}
+                    {form.workType && (
+                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-semibold text-slate-400">
+                        {WORK_TYPE_OPTIONS.find(option => option.value === form.workType)?.label}
+                      </span>
+                    )}
+                    <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-semibold text-slate-400">
+                      {Number(form.slots) || 1} vaga{Number(form.slots) === 1 ? '' : 's'}
+                    </span>
+                    {openingSalaryPreview && (
+                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-semibold text-slate-400">
+                        {openingSalaryPreview}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="mt-3 text-lg font-bold text-white">{form.title.trim() || 'Título da vaga'}</h3>
+                  <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-400">
+                    {form.description.trim() || inheritedDescriptionParts.join('\n\n') || 'Descrição pública da vaga.'}
+                  </p>
+                  {finalRequirements.length > 0 && (
+                    <div className="mt-4">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-600">Requisitos</p>
+                      <ul className="space-y-1.5">
+                        {finalRequirements.slice(0, 6).map(requirement => (
+                          <li key={requirement} className="flex items-start gap-2 text-xs text-slate-400">
+                            <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
+                            {requirement}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {finalBenefits.length > 0 && (
+                    <div className="mt-4 rounded-xl border border-pink-500/20 bg-pink-500/10 p-3">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-pink-200">Benefícios</p>
+                      <div className="grid gap-1.5 sm:grid-cols-2">
+                        {finalBenefits.slice(0, 6).map(benefit => (
+                          <span key={benefit} className="text-xs font-semibold text-pink-100">
+                            {benefit}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-4 rounded-full bg-pink-500 px-4 py-2 text-center text-sm font-bold text-white">
+                    {openingButtonText}
+                  </div>
+                </div>
+              </div>
+            </details>
             <div className="col-span-2 space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
               <div>
                 <h3 className="text-sm font-semibold text-white">Etapas do processo</h3>
@@ -1740,6 +3389,17 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                             onChange={event => updateQuestion(question.id, { text: event.target.value })}
                             className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                           />
+                          <QuestionSectionEditor
+                            question={question}
+                            onChange={(patch) => updateQuestion(question.id, patch)}
+                            variant="dark"
+                          />
+                          <QuestionParentEditor
+                            question={question}
+                            availableQuestions={questions.slice(0, index)}
+                            onChange={(patch) => updateQuestion(question.id, patch)}
+                            variant="dark"
+                          />
                           <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-400">
                             <label className="flex items-center gap-1.5">
                               <input
@@ -1754,7 +3414,9 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                               <input
                                 type="checkbox"
                                 checked={question.eliminatory}
-                                onChange={event => updateQuestion(question.id, { eliminatory: event.target.checked })}
+                                onChange={event => updateQuestion(question.id, withQuestionScoring(question, {
+                                  use: event.target.checked ? 'eliminatory' : 'informational',
+                                }))}
                                 className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500"
                               />
                               Eliminatória
@@ -1781,6 +3443,18 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                               className="mt-3 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                             />
                           )}
+                          <QuestionScoringEditor
+                            question={question}
+                            sourceLayer={question.scoring?.sourceLayer ?? (question.tags?.includes('function') ? 'function' : 'role')}
+                            onChange={(patch) => updateQuestion(question.id, patch)}
+                            variant="dark"
+                          />
+                          <QuestionConditionEditor
+                            question={question}
+                            availableQuestions={questions.slice(0, index)}
+                            onChange={(patch) => updateQuestion(question.id, patch)}
+                            variant="dark"
+                          />
                         </div>
                         <select
                           value={question.type}
@@ -1835,6 +3509,30 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
                     placeholder="Ex: Você tem disponibilidade aos domingos?"
                   />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Seção</label>
+                  <input
+                    type="text"
+                    value={questionDraft.sectionTitle}
+                    onChange={event => setQuestionDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                    placeholder="Ex: Disponibilidade"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">Subpergunta de</label>
+                  <select
+                    value={questionDraft.parentQuestionId}
+                    onChange={event => setQuestionDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
+                    disabled={questions.length === 0}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-50"
+                  >
+                    <option value="">Pergunta principal</option>
+                    {questions.map(question => (
+                      <option key={question.id} value={question.id}>{question.text}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Tipo</label>
@@ -2095,16 +3793,31 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
                 const openingCandidates = candidates.filter(c => c.jobOpeningId === opening.id);
                 const pipelineCount = openingCandidates.filter(c => PIPELINE_STATUSES.includes(c.status)).length;
                 const hiredCount = openingCandidates.filter(c => c.status === 'hired').length;
+                const scoringAlerts = opening.recruitmentScoring?.alerts ?? [];
+                const blockingScoringAlerts = scoringAlerts.filter(alert => alert.severity === 'blocking');
+                const scoringSummary = getOpeningScoringSummary(opening);
                 return (
                   <div key={opening.id}
                     className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-slate-300">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
                           <h4 className="font-bold text-slate-950 text-sm">{opening.title}</h4>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.color}`}>
                             {cfg.label}
                           </span>
+                          {scoringAlerts.length > 0 && (
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                              blockingScoringAlerts.length > 0
+                                ? 'border-red-200 bg-red-50 text-red-700'
+                                : 'border-amber-200 bg-amber-50 text-amber-700'
+                            }`}>
+                              <AlertTriangle className="h-3 w-3" />
+                              {blockingScoringAlerts.length > 0
+                                ? `${blockingScoringAlerts.length} bloqueio${blockingScoringAlerts.length !== 1 ? 's' : ''}`
+                                : `${scoringAlerts.length} alerta${scoringAlerts.length !== 1 ? 's' : ''}`}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-slate-500 mb-2">
                           {role?.name ?? opening.jobRoleName}
@@ -2117,6 +3830,9 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
                           <span>{opening.slots} vaga{opening.slots !== 1 ? 's' : ''}</span>
                           <span>{openingCandidates.length} inscrito{openingCandidates.length !== 1 ? 's' : ''}</span>
                           {hiredCount > 0 && <span className="text-emerald-600">{hiredCount} contratado{hiredCount !== 1 ? 's' : ''}</span>}
+                          <span>{scoringSummary.presetLabel}</span>
+                          <span>{scoringSummary.scoredCount} pontuável{scoringSummary.scoredCount !== 1 ? 'eis' : ''}</span>
+                          <span>{scoringSummary.eliminatoryCount} eliminatória{scoringSummary.eliminatoryCount !== 1 ? 's' : ''}</span>
                           {opening.applicationStartAt && (
                             <span>
                               inscrições desde {new Date(opening.applicationStartAt).toLocaleDateString('pt-BR')}
@@ -2166,6 +3882,15 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
                     </div>
                     {opening.description && (
                       <p className="mt-3 text-xs text-slate-500 line-clamp-2">{opening.description}</p>
+                    )}
+                    {scoringSummary.categoryEntries.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {scoringSummary.categoryEntries.slice(0, 5).map(([category, value]) => (
+                          <span key={category} className="rounded-md bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-500">
+                            {RECRUITMENT_CATEGORY_LABELS[category as keyof typeof RECRUITMENT_CATEGORY_LABELS]} {Number(value).toFixed(0)} pts
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                 );
@@ -2542,6 +4267,21 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
 }) {
   const [selectedId, setSelectedId] = useState('');
   const [questions, setQuestions] = useState<HrFormQuestion[]>([]);
+  const [modelText, setModelText] = useState({
+    publicTitle: '',
+    publicDescription: '',
+    publicResponsibilities: '',
+    publicRequirements: '',
+    benefits: '',
+    workSchedule: '',
+    salaryMin: '',
+    salaryMax: '',
+    salaryVisible: true,
+    locationLabel: '',
+    workType: '',
+    deadlineLabel: '',
+    buttonText: 'Enviar candidatura',
+  });
   const [draft, setDraft] = useState(EMPTY_QUESTION_DRAFT);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2553,6 +4293,34 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
   );
   const modelLabel = kind === 'role' ? 'cargo' : 'função';
   const title = kind === 'role' ? 'Modelos por cargo' : 'Modelos por função';
+  const primaryQuestionCount = questions.filter(question => !question.parentQuestionId).length;
+  const subquestionCount = questions.filter(question => question.parentQuestionId).length;
+  const sectionCount = groupRecruitmentQuestionsBySection(questions, 'Perguntas do modelo').length;
+  const visibleQuestionCount = questions.filter(question => question.active !== false).length;
+  const modelGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; name: string; items: Array<JobRole | JobFunction> }>();
+    for (const item of items) {
+      const name = item.departmentName?.trim() || 'Geral';
+      const id = item.departmentId || makeRecruitmentSectionId(name);
+      const current = groups.get(id);
+      if (current) {
+        current.items.push(item);
+      } else {
+        groups.set(id, { id, name, items: [item] });
+      }
+    }
+    return Array.from(groups.values()).sort((a, b) => {
+      const selectedInA = a.items.some(item => item.id === selected?.id);
+      const selectedInB = b.items.some(item => item.id === selected?.id);
+      if (selectedInA !== selectedInB) return selectedInA ? -1 : 1;
+      if (a.name === 'Geral') return 1;
+      if (b.name === 'Geral') return -1;
+      return a.name.localeCompare(b.name, 'pt-BR');
+    });
+  }, [items, selected?.id]);
+  const getModelItemQuestions = (item: JobRole | JobFunction) =>
+    item.id === selected?.id ? questions : (item.formQuestions ?? []);
+  const configuredModelCount = items.filter(item => getModelItemQuestions(item).length > 0).length;
 
   useEffect(() => {
     if (items.length === 0) {
@@ -2566,10 +4334,41 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
 
   useEffect(() => {
     setQuestions(cloneRecruitmentQuestions(selected?.formQuestions));
+    setModelText({
+      publicTitle: selected?.publicTitle || selected?.name || '',
+      publicDescription: selected?.publicDescription || selected?.description || '',
+      publicResponsibilities: listToText(selected?.publicResponsibilities),
+      publicRequirements: listToText(
+        selected?.publicRequirements?.length
+          ? selected.publicRequirements
+          : selected?.requirements
+      ),
+      benefits: listToText(selected?.benefits),
+      workSchedule: selected?.workSchedule || '',
+      salaryMin: salaryInputValue(selected?.publicSalaryRange?.min),
+      salaryMax: salaryInputValue(selected?.publicSalaryRange?.max),
+      salaryVisible: selected?.publicSalaryRange?.visible !== false,
+      locationLabel: selected?.recruitmentDisplay?.locationLabel || '',
+      workType: selected?.recruitmentDisplay?.workType || '',
+      deadlineLabel: selected?.recruitmentDisplay?.deadlineLabel || '',
+      buttonText: selected?.recruitmentDisplay?.buttonText || 'Enviar candidatura',
+    });
     setDraft(EMPTY_QUESTION_DRAFT);
     setError(null);
     setSavedAt(null);
-  }, [selected?.id, selected?.formQuestions]);
+  }, [
+    selected?.id,
+    selected?.formQuestions,
+    selected?.publicTitle,
+    selected?.publicDescription,
+    selected?.publicResponsibilities,
+    selected?.publicRequirements,
+    selected?.benefits,
+    selected?.workSchedule,
+    selected?.publicSalaryRange,
+    selected?.recruitmentDisplay,
+    selected?.requirements,
+  ]);
 
   function updateQuestion(questionId: string, patch: Partial<HrFormQuestion>) {
     setQuestions(prev => prev.map(question => question.id === questionId ? { ...question, ...patch } : question));
@@ -2613,18 +4412,28 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `question-${Date.now()}`;
+    const parentQuestion = questions.find(question => question.id === draft.parentQuestionId);
+    const conditions = conditionFromDraft(parentQuestion, draft.conditionValue);
     setQuestions(prev => [
       ...prev,
       {
         id,
         text,
         type: draft.type,
+        ...questionSectionFromDraft(draft.sectionTitle),
+        parentQuestionId: draft.parentQuestionId || undefined,
+        ...(conditions ? { conditions } : {}),
         required: draft.required,
         active: true,
         scored: false,
         weight: 'medium',
         eliminatory: draft.eliminatory,
         tags: [kind],
+        scoring: {
+          use: draft.eliminatory ? 'eliminatory' : 'informational',
+          importance: 'medium',
+          sourceLayer: kind,
+        },
         config: options.length > 0 ? { options } : undefined,
       },
     ]);
@@ -2643,6 +4452,19 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
       await apiFetch(endpoint, getToken, {
         method: 'PATCH',
         body: JSON.stringify({
+          publicTitle: modelText.publicTitle.trim() || selected.name,
+          publicDescription: modelText.publicDescription.trim(),
+          publicResponsibilities: textToList(modelText.publicResponsibilities),
+          publicRequirements: textToList(modelText.publicRequirements),
+          benefits: textToList(modelText.benefits),
+          workSchedule: modelText.workSchedule.trim(),
+          publicSalaryRange: salaryRangeFromInputs(modelText.salaryMin, modelText.salaryMax, modelText.salaryVisible),
+          recruitmentDisplay: {
+            locationLabel: modelText.locationLabel.trim(),
+            workType: modelText.workType || undefined,
+            deadlineLabel: modelText.deadlineLabel.trim(),
+            buttonText: modelText.buttonText.trim(),
+          },
           formQuestions: questions.map((question, index) => ({ ...question, order: index })),
         }),
       });
@@ -2654,6 +4476,15 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
       setSaving(false);
     }
   }
+
+  const modelBenefits = textToList(modelText.benefits);
+  const modelRequirements = textToList(modelText.publicRequirements);
+  const modelResponsibilities = textToList(modelText.publicResponsibilities);
+  const modelSalaryPreview = formatSalaryRange(
+    salaryRangeFromInputs(modelText.salaryMin, modelText.salaryMax, modelText.salaryVisible)
+  );
+  const modelWorkTypeLabel = WORK_TYPE_OPTIONS.find(option => option.value === modelText.workType)?.label;
+  const modelButtonText = modelText.buttonText.trim() || 'Enviar candidatura';
 
   if (items.length === 0) {
     return (
@@ -2668,14 +4499,98 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <section className="space-y-2">
+        <div>
+          <h2 className="text-sm font-bold text-slate-950">Visão geral</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            {configuredModelCount} de {items.length} {modelLabel === 'cargo' ? 'cargos' : 'funções'} com modelo configurado.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="space-y-2">
+            {modelGroups.map((group, groupIndex) => {
+              const groupHasSelected = group.items.some(item => item.id === selected?.id);
+              const configuredInGroup = group.items.filter(item => getModelItemQuestions(item).length > 0).length;
+              return (
+                <details
+                  key={group.id}
+                  open={groupHasSelected || groupIndex === 0}
+                  className="group overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60 open:bg-white"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-left [&::-webkit-details-marker]:hidden">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-xs font-bold text-slate-800">{group.name}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        configuredInGroup === group.items.length && configuredInGroup > 0
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : configuredInGroup > 0
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-slate-100 text-slate-400'
+                      }`}>
+                        {configuredInGroup}/{group.items.length}
+                      </span>
+                    </div>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400 transition group-open:rotate-180" />
+                  </summary>
+                  <div className="flex flex-wrap gap-2 border-t border-slate-100 bg-white px-3 py-3">
+                    {group.items.map(item => {
+                      const itemQuestions = getModelItemQuestions(item);
+                      const itemPrimaryCount = itemQuestions.filter(question => !question.parentQuestionId).length;
+                      const isSelected = item.id === selected?.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setSelectedId(item.id)}
+                          className={`inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                            isSelected
+                              ? 'border-slate-950 bg-slate-950 text-white shadow-sm'
+                              : itemQuestions.length > 0
+                                ? 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                                : 'border-dashed border-slate-200 bg-white text-slate-400 hover:text-slate-600'
+                          }`}
+                        >
+                          <span className="truncate">{item.name}</span>
+                          {itemPrimaryCount > 0 ? (
+                            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                              isSelected ? 'bg-white/15 text-white' : 'bg-indigo-50 text-indigo-600'
+                            }`}>
+                              {itemPrimaryCount}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Questionário modelo</p>
-            <h2 className="mt-1 text-xl font-bold text-slate-950">{title}</h2>
+            <h2 className="text-sm font-bold text-slate-950">Modelo · {selected?.name ?? title}</h2>
             <p className="mt-1 text-sm text-slate-500">
-              O modelo selecionado entra como base ao criar uma vaga e pode ser ajustado na vaga antes da publicação.
+              Campos base ao criar uma vaga para este {modelLabel}. Organize em seções, adicione subperguntas e condições.
             </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                {pluralizePt(primaryQuestionCount, 'pergunta', 'perguntas')}
+              </span>
+              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600">
+                {pluralizePt(subquestionCount, 'subpergunta', 'subperguntas')}
+              </span>
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                {pluralizePt(sectionCount, 'seção', 'seções')}
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-400">
+                {visibleQuestionCount}/{questions.length} visíveis
+              </span>
+            </div>
           </div>
           {canManage && (
             <button
@@ -2690,147 +4605,296 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
           )}
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-[minmax(240px,360px)_1fr] md:items-end">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">
-              {kind === 'role' ? 'Cargo' : 'Função'}
-            </label>
-            <select
-              value={selected?.id ?? ''}
-              onChange={event => setSelectedId(event.target.value)}
-              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
-            >
-              {items.map(item => (
-                <option key={item.id} value={item.id}>{item.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500">
-              {questions.length} campo{questions.length !== 1 ? 's' : ''}
-            </span>
-            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-              {questions.filter(question => question.active !== false).length} visível{questions.filter(question => question.active !== false).length !== 1 ? 'eis' : ''}
-            </span>
-          </div>
-        </div>
-
         {error ? <div className="mt-4"><ErrorLine msg={error} /></div> : null}
         {savedAt ? (
           <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
             Modelo atualizado em {new Date(savedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
           </p>
         ) : null}
-      </div>
+        <RecruitmentQuestionsDesigner
+          questions={questions}
+          canManage={canManage}
+          variant="light"
+          fallbackSectionTitle="Perguntas do modelo"
+          emptyLabel="Nenhuma pergunta cadastrada neste modelo."
+          activeLabel="Exibir no formulário"
+          showActiveToggle
+          showScoring
+          sourceLayerResolver={() => kind}
+          onUpdateQuestion={updateQuestion}
+          onUpdateQuestionOptions={updateQuestionOptions}
+          onMoveQuestion={moveQuestion}
+          onRemoveQuestion={(questionId) => setQuestions(prev => prev.filter(item => item.id !== questionId))}
+          onPrepareAddQuestion={(patch) => setDraft(prev => ({
+            ...prev,
+            ...(patch.parentQuestionId ? { text: '', optionsText: '', conditionValue: 'true' as QuestionDraftConditionValue } : {}),
+            sectionTitle: patch.sectionTitle !== undefined ? patch.sectionTitle : prev.sectionTitle,
+            parentQuestionId: patch.parentQuestionId ?? '',
+          }))}
+          inlineDraft={draft}
+          onInlineDraftChange={(patch) => setDraft(prev => ({ ...prev, ...patch }))}
+          onInlineDraftAdd={addQuestion}
+          onInlineDraftCancel={() => setDraft(EMPTY_QUESTION_DRAFT)}
+        />
+      </section>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-3">
+      <details open className="group rounded-xl border border-slate-200 bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
           <div>
-            <h3 className="text-sm font-bold text-slate-950">Campos do modelo</h3>
-            <p className="mt-1 text-xs text-slate-500">{selected?.name ?? 'Modelo'}.</p>
+            <h3 className="text-sm font-bold text-slate-950">Página pública da vaga</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Padrões usados quando uma vaga usa este {modelLabel}. A vaga ainda pode ser revisada antes de publicar.
+            </p>
           </div>
-        </div>
+          <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
+        </summary>
+        <div className="grid gap-5 border-t border-slate-100 p-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Título público</label>
+              <input
+                value={modelText.publicTitle}
+                onChange={event => setModelText(prev => ({ ...prev, publicTitle: event.target.value }))}
+                disabled={!canManage}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder={selected?.name ?? 'Título público'}
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Unidade/local padrão</label>
+              <input
+                value={modelText.locationLabel}
+                onChange={event => setModelText(prev => ({ ...prev, locationLabel: event.target.value }))}
+                disabled={!canManage}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Ex: JK - São Paulo"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Modalidade padrão</label>
+              <select
+                value={modelText.workType}
+                onChange={event => setModelText(prev => ({ ...prev, workType: event.target.value }))}
+                disabled={!canManage}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+              >
+                <option value="">Definir na vaga</option>
+                {WORK_TYPE_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Chip de prazo padrão</label>
+              <input
+                value={modelText.deadlineLabel}
+                onChange={event => setModelText(prev => ({ ...prev, deadlineLabel: event.target.value }))}
+                disabled={!canManage}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Ex: Encerra em 12 dias"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Salário mínimo</label>
+              <input
+                value={modelText.salaryMin}
+                onChange={event => setModelText(prev => ({ ...prev, salaryMin: event.target.value }))}
+                disabled={!canManage}
+                inputMode="decimal"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Ex: 1800"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Salário máximo</label>
+              <input
+                value={modelText.salaryMax}
+                onChange={event => setModelText(prev => ({ ...prev, salaryMax: event.target.value }))}
+                disabled={!canManage}
+                inputMode="decimal"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Ex: 2750"
+              />
+            </div>
+            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={modelText.salaryVisible}
+                onChange={event => setModelText(prev => ({ ...prev, salaryVisible: event.target.checked }))}
+                disabled={!canManage}
+              />
+              Mostrar salário na vaga
+            </label>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Texto do botão</label>
+              <input
+                value={modelText.buttonText}
+                onChange={event => setModelText(prev => ({ ...prev, buttonText: event.target.value }))}
+                disabled={!canManage}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Enviar candidatura"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Sobre a vaga</label>
+              <textarea
+                value={modelText.publicDescription}
+                onChange={event => setModelText(prev => ({ ...prev, publicDescription: event.target.value }))}
+                disabled={!canManage}
+                rows={5}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Texto base que aparecerá na vaga pública."
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Responsabilidades públicas</label>
+              <textarea
+                value={modelText.publicResponsibilities}
+                onChange={event => setModelText(prev => ({ ...prev, publicResponsibilities: event.target.value }))}
+                disabled={!canManage}
+                rows={5}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder={'Uma por linha\nAtendimento ao cliente\nOrganização da rotina'}
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Requisitos públicos</label>
+              <textarea
+                value={modelText.publicRequirements}
+                onChange={event => setModelText(prev => ({ ...prev, publicRequirements: event.target.value }))}
+                disabled={!canManage}
+                rows={5}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder={'Um por linha\nDisponibilidade de horário\nExperiência com atendimento'}
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Benefícios</label>
+              <textarea
+                value={modelText.benefits}
+                onChange={event => setModelText(prev => ({ ...prev, benefits: event.target.value }))}
+                disabled={!canManage}
+                rows={4}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder={'Um por linha\nVale-transporte\nBonificações'}
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Jornada/observação pública</label>
+              <textarea
+                value={modelText.workSchedule}
+                onChange={event => setModelText(prev => ({ ...prev, workSchedule: event.target.value }))}
+                disabled={!canManage}
+                rows={4}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Ex: Escala 6x1, disponibilidade para fins de semana."
+              />
+            </div>
+          </div>
 
-        {questions.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-10 text-center text-sm text-slate-500">
-            Nenhuma pergunta cadastrada neste modelo.
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100 rounded-2xl border border-slate-100">
-            {questions.map((question, index) => (
-              <div key={question.id} className={`grid gap-3 p-4 md:grid-cols-[1fr_160px_auto] md:items-start ${question.active === false ? 'bg-slate-50/70 opacity-75' : ''}`}>
-                <div>
-                  <input
-                    value={question.text}
-                    onChange={event => updateQuestion(question.id, { text: event.target.value })}
-                    disabled={!canManage}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                  />
-                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
-                    <label className="flex items-center gap-1.5">
-                      <input type="checkbox" checked={question.required} onChange={event => updateQuestion(question.id, { required: event.target.checked })} disabled={!canManage} />
-                      Obrigatório
-                    </label>
-                    <label className="flex items-center gap-1.5">
-                      <input type="checkbox" checked={question.active !== false} onChange={event => updateQuestion(question.id, { active: event.target.checked })} disabled={!canManage} />
-                      Exibir no formulário
-                    </label>
-                    <label className="flex items-center gap-1.5">
-                      <input type="checkbox" checked={question.eliminatory} onChange={event => updateQuestion(question.id, { eliminatory: event.target.checked })} disabled={!canManage} />
-                      Eliminatório
-                    </label>
-                    <label className="flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={question.config?.multiline === true}
-                        onChange={event => updateQuestion(question.id, { config: { ...(question.config ?? {}), multiline: event.target.checked } })}
-                        disabled={!canManage || question.type !== 'text'}
-                      />
-                      Texto longo
-                    </label>
-                  </div>
-                  {(question.type === 'select' || question.type === 'multi_select') && (
-                    <textarea
-                      value={Array.isArray(question.config?.options) ? question.config.options.join('\n') : ''}
-                      onChange={event => updateQuestionOptions(question.id, event.target.value)}
-                      disabled={!canManage}
-                      rows={3}
-                      placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
-                      className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                    />
+          <div className="rounded-2xl border border-slate-200 bg-[#f0eee9] p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Prévia da página pública</p>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="bg-[#2A1F2A] p-4 text-white">
+                <div className="flex flex-wrap gap-1.5">
+                  {(modelText.locationLabel.trim() || 'Unidade definida na vaga') && (
+                    <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">
+                      {modelText.locationLabel.trim() || 'Unidade definida na vaga'}
+                    </span>
+                  )}
+                  {(modelWorkTypeLabel || 'Modalidade na vaga') && (
+                    <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">
+                      {modelWorkTypeLabel || 'Modalidade na vaga'}
+                    </span>
+                  )}
+                  {(modelSalaryPreview || 'Salário a combinar') && (
+                    <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">
+                      {modelSalaryPreview || 'Salário a combinar'}
+                    </span>
+                  )}
+                  {(modelText.deadlineLabel.trim() || 'Prazo definido na vaga') && (
+                    <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">
+                      {modelText.deadlineLabel.trim() || 'Prazo definido na vaga'}
+                    </span>
                   )}
                 </div>
-                <select
-                  value={question.type}
-                  onChange={event => updateQuestion(question.id, { type: event.target.value as HrFormQuestion['type'] })}
-                  disabled={!canManage}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                >
-                  {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-                </select>
-                <div className="flex items-center justify-end gap-1">
-                  <button type="button" disabled={!canManage || index === 0} onClick={() => moveQuestion(question.id, -1)}
-                    className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30">Subir</button>
-                  <button type="button" disabled={!canManage || index === questions.length - 1} onClick={() => moveQuestion(question.id, 1)}
-                    className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30">Descer</button>
-                  <button type="button" disabled={!canManage} onClick={() => setQuestions(prev => prev.filter(item => item.id !== question.id))}
-                    className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                <h4 className="mt-4 text-2xl font-black leading-tight">
+                  {modelText.publicTitle.trim() || selected?.name || 'Título da vaga'}
+                </h4>
+              </div>
+              <div className="space-y-3 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Sobre a vaga</p>
+                  <p className="whitespace-pre-line text-xs leading-relaxed text-slate-600">
+                    {modelText.publicDescription.trim() || modelResponsibilities.join('\n') || 'Texto sobre a vaga aparecerá aqui.'}
+                  </p>
+                  {modelText.workSchedule.trim() && (
+                    <p className="mt-2 text-xs font-medium text-slate-500">{modelText.workSchedule.trim()}</p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Requisitos</p>
+                  <ul className="space-y-1.5">
+                    {(modelRequirements.length ? modelRequirements : ['Disponibilidade de horário', 'Experiência com atendimento']).slice(0, 4).map(requirement => (
+                      <li key={requirement} className="flex items-start gap-2 text-xs text-slate-600">
+                        <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" />
+                        {requirement}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-2xl bg-pink-100 p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-pink-500">Benefícios</p>
+                  <div className="grid gap-1.5">
+                    {(modelBenefits.length ? modelBenefits : ['Vale-transporte', 'Bonificações', 'Trilha de carreira']).slice(0, 5).map(benefit => (
+                      <span key={benefit} className="text-xs font-bold text-slate-700">{benefit}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-full bg-pink-500 px-4 py-2 text-center text-xs font-bold text-white">
+                  {modelButtonText}
                 </div>
               </div>
-            ))}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      </details>
 
       {canManage && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="text-sm font-bold text-slate-950">Adicionar campo ao modelo</h3>
-          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px]">
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_180px_180px]">
             <input
               value={draft.text}
               onChange={event => setDraft(prev => ({ ...prev, text: event.target.value }))}
               placeholder="Ex: Tem disponibilidade aos domingos?"
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+            />
+            <input
+              value={draft.sectionTitle}
+              onChange={event => setDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
+              placeholder="Seção"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
             />
             <select
               value={draft.type}
               onChange={event => setDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
             >
               {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
-            {(draft.type === 'select' || draft.type === 'multi_select') && (
-              <textarea
-                value={draft.optionsText}
-                onChange={event => setDraft(prev => ({ ...prev, optionsText: event.target.value }))}
-                rows={3}
-                placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
-                className="resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 md:col-span-2"
-              />
-            )}
-            <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+            <select
+              value={draft.parentQuestionId}
+              onChange={event => setDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
+              disabled={questions.length === 0}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60 md:col-span-2"
+            >
+              <option value="">Pergunta principal</option>
+              {questions.map(question => (
+                <option key={question.id} value={question.id}>{question.text}</option>
+              ))}
+            </select>
+            <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" checked={draft.required} onChange={event => setDraft(prev => ({ ...prev, required: event.target.checked }))} />
                 Obrigatório
@@ -2839,14 +4903,23 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
                 <input type="checkbox" checked={draft.eliminatory} onChange={event => setDraft(prev => ({ ...prev, eliminatory: event.target.checked }))} />
                 Eliminatório
               </label>
-              <button
-                type="button"
-                onClick={addQuestion}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                <Plus className="h-4 w-4" /> Adicionar campo
-              </button>
             </div>
+            {(draft.type === 'select' || draft.type === 'multi_select') && (
+              <textarea
+                value={draft.optionsText}
+                onChange={event => setDraft(prev => ({ ...prev, optionsText: event.target.value }))}
+                rows={3}
+                placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
+                className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 md:col-span-3"
+              />
+            )}
+            <button
+              type="button"
+              onClick={addQuestion}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 md:col-span-3"
+            >
+              <Plus className="h-4 w-4" /> Adicionar campo
+            </button>
           </div>
         </div>
       )}
@@ -2943,24 +5016,31 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `question-${Date.now()}`;
-    setForm(prev => ({
-      ...prev,
-      questions: [
-        ...prev.questions,
-        {
-          id,
-          text,
-          type: questionDraft.type,
-          required: questionDraft.required,
-          active: true,
-          scored: false,
-          weight: 'medium',
-          eliminatory: questionDraft.eliminatory,
-          tags: ['talent_pool'],
-          config: options.length > 0 ? { options } : undefined,
-        },
-      ],
-    }));
+    setForm(prev => {
+      const parentQuestion = prev.questions.find(question => question.id === questionDraft.parentQuestionId);
+      const conditions = conditionFromDraft(parentQuestion, questionDraft.conditionValue);
+      return {
+        ...prev,
+        questions: [
+          ...prev.questions,
+          {
+            id,
+            text,
+            type: questionDraft.type,
+            ...questionSectionFromDraft(questionDraft.sectionTitle),
+            parentQuestionId: questionDraft.parentQuestionId || undefined,
+            ...(conditions ? { conditions } : {}),
+            required: questionDraft.required,
+            active: true,
+            scored: false,
+            weight: 'medium',
+            eliminatory: questionDraft.eliminatory,
+            tags: ['talent_pool'],
+            config: options.length > 0 ? { options } : undefined,
+          },
+        ],
+      };
+    });
     setQuestionDraft(EMPTY_QUESTION_DRAFT);
     setError(null);
   };
@@ -2991,7 +5071,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   }
 
   const formTabs = (
-    <div className="flex flex-wrap gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+    <div className="flex flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
       {([
         { value: 'talent', label: 'Banco de talentos' },
         { value: 'roles', label: 'Modelos por cargo' },
@@ -3003,8 +5083,8 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
           onClick={() => setFormSection(item.value)}
           className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
             formSection === item.value
-              ? 'bg-slate-950 text-white shadow-sm'
-              : 'text-slate-500 hover:bg-slate-50 hover:text-slate-950'
+              ? 'bg-pink-50 text-pink-700 shadow-sm ring-1 ring-pink-200'
+              : 'text-slate-500 hover:bg-white hover:text-slate-950'
           }`}
         >
           {item.label}
@@ -3012,6 +5092,10 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
       ))}
     </div>
   );
+  const talentPrimaryQuestionCount = form.questions.filter(question => !question.parentQuestionId).length;
+  const talentSubquestionCount = form.questions.filter(question => question.parentQuestionId).length;
+  const talentSectionCount = groupRecruitmentQuestionsBySection(form.questions, 'Campos personalizados').length;
+  const fixedFieldCount = 5;
 
   if (formSection === 'roles') {
     return (
@@ -3046,278 +5130,284 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   return (
     <div className="space-y-5">
       {formTabs}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Formulário público</p>
-            <h2 className="mt-1 text-xl font-bold text-slate-950">Banco de talentos</h2>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500">
-              Os campos abaixo aparecem em <span className="font-semibold text-slate-700">vagas.coalashakes.com/banco-de-talentos</span>, dentro do design público do site.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <a
-              href={`${PUBLIC_RECRUITMENT_URL}/banco-de-talentos`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              <ExternalLink className="h-4 w-4" /> Ver no site
-            </a>
-            {canManage && (
-              <button
-                type="button"
-                onClick={saveForm}
-                disabled={saving}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Salvar alterações
-              </button>
-            )}
-          </div>
-        </div>
-
-        {error ? <div className="mt-4"><ErrorLine msg={error} /></div> : null}
-        {savedAt ? (
-          <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-            Formulário atualizado em {new Date(savedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Formulário público</p>
+          <h2 className="mt-1 text-xl font-bold text-slate-950">Banco de talentos</h2>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            Configure textos, campos fixos e perguntas personalizadas exibidas em <span className="font-semibold text-slate-700">vagas.coalashakes.com/banco-de-talentos</span>.
           </p>
-        ) : null}
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-950">Textos do formulário</h3>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Título</label>
-                <input
-                  value={form.title}
-                  onChange={event => setForm(prev => ({ ...prev, title: event.target.value }))}
-                  disabled={!canManage}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Descrição</label>
-                <textarea
-                  value={form.description ?? ''}
-                  onChange={event => setForm(prev => ({ ...prev, description: event.target.value }))}
-                  disabled={!canManage}
-                  rows={3}
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Texto LGPD</label>
-                <textarea
-                  value={form.consentText ?? ''}
-                  onChange={event => setForm(prev => ({ ...prev, consentText: event.target.value }))}
-                  disabled={!canManage}
-                  rows={3}
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">Texto do botão</label>
-                <input
-                  value={form.submitLabel ?? ''}
-                  onChange={event => setForm(prev => ({ ...prev, submitLabel: event.target.value }))}
-                  disabled={!canManage}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={form.status === 'published'}
-                  onChange={event => setForm(prev => ({ ...prev, status: event.target.checked ? 'published' : 'draft' }))}
-                  disabled={!canManage}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                Usar esta versão no site
-              </label>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-950">Campos fixos</h3>
-            <p className="mt-1 text-xs text-slate-500">Esses campos sempre aparecem para proteger o fluxo público.</p>
-            <div className="mt-4 space-y-2">
-              {['Nome completo', 'E-mail', 'Telefone / WhatsApp', 'Currículo', 'Consentimento LGPD'].map(item => (
-                <div key={item} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
-
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-950">Campos complementares</h3>
-                <p className="mt-1 text-xs text-slate-500">Esses campos aparecem abaixo dos dados básicos no site público.</p>
-              </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
-                {activeQuestionCount}/{form.questions.length} visíveis
-              </span>
-            </div>
-
-            <div className="mt-4 divide-y divide-slate-100 rounded-2xl border border-slate-100">
-              {form.questions.map((question, index) => (
-                <div key={question.id} className={`grid gap-3 p-4 md:grid-cols-[1fr_160px_auto] md:items-start ${question.active === false ? 'bg-slate-50/70 opacity-75' : ''}`}>
-                  <div>
-                    {question.active === false && (
-                      <span className="mb-2 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                        Oculto no site
-                      </span>
-                    )}
-                    <input
-                      value={question.text}
-                      onChange={event => updateQuestion(question.id, { text: event.target.value })}
-                      disabled={!canManage}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                    />
-                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={question.required}
-                          onChange={event => updateQuestion(question.id, { required: event.target.checked })}
-                          disabled={!canManage}
-                        />
-                        Obrigatório
-                      </label>
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={question.active !== false}
-                          onChange={event => updateQuestion(question.id, { active: event.target.checked })}
-                          disabled={!canManage}
-                        />
-                        Exibir no site
-                      </label>
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={question.eliminatory}
-                          onChange={event => updateQuestion(question.id, { eliminatory: event.target.checked })}
-                          disabled={!canManage}
-                        />
-                        Eliminatório
-                      </label>
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={question.config?.multiline === true}
-                          onChange={event => updateQuestion(question.id, {
-                            config: { ...(question.config ?? {}), multiline: event.target.checked },
-                          })}
-                          disabled={!canManage || question.type !== 'text'}
-                        />
-                        Texto longo
-                      </label>
-                    </div>
-                    {(question.type === 'select' || question.type === 'multi_select') && (
-                      question.config?.source === 'public_units' ? (
-                        <p className="mt-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
-                          Opções atualizadas automaticamente pelas unidades ativas do site público.
-                        </p>
-                      ) : (
-                        <textarea
-                          value={Array.isArray(question.config?.options) ? question.config.options.join('\n') : ''}
-                          onChange={event => updateQuestionOptions(question.id, event.target.value)}
-                          disabled={!canManage}
-                          rows={3}
-                          placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
-                          className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                        />
-                      )
-                    )}
-                  </div>
-                  <select
-                    value={question.type}
-                    onChange={event => updateQuestion(question.id, { type: event.target.value as HrFormQuestion['type'] })}
-                    disabled={!canManage}
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                  >
-                    {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-                  </select>
-                  <div className="flex items-center justify-end gap-1">
-                    <button type="button" disabled={!canManage || index === 0} onClick={() => moveQuestion(question.id, -1)}
-                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30">Subir</button>
-                    <button type="button" disabled={!canManage || index === form.questions.length - 1} onClick={() => moveQuestion(question.id, 1)}
-                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30">Descer</button>
-                    <button type="button" disabled={!canManage} onClick={() => removeQuestion(question.id)}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
+        <div className="flex items-center gap-2">
+          <a
+            href={`${PUBLIC_RECRUITMENT_URL}/banco-de-talentos`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
+          >
+            <ExternalLink className="h-4 w-4" /> Ver no site
+          </a>
           {canManage && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-950">Adicionar campo</h3>
-              <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px]">
-                <input
-                  value={questionDraft.text}
-                  onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
-                  placeholder="Ex: Tem disponibilidade aos domingos?"
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
-                />
-                <select
-                  value={questionDraft.type}
-                  onChange={event => setQuestionDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
-                >
-                  {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-                </select>
-                {(questionDraft.type === 'select' || questionDraft.type === 'multi_select') && (
-                  <textarea
-                    value={questionDraft.optionsText}
-                    onChange={event => setQuestionDraft(prev => ({ ...prev, optionsText: event.target.value }))}
-                    rows={3}
-                    placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
-                    className="resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 md:col-span-2"
-                  />
-                )}
-                <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-                  <label className="flex items-center gap-2 text-sm text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={questionDraft.required}
-                      onChange={event => setQuestionDraft(prev => ({ ...prev, required: event.target.checked }))}
-                    />
-                    Obrigatório
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={questionDraft.eliminatory}
-                      onChange={event => setQuestionDraft(prev => ({ ...prev, eliminatory: event.target.checked }))}
-                    />
-                    Eliminatório
-                  </label>
-                  <button
-                    type="button"
-                    onClick={addQuestion}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    <Plus className="h-4 w-4" /> Adicionar campo
-                  </button>
-                </div>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={saveForm}
+              disabled={saving}
+              className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Salvar alterações
+            </button>
           )}
         </div>
       </div>
+
+      {error ? <ErrorLine msg={error} /> : null}
+      {savedAt ? (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+          Formulário atualizado em {new Date(savedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
+        </p>
+      ) : null}
+
+      <div>
+        <p className="mb-2 text-xs font-bold text-slate-700">Resumo</p>
+        <div className="grid gap-3 md:grid-cols-4">
+          <RecruitmentMetricCard
+            label="Status"
+            value={form.status === 'published' ? 'Publicado' : 'Rascunho'}
+            description="Versão pública"
+            tone={form.status === 'published' ? 'emerald' : 'slate'}
+          />
+          <RecruitmentMetricCard
+            label="Perguntas ativas"
+            value={activeQuestionCount}
+            description={pluralizePt(form.questions.length, 'campo total', 'campos totais')}
+            tone="violet"
+          />
+          <RecruitmentMetricCard
+            label="Subperguntas"
+            value={talentSubquestionCount}
+            description="Dependem de respostas"
+          />
+          <RecruitmentMetricCard
+            label="Campos fixos"
+            value={fixedFieldCount}
+            description="Sempre exibidos"
+          />
+        </div>
+      </div>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-950">Textos do formulário</h3>
+            <p className="mt-1 text-xs text-slate-500">Configure os textos públicos da página de cadastro.</p>
+          </div>
+          {canManage && (
+            <button
+              type="button"
+              onClick={saveForm}
+              disabled={saving}
+              className="hidden h-8 items-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60 md:inline-flex"
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              Salvar alterações
+            </button>
+          )}
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Título</label>
+              <input
+                value={form.title}
+                onChange={event => setForm(prev => ({ ...prev, title: event.target.value }))}
+                disabled={!canManage}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Texto do botão</label>
+              <input
+                value={form.submitLabel ?? ''}
+                onChange={event => setForm(prev => ({ ...prev, submitLabel: event.target.value }))}
+                disabled={!canManage}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Descrição</label>
+              <textarea
+                value={form.description ?? ''}
+                onChange={event => setForm(prev => ({ ...prev, description: event.target.value }))}
+                disabled={!canManage}
+                rows={3}
+                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Texto LGPD</label>
+              <textarea
+                value={form.consentText ?? ''}
+                onChange={event => setForm(prev => ({ ...prev, consentText: event.target.value }))}
+                disabled={!canManage}
+                rows={3}
+                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600 md:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.status === 'published'}
+                onChange={event => setForm(prev => ({ ...prev, status: event.target.checked ? 'published' : 'draft' }))}
+                disabled={!canManage}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Usar esta versão no site
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-bold text-slate-950">Campos fixos</h3>
+          <p className="mt-1 text-xs text-slate-500">Sempre presentes no formulário para proteger o fluxo público. Não podem ser removidos.</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          {['Nome completo', 'E-mail', 'Telefone / WhatsApp', 'Currículo', 'Consentimento LGPD'].map((item, index) => (
+            <div key={item} className="flex items-center justify-between border-b border-slate-100 px-4 py-3 last:border-b-0">
+              <div className="flex items-center gap-3">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-500">
+                  {index + 1}
+                </span>
+                <span className="text-sm font-medium text-slate-700">{item}</span>
+              </div>
+              <span className="text-[11px] font-medium text-slate-400">Fixo</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-950">Campos personalizados</h3>
+            <p className="mt-1 text-xs text-slate-500">Perguntas adicionais com seções, subperguntas e condições de exibição.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                {pluralizePt(talentPrimaryQuestionCount, 'pergunta', 'perguntas')}
+              </span>
+              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600">
+                {pluralizePt(talentSubquestionCount, 'subpergunta', 'subperguntas')}
+              </span>
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                {pluralizePt(talentSectionCount, 'seção', 'seções')}
+              </span>
+            </div>
+          </div>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
+            {activeQuestionCount}/{form.questions.length} visíveis
+          </span>
+        </div>
+
+        <RecruitmentQuestionsDesigner
+          questions={form.questions}
+          canManage={canManage}
+          variant="light"
+          fallbackSectionTitle="Campos personalizados"
+          emptyLabel="Nenhum campo complementar cadastrado."
+          activeLabel="Exibir no site"
+          showActiveToggle
+          onUpdateQuestion={updateQuestion}
+          onUpdateQuestionOptions={updateQuestionOptions}
+          onMoveQuestion={moveQuestion}
+          onRemoveQuestion={removeQuestion}
+          onPrepareAddQuestion={(patch) => setQuestionDraft(prev => ({
+            ...prev,
+            ...(patch.parentQuestionId ? { text: '', optionsText: '', conditionValue: 'true' as QuestionDraftConditionValue } : {}),
+            sectionTitle: patch.sectionTitle !== undefined ? patch.sectionTitle : prev.sectionTitle,
+            parentQuestionId: patch.parentQuestionId ?? '',
+          }))}
+          inlineDraft={questionDraft}
+          onInlineDraftChange={(patch) => setQuestionDraft(prev => ({ ...prev, ...patch }))}
+          onInlineDraftAdd={addQuestion}
+          onInlineDraftCancel={() => setQuestionDraft(EMPTY_QUESTION_DRAFT)}
+        />
+      </section>
+
+      {canManage && (
+        <section className="space-y-3">
+          <h3 className="text-sm font-bold text-slate-950">Adicionar campo</h3>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="grid gap-3 md:grid-cols-[1fr_180px_180px]">
+              <input
+                value={questionDraft.text}
+                onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
+                placeholder="Ex: Tem disponibilidade aos domingos?"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+              />
+              <input
+                value={questionDraft.sectionTitle}
+                onChange={event => setQuestionDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
+                placeholder="Seção"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+              />
+              <select
+                value={questionDraft.type}
+                onChange={event => setQuestionDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
+              >
+                {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+              </select>
+              <select
+                value={questionDraft.parentQuestionId}
+                onChange={event => setQuestionDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
+                disabled={form.questions.length === 0}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60 md:col-span-2"
+              >
+                <option value="">Pergunta principal</option>
+                {form.questions.map(question => (
+                  <option key={question.id} value={question.id}>{question.text}</option>
+                ))}
+              </select>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={questionDraft.required}
+                    onChange={event => setQuestionDraft(prev => ({ ...prev, required: event.target.checked }))}
+                  />
+                  Obrigatório
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={questionDraft.eliminatory}
+                    onChange={event => setQuestionDraft(prev => ({ ...prev, eliminatory: event.target.checked }))}
+                  />
+                  Eliminatório
+                </label>
+              </div>
+              {(questionDraft.type === 'select' || questionDraft.type === 'multi_select') && (
+                <textarea
+                  value={questionDraft.optionsText}
+                  onChange={event => setQuestionDraft(prev => ({ ...prev, optionsText: event.target.value }))}
+                  rows={3}
+                  placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
+                  className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 md:col-span-3"
+                />
+              )}
+              <button
+                type="button"
+                onClick={addQuestion}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 md:col-span-3"
+              >
+                <Plus className="h-4 w-4" /> Adicionar campo
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -3681,6 +5771,8 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   const [filterLocation, setFilterLocation] = useState('');
   const [filterSource, setFilterSource] = useState('');
   const [filterRating, setFilterRating] = useState('');
+  const [filterEligibility, setFilterEligibility] = useState<CandidateEligibilityFilter>('');
+  const [sortMode, setSortMode] = useState<CandidateSortMode>('recent');
   const [showArchived, setShowArchived] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<CandidateStatus>>(new Set());
 
@@ -3749,7 +5841,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   }, [candidates]);
 
   const filtered = useMemo(() => {
-    return candidates.filter(c => {
+    const next = candidates.filter(c => {
       if (search && !c.name.toLowerCase().includes(search.toLowerCase()) &&
           !c.email.toLowerCase().includes(search.toLowerCase())) return false;
       if (filterOpening && c.jobOpeningId !== filterOpening) return false;
@@ -3761,9 +5853,11 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
       if (filterRating) {
         if ((c.rating ?? 0) < Number(filterRating)) return false;
       }
+      if (!candidateMatchesEligibility(c, filterEligibility)) return false;
       return true;
     });
-  }, [candidates, openings, search, filterOpening, filterLocation, filterSource, filterRating]);
+    return sortCandidatesByMode(next, sortMode);
+  }, [candidates, openings, search, filterOpening, filterLocation, filterSource, filterRating, filterEligibility, sortMode]);
 
   const pipelineCandidates = useMemo(() =>
     filtered.filter(c => PIPELINE_STATUSES.includes(c.status)), [filtered]);
@@ -4000,7 +6094,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
     );
   }
 
-  const activeFilters = [filterOpening, filterLocation, filterSource, filterRating].filter(Boolean).length;
+  const activeFilters = [filterOpening, filterLocation, filterSource, filterRating, filterEligibility, sortMode !== 'recent' ? sortMode : ''].filter(Boolean).length;
   const sectionMeta = RECRUITMENT_SECTION_META[section];
 
   const FUNNEL_COLORS: Record<string, string> = {
@@ -4193,9 +6287,33 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
             <option value="5">5 estrelas</option>
           </select>
 
+          <select value={filterEligibility} onChange={e => setFilterEligibility(e.target.value as CandidateEligibilityFilter)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            <option value="">Elegibilidade</option>
+            <option value="eligible">Apenas elegíveis</option>
+            <option value="not_eligible">Não atende mínimo</option>
+            <option value="scored">Com score</option>
+          </select>
+
+          <select value={sortMode} onChange={e => setSortMode(e.target.value as CandidateSortMode)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            <option value="recent">Mais recentes</option>
+            <option value="score_desc">Maior score</option>
+            <option value="score_asc">Menor score</option>
+            <option value="name">Nome A-Z</option>
+          </select>
+
           {activeFilters > 0 && (
             <button
-              onClick={() => { setFilterOpening(''); setFilterLocation(''); setFilterSource(''); setFilterRating(''); setSearch(''); }}
+              onClick={() => {
+                setFilterOpening('');
+                setFilterLocation('');
+                setFilterSource('');
+                setFilterRating('');
+                setFilterEligibility('');
+                setSortMode('recent');
+                setSearch('');
+              }}
               className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-500 hover:border-slate-300 hover:text-slate-950">
               <X className="h-3 w-3" /> Limpar filtros
             </button>
@@ -4380,7 +6498,10 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
                               <p className="text-sm font-medium text-white group-hover:text-indigo-300 transition-colors truncate leading-snug">
                                 {candidate.name}
                               </p>
-                              <p className="text-[11px] text-slate-500 truncate">{candidate.email}</p>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <p className="text-[11px] text-slate-500 truncate">{candidate.email}</p>
+                                <EligibilityBadge candidate={candidate} />
+                              </div>
                             </div>
                             {candidate.resumeUrl && <Paperclip className="h-3 w-3 text-slate-600 flex-shrink-0" />}
                           </div>

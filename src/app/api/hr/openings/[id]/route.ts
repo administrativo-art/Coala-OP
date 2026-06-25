@@ -3,14 +3,27 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
-import { normalizeRecruitmentQuestions } from '@/lib/recruitment-forms';
+import { normalizeRecruitmentQuestions, resolveJobOpeningQuestions } from '@/lib/recruitment-forms';
 import { normalizeRecruitmentStages } from '@/lib/recruitment-pipeline';
+import {
+  applyRecruitmentScoring,
+  getRecruitmentScoringBlockMessage,
+  RECRUITMENT_COMPOSITION_PRESETS,
+} from '@/lib/recruitment-scoring';
+import type { RecruitmentCompositionPreset } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function normalizeCompositionPreset(value: unknown, fallback: unknown): RecruitmentCompositionPreset {
+  const candidate = typeof value === 'string' ? value : fallback;
+  return typeof candidate === 'string' && candidate in RECRUITMENT_COMPOSITION_PRESETS
+    ? candidate as RecruitmentCompositionPreset
+    : 'role_70_function_30';
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -27,6 +40,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     shiftDefinitionId,
     description,
     requirements,
+    benefits,
+    publicSalaryRange,
+    applyButtonLabel,
     location,
     workType,
     slots,
@@ -35,6 +51,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     applicationEndAt,
     closesAt,
     formQuestions,
+    compositionPreset,
+    scoringAlertJustification,
     pipelineStages,
   } = body;
 
@@ -90,7 +108,62 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
   if (description !== undefined) update.description = description;
   if (requirements !== undefined) update.requirements = requirements;
-  if (formQuestions !== undefined) update.formQuestions = normalizeRecruitmentQuestions(formQuestions);
+  if (benefits !== undefined) update.benefits = Array.isArray(benefits) ? benefits : [];
+  if (publicSalaryRange !== undefined) update.publicSalaryRange = publicSalaryRange || null;
+  if (applyButtonLabel !== undefined) {
+    update.applyButtonLabel = typeof applyButtonLabel === 'string' ? applyButtonLabel.trim() || null : null;
+  }
+  const shouldRecomputeScoring =
+    formQuestions !== undefined ||
+    compositionPreset !== undefined ||
+    jobRoleId !== undefined ||
+    functionId !== undefined;
+  if (shouldRecomputeScoring) {
+    const resolvedJobRoleId = typeof update.jobRoleId === 'string'
+      ? update.jobRoleId
+      : typeof before.jobRoleId === 'string'
+        ? before.jobRoleId
+        : undefined;
+    const resolvedFunctionId = typeof update.functionId === 'string'
+      ? update.functionId
+      : typeof before.functionId === 'string'
+        ? before.functionId
+        : undefined;
+    const [roleDoc, functionDoc] = await Promise.all([
+      resolvedJobRoleId ? hrDbAdmin.collection('jobRoles').doc(resolvedJobRoleId).get() : Promise.resolve(null),
+      resolvedFunctionId ? hrDbAdmin.collection('jobFunctions').doc(resolvedFunctionId).get() : Promise.resolve(null),
+    ]);
+    const roleQuestions = roleDoc?.data()?.formQuestions;
+    const functionQuestions = functionDoc?.data()?.formQuestions;
+    const questionsForScoring = formQuestions !== undefined
+      ? normalizeRecruitmentQuestions(formQuestions)
+      : jobRoleId !== undefined || functionId !== undefined
+        ? resolveJobOpeningQuestions(undefined, roleQuestions, functionQuestions)
+        : normalizeRecruitmentQuestions(before.formQuestions);
+    const selectedPreset = normalizeCompositionPreset(compositionPreset, before.compositionPreset);
+    const scoringModel = applyRecruitmentScoring(questionsForScoring, selectedPreset);
+    const scoringBlock = getRecruitmentScoringBlockMessage(scoringModel.snapshot);
+    if (scoringBlock) return jsonError(scoringBlock);
+    const scoringWarnings = scoringModel.snapshot.alerts.filter(alert => alert.severity === 'warning');
+    const scoringWarningJustification = typeof scoringAlertJustification === 'string'
+      ? scoringAlertJustification.trim().slice(0, 500)
+      : '';
+    if (scoringWarnings.length > 0 && !scoringWarningJustification) {
+      return jsonError('Justifique os alertas de pontuação antes de salvar a vaga.');
+    }
+
+    update.formQuestions = scoringModel.questions;
+    update.compositionPreset = scoringModel.snapshot.preset;
+    update.recruitmentScoring = scoringModel.snapshot;
+    update.recruitmentScoringAlertAcknowledgement = scoringWarnings.length > 0
+      ? {
+          note: scoringWarningJustification,
+          alertCodes: scoringWarnings.map(alert => alert.code),
+          acknowledgedAt: update.updatedAt,
+          acknowledgedBy: access.decoded.uid,
+        }
+      : null;
+  }
   if (pipelineStages !== undefined) update.pipelineStages = normalizeRecruitmentStages(pipelineStages);
   if (location !== undefined) update.location = location;
   if (workType !== undefined) update.workType = workType;

@@ -29,6 +29,13 @@ const salaryRangeSchema = z.object({
   }
 });
 
+const recruitmentDisplaySchema = z.object({
+  locationLabel: z.string().trim().max(120).optional(),
+  workType: z.enum(["presencial", "remoto", "hibrido"]).optional(),
+  deadlineLabel: z.string().trim().max(80).optional(),
+  buttonText: z.string().trim().max(80).optional(),
+}).optional();
+
 const formQuestionSchema = z.object({
   id: z.string().trim().min(1).optional(),
   text: z.string().trim().min(1).max(500),
@@ -42,13 +49,49 @@ const formQuestionSchema = z.object({
     "location",
     "file_upload",
   ]),
+  sectionId: z.string().trim().max(80).optional(),
+  sectionTitle: z.string().trim().max(120).optional(),
+  sectionOrder: z.number().int().nonnegative().optional(),
+  parentQuestionId: z.string().trim().max(120).optional(),
+  subquestionOrder: z.number().int().nonnegative().optional(),
   required: z.boolean().default(false),
   scored: z.boolean().default(false),
-  weight: z.enum(["low", "medium", "high"]).default("medium"),
+  weight: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   eliminatory: z.boolean().default(false),
   expectedAnswer: z.unknown().optional(),
   tags: z.array(z.string().trim().min(1)).default([]),
   config: z.record(z.unknown()).optional(),
+  conditions: z.array(z.object({
+    questionId: z.string().trim().min(1).max(120),
+    operator: z.enum(["equals", "not_equals", "includes", "answered", "not_answered"]),
+    value: z.unknown().optional(),
+  })).optional(),
+  scoring: z.object({
+    criterionCode: z.string().trim().max(80).optional(),
+    criterionLabel: z.string().trim().max(120).optional(),
+    category: z.enum([
+      "availability",
+      "experience",
+      "technical",
+      "behavioral",
+      "interest",
+      "retention",
+      "differentials",
+    ]).optional(),
+    groupId: z.string().trim().max(80).optional(),
+    groupName: z.string().trim().max(80).optional(),
+    use: z.enum(["informational", "scored", "eliminatory"]).optional(),
+    importance: z.enum(["low", "medium", "high", "critical"]).optional(),
+    justification: z.string().trim().max(500).optional(),
+    sourceLayer: z.enum(["role", "function", "opening"]).optional(),
+    answerFactors: z.record(z.number().min(0).max(1)).optional(),
+    finalWeight: z.number().optional(),
+    rubric: z.array(z.object({
+      factor: z.number().min(0).max(1),
+      label: z.string().trim().min(1).max(80),
+      description: z.string().trim().max(240).optional(),
+    })).optional(),
+  }).optional(),
 });
 
 const recruitmentStageSchema = z.object({
@@ -118,6 +161,7 @@ const jobRoleBaseSchema = z.object({
   workSchedule: z.string().trim().max(250).optional(),
   salaryRange: salaryRangeSchema.optional(),
   publicSalaryRange: salaryRangeSchema.optional(),
+  recruitmentDisplay: recruitmentDisplaySchema,
   defaultProfileId: z.string().trim().min(1).optional(),
   loginRestricted: z.boolean().default(false),
   formQuestions: z.array(formQuestionSchema).default([]),
@@ -140,6 +184,11 @@ const jobFunctionBaseSchema = z.object({
   responsibilities: stringListSchema,
   publicResponsibilities: stringListSchema,
   requirements: stringListSchema,
+  publicRequirements: stringListSchema,
+  benefits: stringListSchema,
+  workSchedule: z.string().trim().max(250).optional(),
+  publicSalaryRange: salaryRangeSchema.optional(),
+  recruitmentDisplay: recruitmentDisplaySchema,
   compatibleRoleIds: z.array(z.string().trim().min(1)).default([]),
   defaultProfileId: z.string().trim().min(1).optional(),
   formQuestions: z.array(formQuestionSchema).default([]),
@@ -222,18 +271,43 @@ function normalizeStringList(input?: string[]) {
 function normalizeFormQuestions(
   questions?: Array<z.infer<typeof formQuestionSchema>>
 ) {
-  return (questions ?? []).map((question) =>
+  const normalized = (questions ?? []).map((question) =>
     stripUndefined({
       ...question,
       id: question.id ?? randomUUID(),
+      sectionId: question.sectionId?.trim() || undefined,
+      sectionTitle: question.sectionTitle?.trim() || undefined,
+      parentQuestionId: question.parentQuestionId?.trim() || undefined,
       tags: normalizeStringList(question.tags),
       config: question.config && Object.keys(question.config).length > 0
         ? question.config
+        : undefined,
+      conditions: question.conditions && question.conditions.length > 0
+        ? question.conditions
+        : undefined,
+      scoring: question.scoring && Object.keys(question.scoring).length > 0
+        ? question.scoring
         : undefined,
       expectedAnswer:
         question.expectedAnswer === undefined ? undefined : question.expectedAnswer,
     })
   );
+  const indexById = new Map(normalized.map((question, index) => [question.id, index]));
+  return normalized.map((question, index) => {
+    const parentIndex = question.parentQuestionId ? indexById.get(question.parentQuestionId) : undefined;
+    const hasValidParent = parentIndex !== undefined && parentIndex < index;
+    const conditions = question.conditions?.filter((condition) => {
+      const conditionIndex = indexById.get(condition.questionId);
+      return conditionIndex !== undefined && conditionIndex < index;
+    });
+
+    return stripUndefined({
+      ...question,
+      parentQuestionId: hasValidParent ? question.parentQuestionId : undefined,
+      subquestionOrder: hasValidParent ? question.subquestionOrder : undefined,
+      conditions: conditions && conditions.length > 0 ? conditions : undefined,
+    });
+  });
 }
 
 function normalizePipelineStageModel(
@@ -259,6 +333,19 @@ function normalizeOnboardingDocumentModel(
   return normalizeOnboardingDocumentTemplates(documents);
 }
 
+function normalizeRecruitmentDisplay(
+  display: z.infer<NonNullable<typeof recruitmentDisplaySchema>> | undefined
+) {
+  if (display === undefined) return undefined;
+  const normalized = stripUndefined({
+    locationLabel: display.locationLabel?.trim() || undefined,
+    workType: display.workType || undefined,
+    deadlineLabel: display.deadlineLabel?.trim() || undefined,
+    buttonText: display.buttonText?.trim() || undefined,
+  });
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 export function normalizeJobRoleInput(
   input: z.infer<typeof jobRoleCreateSchema>
 ) {
@@ -274,6 +361,7 @@ export function normalizeJobRoleInput(
     publicRequirements: normalizeStringList(input.publicRequirements),
     competencies: normalizeStringList(input.competencies),
     benefits: normalizeStringList(input.benefits),
+    recruitmentDisplay: normalizeRecruitmentDisplay(input.recruitmentDisplay),
     formQuestions: normalizeFormQuestions(input.formQuestions),
     pipelineStages: normalizePipelineStageModel(input.pipelineStages),
     onboardingStages: normalizeOnboardingStageModel(input.onboardingStages),
@@ -327,6 +415,7 @@ export function normalizeJobRolePatch(
       input.benefits === undefined
         ? undefined
         : normalizeStringList(input.benefits),
+    recruitmentDisplay: normalizeRecruitmentDisplay(input.recruitmentDisplay),
     formQuestions:
       input.formQuestions === undefined
         ? undefined
@@ -348,6 +437,9 @@ export function normalizeJobFunctionInput(
     responsibilities: normalizeStringList(input.responsibilities),
     publicResponsibilities: normalizeStringList(input.publicResponsibilities),
     requirements: normalizeStringList(input.requirements),
+    publicRequirements: normalizeStringList(input.publicRequirements),
+    benefits: normalizeStringList(input.benefits),
+    recruitmentDisplay: normalizeRecruitmentDisplay(input.recruitmentDisplay),
     compatibleRoleIds: normalizeStringList(input.compatibleRoleIds),
     formQuestions: normalizeFormQuestions(input.formQuestions),
     pipelineStages: normalizePipelineStageModel(input.pipelineStages),
@@ -384,6 +476,15 @@ export function normalizeJobFunctionPatch(
       input.requirements === undefined
         ? undefined
         : normalizeStringList(input.requirements),
+    publicRequirements:
+      input.publicRequirements === undefined
+        ? undefined
+        : normalizeStringList(input.publicRequirements),
+    benefits:
+      input.benefits === undefined
+        ? undefined
+        : normalizeStringList(input.benefits),
+    recruitmentDisplay: normalizeRecruitmentDisplay(input.recruitmentDisplay),
     compatibleRoleIds:
       input.compatibleRoleIds === undefined
         ? undefined

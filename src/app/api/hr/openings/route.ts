@@ -5,6 +5,12 @@ import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
 import { resolveJobOpeningQuestions } from '@/lib/recruitment-forms';
 import { mergeRecruitmentStageModels, normalizeRecruitmentStages } from '@/lib/recruitment-pipeline';
+import {
+  applyRecruitmentScoring,
+  getRecruitmentScoringBlockMessage,
+  RECRUITMENT_COMPOSITION_PRESETS,
+} from '@/lib/recruitment-scoring';
+import type { RecruitmentCompositionPreset } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +26,12 @@ function slugify(text: string) {
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function normalizeCompositionPreset(value: unknown): RecruitmentCompositionPreset {
+  return typeof value === 'string' && value in RECRUITMENT_COMPOSITION_PRESETS
+    ? value as RecruitmentCompositionPreset
+    : 'role_70_function_30';
 }
 
 export async function GET(request: NextRequest) {
@@ -44,6 +56,9 @@ export async function POST(request: NextRequest) {
     shiftDefinitionId,
     description,
     requirements,
+    benefits,
+    publicSalaryRange,
+    applyButtonLabel,
     location,
     workType,
     slots,
@@ -51,6 +66,8 @@ export async function POST(request: NextRequest) {
     applicationEndAt,
     closesAt,
     formQuestions,
+    compositionPreset,
+    scoringAlertJustification,
     pipelineStages,
   } = body;
 
@@ -108,6 +125,18 @@ export async function POST(request: NextRequest) {
   }
 
   const resolvedQuestions = resolveJobOpeningQuestions(formQuestions, roleFormQuestions, functionFormQuestions);
+  const selectedCompositionPreset = normalizeCompositionPreset(compositionPreset);
+  const scoringModel = applyRecruitmentScoring(resolvedQuestions, selectedCompositionPreset);
+  const scoringBlock = getRecruitmentScoringBlockMessage(scoringModel.snapshot);
+  if (scoringBlock) return jsonError(scoringBlock);
+  const scoringWarnings = scoringModel.snapshot.alerts.filter(alert => alert.severity === 'warning');
+  const scoringWarningJustification = typeof scoringAlertJustification === 'string'
+    ? scoringAlertJustification.trim().slice(0, 500)
+    : '';
+  if (scoringWarnings.length > 0 && !scoringWarningJustification) {
+    return jsonError('Justifique os alertas de pontuação antes de publicar a vaga.');
+  }
+
   const resolvedPipelineStages = Array.isArray(pipelineStages) && pipelineStages.length > 0
     ? normalizeRecruitmentStages(pipelineStages)
     : mergeRecruitmentStageModels(rolePipelineStages, functionPipelineStages);
@@ -125,7 +154,20 @@ export async function POST(request: NextRequest) {
     shiftDefinitionName,
     description: description?.trim() || null,
     requirements: Array.isArray(requirements) ? requirements : [],
-    formQuestions: resolvedQuestions,
+    benefits: Array.isArray(benefits) ? benefits : [],
+    publicSalaryRange: publicSalaryRange || null,
+    applyButtonLabel: typeof applyButtonLabel === 'string' ? applyButtonLabel.trim() || null : null,
+    formQuestions: scoringModel.questions,
+    compositionPreset: scoringModel.snapshot.preset,
+    recruitmentScoring: scoringModel.snapshot,
+    recruitmentScoringAlertAcknowledgement: scoringWarnings.length > 0
+      ? {
+          note: scoringWarningJustification,
+          alertCodes: scoringWarnings.map(alert => alert.code),
+          acknowledgedAt: now,
+          acknowledgedBy: access.decoded.uid,
+        }
+      : null,
     pipelineStages: resolvedPipelineStages,
     location: location?.trim() || null,
     workType: workType || null,
@@ -158,6 +200,9 @@ export async function POST(request: NextRequest) {
       shift_definition_name: shiftDefinitionName,
       slots: Number(slots) || 1,
       status: 'open',
+      composition_preset: scoringModel.snapshot.preset,
+      scoring_alerts: scoringModel.snapshot.alerts,
+      scoring_alert_acknowledged: scoringWarnings.length > 0,
     },
     ttl_days: 365,
   });

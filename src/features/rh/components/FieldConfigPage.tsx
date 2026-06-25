@@ -753,7 +753,7 @@ export function FieldConfigPage() {
   });
 
   return (
-    <div className="space-y-5 bg-[#f1f1f3] px-4 py-5 text-[#1d1d26] md:px-5">
+    <div className="space-y-5 bg-[var(--bg)] px-4 py-5 text-[#1d1d26] md:px-5">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <h1 className="text-3xl font-black tracking-tight text-[#181820]">Campos do Perfil</h1>

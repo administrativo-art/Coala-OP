@@ -5,12 +5,8 @@
 
 @layer base {
   body {
-    /* Modo Claro: Um gradiente muito sutil com toques de cor (ex: roxo/azul claro) */
-    background-image: 
-      radial-gradient(at 0% 0%, hsla(250, 60%, 96%, 1) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, hsla(200, 60%, 96%, 1) 0px, transparent 50%);
-    background-color: #f8fafc; /* Cor base de fallback (slate-50) */
-    background-attachment: fixed; /* Importante: o fundo não rola com a página */
+    background: var(--bg);
+    background-attachment: fixed;
   }
 
   .dark body {
@@ -24,7 +20,8 @@
 
 @layer base {
   :root {
-    --background: 240 10% 97%; /* #F5F7FA */
+    --bg: #f0eee9;
+    --background: 43 19% 93%; /* #f0eee9 */
     --foreground: 240 6% 10%; /* #1A1B1F */
     --card: 240 10% 100%; /* #FFFFFF */
     --card-foreground: 240 6% 10%;
@@ -55,6 +52,7 @@
     --warning-foreground: 0 0% 10%;
   }
   .dark {
+    --bg: #0f172a;
     --background: 224 23% 15%; /* #1E2230 */
     --foreground: 223 20% 94%; /* #F5F7FA */
     --card: 224 21% 19%; /* #262B3A */
@@ -91,7 +89,8 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background: var(--bg);
   }
   .animate-pulse-once {
     animation-name: pulse-once;
