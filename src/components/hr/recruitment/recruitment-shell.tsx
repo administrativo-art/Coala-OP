@@ -5185,6 +5185,21 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
     }
   };
 
+  const dynamicRoleFunctionOptions = useMemo(() => {
+    const roleOptions = roles
+      .filter(role => role.isActive !== false)
+      .map(role => (role.publicTitle || role.name || '').trim())
+      .filter(Boolean)
+      .map(label => `Cargo · ${label}`);
+    const functionOptions = functions
+      .filter(item => item.isActive !== false)
+      .map(item => (item.publicTitle || item.name || '').trim())
+      .filter(Boolean)
+      .map(label => `Função · ${label}`);
+    return Array.from(new Set([...roleOptions, ...functionOptions]))
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [roles, functions]);
+
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center rounded-2xl bg-white">
@@ -5219,20 +5234,6 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   const talentSubquestionCount = form.questions.filter(question => question.parentQuestionId).length;
   const talentSectionCount = groupRecruitmentQuestionsBySection(form.questions, 'Campos personalizados').length;
   const fixedFieldCount = 5;
-  const dynamicRoleFunctionOptions = useMemo(() => {
-    const roleOptions = roles
-      .filter(role => role.isActive !== false)
-      .map(role => (role.publicTitle || role.name || '').trim())
-      .filter(Boolean)
-      .map(label => `Cargo · ${label}`);
-    const functionOptions = functions
-      .filter(item => item.isActive !== false)
-      .map(item => (item.publicTitle || item.name || '').trim())
-      .filter(Boolean)
-      .map(label => `Função · ${label}`);
-    return Array.from(new Set([...roleOptions, ...functionOptions]))
-      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [roles, functions]);
 
   if (formSection === 'roles') {
     return (
