@@ -193,13 +193,15 @@ function RecruitmentFormsSettingsPanel() {
   }
 
   return (
-    <RecruitmentFormsView
-      getToken={getToken}
-      canManage={canManage}
-      roles={roles}
-      functions={functions}
-      onModelsUpdated={refresh}
-    />
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden">
+      <RecruitmentFormsView
+        getToken={getToken}
+        canManage={canManage}
+        roles={roles}
+        functions={functions}
+        onModelsUpdated={refresh}
+      />
+    </div>
   );
 }
 
@@ -477,14 +479,14 @@ function DepartmentSubtabs({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden">
       <SegmentedTabs tabs={tabs} value={activeGroup.value} onChange={handleGroupChange} />
       {childTabs.length > 1 ? (
         <SegmentedTabs tabs={childTabs} value={activeTab.value} onChange={setActiveLeafTab} />
       ) : null}
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <SectionHeader title={activeTab.title} description={activeTab.description} />
-        {activeTab.content}
+        <div className="min-w-0 overflow-x-hidden">{activeTab.content}</div>
       </div>
     </div>
   );
@@ -876,7 +878,7 @@ export default function SettingsPage() {
 
   return (
     <PermissionGuard allowed={permissions.settings.view}>
-      <div className="w-full space-y-6">
+      <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden">
         <div className="flex items-center gap-2 sm:gap-4 mb-2">
           <Button
             onClick={() => router.back()}
@@ -892,7 +894,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <SegmentedTabs
             tabs={departmentTabs}
             value={activeDepartmentTab?.value ?? "operacional"}

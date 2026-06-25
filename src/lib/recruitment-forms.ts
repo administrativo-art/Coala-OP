@@ -24,14 +24,7 @@ export const RECRUITMENT_QUESTION_TYPES: HrQuestionType[] = [
   "file_upload",
 ];
 
-const DEFAULT_ROLE_OPTIONS = [
-  "Atendente",
-  "Operador(a) de loja",
-  "Auxiliar de cozinha",
-  "Caixa",
-  "Gerente de unidade",
-  "Estágio · Marketing",
-];
+const DYNAMIC_OPTION_SOURCES = ["public_units", "public_roles_functions"] as const;
 
 export function makeRecruitmentSectionId(title: string) {
   return title
@@ -77,14 +70,14 @@ export const DEFAULT_TALENT_POOL_FORM: RecruitmentFormConfig = {
     {
       id: "preferred_role",
       text: "Cargo de interesse",
-      type: "select",
+      type: "multi_select",
       required: false,
       active: true,
       scored: false,
       weight: "medium",
       eliminatory: false,
       tags: ["talent_pool"],
-      config: { options: DEFAULT_ROLE_OPTIONS },
+      config: { source: "public_roles_functions" },
     },
     {
       id: "preferred_unit",
@@ -125,6 +118,12 @@ function cleanOptions(value: unknown) {
       .filter((option): option is string => typeof option === "string" && option.trim().length > 0)
       .map((option) => option.trim().slice(0, 120))
     : [];
+}
+
+function cleanDynamicOptionSource(value: unknown) {
+  return DYNAMIC_OPTION_SOURCES.includes(value as typeof DYNAMIC_OPTION_SOURCES[number])
+    ? value as typeof DYNAMIC_OPTION_SOURCES[number]
+    : undefined;
 }
 
 function cleanWeight(value: unknown): HrQuestionWeight {
@@ -252,9 +251,12 @@ export function normalizeRecruitmentQuestions(value: unknown): HrFormQuestion[] 
       const parentQuestionId = cleanQuestionReferenceId(data.parentQuestionId);
       const subquestionOrder = cleanSubquestionOrder(data.subquestionOrder);
       const options = cleanOptions(rawConfig.options);
+      const hiddenOptions = cleanOptions(rawConfig.hiddenOptions);
       const config: Record<string, unknown> = {};
       if (options.length > 0) config.options = options;
-      if (rawConfig.source === "public_units") config.source = "public_units";
+      const source = cleanDynamicOptionSource(rawConfig.source);
+      if (source) config.source = source;
+      if (hiddenOptions.length > 0) config.hiddenOptions = hiddenOptions;
       if (rawConfig.multiline === true) config.multiline = true;
       if (typeof rawConfig.placeholder === "string" && rawConfig.placeholder.trim()) {
         config.placeholder = rawConfig.placeholder.trim().slice(0, 180);
@@ -448,7 +450,18 @@ export function normalizeRecruitmentFormConfig(
 ): RecruitmentFormConfig {
   const data = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const now = new Date().toISOString();
-  const questions = normalizeRecruitmentQuestions(data.questions);
+  const questions = normalizeRecruitmentQuestions(data.questions).map((question) => {
+    if (question.id !== "preferred_role") return question;
+    return {
+      ...question,
+      text: question.text || "Cargo de interesse",
+      type: "multi_select" as const,
+      config: {
+        ...(question.config ?? {}),
+        source: "public_roles_functions" as const,
+      },
+    };
+  });
 
   return {
     id: typeof data.id === "string" && data.id.trim() ? data.id.trim() : fallback.id,
@@ -471,8 +484,33 @@ export function normalizeRecruitmentFormConfig(
   };
 }
 
-export function getRecruitmentQuestionOptions(question: HrFormQuestion, dynamicOptions?: { units?: string[] }) {
-  if (question.config?.source === "public_units") return dynamicOptions?.units ?? [];
+function filterHiddenRecruitmentOptions(options: string[], question: HrFormQuestion) {
+  const hidden = Array.isArray(question.config?.hiddenOptions)
+    ? new Set(question.config.hiddenOptions.filter((option): option is string => typeof option === "string"))
+    : null;
+  return hidden ? options.filter((option) => !hidden.has(option)) : options;
+}
+
+export function getRecruitmentQuestionOptions(
+  question: HrFormQuestion,
+  dynamicOptions?: { units?: string[]; rolesFunctions?: string[] }
+) {
+  if (question.config?.source === "public_units") {
+    const options = dynamicOptions?.units ?? (
+      Array.isArray(question.config?.options)
+        ? question.config.options.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
+        : []
+    );
+    return filterHiddenRecruitmentOptions(options, question);
+  }
+  if (question.config?.source === "public_roles_functions") {
+    const options = dynamicOptions?.rolesFunctions ?? (
+      Array.isArray(question.config?.options)
+        ? question.config.options.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
+        : []
+    );
+    return filterHiddenRecruitmentOptions(options, question);
+  }
   const options = question.config?.options;
   return Array.isArray(options)
     ? options.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
@@ -481,15 +519,19 @@ export function getRecruitmentQuestionOptions(question: HrFormQuestion, dynamicO
 
 export function hydrateRecruitmentQuestionDynamicOptions(
   questions: HrFormQuestion[],
-  dynamicOptions?: { units?: string[] }
+  dynamicOptions?: { units?: string[]; rolesFunctions?: string[] }
 ) {
   return questions.map((question) => {
-    if (question.config?.source !== "public_units") return question;
+    const source = question.config?.source;
+    if (source !== "public_units" && source !== "public_roles_functions") return question;
+    const options = source === "public_units"
+      ? dynamicOptions?.units ?? []
+      : dynamicOptions?.rolesFunctions ?? [];
     return {
       ...question,
       config: {
         ...(question.config ?? {}),
-        options: dynamicOptions?.units ?? [],
+        options: filterHiddenRecruitmentOptions(options, question),
       },
     };
   });

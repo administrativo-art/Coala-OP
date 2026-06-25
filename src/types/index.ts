@@ -1146,6 +1146,7 @@ export type JobOpening = {
   pipelineStages?: RecruitmentStage[];
   location?: string;
   workType?: 'presencial' | 'remoto' | 'hibrido';
+  workSchedule?: string | null;
   slots: number;
   status: JobOpeningStatus;
   applicationStartAt?: string | null;

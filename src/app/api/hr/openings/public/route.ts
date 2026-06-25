@@ -32,8 +32,39 @@ async function getPublicUnitOptions() {
   )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
-function toPublicQuestions(questions: HrFormQuestion[], units: string[]) {
-  return hydrateRecruitmentQuestionDynamicOptions(getPublicRecruitmentQuestions(questions), { units }).map(question => ({
+function cleanOptionLabel(value: unknown) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+async function getPublicRoleFunctionOptions() {
+  const [rolesSnap, functionsSnap] = await Promise.all([
+    hrDbAdmin.collection('jobRoles').orderBy('name').get(),
+    hrDbAdmin.collection('jobFunctions').orderBy('name').get(),
+  ]);
+
+  const options = [
+    ...rolesSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => cleanOptionLabel(data.publicTitle || data.name))
+      .filter(Boolean)
+      .map(label => `Cargo · ${label}`),
+    ...functionsSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => cleanOptionLabel(data.publicTitle || data.name))
+      .filter(Boolean)
+      .map(label => `Função · ${label}`),
+  ];
+
+  return Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function toPublicQuestions(questions: HrFormQuestion[], units: string[], rolesFunctions: string[]) {
+  return hydrateRecruitmentQuestionDynamicOptions(
+    getPublicRecruitmentQuestions(questions),
+    { units, rolesFunctions }
+  ).map(question => ({
     id: question.id,
     text: question.text,
     type: question.type,
@@ -72,12 +103,13 @@ export async function GET() {
 
     // Evita índice composto: filtra por status sem orderBy no Firestore,
     // ordena no servidor pelo createdAt.
-    const [snapshot, publicUnits] = await Promise.all([
+    const [snapshot, publicUnits, rolesFunctions] = await Promise.all([
       hrDbAdmin
         .collection('jobOpenings')
         .where('status', '==', 'open')
         .get(),
       getPublicUnitOptions(),
+      getPublicRoleFunctionOptions(),
     ]);
 
     const now = new Date().toISOString();
@@ -85,7 +117,7 @@ export async function GET() {
       .map(doc => {
         const data = doc.data();
         const formQuestions = Array.isArray(data.formQuestions)
-          ? toPublicQuestions(data.formQuestions as HrFormQuestion[], publicUnits)
+          ? toPublicQuestions(data.formQuestions as HrFormQuestion[], publicUnits, rolesFunctions)
           : [];
         return {
           id: doc.id,
@@ -104,6 +136,7 @@ export async function GET() {
           applyButtonLabel: data.applyButtonLabel ?? null,
           formQuestions,
           location: data.unitName ?? data.location ?? null,
+          workSchedule: data.workSchedule ?? data.shiftDefinitionName ?? null,
           unitName: data.unitName ?? null,
           shiftDefinitionName: data.shiftDefinitionName ?? null,
           workType: data.workType ?? null,

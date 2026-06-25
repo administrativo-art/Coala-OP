@@ -320,7 +320,9 @@ export default function BancoDeTalentosPage() {
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
-        rolePreference: typeof formAnswers.preferred_role === "string" ? formAnswers.preferred_role.trim() : "",
+        rolePreference: Array.isArray(formAnswers.preferred_role)
+          ? formAnswers.preferred_role.filter((entry): entry is string => typeof entry === "string").join(", ")
+          : typeof formAnswers.preferred_role === "string" ? formAnswers.preferred_role.trim() : "",
         unitPreference: typeof formAnswers.preferred_unit === "string" ? formAnswers.preferred_unit.trim() : "",
         message: typeof formAnswers.message === "string" ? formAnswers.message.trim() : "",
         formAnswers,

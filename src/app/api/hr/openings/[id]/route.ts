@@ -45,6 +45,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     applyButtonLabel,
     location,
     workType,
+    workSchedule,
     slots,
     status,
     applicationStartAt,
@@ -167,6 +168,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (pipelineStages !== undefined) update.pipelineStages = normalizeRecruitmentStages(pipelineStages);
   if (location !== undefined) update.location = location;
   if (workType !== undefined) update.workType = workType;
+  if (workSchedule !== undefined) {
+    update.workSchedule = typeof workSchedule === 'string' ? workSchedule.trim() || null : null;
+  }
   if (slots !== undefined) update.slots = Number(slots);
   if (status !== undefined) update.status = status;
   if (applicationStartAt !== undefined) update.applicationStartAt = applicationStartAt;

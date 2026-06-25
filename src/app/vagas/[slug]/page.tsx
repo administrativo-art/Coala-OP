@@ -40,6 +40,7 @@ interface PublicOpening {
   applyButtonLabel?: string | null;
   formQuestions?: HrFormQuestion[];
   location?: string;
+  workSchedule?: string | null;
   workType?: WorkType;
   slots: number;
   closesAt?: string;
@@ -489,9 +490,10 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
     ? opening.benefits.map((title, index) => ({ emoji: BENEFIT_EMOJIS[index % BENEFIT_EMOJIS.length], title }))
     : BENEFITS;
   const applyButtonLabel = opening.applyButtonLabel?.trim() || "Enviar candidatura";
+  const workTypeLabel = opening.workType ? WORK_TYPE_LABELS[opening.workType] : null;
   const badges: Array<{ icon: typeof MapPin; label: string }> = [
     { icon: MapPin, label: `Coala ${location}` },
-    ...(opening.workType ? [{ icon: Monitor, label: WORK_TYPE_LABELS[opening.workType] }] : []),
+    ...(workTypeLabel ? [{ icon: Monitor, label: workTypeLabel }] : []),
     ...(salaryLabel ? [{ icon: Banknote, label: salaryLabel }] : []),
     ...(opening.slots > 1 ? [{ icon: Users, label: `${opening.slots} vagas` }] : []),
     ...(closingDays != null ? [{ icon: Coffee, label: `Encerra em ${closingDays} dias` }] : []),
@@ -540,6 +542,23 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
 
         <section className="mx-auto grid max-w-7xl gap-8 px-5 py-10 md:py-14 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
           <div className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="stk rounded-[24px] bg-white p-5">
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#5B4C5B]">Local</div>
+                <p className="text-[16px] font-bold text-[#2A1F2A]">{opening.location || `Coala ${location}`}</p>
+              </div>
+              <div className="stk rounded-[24px] bg-white p-5">
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#5B4C5B]">Jornada</div>
+                <p className="whitespace-pre-line text-[16px] font-bold leading-snug text-[#2A1F2A]">
+                  {opening.workSchedule || "Definida durante o processo"}
+                </p>
+              </div>
+              <div className="stk rounded-[24px] bg-white p-5">
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#5B4C5B]">Forma de contratação</div>
+                <p className="text-[16px] font-bold text-[#2A1F2A]">{workTypeLabel || "A definir"}</p>
+              </div>
+            </div>
+
             <div className="stk rounded-[30px] bg-white p-7 md:p-8">
               <div className="mb-5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#5B4C5B]">Sobre a vaga</div>
               <p className="whitespace-pre-line text-[17px] leading-relaxed text-[#5B4C5B]">

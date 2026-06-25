@@ -84,6 +84,34 @@ async function getPublicUnitOptions() {
   )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
+function cleanOptionLabel(value: unknown) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+async function getPublicRoleFunctionOptions() {
+  const [rolesSnap, functionsSnap] = await Promise.all([
+    hrDbAdmin.collection('jobRoles').orderBy('name').get(),
+    hrDbAdmin.collection('jobFunctions').orderBy('name').get(),
+  ]);
+
+  const options = [
+    ...rolesSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => cleanOptionLabel(data.publicTitle || data.name))
+      .filter(Boolean)
+      .map(label => `Cargo · ${label}`),
+    ...functionsSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => cleanOptionLabel(data.publicTitle || data.name))
+      .filter(Boolean)
+      .map(label => `Função · ${label}`),
+  ];
+
+  return Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
 function hasAnswer(value: unknown) {
   if (value === null || value === undefined) return false;
   if (typeof value === 'string') return value.trim().length > 0;
@@ -234,11 +262,14 @@ export async function POST(request: NextRequest) {
   if (!isInsideApplicationWindow(openingData, now)) {
     return jsonError('O período de inscrições desta vaga está encerrado.', 403);
   }
-  const publicUnits = await getPublicUnitOptions();
+  const [publicUnits, rolesFunctions] = await Promise.all([
+    getPublicUnitOptions(),
+    getPublicRoleFunctionOptions(),
+  ]);
   const formQuestions = Array.isArray(openingData.formQuestions)
     ? hydrateRecruitmentQuestionDynamicOptions(
         getPublicRecruitmentQuestions(openingData.formQuestions as HrFormQuestion[]),
-        { units: publicUnits }
+        { units: publicUnits, rolesFunctions }
       )
     : [];
   const rawAnswerMap = rawFormAnswers && typeof rawFormAnswers === 'object' && !Array.isArray(rawFormAnswers)

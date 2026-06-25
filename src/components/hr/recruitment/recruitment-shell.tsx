@@ -35,6 +35,7 @@ import {
   buildRecruitmentQuestionTree,
   DEFAULT_TALENT_POOL_FORM,
   groupRecruitmentQuestionsBySection,
+  getRecruitmentQuestionOptions,
   makeRecruitmentSectionId,
   mergeRecruitmentQuestionModels,
   type RecruitmentQuestionTreeNode,
@@ -847,6 +848,7 @@ type RecruitmentQuestionsDesignerProps = {
   showActiveToggle?: boolean;
   showScoring?: boolean;
   optionPlaceholder?: string;
+  dynamicRoleFunctionOptions?: string[];
   onUpdateQuestion: (questionId: string, patch: Partial<HrFormQuestion>) => void;
   onUpdateQuestionOptions: (questionId: string, optionsText: string) => void;
   onMoveQuestion: (questionId: string, direction: -1 | 1) => void;
@@ -1003,6 +1005,7 @@ function RecruitmentQuestionsDesigner({
   showActiveToggle = true,
   showScoring = false,
   optionPlaceholder = 'Opções, uma por linha\nSim\nNão\nTalvez',
+  dynamicRoleFunctionOptions = [],
   onUpdateQuestion,
   onUpdateQuestionOptions,
   onMoveQuestion,
@@ -1053,8 +1056,8 @@ function RecruitmentQuestionsDesigner({
     const editorBorderClass = isDark ? 'border-slate-800' : 'border-slate-100';
 
     return (
-      <div key={question.id} className={isSubquestion ? 'pl-5' : ''}>
-        <details className={`group rounded-xl border open:border-indigo-300 open:ring-1 open:ring-indigo-200 ${rowClass} ${question.active === false ? 'opacity-65' : ''}`}>
+      <div key={question.id} className={`min-w-0 ${isSubquestion ? 'pl-5' : ''}`}>
+        <details className={`group min-w-0 rounded-xl border open:border-indigo-300 open:ring-1 open:ring-indigo-200 ${rowClass} ${question.active === false ? 'opacity-65' : ''}`}>
           <summary className={`flex cursor-pointer list-none items-center gap-3 px-3 py-2.5 text-left transition [&::-webkit-details-marker]:hidden ${summaryClass}`}>
             <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${
               isSubquestion
@@ -1109,9 +1112,9 @@ function RecruitmentQuestionsDesigner({
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
           </summary>
 
-          <div className={`border-t px-3 pb-3 pt-3 ${editorBorderClass}`}>
-            <div className="grid gap-3 md:grid-cols-[1fr_170px]">
-              <div className="md:col-span-2">
+          <div className={`min-w-0 border-t px-3 pb-3 pt-3 ${editorBorderClass}`}>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,170px)]">
+              <div className="lg:col-span-2">
                 <label className={labelClass}>Pergunta</label>
                 <input
                   type="text"
@@ -1196,13 +1199,72 @@ function RecruitmentQuestionsDesigner({
               </div>
               {(question.type === 'select' || question.type === 'multi_select') && (
                 question.config?.source === 'public_units' ? (
-                  <p className={`md:col-span-2 rounded-xl border px-3 py-2 text-xs font-medium ${
+                    <p className={`lg:col-span-2 rounded-xl border px-3 py-2 text-xs font-medium ${
                     isDark ? 'border-slate-800 bg-slate-900/70 text-slate-500' : 'border-slate-100 bg-slate-50 text-slate-500'
                   }`}>
                     Opções atualizadas automaticamente pelas unidades ativas do site público.
                   </p>
+                ) : question.config?.source === 'public_roles_functions' ? (
+                  <div className={`lg:col-span-2 rounded-xl border p-3 ${
+                    isDark ? 'border-slate-800 bg-slate-900/70' : 'border-slate-100 bg-slate-50'
+                  }`}>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className={labelClass}>Opções públicas</p>
+                        <p className={isDark ? 'text-xs text-slate-500' : 'text-xs text-slate-500'}>
+                          Cargos e funções ativos são atualizados automaticamente. Desmarque o que não deve aparecer.
+                        </p>
+                      </div>
+                      <span className={isDark ? 'text-[11px] font-semibold text-slate-500' : 'text-[11px] font-semibold text-slate-500'}>
+                        {pluralizePt(getRecruitmentQuestionOptions(question, { rolesFunctions: dynamicRoleFunctionOptions }).length, 'visível', 'visíveis')}
+                      </span>
+                    </div>
+                    <div className="grid max-h-44 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+                      {dynamicRoleFunctionOptions.map(option => {
+                        const hiddenOptions = Array.isArray(question.config?.hiddenOptions)
+                          ? question.config.hiddenOptions.filter((entry): entry is string => typeof entry === 'string')
+                          : [];
+                        const checked = !hiddenOptions.includes(option);
+                        return (
+                          <label
+                            key={option}
+                            className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-semibold ${
+                              checked
+                                ? isDark ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-emerald-100 bg-white text-slate-700'
+                                : isDark ? 'border-slate-800 bg-slate-950 text-slate-500' : 'border-slate-200 bg-white/60 text-slate-400'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={!canManage}
+                              onChange={event => {
+                                const nextHidden = event.target.checked
+                                  ? hiddenOptions.filter(item => item !== option)
+                                  : Array.from(new Set([...hiddenOptions, option]));
+                                onUpdateQuestion(question.id, {
+                                  config: {
+                                    ...(question.config ?? {}),
+                                    source: 'public_roles_functions',
+                                    hiddenOptions: nextHidden,
+                                  },
+                                });
+                              }}
+                              className={checkboxClass}
+                            />
+                            <span className="truncate">{option}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {dynamicRoleFunctionOptions.length === 0 ? (
+                      <p className={isDark ? 'text-xs text-slate-500' : 'text-xs text-slate-500'}>
+                        Nenhum cargo ou função ativo encontrado.
+                      </p>
+                    ) : null}
+                  </div>
                 ) : (
-                  <div className="md:col-span-2">
+                  <div className="lg:col-span-2">
                     <label className={labelClass}>Opções</label>
                     <textarea
                       value={Array.isArray(question.config?.options) ? question.config.options.join('\n') : ''}
@@ -1273,13 +1335,13 @@ function RecruitmentQuestionsDesigner({
         </details>
 
         {node.subquestions.length > 0 && (
-          <div className={`ml-4 mt-2 space-y-2 border-l pl-3 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className={`ml-4 mt-2 min-w-0 space-y-2 border-l pl-3 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
             {node.subquestions.map(child => renderQuestionNode(child, depth + 1, sectionTitle, sectionTone))}
           </div>
         )}
         {depth === 0 && canManage && onPrepareAddQuestion && (
           inlineDraft?.parentQuestionId === question.id && onInlineDraftChange && onInlineDraftAdd && onInlineDraftCancel ? (
-            <div className={`ml-8 mt-2 rounded-xl border p-3 ${
+            <div className={`ml-8 mt-2 min-w-0 rounded-xl border p-3 ${
               isDark ? 'border-indigo-500/25 bg-indigo-500/5' : 'border-indigo-200 bg-indigo-50/35'
             }`}>
               <p className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${
@@ -1287,7 +1349,7 @@ function RecruitmentQuestionsDesigner({
               }`}>
                 Nova subpergunta
               </p>
-              <div className="grid gap-2 md:grid-cols-[1fr_130px]">
+              <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,130px)]">
                 <input
                   value={inlineDraft.text}
                   onChange={event => onInlineDraftChange({ text: event.target.value })}
@@ -1373,7 +1435,7 @@ function RecruitmentQuestionsDesigner({
 
   if (questions.length === 0) {
     return (
-      <div className={`rounded-2xl border border-dashed px-4 py-10 text-center text-sm ${
+      <div className={`rounded-xl border border-dashed px-4 py-6 text-center text-sm ${
         isDark ? 'border-slate-800 bg-slate-950/40 text-slate-500' : 'border-slate-200 bg-slate-50 text-slate-500'
       }`}>
         <div className={`mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full ${
@@ -1400,7 +1462,7 @@ function RecruitmentQuestionsDesigner({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden">
       {sections.map((section, sectionIndex) => {
         const tree = buildRecruitmentQuestionTree(section.questions);
         const subquestionCount = section.questions.length - tree.length;
@@ -1442,7 +1504,7 @@ function RecruitmentQuestionsDesigner({
                 </span>
               </div>
             </div>
-            <div className="space-y-3 p-4">
+            <div className="min-w-0 space-y-3 p-4">
               {tree.map(node => renderQuestionNode(node, 0, section.title, sectionTone))}
               {canManage && onPrepareAddQuestion && (
                 <button
@@ -2653,6 +2715,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     description: opening?.description ?? '',
     location: opening?.location ?? '',
     workType: opening?.workType ?? '',
+    workSchedule: opening?.workSchedule ?? '',
     slots: String(opening?.slots ?? 1),
     applicationStartAt: opening?.applicationStartAt ? opening.applicationStartAt.split('T')[0] : '',
     applicationEndAt: opening?.applicationEndAt ? opening.applicationEndAt.split('T')[0] : '',
@@ -2746,6 +2809,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
       ...(fn?.benefits ?? []),
     ]));
     const publicSalaryRange = fn?.publicSalaryRange ?? role?.publicSalaryRange;
+    const inheritedWorkSchedule = fn?.workSchedule || role?.workSchedule || '';
     const recruitmentDisplay = {
       ...(role?.recruitmentDisplay ?? {}),
       ...(fn?.recruitmentDisplay ?? {}),
@@ -2765,6 +2829,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         benefits: prev.benefits.trim() || benefits.length === 0 ? prev.benefits : benefits.join('\n'),
         location: prev.location.trim() || !displayLocation ? prev.location : displayLocation,
         workType: prev.workType || recruitmentDisplay.workType || '',
+        workSchedule: prev.workSchedule.trim() || !inheritedWorkSchedule ? prev.workSchedule : inheritedWorkSchedule,
         salaryMin: hasSalary || publicSalaryRange?.min === undefined ? prev.salaryMin : salaryInputValue(publicSalaryRange.min),
         salaryMax: hasSalary || publicSalaryRange?.max === undefined ? prev.salaryMax : salaryInputValue(publicSalaryRange.max),
         salaryVisible: hasSalary || publicSalaryRange === undefined ? prev.salaryVisible : publicSalaryRange.visible !== false,
@@ -2937,6 +3002,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         description: form.description.trim() || null,
         location: form.location.trim() || null,
         workType: form.workType || null,
+        workSchedule: form.workSchedule.trim() || null,
         slots: Number(form.slots) || 1,
         applicationStartAt: dateInputToIso(form.applicationStartAt),
         applicationEndAt: dateInputToIso(form.applicationEndAt, true),
@@ -3137,6 +3203,16 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 {WORK_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Jornada</label>
+              <textarea
+                value={form.workSchedule}
+                onChange={set('workSchedule')}
+                rows={2}
+                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                placeholder="Ex: Escala 6x1, turnos alternados, disponibilidade para fins de semana."
+              />
+            </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Início das inscrições</label>
               <input type="date" value={form.applicationStartAt} onChange={set('applicationStartAt')}
@@ -3263,6 +3339,20 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                     )}
                   </div>
                   <h3 className="mt-3 text-lg font-bold text-white">{form.title.trim() || 'Título da vaga'}</h3>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Local</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-200">{selectedUnit?.name || form.location.trim() || 'Definir na vaga'}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Jornada</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-200">{form.workSchedule.trim() || selectedShiftDefinition?.name || 'Definir na vaga'}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Contratação</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-200">{WORK_TYPE_OPTIONS.find(option => option.value === form.workType)?.label || 'Definir na vaga'}</p>
+                    </div>
+                  </div>
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-400">
                     {form.description.trim() || inheritedDescriptionParts.join('\n\n') || 'Descrição pública da vaga.'}
                   </p>
@@ -3692,8 +3782,8 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
   const activeFilters = [search.trim(), filterStatus, filterRole, filterUnit].filter(Boolean).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <p className="text-slate-500 text-sm">{openings.filter(o => o.status === 'open').length} vagas abertas</p>
         {canManage && (
           <button onClick={() => setModal('new')}
@@ -3704,7 +3794,7 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
-        <div className="relative min-w-[240px] flex-1">
+        <div className="relative min-w-0 flex-1 basis-full sm:basis-64">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -4488,7 +4578,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
 
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+      <div className="w-full min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
         <Briefcase className="mx-auto mb-3 h-10 w-10 text-slate-300" />
         <p className="text-sm font-medium text-slate-500">
           Nenhum {modelLabel} cadastrado para configurar formulário.
@@ -4498,8 +4588,8 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
   }
 
   return (
-    <div className="space-y-5">
-      <section className="space-y-2">
+    <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
+      <section className="min-w-0 space-y-2">
         <div>
           <h2 className="text-sm font-bold text-slate-950">Visão geral</h2>
           <p className="mt-1 text-xs text-slate-500">
@@ -4507,7 +4597,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="space-y-2">
             {modelGroups.map((group, groupIndex) => {
               const groupHasSelected = group.items.some(item => item.id === selected?.id);
@@ -4570,9 +4660,9 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
         </div>
       </section>
 
-      <section className="space-y-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
+      <section className="min-w-0 space-y-3">
+        <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
             <h2 className="text-sm font-bold text-slate-950">Modelo · {selected?.name ?? title}</h2>
             <p className="mt-1 text-sm text-slate-500">
               Campos base ao criar uma vaga para este {modelLabel}. Organize em seções, adicione subperguntas e condições.
@@ -4597,7 +4687,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
               type="button"
               onClick={saveModel}
               disabled={saving || !selected}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar modelo
@@ -4611,45 +4701,19 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
             Modelo atualizado em {new Date(savedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
           </p>
         ) : null}
-        <RecruitmentQuestionsDesigner
-          questions={questions}
-          canManage={canManage}
-          variant="light"
-          fallbackSectionTitle="Perguntas do modelo"
-          emptyLabel="Nenhuma pergunta cadastrada neste modelo."
-          activeLabel="Exibir no formulário"
-          showActiveToggle
-          showScoring
-          sourceLayerResolver={() => kind}
-          onUpdateQuestion={updateQuestion}
-          onUpdateQuestionOptions={updateQuestionOptions}
-          onMoveQuestion={moveQuestion}
-          onRemoveQuestion={(questionId) => setQuestions(prev => prev.filter(item => item.id !== questionId))}
-          onPrepareAddQuestion={(patch) => setDraft(prev => ({
-            ...prev,
-            ...(patch.parentQuestionId ? { text: '', optionsText: '', conditionValue: 'true' as QuestionDraftConditionValue } : {}),
-            sectionTitle: patch.sectionTitle !== undefined ? patch.sectionTitle : prev.sectionTitle,
-            parentQuestionId: patch.parentQuestionId ?? '',
-          }))}
-          inlineDraft={draft}
-          onInlineDraftChange={(patch) => setDraft(prev => ({ ...prev, ...patch }))}
-          onInlineDraftAdd={addQuestion}
-          onInlineDraftCancel={() => setDraft(EMPTY_QUESTION_DRAFT)}
-        />
       </section>
 
-      <details open className="group rounded-xl border border-slate-200 bg-white shadow-sm">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+      <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div>
-            <h3 className="text-sm font-bold text-slate-950">Página pública da vaga</h3>
+            <h3 className="text-sm font-bold text-slate-950">Informações gerais</h3>
             <p className="mt-1 text-xs text-slate-500">
-              Padrões usados quando uma vaga usa este {modelLabel}. A vaga ainda pode ser revisada antes de publicar.
+              Dados públicos usados quando uma vaga usa este {modelLabel}. A vaga ainda pode ser revisada antes de publicar.
             </p>
           </div>
-          <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
-        </summary>
-        <div className="grid gap-5 border-t border-slate-100 p-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="grid gap-4 md:grid-cols-2">
+        </div>
+        <div className="grid min-w-0 gap-5 border-t border-slate-100 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Título público</label>
               <input
@@ -4735,7 +4799,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
                 placeholder="Enviar candidatura"
               />
             </div>
-            <div className="md:col-span-2">
+            <div className="lg:col-span-2">
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Sobre a vaga</label>
               <textarea
                 value={modelText.publicDescription}
@@ -4792,7 +4856,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-[#f0eee9] p-4">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-[#f0eee9] p-4">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Prévia da página pública</p>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="bg-[#2A1F2A] p-4 text-white">
@@ -4823,14 +4887,25 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
                 </h4>
               </div>
               <div className="space-y-3 p-4">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Local</p>
+                    <p className="mt-1 text-xs font-bold text-slate-700">{modelText.locationLabel.trim() || 'Unidade definida na vaga'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Jornada</p>
+                    <p className="mt-1 text-xs font-bold text-slate-700">{modelText.workSchedule.trim() || 'Definida na vaga'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Contratação</p>
+                    <p className="mt-1 text-xs font-bold text-slate-700">{modelWorkTypeLabel || 'Definida na vaga'}</p>
+                  </div>
+                </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Sobre a vaga</p>
                   <p className="whitespace-pre-line text-xs leading-relaxed text-slate-600">
                     {modelText.publicDescription.trim() || modelResponsibilities.join('\n') || 'Texto sobre a vaga aparecerá aqui.'}
                   </p>
-                  {modelText.workSchedule.trim() && (
-                    <p className="mt-2 text-xs font-medium text-slate-500">{modelText.workSchedule.trim()}</p>
-                  )}
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Requisitos</p>
@@ -4858,12 +4933,59 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
             </div>
           </div>
         </div>
-      </details>
+      </section>
 
-      {canManage && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-slate-950">Formulário</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Perguntas complementares exibidas para candidatos deste {modelLabel}.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+              {pluralizePt(primaryQuestionCount, 'pergunta', 'perguntas')}
+            </span>
+            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600">
+              {pluralizePt(subquestionCount, 'subpergunta', 'subperguntas')}
+            </span>
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+              {pluralizePt(sectionCount, 'seção', 'seções')}
+            </span>
+          </div>
+        </div>
+
+        <RecruitmentQuestionsDesigner
+          questions={questions}
+          canManage={canManage}
+          variant="light"
+          fallbackSectionTitle="Perguntas do modelo"
+          emptyLabel="Nenhuma pergunta cadastrada neste modelo."
+          activeLabel="Exibir no formulário"
+          showActiveToggle
+          showScoring
+          sourceLayerResolver={() => kind}
+          onUpdateQuestion={updateQuestion}
+          onUpdateQuestionOptions={updateQuestionOptions}
+          onMoveQuestion={moveQuestion}
+          onRemoveQuestion={(questionId) => setQuestions(prev => prev.filter(item => item.id !== questionId))}
+          onPrepareAddQuestion={(patch) => setDraft(prev => ({
+            ...prev,
+            ...(patch.parentQuestionId ? { text: '', optionsText: '', conditionValue: 'true' as QuestionDraftConditionValue } : {}),
+            sectionTitle: patch.sectionTitle !== undefined ? patch.sectionTitle : prev.sectionTitle,
+            parentQuestionId: patch.parentQuestionId ?? '',
+          }))}
+          inlineDraft={draft}
+          onInlineDraftChange={(patch) => setDraft(prev => ({ ...prev, ...patch }))}
+          onInlineDraftAdd={addQuestion}
+          onInlineDraftCancel={() => setDraft(EMPTY_QUESTION_DRAFT)}
+        />
+
+        {canManage && (
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-4">
           <h3 className="text-sm font-bold text-slate-950">Adicionar campo ao modelo</h3>
-          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_180px_180px]">
+          <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,180px)_minmax(0,180px)]">
             <input
               value={draft.text}
               onChange={event => setDraft(prev => ({ ...prev, text: event.target.value }))}
@@ -4887,7 +5009,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
               value={draft.parentQuestionId}
               onChange={event => setDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
               disabled={questions.length === 0}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60 md:col-span-2"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60 lg:col-span-2"
             >
               <option value="">Pergunta principal</option>
               {questions.map(question => (
@@ -4910,19 +5032,20 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
                 onChange={event => setDraft(prev => ({ ...prev, optionsText: event.target.value }))}
                 rows={3}
                 placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
-                className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 md:col-span-3"
+                className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 lg:col-span-3"
               />
             )}
             <button
               type="button"
               onClick={addQuestion}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 md:col-span-3"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 lg:col-span-3"
             >
               <Plus className="h-4 w-4" /> Adicionar campo
             </button>
           </div>
         </div>
-      )}
+        )}
+      </section>
     </div>
   );
 }
@@ -5071,7 +5194,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   }
 
   const formTabs = (
-    <div className="flex flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
+    <div className="flex max-w-full flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
       {([
         { value: 'talent', label: 'Banco de talentos' },
         { value: 'roles', label: 'Modelos por cargo' },
@@ -5096,10 +5219,24 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   const talentSubquestionCount = form.questions.filter(question => question.parentQuestionId).length;
   const talentSectionCount = groupRecruitmentQuestionsBySection(form.questions, 'Campos personalizados').length;
   const fixedFieldCount = 5;
+  const dynamicRoleFunctionOptions = useMemo(() => {
+    const roleOptions = roles
+      .filter(role => role.isActive !== false)
+      .map(role => (role.publicTitle || role.name || '').trim())
+      .filter(Boolean)
+      .map(label => `Cargo · ${label}`);
+    const functionOptions = functions
+      .filter(item => item.isActive !== false)
+      .map(item => (item.publicTitle || item.name || '').trim())
+      .filter(Boolean)
+      .map(label => `Função · ${label}`);
+    return Array.from(new Set([...roleOptions, ...functionOptions]))
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [roles, functions]);
 
   if (formSection === 'roles') {
     return (
-      <div className="space-y-5">
+      <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
         {formTabs}
         <RecruitmentQuestionModelEditor
           kind="role"
@@ -5114,7 +5251,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
 
   if (formSection === 'functions') {
     return (
-      <div className="space-y-5">
+      <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
         {formTabs}
         <RecruitmentQuestionModelEditor
           kind="function"
@@ -5128,17 +5265,17 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   }
 
   return (
-    <div className="space-y-5">
+    <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
       {formTabs}
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
+      <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Formulário público</p>
           <h2 className="mt-1 text-xl font-bold text-slate-950">Banco de talentos</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Configure textos, campos fixos e perguntas personalizadas exibidas em <span className="font-semibold text-slate-700">vagas.coalashakes.com/banco-de-talentos</span>.
+            Configure textos, campos fixos e perguntas personalizadas exibidas em <span className="break-all font-semibold text-slate-700">vagas.coalashakes.com/banco-de-talentos</span>.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <a
             href={`${PUBLIC_RECRUITMENT_URL}/banco-de-talentos`}
             target="_blank"
@@ -5170,7 +5307,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
 
       <div>
         <p className="mb-2 text-xs font-bold text-slate-700">Resumo</p>
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <RecruitmentMetricCard
             label="Status"
             value={form.status === 'published' ? 'Publicado' : 'Rascunho'}
@@ -5196,9 +5333,9 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
         </div>
       </div>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
+      <section className="min-w-0 space-y-3">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="min-w-0">
             <h3 className="text-sm font-bold text-slate-950">Textos do formulário</h3>
             <p className="mt-1 text-xs text-slate-500">Configure os textos públicos da página de cadastro.</p>
           </div>
@@ -5214,8 +5351,8 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
             </button>
           )}
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-2">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Título</label>
               <input
@@ -5254,7 +5391,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                 className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
               />
             </div>
-            <label className="flex items-center gap-2 text-sm font-medium text-slate-600 md:col-span-2">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600 lg:col-span-2">
               <input
                 type="checkbox"
                 checked={form.status === 'published'}
@@ -5268,12 +5405,12 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section className="min-w-0 space-y-3">
         <div>
           <h3 className="text-sm font-bold text-slate-950">Campos fixos</h3>
           <p className="mt-1 text-xs text-slate-500">Sempre presentes no formulário para proteger o fluxo público. Não podem ser removidos.</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
           {['Nome completo', 'E-mail', 'Telefone / WhatsApp', 'Currículo', 'Consentimento LGPD'].map((item, index) => (
             <div key={item} className="flex items-center justify-between border-b border-slate-100 px-4 py-3 last:border-b-0">
               <div className="flex items-center gap-3">
@@ -5288,9 +5425,9 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
         </div>
       </section>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
+      <section className="min-w-0 space-y-3">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="min-w-0">
             <h3 className="text-sm font-bold text-slate-950">Campos personalizados</h3>
             <p className="mt-1 text-xs text-slate-500">Perguntas adicionais com seções, subperguntas e condições de exibição.</p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -5318,6 +5455,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
           emptyLabel="Nenhum campo complementar cadastrado."
           activeLabel="Exibir no site"
           showActiveToggle
+          dynamicRoleFunctionOptions={dynamicRoleFunctionOptions}
           onUpdateQuestion={updateQuestion}
           onUpdateQuestionOptions={updateQuestionOptions}
           onMoveQuestion={moveQuestion}
@@ -5336,10 +5474,10 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
       </section>
 
       {canManage && (
-        <section className="space-y-3">
+        <section className="min-w-0 space-y-3">
           <h3 className="text-sm font-bold text-slate-950">Adicionar campo</h3>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid gap-3 md:grid-cols-[1fr_180px_180px]">
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,180px)_minmax(0,180px)]">
               <input
                 value={questionDraft.text}
                 onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
@@ -5363,7 +5501,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                 value={questionDraft.parentQuestionId}
                 onChange={event => setQuestionDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
                 disabled={form.questions.length === 0}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60 md:col-span-2"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60 lg:col-span-2"
               >
                 <option value="">Pergunta principal</option>
                 {form.questions.map(question => (
@@ -5394,13 +5532,13 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                   onChange={event => setQuestionDraft(prev => ({ ...prev, optionsText: event.target.value }))}
                   rows={3}
                   placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
-                  className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 md:col-span-3"
+                  className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 lg:col-span-3"
                 />
               )}
               <button
                 type="button"
                 onClick={addQuestion}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 md:col-span-3"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 lg:col-span-3"
               >
                 <Plus className="h-4 w-4" /> Adicionar campo
               </button>
@@ -5492,8 +5630,8 @@ function OnboardingView({ processes, getToken, canManage, onRefresh }: {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-3 md:grid-cols-4">
+    <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Em integração</p>
           <p className="text-3xl font-bold text-slate-950">{activeProcesses.filter(process => process.status !== 'completed').length}</p>
@@ -5512,15 +5650,15 @@ function OnboardingView({ processes, getToken, canManage, onRefresh }: {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
-        <div className="relative">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
+        <div className="relative min-w-0 flex-1 basis-full sm:basis-80">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             value={search}
             onChange={event => setSearch(event.target.value)}
             placeholder="Buscar candidato, cargo ou unidade..."
-            className="w-80 rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
           />
         </div>
         <button
@@ -6107,11 +6245,11 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] flex-col space-y-5 rounded-[28px] border border-white/70 bg-white/85 p-4 text-slate-900 shadow-sm backdrop-blur md:p-5">
+    <div className="flex min-h-[calc(100vh-8rem)] w-full min-w-0 max-w-full flex-col space-y-5 overflow-x-hidden rounded-[28px] border border-white/70 bg-white/85 p-4 text-slate-900 shadow-sm backdrop-blur md:p-5">
 
       {/* ─── Header ─── */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div>
+      <div className="flex min-w-0 flex-col gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
           <p className="text-xs font-semibold text-slate-400">{sectionMeta.eyebrow}</p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-950">{sectionMeta.title}</h1>
           <p className="text-slate-500 mt-1 text-sm">
@@ -6119,7 +6257,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <a href={PUBLIC_RECRUITMENT_URL} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 transition-all hover:border-slate-300 hover:bg-white hover:text-slate-950">
             <Globe className="h-3.5 w-3.5" />
@@ -6140,7 +6278,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
 
       {/* ─── Stats row ─── */}
       {section === 'jobs' && (viewMode === 'list' || viewMode === 'kanban') && (
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">Vagas abertas</p>
             <p className="text-3xl font-bold leading-none text-slate-950">{stats.openOpenings}</p>
@@ -6245,12 +6383,12 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
             <Kanban className="h-4 w-4 text-slate-500" />
             Board
           </div>
-          <div className="relative">
+          <div className="relative min-w-0 flex-1 basis-full sm:basis-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Buscar candidato e e-mail…"
-              className="w-64 rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
           </div>
 
           {openings.length > 0 && (

@@ -10,6 +10,7 @@ import {
   getPublicRecruitmentQuestions,
   getRecruitmentQuestionOptions,
   hasRecruitmentAnswer,
+  hydrateRecruitmentQuestionDynamicOptions,
   normalizeRecruitmentFormConfig,
 } from '@/lib/recruitment-forms';
 
@@ -52,6 +53,53 @@ function isAllowedResumeUrl(value: unknown) {
   return typeof value === 'string' &&
     value.startsWith('https://firebasestorage.googleapis.com/') &&
     value.length <= 1200;
+}
+
+function isActiveRecord(data: FirebaseFirestore.DocumentData) {
+  return data.active !== false &&
+    data.isActive !== false &&
+    data.status !== 'inactive' &&
+    data.status !== 'inativo' &&
+    data.status !== 'terminated';
+}
+
+function cleanOptionLabel(value: unknown) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+async function getPublicRoleFunctionOptions() {
+  const [rolesSnap, functionsSnap] = await Promise.all([
+    hrDbAdmin.collection('jobRoles').orderBy('name').get(),
+    hrDbAdmin.collection('jobFunctions').orderBy('name').get(),
+  ]);
+
+  const options = [
+    ...rolesSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => cleanOptionLabel(data.publicTitle || data.name))
+      .filter(Boolean)
+      .map(label => `Cargo · ${label}`),
+    ...functionsSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => cleanOptionLabel(data.publicTitle || data.name))
+      .filter(Boolean)
+      .map(label => `Função · ${label}`),
+  ];
+
+  return Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function formatTalentPreferenceAnswer(value: unknown, maxLength: number) {
+  if (Array.isArray(value)) {
+    return value
+      .map(entry => trimText(entry, 120))
+      .filter(Boolean)
+      .join(', ')
+      .slice(0, maxLength);
+  }
+  return trimText(value, maxLength);
 }
 
 function normalizeTalentFormAnswers(rawAnswers: unknown, questions: HrFormQuestion[]) {
@@ -169,13 +217,30 @@ export async function POST(request: NextRequest) {
     return jsonError('E-mail inválido.');
   }
 
-  const formDoc = await hrDbAdmin.collection('recruitmentForms').doc(TALENT_POOL_FORM_ID).get();
+  const [formDoc, rolesFunctions] = await Promise.all([
+    hrDbAdmin.collection('recruitmentForms').doc(TALENT_POOL_FORM_ID).get(),
+    getPublicRoleFunctionOptions(),
+  ]);
   const formConfig = normalizeRecruitmentFormConfig(
     formDoc.exists ? { id: formDoc.id, ...formDoc.data() } : DEFAULT_TALENT_POOL_FORM
   );
+  const fallbackPublicForm = {
+    ...DEFAULT_TALENT_POOL_FORM,
+    questions: hydrateRecruitmentQuestionDynamicOptions(
+      getPublicRecruitmentQuestions(DEFAULT_TALENT_POOL_FORM.questions),
+      { rolesFunctions }
+    ),
+  };
+
   const publicForm = formConfig.status === 'published'
-    ? { ...formConfig, questions: getPublicRecruitmentQuestions(formConfig.questions) }
-    : DEFAULT_TALENT_POOL_FORM;
+    ? {
+        ...formConfig,
+        questions: hydrateRecruitmentQuestionDynamicOptions(
+          getPublicRecruitmentQuestions(formConfig.questions),
+          { rolesFunctions }
+        ),
+      }
+    : fallbackPublicForm;
   let formAnswers: Record<string, unknown>;
   try {
     formAnswers = normalizeTalentFormAnswers(rawFormAnswers, publicForm.questions);
@@ -184,8 +249,8 @@ export async function POST(request: NextRequest) {
   }
   const formQuestionSnapshot = createQuestionSnapshot(publicForm.questions);
 
-  const resolvedRolePreference = rolePreference || trimText(formAnswers.preferred_role, 120);
-  const resolvedUnitPreference = unitPreference || trimText(formAnswers.preferred_unit, 120);
+  const resolvedRolePreference = rolePreference || formatTalentPreferenceAnswer(formAnswers.preferred_role, 500);
+  const resolvedUnitPreference = unitPreference || formatTalentPreferenceAnswer(formAnswers.preferred_unit, 120);
   const resolvedNotes = notes || trimText(formAnswers.message, 1500);
 
   const existing = await hrDbAdmin
