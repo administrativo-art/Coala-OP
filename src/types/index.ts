@@ -960,6 +960,7 @@ export type JobRoleSalaryRange = {
 export type RecruitmentDisplaySettings = {
   locationLabel?: string;
   workType?: 'presencial' | 'remoto' | 'hibrido';
+  contractTypeLabel?: string;
   deadlineLabel?: string;
   buttonText?: string;
 };
@@ -1146,6 +1147,7 @@ export type JobOpening = {
   pipelineStages?: RecruitmentStage[];
   location?: string;
   workType?: 'presencial' | 'remoto' | 'hibrido';
+  contractTypeLabel?: string | null;
   workSchedule?: string | null;
   slots: number;
   status: JobOpeningStatus;

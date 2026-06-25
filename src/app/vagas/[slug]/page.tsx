@@ -42,6 +42,7 @@ interface PublicOpening {
   location?: string;
   workSchedule?: string | null;
   workType?: WorkType;
+  contractTypeLabel?: string | null;
   slots: number;
   closesAt?: string;
 }
@@ -491,6 +492,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
     : BENEFITS;
   const applyButtonLabel = opening.applyButtonLabel?.trim() || "Enviar candidatura";
   const workTypeLabel = opening.workType ? WORK_TYPE_LABELS[opening.workType] : null;
+  const contractTypeLabel = opening.contractTypeLabel?.trim() || null;
   const badges: Array<{ icon: typeof MapPin; label: string }> = [
     { icon: MapPin, label: `Coala ${location}` },
     ...(workTypeLabel ? [{ icon: Monitor, label: workTypeLabel }] : []),
@@ -555,7 +557,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
               </div>
               <div className="stk rounded-[24px] bg-white p-5">
                 <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#5B4C5B]">Forma de contratação</div>
-                <p className="text-[16px] font-bold text-[#2A1F2A]">{workTypeLabel || "A definir"}</p>
+                <p className="text-[16px] font-bold text-[#2A1F2A]">{contractTypeLabel || "A definir"}</p>
               </div>
             </div>
 

@@ -32,6 +32,7 @@ const salaryRangeSchema = z.object({
 const recruitmentDisplaySchema = z.object({
   locationLabel: z.string().trim().max(120).optional(),
   workType: z.enum(["presencial", "remoto", "hibrido"]).optional(),
+  contractTypeLabel: z.string().trim().max(80).optional(),
   deadlineLabel: z.string().trim().max(80).optional(),
   buttonText: z.string().trim().max(80).optional(),
 }).optional();
@@ -340,6 +341,7 @@ function normalizeRecruitmentDisplay(
   const normalized = stripUndefined({
     locationLabel: display.locationLabel?.trim() || undefined,
     workType: display.workType || undefined,
+    contractTypeLabel: display.contractTypeLabel?.trim() || undefined,
     deadlineLabel: display.deadlineLabel?.trim() || undefined,
     buttonText: display.buttonText?.trim() || undefined,
   });

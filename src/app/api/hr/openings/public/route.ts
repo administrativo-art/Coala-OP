@@ -140,6 +140,7 @@ export async function GET() {
           unitName: data.unitName ?? null,
           shiftDefinitionName: data.shiftDefinitionName ?? null,
           workType: data.workType ?? null,
+          contractTypeLabel: data.contractTypeLabel ?? null,
           slots: data.slots ?? 1,
           applicationStartAt: data.applicationStartAt ?? null,
           applicationEndAt: data.applicationEndAt ?? null,

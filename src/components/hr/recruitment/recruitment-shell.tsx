@@ -59,6 +59,7 @@ import {
   ArrowRight, Kanban, List, Loader2, X, Trash2, AlertTriangle,
   Briefcase, ChevronDown, ChevronRight, ExternalLink, Paperclip,
   Globe, PauseCircle, Archive, Plus, Pencil, SlidersHorizontal,
+  FolderOpen,
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -2715,6 +2716,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     description: opening?.description ?? '',
     location: opening?.location ?? '',
     workType: opening?.workType ?? '',
+    contractTypeLabel: opening?.contractTypeLabel ?? '',
     workSchedule: opening?.workSchedule ?? '',
     slots: String(opening?.slots ?? 1),
     applicationStartAt: opening?.applicationStartAt ? opening.applicationStartAt.split('T')[0] : '',
@@ -2815,6 +2817,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
       ...(fn?.recruitmentDisplay ?? {}),
     };
     const displayLocation = recruitmentDisplay.locationLabel?.trim();
+    const displayContractType = recruitmentDisplay.contractTypeLabel?.trim();
     const displayButton = recruitmentDisplay.buttonText?.trim();
     const inheritedQuestions = getModelQuestions(role, fn);
     const inheritedStages = mergeRecruitmentStageModels(role?.pipelineStages, fn?.pipelineStages);
@@ -2829,6 +2832,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         benefits: prev.benefits.trim() || benefits.length === 0 ? prev.benefits : benefits.join('\n'),
         location: prev.location.trim() || !displayLocation ? prev.location : displayLocation,
         workType: prev.workType || recruitmentDisplay.workType || '',
+        contractTypeLabel: prev.contractTypeLabel.trim() || !displayContractType ? prev.contractTypeLabel : displayContractType,
         workSchedule: prev.workSchedule.trim() || !inheritedWorkSchedule ? prev.workSchedule : inheritedWorkSchedule,
         salaryMin: hasSalary || publicSalaryRange?.min === undefined ? prev.salaryMin : salaryInputValue(publicSalaryRange.min),
         salaryMax: hasSalary || publicSalaryRange?.max === undefined ? prev.salaryMax : salaryInputValue(publicSalaryRange.max),
@@ -3002,6 +3006,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         description: form.description.trim() || null,
         location: form.location.trim() || null,
         workType: form.workType || null,
+        contractTypeLabel: form.contractTypeLabel.trim() || null,
         workSchedule: form.workSchedule.trim() || null,
         slots: Number(form.slots) || 1,
         applicationStartAt: dateInputToIso(form.applicationStartAt),
@@ -3196,12 +3201,22 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Modalidade</label>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Modalidade de trabalho</label>
               <select value={form.workType} onChange={set('workType')}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Não especificado</option>
                 {WORK_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Forma de contratação</label>
+              <input
+                type="text"
+                value={form.contractTypeLabel}
+                onChange={set('contractTypeLabel')}
+                placeholder="Ex: CLT, PJ, temporário"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+              />
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Jornada</label>
@@ -3329,6 +3344,11 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                         {WORK_TYPE_OPTIONS.find(option => option.value === form.workType)?.label}
                       </span>
                     )}
+                    {form.contractTypeLabel.trim() && (
+                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-semibold text-slate-400">
+                        {form.contractTypeLabel.trim()}
+                      </span>
+                    )}
                     <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-semibold text-slate-400">
                       {Number(form.slots) || 1} vaga{Number(form.slots) === 1 ? '' : 's'}
                     </span>
@@ -3350,7 +3370,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                     </div>
                     <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Contratação</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-200">{WORK_TYPE_OPTIONS.find(option => option.value === form.workType)?.label || 'Definir na vaga'}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-200">{form.contractTypeLabel.trim() || 'Definir na vaga'}</p>
                     </div>
                   </div>
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-400">
@@ -4339,6 +4359,15 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
 
 type QuestionModelKind = 'role' | 'function';
 
+type QuestionModelOption = {
+  key: string;
+  kind: QuestionModelKind;
+  item: JobRole | JobFunction;
+  label: string;
+  subtitle: string;
+  searchText: string;
+};
+
 function cloneRecruitmentQuestions(questions: HrFormQuestion[] | undefined) {
   return (questions ?? []).map((question, index) => ({
     ...question,
@@ -4348,14 +4377,17 @@ function cloneRecruitmentQuestions(questions: HrFormQuestion[] | undefined) {
   }));
 }
 
-function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSaved }: {
-  kind: QuestionModelKind;
-  items: Array<JobRole | JobFunction>;
+function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage, onSaved }: {
+  roles: JobRole[];
+  functions: JobFunction[];
   getToken: () => Promise<string>;
   canManage: boolean;
   onSaved: () => void;
 }) {
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedKey, setSelectedKey] = useState('');
+  const [selectorQuery, setSelectorQuery] = useState('');
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [showModelsModal, setShowModelsModal] = useState(false);
   const [questions, setQuestions] = useState<HrFormQuestion[]>([]);
   const [modelText, setModelText] = useState({
     publicTitle: '',
@@ -4369,6 +4401,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
     salaryVisible: true,
     locationLabel: '',
     workType: '',
+    contractTypeLabel: '',
     deadlineLabel: '',
     buttonText: 'Enviar candidatura',
   });
@@ -4377,50 +4410,78 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
-  const selected = useMemo(
-    () => items.find(item => item.id === selectedId) ?? items[0] ?? null,
-    [items, selectedId]
+  const modelOptions = useMemo<QuestionModelOption[]>(() => {
+    const activeFunctions = functions.filter(item => item.isActive !== false);
+    const rolesWithFunctions = new Set<string>();
+    activeFunctions.forEach(item => {
+      (item.compatibleRoleIds ?? []).forEach(roleId => rolesWithFunctions.add(roleId));
+    });
+
+    const roleOptions = roles
+      .filter(role => role.isActive !== false && !rolesWithFunctions.has(role.id))
+      .map((role): QuestionModelOption => {
+        const subtitle = role.departmentName?.trim() || 'Cargo sem função vinculada';
+        return {
+          key: `role:${role.id}`,
+          kind: 'role',
+          item: role,
+          label: role.name,
+          subtitle,
+          searchText: `${role.name} ${role.publicTitle ?? ''} ${subtitle}`.toLowerCase(),
+        };
+      });
+
+    const functionOptions = activeFunctions.map((item): QuestionModelOption => {
+      const roleNames = (item.compatibleRoleIds ?? [])
+        .map(roleId => roles.find(role => role.id === roleId)?.name)
+        .filter((name): name is string => !!name);
+      const subtitle = [
+        item.departmentName?.trim() || 'Função',
+        roleNames.length ? `Cargo: ${roleNames.join(', ')}` : '',
+      ].filter(Boolean).join(' · ');
+      return {
+        key: `function:${item.id}`,
+        kind: 'function',
+        item,
+        label: item.name,
+        subtitle,
+        searchText: `${item.name} ${item.publicTitle ?? ''} ${subtitle}`.toLowerCase(),
+      };
+    });
+
+    return [...roleOptions, ...functionOptions].sort((a, b) => {
+      const departmentCompare = a.subtitle.localeCompare(b.subtitle, 'pt-BR');
+      if (departmentCompare !== 0) return departmentCompare;
+      if (a.kind !== b.kind) return a.kind === 'function' ? -1 : 1;
+      return a.label.localeCompare(b.label, 'pt-BR');
+    });
+  }, [roles, functions]);
+
+  const selectedOption = useMemo(
+    () => modelOptions.find(option => option.key === selectedKey) ?? modelOptions[0] ?? null,
+    [modelOptions, selectedKey]
   );
+  const selected = selectedOption?.item ?? null;
+  const kind: QuestionModelKind = selectedOption?.kind ?? 'role';
   const modelLabel = kind === 'role' ? 'cargo' : 'função';
-  const title = kind === 'role' ? 'Modelos por cargo' : 'Modelos por função';
+  const title = 'Modelos por cargo e função';
   const primaryQuestionCount = questions.filter(question => !question.parentQuestionId).length;
   const subquestionCount = questions.filter(question => question.parentQuestionId).length;
   const sectionCount = groupRecruitmentQuestionsBySection(questions, 'Perguntas do modelo').length;
   const visibleQuestionCount = questions.filter(question => question.active !== false).length;
-  const modelGroups = useMemo(() => {
-    const groups = new Map<string, { id: string; name: string; items: Array<JobRole | JobFunction> }>();
-    for (const item of items) {
-      const name = item.departmentName?.trim() || 'Geral';
-      const id = item.departmentId || makeRecruitmentSectionId(name);
-      const current = groups.get(id);
-      if (current) {
-        current.items.push(item);
-      } else {
-        groups.set(id, { id, name, items: [item] });
-      }
-    }
-    return Array.from(groups.values()).sort((a, b) => {
-      const selectedInA = a.items.some(item => item.id === selected?.id);
-      const selectedInB = b.items.some(item => item.id === selected?.id);
-      if (selectedInA !== selectedInB) return selectedInA ? -1 : 1;
-      if (a.name === 'Geral') return 1;
-      if (b.name === 'Geral') return -1;
-      return a.name.localeCompare(b.name, 'pt-BR');
-    });
-  }, [items, selected?.id]);
-  const getModelItemQuestions = (item: JobRole | JobFunction) =>
-    item.id === selected?.id ? questions : (item.formQuestions ?? []);
-  const configuredModelCount = items.filter(item => getModelItemQuestions(item).length > 0).length;
+  const getModelOptionQuestions = (option: QuestionModelOption) =>
+    option.key === selectedOption?.key ? questions : (option.item.formQuestions ?? []);
+  const configuredModelOptions = modelOptions.filter(option => getModelOptionQuestions(option).length > 0);
 
   useEffect(() => {
-    if (items.length === 0) {
-      setSelectedId('');
+    if (modelOptions.length === 0) {
+      setSelectedKey('');
       return;
     }
-    if (!selectedId || !items.some(item => item.id === selectedId)) {
-      setSelectedId(items[0].id);
+    if (!selectedKey || !modelOptions.some(option => option.key === selectedKey)) {
+      setSelectedKey(modelOptions[0].key);
     }
-  }, [items, selectedId]);
+  }, [modelOptions, selectedKey]);
 
   useEffect(() => {
     setQuestions(cloneRecruitmentQuestions(selected?.formQuestions));
@@ -4440,6 +4501,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
       salaryVisible: selected?.publicSalaryRange?.visible !== false,
       locationLabel: selected?.recruitmentDisplay?.locationLabel || '',
       workType: selected?.recruitmentDisplay?.workType || '',
+      contractTypeLabel: selected?.recruitmentDisplay?.contractTypeLabel || '',
       deadlineLabel: selected?.recruitmentDisplay?.deadlineLabel || '',
       buttonText: selected?.recruitmentDisplay?.buttonText || 'Enviar candidatura',
     });
@@ -4552,6 +4614,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
           recruitmentDisplay: {
             locationLabel: modelText.locationLabel.trim(),
             workType: modelText.workType || undefined,
+            contractTypeLabel: modelText.contractTypeLabel.trim(),
             deadlineLabel: modelText.deadlineLabel.trim(),
             buttonText: modelText.buttonText.trim(),
           },
@@ -4574,14 +4637,19 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
     salaryRangeFromInputs(modelText.salaryMin, modelText.salaryMax, modelText.salaryVisible)
   );
   const modelWorkTypeLabel = WORK_TYPE_OPTIONS.find(option => option.value === modelText.workType)?.label;
+  const modelContractTypeLabel = modelText.contractTypeLabel.trim();
   const modelButtonText = modelText.buttonText.trim() || 'Enviar candidatura';
+  const normalizedSelectorQuery = selectorQuery.trim().toLowerCase();
+  const filteredModelOptions = normalizedSelectorQuery
+    ? modelOptions.filter(option => option.searchText.includes(normalizedSelectorQuery))
+    : modelOptions;
 
-  if (items.length === 0) {
+  if (modelOptions.length === 0) {
     return (
       <div className="w-full min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
         <Briefcase className="mx-auto mb-3 h-10 w-10 text-slate-300" />
         <p className="text-sm font-medium text-slate-500">
-          Nenhum {modelLabel} cadastrado para configurar formulário.
+          Nenhum cargo ou função disponível para configurar modelo.
         </p>
       </div>
     );
@@ -4589,73 +4657,88 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <section className="min-w-0 space-y-2">
-        <div>
-          <h2 className="text-sm font-bold text-slate-950">Visão geral</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            {configuredModelCount} de {items.length} {modelLabel === 'cargo' ? 'cargos' : 'funções'} com modelo configurado.
-          </p>
-        </div>
-
-        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="space-y-2">
-            {modelGroups.map((group, groupIndex) => {
-              const groupHasSelected = group.items.some(item => item.id === selected?.id);
-              const configuredInGroup = group.items.filter(item => getModelItemQuestions(item).length > 0).length;
-              return (
-                <details
-                  key={group.id}
-                  open={groupHasSelected || groupIndex === 0}
-                  className="group overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60 open:bg-white"
-                >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-left [&::-webkit-details-marker]:hidden">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-xs font-bold text-slate-800">{group.name}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        configuredInGroup === group.items.length && configuredInGroup > 0
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : configuredInGroup > 0
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-slate-100 text-slate-400'
-                      }`}>
-                        {configuredInGroup}/{group.items.length}
-                      </span>
-                    </div>
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400 transition group-open:rotate-180" />
-                  </summary>
-                  <div className="flex flex-wrap gap-2 border-t border-slate-100 bg-white px-3 py-3">
-                    {group.items.map(item => {
-                      const itemQuestions = getModelItemQuestions(item);
-                      const itemPrimaryCount = itemQuestions.filter(question => !question.parentQuestionId).length;
-                      const isSelected = item.id === selected?.id;
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => setSelectedId(item.id)}
-                          className={`inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                            isSelected
-                              ? 'border-slate-950 bg-slate-950 text-white shadow-sm'
-                              : itemQuestions.length > 0
-                                ? 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                                : 'border-dashed border-slate-200 bg-white text-slate-400 hover:text-slate-600'
-                          }`}
-                        >
-                          <span className="truncate">{item.name}</span>
-                          {itemPrimaryCount > 0 ? (
-                            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                              isSelected ? 'bg-white/15 text-white' : 'bg-indigo-50 text-indigo-600'
-                            }`}>
-                              {itemPrimaryCount}
-                            </span>
-                          ) : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </details>
-              );
-            })}
+      <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-bold text-slate-950">Selecionar cargo ou função</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Cargos com funções vinculadas são configurados pela função. Cargos sem função continuam com modelo próprio.
+            </p>
+            <div className="relative mt-3 max-w-3xl">
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Cargo ou função</label>
+              <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 focus-within:ring-2 focus-within:ring-slate-900/10">
+                <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                <input
+                  value={selectorOpen ? selectorQuery : selectedOption?.label ?? ''}
+                  onFocus={() => {
+                    setSelectorOpen(true);
+                    setSelectorQuery('');
+                  }}
+                  onChange={event => {
+                    setSelectorQuery(event.target.value);
+                    setSelectorOpen(true);
+                  }}
+                  onBlur={() => window.setTimeout(() => setSelectorOpen(false), 140)}
+                  placeholder="Buscar cargo ou função..."
+                  className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+                />
+                {selectedOption ? (
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-500">
+                    {selectedOption.kind === 'role' ? 'Cargo' : 'Função'}
+                  </span>
+                ) : null}
+              </div>
+              {selectorOpen ? (
+                <div className="absolute z-30 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+                  {filteredModelOptions.length > 0 ? filteredModelOptions.map(option => {
+                    const optionQuestionCount = getModelOptionQuestions(option).length;
+                    const isSelected = option.key === selectedOption?.key;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => {
+                          setSelectedKey(option.key);
+                          setSelectorQuery('');
+                          setSelectorOpen(false);
+                        }}
+                        className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition ${
+                          isSelected ? 'bg-slate-950 text-white' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold">{option.label}</span>
+                          <span className={`block truncate text-xs ${isSelected ? 'text-white/70' : 'text-slate-500'}`}>
+                            {option.subtitle}
+                          </span>
+                        </span>
+                        <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
+                          isSelected ? 'bg-white/15 text-white' : optionQuestionCount > 0 ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'
+                        }`}>
+                          {optionQuestionCount > 0 ? pluralizePt(optionQuestionCount, 'pergunta', 'perguntas') : 'sem modelo'}
+                        </span>
+                      </button>
+                    );
+                  }) : (
+                    <div className="px-3 py-4 text-sm text-slate-500">Nenhum resultado encontrado.</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500">
+              {configuredModelOptions.length}/{modelOptions.length} com modelo
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowModelsModal(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <FolderOpen className="h-4 w-4" />
+              Modelos
+            </button>
           </div>
         </div>
       </section>
@@ -4735,6 +4818,16 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
               />
             </div>
             <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Jornada padrão</label>
+              <input
+                value={modelText.workSchedule}
+                onChange={event => setModelText(prev => ({ ...prev, workSchedule: event.target.value }))}
+                disabled={!canManage}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Ex: Escala 6x1, fins de semana alternados"
+              />
+            </div>
+            <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Modalidade padrão</label>
               <select
                 value={modelText.workType}
@@ -4747,6 +4840,16 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Forma de contratação padrão</label>
+              <input
+                value={modelText.contractTypeLabel}
+                onChange={event => setModelText(prev => ({ ...prev, contractTypeLabel: event.target.value }))}
+                disabled={!canManage}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Ex: CLT, PJ, temporário"
+              />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Chip de prazo padrão</label>
@@ -4843,17 +4946,6 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
                 placeholder={'Um por linha\nVale-transporte\nBonificações'}
               />
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Jornada/observação pública</label>
-              <textarea
-                value={modelText.workSchedule}
-                onChange={event => setModelText(prev => ({ ...prev, workSchedule: event.target.value }))}
-                disabled={!canManage}
-                rows={4}
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                placeholder="Ex: Escala 6x1, disponibilidade para fins de semana."
-              />
-            </div>
           </div>
 
           <div className="min-w-0 rounded-2xl border border-slate-200 bg-[#f0eee9] p-4">
@@ -4874,6 +4966,11 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
                   {(modelSalaryPreview || 'Salário a combinar') && (
                     <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">
                       {modelSalaryPreview || 'Salário a combinar'}
+                    </span>
+                  )}
+                  {(modelContractTypeLabel || 'Contratação na vaga') && (
+                    <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">
+                      {modelContractTypeLabel || 'Contratação na vaga'}
                     </span>
                   )}
                   {(modelText.deadlineLabel.trim() || 'Prazo definido na vaga') && (
@@ -4898,7 +4995,7 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-white p-3">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Contratação</p>
-                    <p className="mt-1 text-xs font-bold text-slate-700">{modelWorkTypeLabel || 'Definida na vaga'}</p>
+                    <p className="mt-1 text-xs font-bold text-slate-700">{modelContractTypeLabel || 'Definida na vaga'}</p>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -5046,6 +5143,77 @@ function RecruitmentQuestionModelEditor({ kind, items, getToken, canManage, onSa
         </div>
         )}
       </section>
+
+      {showModelsModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="max-h-[82vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-950">Modelos cadastrados</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Selecione um cargo ou função para abrir o modelo salvo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModelsModal(false)}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto p-3">
+              {configuredModelOptions.length > 0 ? (
+                <div className="space-y-2">
+                  {configuredModelOptions.map(option => {
+                    const optionQuestions = getModelOptionQuestions(option);
+                    const isSelected = option.key === selectedOption?.key;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => {
+                          setSelectedKey(option.key);
+                          setShowModelsModal(false);
+                        }}
+                        className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                          isSelected
+                            ? 'border-slate-950 bg-slate-950 text-white'
+                            : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-sm font-bold">{option.label}</span>
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              isSelected ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {option.kind === 'role' ? 'Cargo' : 'Função'}
+                            </span>
+                          </span>
+                          <span className={`mt-1 block truncate text-xs ${isSelected ? 'text-white/70' : 'text-slate-500'}`}>
+                            {option.subtitle}
+                          </span>
+                        </span>
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                          isSelected ? 'bg-white/15 text-white' : 'bg-indigo-50 text-indigo-600'
+                        }`}>
+                          {pluralizePt(optionQuestions.filter(question => !question.parentQuestionId).length, 'pergunta', 'perguntas')}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  Nenhum modelo cadastrado ainda.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -5057,7 +5225,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   functions: JobFunction[];
   onModelsUpdated: () => void;
 }) {
-  const [formSection, setFormSection] = useState<'talent' | 'roles' | 'functions'>('talent');
+  const [formSection, setFormSection] = useState<'talent' | 'models'>('talent');
   const [form, setForm] = useState<RecruitmentFormConfig>(DEFAULT_TALENT_POOL_FORM);
   const [questionDraft, setQuestionDraft] = useState(EMPTY_QUESTION_DRAFT);
   const [loading, setLoading] = useState(true);
@@ -5212,8 +5380,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
     <div className="flex max-w-full flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
       {([
         { value: 'talent', label: 'Banco de talentos' },
-        { value: 'roles', label: 'Modelos por cargo' },
-        { value: 'functions', label: 'Modelos por função' },
+        { value: 'models', label: 'Modelos por cargo e função' },
       ] as const).map(item => (
         <button
           key={item.value}
@@ -5235,28 +5402,13 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   const talentSectionCount = groupRecruitmentQuestionsBySection(form.questions, 'Campos personalizados').length;
   const fixedFieldCount = 5;
 
-  if (formSection === 'roles') {
+  if (formSection === 'models') {
     return (
       <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
         {formTabs}
         <RecruitmentQuestionModelEditor
-          kind="role"
-          items={roles}
-          getToken={getToken}
-          canManage={canManage}
-          onSaved={onModelsUpdated}
-        />
-      </div>
-    );
-  }
-
-  if (formSection === 'functions') {
-    return (
-      <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
-        {formTabs}
-        <RecruitmentQuestionModelEditor
-          kind="function"
-          items={functions}
+          roles={roles}
+          functions={functions}
           getToken={getToken}
           canManage={canManage}
           onSaved={onModelsUpdated}
