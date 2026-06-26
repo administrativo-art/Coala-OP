@@ -10,6 +10,7 @@ import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
 import { ChangePasswordModal } from './change-password-modal';
+import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 import {
   fetchHrLoginAccess,
   type HrLoginAccessPayload,
@@ -102,6 +103,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         const userDocRef = doc(db, 'users', user.uid);
         let userDocSnap;
+        let fallbackUser: User | null = null;
+
+        const loadCurrentUserFallback = async () => {
+          try {
+            const payload = await fetchClientBootstrap(user, ["currentUser"]);
+            return payload.currentUser ?? null;
+          } catch (fallbackError) {
+            console.error("[AuthProvider] Server user fallback failed.", fallbackError);
+            return null;
+          }
+        };
 
         try {
           userDocSnap = await getDoc(userDocRef);
@@ -118,14 +130,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             userDocSnap = await getDocFromCache(userDocRef);
           } catch (cacheError) {
             console.error("[AuthProvider] Cached user document is unavailable.", cacheError);
+            fallbackUser = await loadCurrentUserFallback();
           }
         }
 
-        if (userDocSnap?.exists()) {
+        if (!userDocSnap?.exists() && !fallbackUser) {
+          fallbackUser = await loadCurrentUserFallback();
+        }
+
+        if (userDocSnap?.exists() || fallbackUser) {
           // Força refresh do token para garantir claims atualizados (profileId, isDefaultAdmin)
           await user.getIdToken(true);
           void recordLoginAccess(user);
-          const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
+          const userData = fallbackUser ?? ({ id: userDocSnap!.id, ...userDocSnap!.data() } as User);
           setAppUser(userData);
         } else {
           await signOut(auth);
@@ -163,10 +180,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUsers(usersData);
     }, (error) => {
         console.error("[AuthProvider] Falha ao carregar diretório de usuários.", error);
-        setUsers([appUser]);
+        const currentFirebaseUser = firebaseUser ?? auth.currentUser;
+        if (!currentFirebaseUser) {
+          setUsers([appUser]);
+          return;
+        }
+
+        void fetchClientBootstrap(currentFirebaseUser, ["users"])
+          .then((payload) => setUsers(payload.users?.length ? payload.users : [appUser]))
+          .catch((fallbackError) => {
+            console.error("[AuthProvider] Server users fallback failed.", fallbackError);
+            setUsers([appUser]);
+          });
     });
     return () => unsubscribeUsers();
-  }, [appUser, permissions, permissionsReady, profilesLoading]);
+  }, [appUser, firebaseUser, permissions, permissionsReady, profilesLoading]);
 
   const mergeRecursive = useCallback((target: Record<string, any>, source: Record<string, any>) => {
     if (!source || typeof source !== 'object' || Array.isArray(source)) return;

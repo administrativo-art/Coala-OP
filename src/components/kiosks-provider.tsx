@@ -6,6 +6,7 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { type Kiosk } from '@/types';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, query, updateDoc } from "firebase/firestore";
 
 export interface KiosksContextType {
@@ -23,15 +24,32 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubscribeKiosks: (() => void) | null = null;
+
     const unsubAuth = onAuthStateChanged(auth, (user) => {
+      unsubscribeKiosks?.();
+      unsubscribeKiosks = null;
+
       if (!user) {
         setKiosks([]);
         setLoading(false);
         return;
       }
 
+      const loadFallback = async () => {
+        try {
+          const payload = await fetchClientBootstrap(user, ["kiosks"]);
+          setKiosks(payload.kiosks ?? []);
+        } catch (fallbackError) {
+          console.error("[KiosksProvider] API fallback failed:", fallbackError);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      setLoading(true);
       const q = query(collection(db, "kiosks"));
-      const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+      unsubscribeKiosks = onSnapshot(q, async (querySnapshot) => {
         // If the collection is empty, seed it with default data.
         if (querySnapshot.empty && !localStorage.getItem('kiosks_seeded')) {
           console.log("No kiosks found. Seeding default kiosks...");
@@ -55,13 +73,14 @@ export function KiosksProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }, (error) => {
           console.error("Error fetching kiosks from Firestore: ", error);
-          setLoading(false);
+          void loadFallback();
       });
-
-      return () => unsubscribe();
     });
 
-    return () => unsubAuth();
+    return () => {
+      unsubscribeKiosks?.();
+      unsubAuth();
+    };
   }, []);
   
   const addKiosk = useCallback(async (kioskData: Partial<Kiosk>) => {

@@ -7,6 +7,7 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, ser
 import { type GoalTemplate, type GoalPeriodDoc, type EmployeeGoal } from '@/types';
 import { GoalsContext } from '@/contexts/goals-context';
 import { buildGoalClosureSnapshot, calculateScheduledEmployeeGoalTargets, loadGoalDistributionSnapshot } from '@/lib/goals-distribution';
+import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 
 export function GoalsProvider({ children }: { children: React.ReactNode }) {
   const [templates, setTemplates] = useState<GoalTemplate[]>([]);
@@ -18,7 +19,13 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
     // Só abre subscriptions quando o usuário estiver autenticado.
     // Isso evita que os onSnapshot disparem antes do token estar pronto e
     // morram silenciosamente com permission-denied.
+    let unsubscribeGoals: (() => void) | null = null;
+    let active = true;
+
     const unsubAuth = onAuthStateChanged(auth, (user) => {
+      unsubscribeGoals?.();
+      unsubscribeGoals = null;
+
       if (!user) {
         setTemplates([]);
         setPeriods([]);
@@ -28,28 +35,53 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
       }
 
       let loadedCount = 0;
+      let fallbackStarted = false;
       const checkDone = () => { loadedCount++; if (loadedCount >= 3) setLoading(false); };
 
+      const loadFallback = async () => {
+        if (fallbackStarted) return;
+        fallbackStarted = true;
+
+        try {
+          const payload = await fetchClientBootstrap(user, ["goals"]);
+          if (!active) return;
+          setTemplates(payload.goalTemplates ?? []);
+          setPeriods(payload.goalPeriods ?? []);
+          setEmployeeGoals(payload.employeeGoals ?? []);
+        } catch (fallbackError) {
+          console.error("[GoalsProvider] API fallback failed:", fallbackError);
+        } finally {
+          if (active) setLoading(false);
+        }
+      };
+
       const unsubTemplates = onSnapshot(collection(db, 'goalTemplates'), snap => {
+        if (!active) return;
         setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() } as GoalTemplate)));
         checkDone();
-      }, err => { console.warn('[GoalsProvider] goalTemplates:', err.code, err.message); checkDone(); });
+      }, err => { console.warn('[GoalsProvider] goalTemplates:', err.code, err.message); void loadFallback(); });
 
       const unsubPeriods = onSnapshot(collection(db, 'goalPeriods'), snap => {
+        if (!active) return;
         setPeriods(snap.docs.map(d => ({ id: d.id, ...d.data() } as GoalPeriodDoc)));
         checkDone();
-      }, err => { console.warn('[GoalsProvider] goalPeriods:', err.code, err.message); checkDone(); });
+      }, err => { console.warn('[GoalsProvider] goalPeriods:', err.code, err.message); void loadFallback(); });
 
       const unsubEmp = onSnapshot(collection(db, 'employeeGoals'), snap => {
+        if (!active) return;
         setEmployeeGoals(snap.docs.map(d => ({ id: d.id, ...d.data() } as EmployeeGoal)));
         checkDone();
-      }, err => { console.warn('[GoalsProvider] employeeGoals:', err.code, err.message); checkDone(); });
+      }, err => { console.warn('[GoalsProvider] employeeGoals:', err.code, err.message); void loadFallback(); });
 
       // Retorna cleanup das subscriptions Firestore quando o auth mudar
-      return () => { unsubTemplates(); unsubPeriods(); unsubEmp(); };
+      unsubscribeGoals = () => { unsubTemplates(); unsubPeriods(); unsubEmp(); };
     });
 
-    return () => unsubAuth();
+    return () => {
+      active = false;
+      unsubscribeGoals?.();
+      unsubAuth();
+    };
   }, []);
 
   const addTemplate = useCallback(async (data: Omit<GoalTemplate, 'id' | 'createdAt'>): Promise<string | null> => {

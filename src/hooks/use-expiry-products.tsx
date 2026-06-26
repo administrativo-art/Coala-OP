@@ -7,6 +7,7 @@ import { type LotEntry, type MovementRecord, type MovementType, type User, type 
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
+import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 import { pruneUndefined } from '@/lib/utils';
 import { convertValue } from '@/lib/conversion';
 
@@ -70,7 +71,7 @@ const destLotIdKey = (params: {
 
 // --- PROVIDER COMPONENT ---
 export function ExpiryProductsProvider({ children }: { children: React.ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, firebaseUser, loading: authLoading } = useAuth();
   const [lots, setLots] = useState<LotEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -87,17 +88,40 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
 
     setLoading(true);
+    let active = true;
+
+    const loadFallback = async () => {
+      if (!firebaseUser) {
+        if (active) setLoading(false);
+        return;
+      }
+
+      try {
+        const payload = await fetchClientBootstrap(firebaseUser, ["lots"]);
+        if (!active) return;
+        setLots(payload.lots ?? []);
+      } catch (fallbackError) {
+        console.error("[ExpiryProductsProvider] API fallback failed:", fallbackError);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
     const q = query(collection(db, "lots"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      if (!active) return;
       const lotsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LotEntry));
       setLots(lotsData);
       setLoading(false);
     }, (error) => {
         console.error("Error fetching lots from Firestore: ", error);
-        setLoading(false);
+        void loadFallback();
     });
-    return () => unsubscribe();
-  }, [authLoading, user]);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [authLoading, firebaseUser, user]);
 
   const addMovementRecord = (batchOrTx: any, record: Omit<MovementRecord, 'id'>) => {
     const movementHistoryRef = doc(collection(db, "movementHistory"));

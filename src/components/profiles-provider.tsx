@@ -6,6 +6,7 @@ import { type Profile, defaultAdminPermissions, defaultUserPermissions } from '@
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, query } from 'firebase/firestore';
+import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 
 export interface ProfilesContextType {
   profiles: Profile[];
@@ -25,6 +26,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let unsubscribeProfiles: (() => void) | null = null;
+    let isMounted = true;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       unsubscribeProfiles?.();
@@ -40,6 +42,24 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       const q = query(collection(db, "profiles"));
       let lastUpdateAt = 0;
+      const applyProfiles = (profilesData: Profile[]) => {
+        if (!isMounted) return;
+        const adminProfile = profilesData.find(p => p.isDefaultAdmin);
+        setAdminProfileId(adminProfile?.id ?? null);
+        setProfiles(profilesData);
+        setLoading(false);
+      };
+
+      const loadFallback = async () => {
+        try {
+          const payload = await fetchClientBootstrap(user, ["profiles"]);
+          applyProfiles(payload.profiles ?? []);
+        } catch (fallbackError) {
+          console.error("[ProfilesProvider] API fallback failed:", fallbackError);
+          if (isMounted) setLoading(false);
+        }
+      };
+
       unsubscribeProfiles = onSnapshot(q, async (querySnapshot) => {
         let profilesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Profile));
 
@@ -108,15 +128,15 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
           }
         }
         
-        setProfiles(profilesData);
-        setLoading(false);
+        applyProfiles(profilesData);
       }, (error) => {
           console.error("Error fetching profiles:", error);
-          setLoading(false);
+          void loadFallback();
       });
     });
 
     return () => {
+      isMounted = false;
       unsubscribeProfiles?.();
       unsubAuth();
     };

@@ -5,6 +5,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type BaseProduct } from '@/types';
 import { db } from '@/lib/firebase';
+import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -37,6 +38,29 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
       return;
     }
 
+    let active = true;
+    const applyBaseProducts = (productsData: BaseProduct[]) => {
+      if (!active) return;
+      setBaseProducts(productsData.sort((a,b) => (a.name || '').localeCompare(b.name || '')));
+      setLoading(false);
+    };
+
+    const loadFallback = async () => {
+      if (!firebaseUser) {
+        if (active) setLoading(false);
+        return;
+      }
+
+      try {
+        const payload = await fetchClientBootstrap(firebaseUser, ["baseProducts"]);
+        applyBaseProducts(payload.baseProducts ?? []);
+      } catch (fallbackError) {
+        console.error("[BaseProductsProvider] API fallback failed:", fallbackError);
+        if (active) setLoading(false);
+      }
+    };
+
+    setLoading(true);
     const q = query(collection(db, "baseProducts"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const productsData = querySnapshot.docs.map(doc => {
@@ -45,15 +69,17 @@ export function BaseProductsProvider({ children }: { children: React.ReactNode }
                 ...doc.data(),
              } as BaseProduct
         });
-        setBaseProducts(productsData.sort((a,b) => (a.name || '').localeCompare(b.name || '')));
-        setLoading(false);
+        applyBaseProducts(productsData);
     }, (error) => {
         console.error("Error fetching base products from Firestore: ", error);
-        setLoading(false);
+        void loadFallback();
     });
 
-    return () => unsubscribe();
-  }, [authLoading, user]);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [authLoading, firebaseUser, user]);
 
   const addBaseProduct = useCallback(async (product: Omit<BaseProduct, 'id'>) => {
     if (!firebaseUser) throw new Error('Usuário não autenticado.');
