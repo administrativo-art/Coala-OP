@@ -32,18 +32,18 @@ import {
   type PurchasingTone,
 } from '@/components/purchasing/purchasing-ui';
 
-const statusConfig: Record<PurchaseReceipt['status'], { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'done' }> = {
+const statusConfig: Record<PurchaseReceipt['status'], { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'divergence' | 'done' }> = {
   awaiting_delivery: { label: 'A receber', tone: 'cyan', progress: 5, bucket: 'waiting' },
   in_conference: { label: 'Em conferência', tone: 'purple', progress: 6, bucket: 'conference' },
   awaiting_stock: { label: 'Aguardando estoque', tone: 'blue', progress: 7, bucket: 'conference' },
   in_stock_entry: { label: 'Entrada em estoque', tone: 'green', progress: 7, bucket: 'conference' },
   partially_stocked: { label: 'Recebimento parcial', tone: 'amber', progress: 6, bucket: 'partial' },
   stocked: { label: 'Concluída', tone: 'green', progress: 8, bucket: 'done' },
-  stocked_with_divergence: { label: 'Em processo', tone: 'purple', progress: 7, bucket: 'conference' },
+  stocked_with_divergence: { label: 'Tratamento de divergência', tone: 'rose', progress: 7, bucket: 'divergence' },
   cancelled: { label: 'Cancelada', tone: 'zinc', progress: 1, bucket: 'done' },
 };
 
-const fallbackStatusConfig: { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'done' } = {
+const fallbackStatusConfig: { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'divergence' | 'done' } = {
   label: 'Pendente',
   tone: 'zinc',
   progress: 1,
@@ -71,7 +71,7 @@ export default function ReceiptsPage() {
     [orders],
   );
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'waiting' | 'partial' | 'conference' | 'delayed' | 'done'>('all');
+  const [filter, setFilter] = useState<'all' | 'waiting' | 'partial' | 'conference' | 'divergence' | 'delayed' | 'done'>('all');
   const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
   const [period, setPeriod] = useState(createDefaultPurchasingPeriod);
   const canView = canViewPurchasing(permissions);
@@ -88,7 +88,8 @@ export default function ReceiptsPage() {
 
   const waiting = periodReceipts.filter((r) => r.status === 'awaiting_delivery');
   const partial = periodReceipts.filter((r) => r.status === 'partially_stocked');
-  const conference = periodReceipts.filter((r) => ['in_conference', 'awaiting_stock', 'in_stock_entry', 'stocked_with_divergence'].includes(r.status));
+  const conference = periodReceipts.filter((r) => ['in_conference', 'awaiting_stock', 'in_stock_entry'].includes(r.status));
+  const divergence = periodReceipts.filter((r) => r.status === 'stocked_with_divergence');
   const done = periodReceipts.filter((r) => r.status === 'stocked');
   const delayed = periodReceipts.filter((r) => ['awaiting_delivery', 'in_conference', 'awaiting_stock', 'in_stock_entry', 'partially_stocked', 'stocked_with_divergence'].includes(r.status) && r.expectedDate && new Date(r.expectedDate).getTime() < Date.now());
 
@@ -117,10 +118,11 @@ export default function ReceiptsPage() {
           description="Conferência da mercadoria recebida, divergências, NF-e e lançamento financeiro."
         />
 
-        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-5">
+        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
           <PurchasingMetricCard label="A receber" value={waiting.length} detail="aguardando chegada" tone="cyan" icon={<Truck className="h-5 w-5" />} />
           <PurchasingMetricCard label="Parciais" value={partial.length} detail="com saldo aberto" tone="amber" icon={<AlertTriangle className="h-5 w-5" />} />
           <PurchasingMetricCard label="Em processo" value={conference.length} detail="conferência/estoque" tone="purple" icon={<PackageCheck className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Divergências" value={divergence.length} detail="precisa tratar" tone="rose" icon={<AlertTriangle className="h-5 w-5" />} />
           <PurchasingMetricCard label="Atrasados" value={delayed.length} detail="previsão vencida" tone="rose" icon={<AlertTriangle className="h-5 w-5" />} />
           <PurchasingMetricCard label="Concluídos" value={done.length} detail="despesa lançada" tone="green" icon={<CheckCircle2 className="h-5 w-5" />} />
         </div>
@@ -137,6 +139,7 @@ export default function ReceiptsPage() {
           <PurchasingFilterChip active={filter === 'waiting'} label="Aguardando" count={waiting.length} tone="cyan" onClick={() => setFilter('waiting')} />
           <PurchasingFilterChip active={filter === 'partial'} label="Parcial" count={partial.length} tone="amber" onClick={() => setFilter('partial')} />
           <PurchasingFilterChip active={filter === 'conference'} label="Em processo" count={conference.length} tone="purple" onClick={() => setFilter('conference')} />
+          <PurchasingFilterChip active={filter === 'divergence'} label="Divergência" count={divergence.length} tone="rose" onClick={() => setFilter('divergence')} />
           <PurchasingFilterChip active={filter === 'delayed'} label="Atrasado" count={delayed.length} tone="rose" onClick={() => setFilter('delayed')} />
           <PurchasingFilterChip active={filter === 'done'} label="Concluída" count={done.length} tone="green" onClick={() => setFilter('done')} />
         </PurchasingToolbar>
@@ -167,16 +170,17 @@ export default function ReceiptsPage() {
           </div>
         ) : view === 'kanban' ? (
           <div className="overflow-x-auto pb-3">
-            <div className="grid min-w-[1280px] grid-cols-6 gap-3">
+            <div className="grid min-w-[1480px] grid-cols-7 gap-3">
               {[
                 { label: 'A receber', tone: 'cyan' as const },
                 { label: 'Em conferência', tone: 'purple' as const },
                 { label: 'Aguardando estoque', tone: 'blue' as const },
                 { label: 'Entrada em estoque', tone: 'green' as const },
                 { label: 'Recebimento parcial', tone: 'amber' as const },
+                { label: 'Tratamento de divergência', tone: 'rose' as const },
                 { label: 'Concluída', tone: 'green' as const },
               ].map((column) => {
-                const columnCards = cards.filter((entry) => entry.cfg.label === column.label || (column.label === 'Em conferência' && entry.receipt.status === 'stocked_with_divergence'));
+                const columnCards = cards.filter((entry) => entry.cfg.label === column.label);
                 return (
                   <PurchasingKanbanColumn key={column.label} label={column.label} tone={column.tone} count={columnCards.length}>
                     {columnCards.map(({ receipt, cfg }) => (

@@ -34,6 +34,7 @@ import {
 import {
   type Product,
   type BaseProduct,
+  type PurchaseDivergenceResolutionAction,
   type PurchaseItemTreatment,
   type PurchaseStockEntryType,
 } from '@/types';
@@ -184,6 +185,64 @@ function purchaseItemTreatmentFields(item: Record<string, any>) {
     linkedAssetName: item.linkedAssetName ?? null,
     componentAction: item.componentAction ?? null,
   };
+}
+
+const DIVERGENCE_RESOLUTION_LABELS: Record<PurchaseDivergenceResolutionAction, string> = {
+  accept_charged: 'Aceitar excedente/diferença com cobrança',
+  bonus: 'Registrar excedente como bonificação',
+  return_excess: 'Marcar excedente para devolução',
+  keep_pending: 'Manter saldo pendente',
+  close_shortage: 'Fechar saldo como não entregue',
+  request_replacement: 'Solicitar reposição',
+  credit_discount: 'Registrar crédito/desconto',
+  correct_entry: 'Corrigir lançamento',
+};
+
+function normalizeDivergenceResolutionAction(value: unknown): PurchaseDivergenceResolutionAction | null {
+  return typeof value === 'string' && value in DIVERGENCE_RESOLUTION_LABELS
+    ? (value as PurchaseDivergenceResolutionAction)
+    : null;
+}
+
+function isClosingDivergenceAction(action?: PurchaseDivergenceResolutionAction | null) {
+  return (
+    action === 'accept_charged' ||
+    action === 'bonus' ||
+    action === 'return_excess' ||
+    action === 'close_shortage' ||
+    action === 'credit_discount' ||
+    action === 'correct_entry'
+  );
+}
+
+function itemHasCommercialDivergence(item: Record<string, any>) {
+  const quantityReceived = Number(item.quantityReceived ?? 0);
+  const quantityOrdered = Number(item.quantityOrdered ?? 0);
+  const unitPriceConfirmed = Number(item.unitPriceConfirmed ?? 0);
+  const unitPriceOrdered = Number(item.unitPriceOrdered ?? 0);
+  return (
+    Math.abs(quantityReceived - quantityOrdered) > 0.001 ||
+    Math.abs(unitPriceConfirmed - unitPriceOrdered) > 0.01 ||
+    !!item.divergenceReason ||
+    item.receiptDisposition === 'receive_less' ||
+    item.receiptDisposition === 'receive_more' ||
+    item.receiptDisposition === 'exchange_pending' ||
+    item.receiptDisposition === 'returned' ||
+    item.status === 'divergent'
+  );
+}
+
+function chargeableReceiptItemTotal(item: Record<string, any>) {
+  const action = normalizeDivergenceResolutionAction(item.divergenceResolutionAction);
+  const quantityReceived = Number(item.quantityReceived ?? 0);
+  const quantityOrdered = Number(item.quantityOrdered ?? quantityReceived);
+  const unitPriceConfirmed = Number(item.unitPriceConfirmed ?? item.unitPriceOrdered ?? 0);
+
+  if (action === 'bonus' || action === 'return_excess') {
+    return Math.max(Math.min(quantityReceived, quantityOrdered), 0) * unitPriceConfirmed;
+  }
+
+  return Math.max(quantityReceived, 0) * unitPriceConfirmed;
 }
 
 function buildPurchaseAuditNotes(orderData: Record<string, any>) {
@@ -869,6 +928,176 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     if (quantityReceived < quantityOrdered) return 'partial';
     if (divergenceReason || quantityDiffers || priceDiffers) return 'divergent';
     return 'received';
+  }
+
+  if (resource === 'receipts' && id && child === 'resolve-divergence') {
+    const receiptRef = dbAdmin.collection('purchase_receipts').doc(id);
+    const receiptSnap = await receiptRef.get();
+    if (!receiptSnap.exists) return jsonError('Recebimento não encontrado.', 404);
+    const receipt = receiptSnap.data()!;
+
+    const items = Array.isArray(body.items) ? body.items : [];
+    if (items.length === 0) return jsonError('Informe ao menos uma divergência para tratar.');
+
+    const orderRef = dbAdmin.collection('purchase_orders').doc(receipt.purchaseOrderId);
+    const orderSnap = await orderRef.get();
+    const order = orderSnap.data() ?? {};
+    const receiptItemsSnap = await receiptRef.collection('items').get();
+    const receiptItems = receiptItemsSnap.docs.map((itemDoc) => ({
+      id: itemDoc.id,
+      ref: itemDoc.ref,
+      data: itemDoc.data(),
+    }));
+    const receiptItemsById = new Map(receiptItems.map((item) => [item.id, item]));
+    const resolutions = new Map<string, { action: PurchaseDivergenceResolutionAction; notes?: string }>();
+
+    for (const item of items) {
+      const receiptItemId = String(item.receiptItemId ?? '');
+      const action = normalizeDivergenceResolutionAction(item.action);
+      if (!receiptItemId || !action) return jsonError('Ação de divergência inválida.', 400);
+      if (!receiptItemsById.has(receiptItemId)) return jsonError('Item de recebimento inválido.', 404);
+      resolutions.set(receiptItemId, {
+        action,
+        notes: typeof item.notes === 'string' ? item.notes.trim() : '',
+      });
+    }
+
+    const batch = dbAdmin.batch();
+    const nextItems: Array<Record<string, any>> = [];
+    const username = body.username ?? 'Sistema';
+
+    for (const item of receiptItems) {
+      const resolution = resolutions.get(item.id);
+      const nextItem = { ...item.data };
+
+      if (resolution) {
+        const { action, notes } = resolution;
+        const quantityReceived = Number(nextItem.quantityReceived ?? 0);
+        const status =
+          action === 'keep_pending' || action === 'request_replacement'
+            ? 'partial'
+            : quantityReceived > 0
+            ? 'received'
+            : 'cancelled';
+        const disposition =
+          action === 'keep_pending' ||
+          action === 'request_replacement' ||
+          action === 'close_shortage' ||
+          action === 'credit_discount'
+            ? 'receive_less'
+            : action === 'return_excess' || action === 'bonus' || action === 'accept_charged'
+            ? 'receive_more'
+            : nextItem.receiptDisposition ?? 'receive';
+        const auditEntry = {
+          action,
+          label: DIVERGENCE_RESOLUTION_LABELS[action],
+          notes: notes || null,
+          resolvedAt: now,
+          resolvedBy: decoded.uid,
+          resolvedByName: username,
+        };
+
+        Object.assign(nextItem, {
+          status,
+          receiptDisposition: disposition,
+          divergenceResolutionAction: action,
+          divergenceResolvedAt: now,
+          divergenceResolvedBy: decoded.uid,
+          resolutionNotes: notes || DIVERGENCE_RESOLUTION_LABELS[action],
+        });
+
+        batch.update(item.ref, {
+          status,
+          receiptDisposition: disposition,
+          divergenceResolutionAction: action,
+          divergenceResolvedAt: now,
+          divergenceResolvedBy: decoded.uid,
+          resolutionNotes: notes || DIVERGENCE_RESOLUTION_LABELS[action],
+          divergenceResolutionHistory: FieldValue.arrayUnion(auditEntry),
+          updatedAt: now,
+        });
+      }
+
+      nextItems.push(nextItem);
+    }
+
+    let goodsConfirmed = 0;
+    let hasOpenBalance = false;
+    let hasUnresolvedDivergence = false;
+
+    for (const item of nextItems) {
+      goodsConfirmed += chargeableReceiptItemTotal(item);
+
+      const action = normalizeDivergenceResolutionAction(item.divergenceResolutionAction);
+      const itemDiverges = itemHasCommercialDivergence(item);
+      const hasResolution = !!action;
+      const keepsBalanceOpen = action === 'keep_pending' || action === 'request_replacement';
+
+      if (keepsBalanceOpen || (!isClosingDivergenceAction(action) && item.status === 'partial')) {
+        hasOpenBalance = true;
+      }
+
+      if (itemDiverges && !hasResolution) {
+        hasUnresolvedDivergence = true;
+      }
+    }
+
+    const finalStatus = hasOpenBalance
+      ? 'partially_stocked'
+      : hasUnresolvedDivergence
+      ? 'stocked_with_divergence'
+      : 'stocked';
+    const deliveryFee = Number(order.deliveryFee ?? 0);
+    const financialConfirmed = goodsConfirmed + deliveryFee;
+    const resolutionSummary = items
+      .map((item: any) => {
+        const action = normalizeDivergenceResolutionAction(item.action);
+        return action ? DIVERGENCE_RESOLUTION_LABELS[action] : null;
+      })
+      .filter(Boolean)
+      .join('; ');
+
+    batch.update(receiptRef, {
+      status: finalStatus,
+      totalConfirmed: goodsConfirmed,
+      divergenceResolvedAt: finalStatus === 'stocked' ? now : null,
+      divergenceResolvedBy: decoded.uid,
+      divergenceResolutionSummary: resolutionSummary || null,
+      ...(finalStatus === 'stocked' ? { receivedAt: now } : {}),
+      updatedAt: now,
+      notes: body.notes ?? receipt.notes ?? null,
+    });
+
+    batch.update(orderRef, {
+      totalConfirmed: goodsConfirmed,
+      ...(finalStatus === 'stocked' ? { receivedAt: now } : {}),
+      updatedAt: now,
+    });
+
+    const finSnap = await dbAdmin
+      .collection('purchase_financials')
+      .where('purchaseOrderId', '==', receipt.purchaseOrderId)
+      .get();
+    finSnap.forEach((financialDoc) => {
+      batch.update(financialDoc.ref, {
+        status:
+          finalStatus === 'stocked'
+            ? 'confirmed'
+            : finalStatus === 'partially_stocked'
+            ? 'forecasted'
+            : 'divergent',
+        amountConfirmed: financialConfirmed,
+        updatedAt: now,
+      });
+    });
+
+    await batch.commit();
+    return NextResponse.json({
+      ok: true,
+      status: finalStatus,
+      totalConfirmed: goodsConfirmed,
+      amountConfirmed: financialConfirmed,
+    });
   }
 
   if (resource === 'receipts' && id && child === 'save-conference') {

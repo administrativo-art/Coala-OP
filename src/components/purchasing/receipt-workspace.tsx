@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, Info, ShoppingCart, ReceiptText, Scale, Truck, Building2, Check } from 'lucide-react';
+import { Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, ShoppingCart, ReceiptText, Scale, Truck, Building2, Check } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -24,6 +24,12 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
@@ -44,6 +50,7 @@ import {
 } from '@/lib/purchasing-item-treatment';
 import {
   type PurchaseAssetComponentAction,
+  type PurchaseDivergenceResolutionAction,
   type PurchaseItemTreatment,
   type PurchaseReceipt,
   type PurchaseReceiptItem,
@@ -163,6 +170,8 @@ interface ItemDraft {
   lockedFromPreviousReceipt: boolean;
   unitPriceConfirmed: number;
   divergenceReason: string;
+  divergenceResolutionAction?: PurchaseDivergenceResolutionAction | null;
+  divergenceResolvedAt?: string;
   resolutionNotes: string;
   lots: LotDraft[];
   expiryDate?: string;
@@ -183,6 +192,22 @@ const RECEIPT_DISPOSITION_LABELS: Record<ItemDraft['receiptDisposition'], string
   receive_more: 'Recebimento a mais',
   exchange_pending: 'Troca pendente',
   returned: 'Devolvido',
+};
+
+const DIVERGENCE_RESOLUTION_LABELS: Record<PurchaseDivergenceResolutionAction, string> = {
+  accept_charged: 'Aceitar excedente com cobrança',
+  bonus: 'Registrar como bonificação',
+  return_excess: 'Marcar para devolução',
+  keep_pending: 'Manter saldo pendente',
+  close_shortage: 'Fechar saldo como não entregue',
+  request_replacement: 'Solicitar reposição',
+  credit_discount: 'Registrar crédito/desconto',
+  correct_entry: 'Corrigir lançamento',
+};
+
+type DivergenceResolutionDraft = {
+  action: PurchaseDivergenceResolutionAction | '';
+  notes: string;
 };
 
 function generateLotCode(baseItemName: string) {
@@ -214,7 +239,7 @@ interface Props {
 export function ReceiptWorkspace({ receipt }: Props) {
   const router = useRouter();
   const { permissions, firebaseUser } = useAuth();
-  const { fetchReceiptItems, startConference, saveConference, startStockEntry, confirmStockEntry } = usePurchaseReceipts();
+  const { fetchReceiptItems, startConference, saveConference, startStockEntry, confirmStockEntry, resolveDivergence } = usePurchaseReceipts();
   const { orders } = usePurchaseOrders();
   const { financials } = usePurchaseFinancials();
   const { baseProducts } = useBaseProducts();
@@ -234,16 +259,19 @@ export function ReceiptWorkspace({ receipt }: Props) {
   const [proofDescription, setProofDescription] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [resolvingDivergence, setResolvingDivergence] = useState(false);
+  const [resolutionDrafts, setResolutionDrafts] = useState<Record<string, DivergenceResolutionDraft>>({});
 
   const isImmediate = receipt.receiptMode === 'immediate_pickup';
   const isAwaitingDelivery = receipt.status === 'awaiting_delivery';
   const isPartiallyStocked = receipt.status === 'partially_stocked';
   const isInConference = receipt.status === 'in_conference' || isPartiallyStocked;
   const isAwaitingStock = receipt.status === 'awaiting_stock';
+  const isDivergenceTreatment = receipt.status === 'stocked_with_divergence';
   const isInStockEntry =
     receipt.status === 'in_stock_entry' ||
     (isImmediate && receipt.status === 'awaiting_stock');
-  const isDone = receipt.status === 'stocked' || receipt.status === 'stocked_with_divergence' || receipt.status === 'cancelled';
+  const isDone = receipt.status === 'stocked' || receipt.status === 'cancelled';
   const canReceive = canReceivePurchase(permissions);
   const canEditCompletedReceipt = process.env.NODE_ENV === 'development';
 
@@ -277,6 +305,70 @@ export function ReceiptWorkspace({ receipt }: Props) {
   const effectiveOrderTotal = useMemo(() => {
     return (goodsGrossSubtotal || 0) + (order?.deliveryFee || 0);
   }, [goodsGrossSubtotal, order?.deliveryFee]);
+
+  const confirmedQuantityForDraft = (draft: ItemDraft) =>
+    isDivergenceTreatment || isDone || isInStockEntry
+      ? Number(draft.quantityPreviouslyReceived || draft.quantityReceived || 0)
+      : Number(draft.quantityPreviouslyReceived || 0) + Number(draft.quantityReceived || 0);
+
+  const getDraftDivergenceReasons = (draft: ItemDraft) => {
+    const confirmedQuantity = confirmedQuantityForDraft(draft);
+    const quantityDiff = confirmedQuantity - Number(draft.quantityOrdered || 0);
+    const priceDiff = Number(draft.unitPriceConfirmed || 0) - Number(receiptItems.find((item) => item.id === draft.receiptItemId)?.unitPriceOrdered ?? 0);
+    const reasons = [
+      quantityDiff > 0.001
+        ? `Recebido a mais: +${fmtQty(quantityDiff)} ${draft.purchaseUnitLabel}`
+        : null,
+      quantityDiff < -0.001
+        ? `Recebido a menos: ${fmtQty(Math.abs(quantityDiff))} ${draft.purchaseUnitLabel} pendente`
+        : null,
+      Math.abs(priceDiff) > 0.01
+        ? `Preço diferente: ${fmt(priceDiff)} por ${draft.purchaseUnitLabel}`
+        : null,
+      draft.receiptDisposition === 'exchange_pending' ? 'Troca pendente com fornecedor' : null,
+      draft.receiptDisposition === 'returned' ? 'Item devolvido' : null,
+      draft.divergenceReason?.trim() ? draft.divergenceReason.trim() : null,
+    ].filter((reason): reason is string => !!reason);
+
+    return { confirmedQuantity, quantityDiff, priceDiff, reasons };
+  };
+
+  const suggestedResolutionAction = (draft: ItemDraft): PurchaseDivergenceResolutionAction => {
+    const { quantityDiff, priceDiff } = getDraftDivergenceReasons(draft);
+    if (quantityDiff > 0.001) return 'accept_charged';
+    if (quantityDiff < -0.001) return 'keep_pending';
+    if (Math.abs(priceDiff) > 0.01) return 'accept_charged';
+    return 'correct_entry';
+  };
+
+  const divergenceDrafts = useMemo(
+    () =>
+      drafts.filter((draft) => {
+        const { reasons } = getDraftDivergenceReasons(draft);
+        return (
+          reasons.length > 0 ||
+          draft.receiptDisposition !== 'receive' ||
+          draft.divergenceResolutionAction ||
+          draft.resolutionNotes.trim()
+        );
+      }),
+    [drafts, receiptItems, isDivergenceTreatment, isDone, isInStockEntry],
+  );
+
+  useEffect(() => {
+    setResolutionDrafts((previous) => {
+      const next = { ...previous };
+      for (const draft of divergenceDrafts) {
+        if (!next[draft.receiptItemId]) {
+          next[draft.receiptItemId] = {
+            action: draft.divergenceResolutionAction ?? suggestedResolutionAction(draft),
+            notes: draft.resolutionNotes ?? '',
+          };
+        }
+      }
+      return next;
+    });
+  }, [divergenceDrafts]);
 
   useEffect(() => {
     fetchReceiptItems(receipt.id).then((items) => {
@@ -337,6 +429,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
               lockedFromPreviousReceipt,
               unitPriceConfirmed: item.unitPriceConfirmed || item.unitPriceOrdered,
               divergenceReason: '',
+              divergenceResolutionAction: item.divergenceResolutionAction ?? null,
+              divergenceResolvedAt: item.divergenceResolvedAt,
               resolutionNotes: item.resolutionNotes ?? '',
               expiryDate: '',
               entryType,
@@ -619,6 +713,53 @@ export function ReceiptWorkspace({ receipt }: Props) {
     }
   };
 
+  const handleResolveDivergence = async () => {
+    if (!canReceive || !isDivergenceTreatment || divergenceDrafts.length === 0) return;
+    const items = divergenceDrafts.map((draft) => {
+      const resolution = resolutionDrafts[draft.receiptItemId];
+      return {
+        receiptItemId: draft.receiptItemId,
+        action: resolution?.action,
+        notes: resolution?.notes,
+      };
+    });
+    if (items.some((item) => !item.action)) return;
+
+    setResolvingDivergence(true);
+    try {
+      await resolveDivergence(receipt.id, {
+        notes,
+        items: items.map((item) => ({
+          receiptItemId: item.receiptItemId,
+          action: item.action as PurchaseDivergenceResolutionAction,
+          notes: item.notes,
+        })),
+      });
+    } finally {
+      setResolvingDivergence(false);
+    }
+  };
+
+  const canResolveDivergence =
+    canReceive &&
+    isDivergenceTreatment &&
+    divergenceDrafts.length > 0 &&
+    divergenceDrafts.every((draft) => !!resolutionDrafts[draft.receiptItemId]?.action);
+
+  const resolutionOptionsForDraft = (draft: ItemDraft): PurchaseDivergenceResolutionAction[] => {
+    const { quantityDiff, priceDiff } = getDraftDivergenceReasons(draft);
+    if (quantityDiff > 0.001) {
+      return ['accept_charged', 'bonus', 'return_excess', 'correct_entry'];
+    }
+    if (quantityDiff < -0.001) {
+      return ['keep_pending', 'close_shortage', 'request_replacement', 'credit_discount', 'correct_entry'];
+    }
+    if (Math.abs(priceDiff) > 0.01) {
+      return ['accept_charged', 'credit_discount', 'correct_entry'];
+    }
+    return ['correct_entry'];
+  };
+
   return (
     <div className="space-y-6">
       {/* Header card */}
@@ -638,6 +779,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
                   ? 'Aguardando estoque'
                   : isInStockEntry
                   ? 'Entrada no estoque'
+                  : isDivergenceTreatment
+                  ? 'Tratamento de divergência'
                   : 'Concluído'}
               </Badge>
               <Badge variant="outline" className="text-xs">
@@ -720,6 +863,161 @@ export function ReceiptWorkspace({ receipt }: Props) {
                 </div>
               </div>
             </div>
+
+            <Accordion
+              type="multiple"
+              defaultValue={['recebimento', 'divergencia', 'estoque', 'financeiro', 'conclusao']}
+              className="border-b bg-muted/10 px-5"
+            >
+              <AccordionItem value="recebimento" className="border-b border-border/70">
+                <AccordionTrigger className="py-3 text-sm font-semibold hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-background text-xs font-semibold">1</span>
+                    Recebimento
+                    <Badge variant={isInConference ? 'default' : 'outline'} className="ml-1 text-[10px]">
+                      {isInConference ? 'Atual' : receipt.conferenceCompletedAt ? 'Concluído' : 'Pendente'}
+                    </Badge>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  <div className="grid gap-3 text-sm md:grid-cols-3">
+                    <div className="rounded-xl border bg-background p-3">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Itens</p>
+                      <p className="mt-1 font-semibold">{drafts.length} item(ns) conferidos</p>
+                    </div>
+                    <div className="rounded-xl border bg-background p-3">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Recebido</p>
+                      <p className="mt-1 font-semibold">{fmt(receipt.totalConfirmed || 0)}</p>
+                    </div>
+                    <div className="rounded-xl border bg-background p-3">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Comprovante</p>
+                      <p className="mt-1 font-semibold">{receipt.receiptProofUrl ? 'Anexado' : 'Não anexado'}</p>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="divergencia" className="border-b border-border/70">
+                <AccordionTrigger className="py-3 text-sm font-semibold hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-background text-xs font-semibold">2</span>
+                    Tratamento de divergência
+                    <Badge variant={isDivergenceTreatment ? 'destructive' : divergenceDrafts.length > 0 ? 'secondary' : 'outline'} className="ml-1 text-[10px]">
+                      {isDivergenceTreatment ? 'Pendente' : divergenceDrafts.length > 0 ? 'Tratada' : 'Sem divergência'}
+                    </Badge>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  {divergenceDrafts.length === 0 ? (
+                    <p className="rounded-xl border bg-background p-3 text-sm text-muted-foreground">
+                      Nenhuma diferença de quantidade, preço ou tratativa registrada.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {divergenceDrafts.map((draft) => {
+                        const { reasons } = getDraftDivergenceReasons(draft);
+                        return (
+                          <div key={draft.receiptItemId} className="rounded-xl border bg-background p-3">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold">{draft.itemName || draft.baseItemId}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Pedido: {fmtQty(draft.quantityOrdered)} {draft.purchaseUnitLabel} · Recebido: {fmtQty(confirmedQuantityForDraft(draft))} {draft.purchaseUnitLabel}
+                                </p>
+                              </div>
+                              {draft.divergenceResolutionAction ? (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {DIVERGENCE_RESOLUTION_LABELS[draft.divergenceResolutionAction]}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="border-amber-300 text-amber-700 text-[10px]">Sem ação</Badge>
+                              )}
+                            </div>
+                            {reasons.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {reasons.map((reason) => (
+                                  <span key={reason} className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                    {reason}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="estoque" className="border-b border-border/70">
+                <AccordionTrigger className="py-3 text-sm font-semibold hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-background text-xs font-semibold">3</span>
+                    Entrada no estoque
+                    <Badge variant={isInStockEntry ? 'default' : receipt.stockEnteredAt ? 'secondary' : 'outline'} className="ml-1 text-[10px]">
+                      {isInStockEntry ? 'Atual' : receipt.stockEnteredAt ? 'Concluída' : 'Pendente'}
+                    </Badge>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  <p className="rounded-xl border bg-background p-3 text-sm text-muted-foreground">
+                    {receipt.stockEnteredAt
+                      ? `Entrada registrada em ${format(parseISO(receipt.stockEnteredAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.`
+                      : 'A entrada no estoque só deve avançar depois da conferência e do tratamento das divergências pendentes.'}
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="financeiro" className="border-b border-border/70">
+                <AccordionTrigger className="py-3 text-sm font-semibold hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-background text-xs font-semibold">4</span>
+                    Financeiro
+                    <Badge variant={financial?.status === 'divergent' ? 'destructive' : 'outline'} className="ml-1 text-[10px]">
+                      {financial ? FINANCIAL_STATUS_LABELS[financial.status] || financial.status : 'Pendente'}
+                    </Badge>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  <div className="grid gap-3 text-sm md:grid-cols-3">
+                    <div className="rounded-xl border bg-background p-3">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Previsto</p>
+                      <p className="mt-1 font-semibold">{fmt(effectiveOrderTotal)}</p>
+                    </div>
+                    <div className="rounded-xl border bg-background p-3">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Confirmado</p>
+                      <p className="mt-1 font-semibold">{fmt(financial?.amountConfirmed)}</p>
+                    </div>
+                    <div className="rounded-xl border bg-background p-3">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Situação</p>
+                      <p className="mt-1 font-semibold">{financial ? FINANCIAL_STATUS_LABELS[financial.status] || financial.status : 'Pendente'}</p>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="conclusao" className="border-b-0">
+                <AccordionTrigger className="py-3 text-sm font-semibold hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-background text-xs font-semibold">5</span>
+                    Conclusão
+                    <Badge variant={isDone ? 'secondary' : 'outline'} className="ml-1 text-[10px]">
+                      {isDone ? 'Concluída' : 'Em andamento'}
+                    </Badge>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  <p className="rounded-xl border bg-background p-3 text-sm text-muted-foreground">
+                    {isDone
+                      ? 'Recebimento encerrado.'
+                      : isDivergenceTreatment
+                      ? 'A conclusão fica bloqueada até a divergência ser tratada.'
+                      : 'A conclusão será liberada quando recebimento, estoque e financeiro estiverem consistentes.'}
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
             {isInStockEntry && requiresStockDestination && (
               <div className="border-b bg-muted/20 px-5 py-4">
@@ -817,7 +1115,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                   ].filter((reason): reason is string => !!reason);
                   const hasItemIssue = hasDivergence || stockEntryIssues.length > 0;
                   
-                  const isReadonly = isAwaitingDelivery || isDone;
+                  const isReadonly = isAwaitingDelivery || isDivergenceTreatment || isDone;
                   const isDraftReadonly = isReadonly || draft.lockedFromPreviousReceipt;
                   const receiptFieldDisabled =
                     isDraftReadonly ||
@@ -1243,6 +1541,118 @@ export function ReceiptWorkspace({ receipt }: Props) {
               </div>
             )}
           </div>
+
+          {isDivergenceTreatment && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5 shadow-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-rose-600" />
+                    <h2 className="text-lg font-bold">Tratamento de divergência</h2>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Escolha a ação para cada diferença encontrada. A compra só será concluída quando todas estiverem tratadas.
+                  </p>
+                </div>
+                <Badge variant="outline" className="w-fit border-rose-300 bg-white text-rose-700">
+                  {divergenceDrafts.length} divergência(s)
+                </Badge>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {divergenceDrafts.map((draft) => {
+                  const { reasons, confirmedQuantity } = getDraftDivergenceReasons(draft);
+                  const resolution = resolutionDrafts[draft.receiptItemId] ?? {
+                    action: suggestedResolutionAction(draft),
+                    notes: '',
+                  };
+                  return (
+                    <div key={draft.receiptItemId} className="rounded-xl border bg-white p-4">
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                        <div className="min-w-0">
+                          <p className="font-semibold">{draft.itemName || draft.baseItemId}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Pedido: {fmtQty(draft.quantityOrdered)} {draft.purchaseUnitLabel} · Recebido: {fmtQty(confirmedQuantity)} {draft.purchaseUnitLabel} · Preço: {fmt(draft.unitPriceConfirmed)}
+                          </p>
+                          {reasons.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {reasons.map((reason) => (
+                                <span key={reason} className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
+                                  {reason}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Ação</Label>
+                            <Select
+                              value={resolution.action}
+                              disabled={!canReceive || resolvingDivergence}
+                              onValueChange={(action: PurchaseDivergenceResolutionAction) => {
+                                setResolutionDrafts((previous) => ({
+                                  ...previous,
+                                  [draft.receiptItemId]: {
+                                    action,
+                                    notes: previous[draft.receiptItemId]?.notes ?? '',
+                                  },
+                                }));
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Escolha a ação..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {resolutionOptionsForDraft(draft).map((action) => (
+                                  <SelectItem key={action} value={action}>
+                                    {DIVERGENCE_RESOLUTION_LABELS[action]}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Observação</Label>
+                            <Textarea
+                              rows={3}
+                              value={resolution.notes}
+                              disabled={!canReceive || resolvingDivergence}
+                              placeholder="Ex.: fornecedor confirmou cobrança do excedente."
+                              onChange={(event) => {
+                                setResolutionDrafts((previous) => ({
+                                  ...previous,
+                                  [draft.receiptItemId]: {
+                                    action: previous[draft.receiptItemId]?.action ?? suggestedResolutionAction(draft),
+                                    notes: event.target.value,
+                                  },
+                                }));
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 border-t border-rose-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Aceitar com cobrança recalcula o financeiro pelo valor recebido. Manter saldo pendente devolve a compra para parcial.
+                </p>
+                <Button
+                  onClick={handleResolveDivergence}
+                  disabled={!canResolveDivergence || resolvingDivergence}
+                  className="rounded-full px-6"
+                >
+                  {resolvingDivergence && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Finalizar tratamento
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Bottom Action Cards */}
           {isAwaitingDelivery && canReceive && (

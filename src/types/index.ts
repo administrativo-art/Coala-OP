@@ -1744,6 +1744,15 @@ export type PurchaseReceipt = {
 };
 
 export type PurchaseReceiptItemStatus = 'pending' | 'received' | 'partial' | 'divergent' | 'cancelled';
+export type PurchaseDivergenceResolutionAction =
+  | 'accept_charged'
+  | 'bonus'
+  | 'return_excess'
+  | 'keep_pending'
+  | 'close_shortage'
+  | 'request_replacement'
+  | 'credit_discount'
+  | 'correct_entry';
 export type PurchaseStockEntryType = 'stock' | 'uniform' | 'asset';
 export type PurchaseItemTreatment =
   | 'stock'
@@ -1776,6 +1785,9 @@ export type PurchaseReceiptItem = {
   status: PurchaseReceiptItemStatus;
   receiptDisposition?: 'pending' | 'receive' | 'receive_less' | 'receive_more' | 'exchange_pending' | 'returned';
   divergenceReason?: string;
+  divergenceResolutionAction?: PurchaseDivergenceResolutionAction | null;
+  divergenceResolvedAt?: string;
+  divergenceResolvedBy?: string;
   resolutionNotes?: string;
   entryType?: PurchaseStockEntryType;
   itemTreatment?: PurchaseItemTreatment;
