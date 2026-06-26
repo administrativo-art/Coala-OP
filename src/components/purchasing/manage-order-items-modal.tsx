@@ -59,6 +59,8 @@ type DraftItem = {
   purchaseUnitType: PurchaseUnitType;
   quantityOrdered: number;
   unitPriceOrdered: number;
+  lineGrossOrdered: number;
+  preserveLineGross: boolean;
   discountOrdered: number;
   entryType: PurchaseStockEntryType;
   itemTreatment: PurchaseItemTreatment;
@@ -100,6 +102,8 @@ function newDraftItem(): DraftItem {
     purchaseUnitType: 'content',
     quantityOrdered: 0,
     unitPriceOrdered: 0,
+    lineGrossOrdered: 0,
+    preserveLineGross: false,
     discountOrdered: 0,
     entryType: 'stock',
     itemTreatment: 'stock',
@@ -129,6 +133,15 @@ function fmtQuantity(value: number) {
   return value.toLocaleString('pt-BR', {
     maximumFractionDigits: 3,
   });
+}
+
+function calculateLineGross(quantity: number, unitPrice: number) {
+  return Math.max(Number(quantity || 0) * Number(unitPrice || 0), 0);
+}
+
+function calculateUnitPriceFromGross(lineGross: number, quantity: number) {
+  if (!quantity || quantity <= 0) return 0;
+  return Math.max(Number(lineGross || 0) / quantity, 0);
 }
 
 function shouldLinkAlias(candidate: string, product: Product | undefined, productLabel: string) {
@@ -335,6 +348,8 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                 activeCategories.find((category) => category.destination === entryType)
               : undefined;
 
+          const lineGrossOrdered = calculateLineGross(item.quantityOrdered, item.unitPriceOrdered);
+
           return {
             key: item.id,
             id: item.id,
@@ -348,6 +363,8 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             purchaseUnitType: item.purchaseUnitType ?? 'content',
             quantityOrdered: item.quantityOrdered,
             unitPriceOrdered: item.unitPriceOrdered,
+            lineGrossOrdered,
+            preserveLineGross: lineGrossOrdered > 0,
             discountOrdered: item.discountOrdered ?? 0,
             entryType,
             itemTreatment,
@@ -434,6 +451,20 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             next.linkAlias = shouldLinkAlias(next.aliasCandidate, product, next.itemName);
           }
         }
+        if (patch.quantityOrdered != null && patch.unitPriceOrdered == null && patch.lineGrossOrdered == null) {
+          if (next.preserveLineGross && next.lineGrossOrdered > 0) {
+            next.unitPriceOrdered = calculateUnitPriceFromGross(next.lineGrossOrdered, next.quantityOrdered);
+          } else {
+            next.lineGrossOrdered = calculateLineGross(next.quantityOrdered, next.unitPriceOrdered);
+          }
+        }
+        if (patch.unitPriceOrdered != null && patch.lineGrossOrdered == null) {
+          next.lineGrossOrdered = calculateLineGross(next.quantityOrdered, next.unitPriceOrdered);
+          next.preserveLineGross = false;
+        }
+        if (patch.lineGrossOrdered != null && patch.unitPriceOrdered == null) {
+          next.unitPriceOrdered = calculateUnitPriceFromGross(next.lineGrossOrdered, next.quantityOrdered);
+        }
         return next;
       }),
     );
@@ -463,7 +494,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
   );
 
   const total = useMemo(
-    () => items.reduce((sum, item) => sum + item.quantityOrdered * item.unitPriceOrdered - item.discountOrdered, 0),
+    () => items.reduce((sum, item) => sum + item.lineGrossOrdered - item.discountOrdered, 0),
     [items],
   );
 
@@ -515,7 +546,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           purchaseUnitType: item.purchaseUnitType,
           purchaseUnitLabel: item.unit,
           quantityOrdered: item.quantityOrdered,
-          unitPriceOrdered: item.unitPriceOrdered,
+          unitPriceOrdered: calculateUnitPriceFromGross(item.lineGrossOrdered, item.quantityOrdered),
           discountOrdered: item.discountOrdered,
           entryType: item.entryType,
           itemTreatment: item.itemTreatment,
@@ -779,6 +810,19 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                   />
                 </div>
                 </div>
+                {item.lineGrossOrdered > 0 && (
+                  <p className="rounded-md bg-background px-3 py-2 text-xs text-muted-foreground">
+                    Total do item:{' '}
+                    <span className="font-medium text-foreground">
+                      {fmtCurrency(Math.max(item.lineGrossOrdered - item.discountOrdered, 0))}
+                    </span>
+                    {item.discountOrdered > 0 && (
+                      <>
+                        {' '}· bruto {fmtCurrency(item.lineGrossOrdered)} menos desconto {fmtCurrency(item.discountOrdered)}
+                      </>
+                    )}
+                  </p>
+                )}
                 <div className="space-y-2">
                   <div className="grid gap-3 sm:grid-cols-2">
                     {item.itemTreatment === 'asset_component' && (
