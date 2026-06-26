@@ -28,6 +28,7 @@ import type {
   RecruitmentQuestionCondition,
   RecruitmentQuestionConditionOperator,
   RecruitmentQuestionScoringUse,
+  RecruitmentScoringSourceLayer,
   RecruitmentFormConfig,
   RecruitmentStage,
 } from '@/types';
@@ -125,6 +126,8 @@ const EMPTY_QUESTION_DRAFT = {
   optionsText: '',
   required: false,
   eliminatory: false,
+  scoringUse: 'informational' as RecruitmentQuestionScoringUse,
+  importance: 'medium' as HrQuestionWeight,
 };
 
 type QuestionDraft = typeof EMPTY_QUESTION_DRAFT;
@@ -235,6 +238,27 @@ function withQuestionScoring(
     scored: use === 'scored',
     eliminatory: use === 'eliminatory',
     weight: importance,
+  };
+}
+
+function getDraftScoringUse(draft: QuestionDraft): RecruitmentQuestionScoringUse {
+  return draft.eliminatory ? 'eliminatory' : draft.scoringUse;
+}
+
+function questionScoringFromDraft(
+  draft: QuestionDraft,
+  sourceLayer: RecruitmentScoringSourceLayer
+): Pick<HrFormQuestion, 'scored' | 'weight' | 'eliminatory' | 'scoring'> {
+  const use = getDraftScoringUse(draft);
+  return {
+    scored: use === 'scored',
+    weight: draft.importance,
+    eliminatory: use === 'eliminatory',
+    scoring: {
+      use,
+      importance: draft.importance,
+      sourceLayer,
+    },
   };
 }
 
@@ -504,6 +528,102 @@ function QuestionParentEditor({
           <option key={item.id} value={item.id}>{item.text}</option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function QuestionDraftConditionControls({
+  draft,
+  parentQuestion,
+  onChange,
+}: {
+  draft: QuestionDraft;
+  parentQuestion?: HrFormQuestion;
+  onChange: (patch: Partial<QuestionDraft>) => void;
+}) {
+  if (!draft.parentQuestionId) return null;
+
+  const label = parentQuestion?.text || 'pergunta selecionada';
+
+  return (
+    <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 lg:col-span-3">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+        Subpergunta
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+        <span className="min-w-0 truncate">Aparece abaixo de “{label}” quando a resposta for</span>
+        {([
+          { value: 'true', label: 'Sim' },
+          { value: 'false', label: 'Não' },
+          { value: 'always', label: 'Sempre' },
+        ] as const).map(item => (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => onChange({ conditionValue: item.value })}
+            className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+              draft.conditionValue === item.value
+                ? 'bg-slate-950 text-white'
+                : 'bg-white text-slate-500 hover:text-slate-950'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QuestionDraftScoringControls({
+  draft,
+  onChange,
+}: {
+  draft: QuestionDraft;
+  onChange: (patch: Partial<QuestionDraft>) => void;
+}) {
+  const use = getDraftScoringUse(draft);
+
+  return (
+    <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 lg:col-span-3 md:grid-cols-[minmax(0,1fr)_minmax(0,180px)]">
+      <div>
+        <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Pontuação
+        </label>
+        <select
+          value={use}
+          onChange={event => {
+            const nextUse = event.target.value as RecruitmentQuestionScoringUse;
+            onChange({
+              scoringUse: nextUse,
+              eliminatory: nextUse === 'eliminatory',
+            });
+          }}
+          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
+        >
+          {SCORING_USE_OPTIONS.map(option => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Peso
+        </label>
+        <select
+          value={draft.importance}
+          onChange={event => onChange({ importance: event.target.value as HrQuestionWeight })}
+          disabled={use === 'informational'}
+          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+        >
+          {IMPORTANCE_OPTIONS.map(option => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </div>
+      <p className="text-xs text-slate-500 md:col-span-2">
+        Informativa não entra no ranking. Pontuável soma score conforme o peso. Eliminatória reprova quando a resposta não atende o critério.
+      </p>
     </div>
   );
 }
@@ -1102,6 +1222,13 @@ function RecruitmentQuestionsDesigner({
                 Elim.
               </span>
             )}
+            {getQuestionScoringUse(question) === 'scored' && (
+              <span className={`hidden shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-bold sm:inline-flex ${
+                isDark ? 'border-amber-500/20 bg-amber-500/10 text-amber-300' : 'border-amber-100 bg-amber-50 text-amber-700'
+              }`}>
+                Pont. {IMPORTANCE_OPTIONS.find(item => item.value === getQuestionImportance(question))?.label ?? 'Média'}
+              </span>
+            )}
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
           </summary>
 
@@ -1428,26 +1555,41 @@ function RecruitmentQuestionsDesigner({
 
   if (questions.length === 0) {
     return (
-      <div className={`rounded-xl border border-dashed px-4 py-6 text-center text-sm ${
-        isDark ? 'border-slate-800 bg-slate-950/40 text-slate-500' : 'border-slate-200 bg-slate-50 text-slate-500'
-      }`}>
-        <div className={`mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full ${
-          isDark ? 'bg-slate-900 text-slate-500' : 'bg-pink-50 text-pink-600'
+      <div className="space-y-3">
+        <div className={`rounded-xl border border-dashed px-4 py-6 text-center text-sm ${
+          isDark ? 'border-slate-800 bg-slate-950/40 text-slate-500' : 'border-slate-200 bg-slate-50 text-slate-500'
         }`}>
-          <Plus className="h-4 w-4" />
+          <div className={`mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full ${
+            isDark ? 'bg-slate-900 text-slate-500' : 'bg-pink-50 text-pink-600'
+          }`}>
+            <Plus className="h-4 w-4" />
+          </div>
+          <p className="font-semibold">{emptyLabel}</p>
+          {canManage && onPrepareAddQuestion && (
+            <button
+              type="button"
+              onClick={() => onPrepareAddQuestion({ sectionTitle: fallbackSectionTitle })}
+              className={`mt-4 inline-flex h-9 items-center justify-center rounded-xl border px-3 text-xs font-semibold ${
+                isDark
+                  ? 'border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+              }`}
+            >
+              Preparar primeira pergunta
+            </button>
+          )}
         </div>
-        <p className="font-semibold">{emptyLabel}</p>
         {canManage && onPrepareAddQuestion && (
           <button
             type="button"
-            onClick={() => onPrepareAddQuestion({ sectionTitle: fallbackSectionTitle })}
-            className={`mt-4 inline-flex h-9 items-center justify-center rounded-xl border px-3 text-xs font-semibold ${
+            onClick={() => onPrepareAddQuestion({ sectionTitle: 'Nova seção' })}
+            className={`flex w-full items-center justify-center rounded-2xl border border-dashed px-3 py-3 text-xs font-medium ${
               isDark
-                ? 'border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                ? 'border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'
+                : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-700'
             }`}
           >
-            Preparar primeira pergunta
+            + Adicionar seção
           </button>
         )}
       </div>
@@ -2944,15 +3086,8 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         parentQuestionId: questionDraft.parentQuestionId || undefined,
         ...(conditions ? { conditions } : {}),
         required: questionDraft.required,
-        scored: false,
-        weight: 'medium',
-        eliminatory: questionDraft.eliminatory,
-        tags: ['role'],
-        scoring: {
-          use: questionDraft.eliminatory ? 'eliminatory' : 'informational',
-          importance: 'medium',
-          sourceLayer: 'role',
-        },
+        ...questionScoringFromDraft(questionDraft, 'opening'),
+        tags: ['opening'],
         config: options.length > 0 ? { options } : undefined,
       },
     ]);
@@ -3616,10 +3751,38 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                   >
                     <option value="">Pergunta principal</option>
                     {questions.map(question => (
-                      <option key={question.id} value={question.id}>{question.text}</option>
+                      <option key={question.id} value={question.id}>Subpergunta de: {question.text}</option>
                     ))}
                   </select>
                 </div>
+                {questionDraft.parentQuestionId && (
+                  <div className="col-span-2 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Condição da subpergunta</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                      <span>
+                        Exibir quando a resposta for
+                      </span>
+                      {([
+                        { value: 'true', label: 'Sim' },
+                        { value: 'false', label: 'Não' },
+                        { value: 'always', label: 'Sempre' },
+                      ] as const).map(item => (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => setQuestionDraft(prev => ({ ...prev, conditionValue: item.value }))}
+                          className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                            questionDraft.conditionValue === item.value
+                              ? 'bg-white text-slate-950'
+                              : 'bg-slate-900 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">Tipo</label>
                   <select
@@ -3639,18 +3802,46 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                       checked={questionDraft.required}
                       onChange={event => setQuestionDraft(prev => ({ ...prev, required: event.target.checked }))}
                       className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500"
-                    />
-                    Obrigatória
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={questionDraft.eliminatory}
-                      onChange={event => setQuestionDraft(prev => ({ ...prev, eliminatory: event.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500"
-                    />
-                    Eliminatória
-                  </label>
+                  />
+                  Obrigatória
+                </label>
+                </div>
+                <div className="col-span-2 grid gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 md:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Pontuação</label>
+                    <select
+                      value={getDraftScoringUse(questionDraft)}
+                      onChange={event => {
+                        const nextUse = event.target.value as RecruitmentQuestionScoringUse;
+                        setQuestionDraft(prev => ({
+                          ...prev,
+                          scoringUse: nextUse,
+                          eliminatory: nextUse === 'eliminatory',
+                        }));
+                      }}
+                      className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                    >
+                      {SCORING_USE_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Peso</label>
+                    <select
+                      value={questionDraft.importance}
+                      onChange={event => setQuestionDraft(prev => ({ ...prev, importance: event.target.value as HrQuestionWeight }))}
+                      disabled={getDraftScoringUse(questionDraft) === 'informational'}
+                      className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50"
+                    >
+                      {IMPORTANCE_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-xs text-slate-500 md:col-span-2">
+                    Informativa não entra no ranking. Pontuável soma score. Eliminatória reprova quando não atende.
+                  </p>
                 </div>
                 {(questionDraft.type === 'select' || questionDraft.type === 'multi_select') && (
                   <div className="col-span-2">
@@ -4606,15 +4797,8 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
         ...(conditions ? { conditions } : {}),
         required: draft.required,
         active: true,
-        scored: false,
-        weight: 'medium',
-        eliminatory: draft.eliminatory,
+        ...questionScoringFromDraft(draft, kind),
         tags: [kind],
-        scoring: {
-          use: draft.eliminatory ? 'eliminatory' : 'informational',
-          importance: 'medium',
-          sourceLayer: kind,
-        },
         config: options.length > 0 ? { options } : undefined,
       },
     ]);
@@ -5099,46 +5283,63 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
         <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-4">
           <h3 className="text-sm font-bold text-slate-950">Adicionar campo ao modelo</h3>
           <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,180px)_minmax(0,180px)]">
-            <input
-              value={draft.text}
-              onChange={event => setDraft(prev => ({ ...prev, text: event.target.value }))}
-              placeholder="Ex: Tem disponibilidade aos domingos?"
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
-            />
-            <input
-              value={draft.sectionTitle}
-              onChange={event => setDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
-              placeholder="Seção"
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
-            />
-            <select
-              value={draft.type}
-              onChange={event => setDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
-            >
-              {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
-            <select
-              value={draft.parentQuestionId}
-              onChange={event => setDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
-              disabled={questions.length === 0}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60 lg:col-span-2"
-            >
-              <option value="">Pergunta principal</option>
-              {questions.map(question => (
-                <option key={question.id} value={question.id}>{question.text}</option>
-              ))}
-            </select>
-            <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Pergunta</label>
+              <input
+                value={draft.text}
+                onChange={event => setDraft(prev => ({ ...prev, text: event.target.value }))}
+                placeholder="Ex: Tem disponibilidade aos domingos?"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Seção</label>
+              <input
+                value={draft.sectionTitle}
+                onChange={event => setDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
+                placeholder="Ex: Disponibilidade"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo</label>
+              <select
+                value={draft.type}
+                onChange={event => setDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
+              >
+                {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+              </select>
+            </div>
+            <div className="lg:col-span-2">
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Hierarquia</label>
+              <select
+                value={draft.parentQuestionId}
+                onChange={event => setDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
+                disabled={questions.length === 0}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+              >
+                <option value="">Pergunta principal</option>
+                {questions.map(question => (
+                  <option key={question.id} value={question.id}>Subpergunta de: {question.text}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-wrap items-end gap-3 pb-1">
               <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" checked={draft.required} onChange={event => setDraft(prev => ({ ...prev, required: event.target.checked }))} />
                 Obrigatório
               </label>
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <input type="checkbox" checked={draft.eliminatory} onChange={event => setDraft(prev => ({ ...prev, eliminatory: event.target.checked }))} />
-                Eliminatório
-              </label>
             </div>
+            <QuestionDraftConditionControls
+              draft={draft}
+              parentQuestion={questions.find(question => question.id === draft.parentQuestionId)}
+              onChange={(patch) => setDraft(prev => ({ ...prev, ...patch }))}
+            />
+            <QuestionDraftScoringControls
+              draft={draft}
+              onChange={(patch) => setDraft(prev => ({ ...prev, ...patch }))}
+            />
             {(draft.type === 'select' || draft.type === 'multi_select') && (
               <textarea
                 value={draft.optionsText}
@@ -5340,9 +5541,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
             ...(conditions ? { conditions } : {}),
             required: questionDraft.required,
             active: true,
-            scored: false,
-            weight: 'medium',
-            eliminatory: questionDraft.eliminatory,
+            ...questionScoringFromDraft(questionDraft, 'opening'),
             tags: ['talent_pool'],
             config: options.length > 0 ? { options } : undefined,
           },
@@ -5648,37 +5847,49 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
           <h3 className="text-sm font-bold text-slate-950">Adicionar campo</h3>
           <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,180px)_minmax(0,180px)]">
-              <input
-                value={questionDraft.text}
-                onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
-                placeholder="Ex: Tem disponibilidade aos domingos?"
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
-              />
-              <input
-                value={questionDraft.sectionTitle}
-                onChange={event => setQuestionDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
-                placeholder="Seção"
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
-              />
-              <select
-                value={questionDraft.type}
-                onChange={event => setQuestionDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
-              >
-                {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-              </select>
-              <select
-                value={questionDraft.parentQuestionId}
-                onChange={event => setQuestionDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
-                disabled={form.questions.length === 0}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60 lg:col-span-2"
-              >
-                <option value="">Pergunta principal</option>
-                {form.questions.map(question => (
-                  <option key={question.id} value={question.id}>{question.text}</option>
-                ))}
-              </select>
-              <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Pergunta</label>
+                <input
+                  value={questionDraft.text}
+                  onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
+                  placeholder="Ex: Tem disponibilidade aos domingos?"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Seção</label>
+                <input
+                  value={questionDraft.sectionTitle}
+                  onChange={event => setQuestionDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
+                  placeholder="Ex: Preferências"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo</label>
+                <select
+                  value={questionDraft.type}
+                  onChange={event => setQuestionDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
+                >
+                  {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                </select>
+              </div>
+              <div className="lg:col-span-2">
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Hierarquia</label>
+                <select
+                  value={questionDraft.parentQuestionId}
+                  onChange={event => setQuestionDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
+                  disabled={form.questions.length === 0}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                >
+                  <option value="">Pergunta principal</option>
+                  {form.questions.map(question => (
+                    <option key={question.id} value={question.id}>Subpergunta de: {question.text}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-end gap-3 pb-1">
                 <label className="flex items-center gap-2 text-sm text-slate-600">
                   <input
                     type="checkbox"
@@ -5687,15 +5898,16 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                   />
                   Obrigatório
                 </label>
-                <label className="flex items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={questionDraft.eliminatory}
-                    onChange={event => setQuestionDraft(prev => ({ ...prev, eliminatory: event.target.checked }))}
-                  />
-                  Eliminatório
-                </label>
               </div>
+              <QuestionDraftConditionControls
+                draft={questionDraft}
+                parentQuestion={form.questions.find(question => question.id === questionDraft.parentQuestionId)}
+                onChange={(patch) => setQuestionDraft(prev => ({ ...prev, ...patch }))}
+              />
+              <QuestionDraftScoringControls
+                draft={questionDraft}
+                onChange={(patch) => setQuestionDraft(prev => ({ ...prev, ...patch }))}
+              />
               {(questionDraft.type === 'select' || questionDraft.type === 'multi_select') && (
                 <textarea
                   value={questionDraft.optionsText}
