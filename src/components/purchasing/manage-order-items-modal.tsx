@@ -76,6 +76,7 @@ type DraftItem = {
 interface Props {
   orderId: string;
   initialItems: PurchaseOrderItem[];
+  deliveryFee?: number;
   open: boolean;
   onOpenChange: (value: boolean) => void;
   onSuccess?: () => void;
@@ -322,7 +323,7 @@ function AssetLinkField({
   );
 }
 
-export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChange, onSuccess }: Props) {
+export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, open, onOpenChange, onSuccess }: Props) {
   const { products, getProductFullName, updateProduct } = useProducts();
   const { activeCategories } = useOperationalItemCategories();
   const { assets } = useAssets();
@@ -493,10 +494,22 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
     [getProductFullName, products],
   );
 
-  const total = useMemo(
+  const goodsGrossTotal = useMemo(
+    () => items.reduce((sum, item) => sum + item.lineGrossOrdered, 0),
+    [items],
+  );
+
+  const discountTotal = useMemo(
+    () => items.reduce((sum, item) => sum + item.discountOrdered, 0),
+    [items],
+  );
+
+  const goodsNetTotal = useMemo(
     () => items.reduce((sum, item) => sum + item.lineGrossOrdered - item.discountOrdered, 0),
     [items],
   );
+
+  const orderEstimatedTotal = goodsNetTotal + deliveryFee;
 
   const validItems = items.filter((item) => {
     const category = activeCategories.find((entry) => entry.id === item.operationalCategoryId);
@@ -892,9 +905,18 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
         </div>
 
         <DialogFooter className="items-center sm:justify-between gap-3 border-t pt-4">
-          <p className="text-sm font-semibold">
-            Subtotal estimado: {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </p>
+          <div className="space-y-1 text-sm">
+            <p className="font-semibold">
+              Total estimado: {fmtCurrency(orderEstimatedTotal)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {fmtCurrency(goodsGrossTotal)} em itens
+              {discountTotal > 0 ? ` - ${fmtCurrency(discountTotal)} em descontos` : ''}
+              {deliveryFee > 0 ? ` + ${fmtCurrency(deliveryFee)} de frete` : ''}
+              {' = '}
+              <span className="font-medium text-foreground">{fmtCurrency(orderEstimatedTotal)}</span>
+            </p>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
               Cancelar

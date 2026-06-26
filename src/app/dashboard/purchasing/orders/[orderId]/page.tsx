@@ -1171,6 +1171,7 @@ export default function PurchaseOrderPage() {
         <ManageOrderItemsModal
           orderId={params.orderId}
           initialItems={items}
+          deliveryFee={order?.deliveryFee ?? 0}
           open={itemsEditOpen}
           onOpenChange={setItemsEditOpen}
           onSuccess={() => {
