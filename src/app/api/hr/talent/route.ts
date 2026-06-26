@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
 import type { HrFormQuestion } from '@/types';
@@ -89,6 +90,46 @@ async function getPublicRoleFunctionOptions() {
   ];
 
   return Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function cleanCityLabel(data: FirebaseFirestore.DocumentData) {
+  const direct = cleanOptionLabel(data.city || data.cidade || data.municipio || data.municipality);
+  if (direct) return direct;
+  const address = data.address && typeof data.address === 'object' ? data.address as Record<string, unknown> : null;
+  const addressCity = address ? cleanOptionLabel(address.city || address.cidade || address.municipio) : '';
+  return addressCity || 'São Luís';
+}
+
+async function getPublicCityOptions() {
+  const unitsSnap = await dbAdmin.collection('dp_units').get();
+  const options = unitsSnap.docs
+    .map(doc => doc.data())
+    .filter(isActiveRecord)
+    .map(cleanCityLabel)
+    .filter(Boolean);
+  return Array.from(new Set(options.length > 0 ? options : ['São Luís']))
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+async function getPublicDepartmentOptions() {
+  const departmentsSnap = await hrDbAdmin.collection('jobDepartments').orderBy('name').get();
+  const departments = departmentsSnap.docs
+    .map(doc => doc.data())
+    .filter(isActiveRecord)
+    .map(data => {
+      const name = cleanOptionLabel(data.name);
+      if (!name) return null;
+      const description = cleanOptionLabel(data.description);
+      return { name, description };
+    })
+    .filter((entry): entry is { name: string; description: string } => entry !== null);
+  const names = Array.from(new Set(departments.map(item => item.name))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const descriptions = Object.fromEntries(
+    departments
+      .filter(item => item.description)
+      .map(item => [item.name, item.description])
+  );
+  return { names, descriptions };
 }
 
 function formatTalentPreferenceAnswer(value: unknown, maxLength: number) {
@@ -203,6 +244,8 @@ export async function POST(request: NextRequest) {
   const phone = trimText(body.phone, 40);
   const rolePreference = trimText(body.rolePreference, 120);
   const unitPreference = trimText(body.unitPreference, 120);
+  const departmentPreference = trimText(body.departmentPreference, 180);
+  const cityPreference = trimText(body.cityPreference, 120);
   const notes = trimText(body.message, 1500);
   const rawFormAnswers = body.formAnswers;
   const resumeUrl = isAllowedResumeUrl(body.resumeUrl) ? body.resumeUrl : null;
@@ -217,9 +260,11 @@ export async function POST(request: NextRequest) {
     return jsonError('E-mail inválido.');
   }
 
-  const [formDoc, rolesFunctions] = await Promise.all([
+  const [formDoc, rolesFunctions, cities, departments] = await Promise.all([
     hrDbAdmin.collection('recruitmentForms').doc(TALENT_POOL_FORM_ID).get(),
     getPublicRoleFunctionOptions(),
+    getPublicCityOptions(),
+    getPublicDepartmentOptions(),
   ]);
   const formConfig = normalizeRecruitmentFormConfig(
     formDoc.exists ? { id: formDoc.id, ...formDoc.data() } : DEFAULT_TALENT_POOL_FORM
@@ -228,7 +273,12 @@ export async function POST(request: NextRequest) {
     ...DEFAULT_TALENT_POOL_FORM,
     questions: hydrateRecruitmentQuestionDynamicOptions(
       getPublicRecruitmentQuestions(DEFAULT_TALENT_POOL_FORM.questions),
-      { rolesFunctions }
+      {
+        rolesFunctions,
+        cities,
+        departments: departments.names,
+        departmentDescriptions: departments.descriptions,
+      }
     ),
   };
 
@@ -237,7 +287,12 @@ export async function POST(request: NextRequest) {
         ...formConfig,
         questions: hydrateRecruitmentQuestionDynamicOptions(
           getPublicRecruitmentQuestions(formConfig.questions),
-          { rolesFunctions }
+          {
+            rolesFunctions,
+            cities,
+            departments: departments.names,
+            departmentDescriptions: departments.descriptions,
+          }
         ),
       }
     : fallbackPublicForm;
@@ -249,8 +304,10 @@ export async function POST(request: NextRequest) {
   }
   const formQuestionSnapshot = createQuestionSnapshot(publicForm.questions);
 
-  const resolvedRolePreference = rolePreference || formatTalentPreferenceAnswer(formAnswers.preferred_role, 500);
-  const resolvedUnitPreference = unitPreference || formatTalentPreferenceAnswer(formAnswers.preferred_unit, 120);
+  const resolvedDepartmentPreference = departmentPreference || formatTalentPreferenceAnswer(formAnswers.preferred_department, 180);
+  const resolvedCityPreference = cityPreference || formatTalentPreferenceAnswer(formAnswers.preferred_city, 120);
+  const resolvedRolePreference = rolePreference || resolvedDepartmentPreference || formatTalentPreferenceAnswer(formAnswers.preferred_role, 500);
+  const resolvedUnitPreference = unitPreference || resolvedCityPreference || formatTalentPreferenceAnswer(formAnswers.preferred_unit, 120);
   const resolvedNotes = notes || trimText(formAnswers.message, 1500);
 
   const existing = await hrDbAdmin
@@ -298,6 +355,8 @@ export async function POST(request: NextRequest) {
     talentPool: {
       rolePreference: resolvedRolePreference || null,
       unitPreference: resolvedUnitPreference || null,
+      departmentPreference: resolvedDepartmentPreference || null,
+      cityPreference: resolvedCityPreference || null,
       submittedAt: now,
       formId: publicForm.id,
       formVersion: publicForm.version,

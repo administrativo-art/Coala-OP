@@ -24,7 +24,7 @@ export const RECRUITMENT_QUESTION_TYPES: HrQuestionType[] = [
   "file_upload",
 ];
 
-const DYNAMIC_OPTION_SOURCES = ["public_units", "public_roles_functions"] as const;
+const DYNAMIC_OPTION_SOURCES = ["public_units", "public_roles_functions", "public_departments", "public_cities"] as const;
 
 export function makeRecruitmentSectionId(title: string) {
   return title
@@ -68,20 +68,8 @@ export const DEFAULT_TALENT_POOL_FORM: RecruitmentFormConfig = {
   status: "published",
   questions: [
     {
-      id: "preferred_role",
-      text: "Cargo de interesse",
-      type: "multi_select",
-      required: false,
-      active: true,
-      scored: false,
-      weight: "medium",
-      eliminatory: false,
-      tags: ["talent_pool"],
-      config: { source: "public_roles_functions" },
-    },
-    {
-      id: "preferred_unit",
-      text: "Unidade preferida",
+      id: "preferred_department",
+      text: "Departamento de interesse",
       type: "select",
       required: false,
       active: true,
@@ -89,7 +77,19 @@ export const DEFAULT_TALENT_POOL_FORM: RecruitmentFormConfig = {
       weight: "medium",
       eliminatory: false,
       tags: ["talent_pool"],
-      config: { source: "public_units" },
+      config: { source: "public_departments" },
+    },
+    {
+      id: "preferred_city",
+      text: "Cidade",
+      type: "select",
+      required: false,
+      active: true,
+      scored: false,
+      weight: "medium",
+      eliminatory: false,
+      tags: ["talent_pool"],
+      config: { source: "public_cities" },
     },
     {
       id: "message",
@@ -105,7 +105,9 @@ export const DEFAULT_TALENT_POOL_FORM: RecruitmentFormConfig = {
     },
   ],
   consentText: "Autorizo o tratamento dos meus dados para fins de recrutamento, conforme a LGPD.",
-  submitLabel: "Enviar cadastro",
+  lgpdContractText: "Ao enviar este cadastro, autorizo a Coala Shakes a tratar meus dados pessoais para fins de recrutamento e seleção, incluindo contato, avaliação de perfil e armazenamento durante o processo seletivo.",
+  successMessage: "Cadastro enviado. Recebemos suas informações e entraremos em contato quando houver uma oportunidade compatível.",
+  submitLabel: "Enviar candidatura",
   version: 1,
   updatedAt: new Date(0).toISOString(),
   updatedBy: "system",
@@ -451,14 +453,49 @@ export function normalizeRecruitmentFormConfig(
   const data = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const now = new Date().toISOString();
   const questions = normalizeRecruitmentQuestions(data.questions).map((question) => {
+    if (question.id === "preferred_department") {
+      return {
+        ...question,
+        text: question.text || "Departamento de interesse",
+        type: "select" as const,
+        config: {
+          ...(question.config ?? {}),
+          source: "public_departments" as const,
+        },
+      };
+    }
+    if (question.id === "preferred_city") {
+      return {
+        ...question,
+        text: question.text || "Cidade",
+        type: "select" as const,
+        config: {
+          ...(question.config ?? {}),
+          source: "public_cities" as const,
+        },
+      };
+    }
+    if (question.id === "preferred_unit") {
+      return {
+        ...question,
+        id: "preferred_city",
+        text: "Cidade",
+        type: "select" as const,
+        config: {
+          ...(question.config ?? {}),
+          source: "public_cities" as const,
+        },
+      };
+    }
     if (question.id !== "preferred_role") return question;
     return {
       ...question,
-      text: question.text || "Cargo de interesse",
-      type: "multi_select" as const,
+      id: "preferred_department",
+      text: "Departamento de interesse",
+      type: "select" as const,
       config: {
         ...(question.config ?? {}),
-        source: "public_roles_functions" as const,
+        source: "public_departments" as const,
       },
     };
   });
@@ -473,9 +510,13 @@ export function normalizeRecruitmentFormConfig(
     consentText: typeof data.consentText === "string" && data.consentText.trim()
       ? data.consentText.trim().slice(0, 500)
       : fallback.consentText,
-    submitLabel: typeof data.submitLabel === "string" && data.submitLabel.trim()
-      ? data.submitLabel.trim().slice(0, 80)
-      : fallback.submitLabel,
+    lgpdContractText: typeof data.lgpdContractText === "string" && data.lgpdContractText.trim()
+      ? data.lgpdContractText.trim().slice(0, 4000)
+      : fallback.lgpdContractText,
+    successMessage: typeof data.successMessage === "string" && data.successMessage.trim()
+      ? data.successMessage.trim().slice(0, 500)
+      : fallback.successMessage,
+    submitLabel: fallback.submitLabel,
     version: typeof data.version === "number" && Number.isFinite(data.version) ? data.version : fallback.version,
     createdAt: typeof data.createdAt === "string" ? data.createdAt : fallback.createdAt,
     updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : now,
@@ -493,7 +534,13 @@ function filterHiddenRecruitmentOptions(options: string[], question: HrFormQuest
 
 export function getRecruitmentQuestionOptions(
   question: HrFormQuestion,
-  dynamicOptions?: { units?: string[]; rolesFunctions?: string[] }
+  dynamicOptions?: {
+    units?: string[];
+    rolesFunctions?: string[];
+    departments?: string[];
+    departmentDescriptions?: Record<string, string>;
+    cities?: string[];
+  }
 ) {
   if (question.config?.source === "public_units") {
     const options = dynamicOptions?.units ?? (
@@ -511,6 +558,22 @@ export function getRecruitmentQuestionOptions(
     );
     return filterHiddenRecruitmentOptions(options, question);
   }
+  if (question.config?.source === "public_departments") {
+    const options = dynamicOptions?.departments ?? (
+      Array.isArray(question.config?.options)
+        ? question.config.options.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
+        : []
+    );
+    return filterHiddenRecruitmentOptions(options, question);
+  }
+  if (question.config?.source === "public_cities") {
+    const options = dynamicOptions?.cities ?? (
+      Array.isArray(question.config?.options)
+        ? question.config.options.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
+        : []
+    );
+    return filterHiddenRecruitmentOptions(options, question);
+  }
   const options = question.config?.options;
   return Array.isArray(options)
     ? options.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
@@ -519,19 +582,37 @@ export function getRecruitmentQuestionOptions(
 
 export function hydrateRecruitmentQuestionDynamicOptions(
   questions: HrFormQuestion[],
-  dynamicOptions?: { units?: string[]; rolesFunctions?: string[] }
+  dynamicOptions?: {
+    units?: string[];
+    rolesFunctions?: string[];
+    departments?: string[];
+    departmentDescriptions?: Record<string, string>;
+    cities?: string[];
+  }
 ) {
   return questions.map((question) => {
     const source = question.config?.source;
-    if (source !== "public_units" && source !== "public_roles_functions") return question;
+    if (
+      source !== "public_units" &&
+      source !== "public_roles_functions" &&
+      source !== "public_departments" &&
+      source !== "public_cities"
+    ) return question;
     const options = source === "public_units"
       ? dynamicOptions?.units ?? []
-      : dynamicOptions?.rolesFunctions ?? [];
+      : source === "public_roles_functions"
+        ? dynamicOptions?.rolesFunctions ?? []
+        : source === "public_departments"
+          ? dynamicOptions?.departments ?? []
+          : dynamicOptions?.cities ?? [];
     return {
       ...question,
       config: {
         ...(question.config ?? {}),
         options: filterHiddenRecruitmentOptions(options, question),
+        ...(source === "public_departments" && dynamicOptions?.departmentDescriptions
+          ? { optionDescriptions: dynamicOptions.departmentDescriptions }
+          : {}),
       },
     };
   });

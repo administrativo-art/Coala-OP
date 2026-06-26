@@ -38,6 +38,8 @@ interface PublicOpening {
   benefits?: string[];
   publicSalaryRange?: JobRoleSalaryRange | null;
   applyButtonLabel?: string | null;
+  applicationSuccessMessage?: string | null;
+  lgpdContractText?: string | null;
   formQuestions?: HrFormQuestion[];
   location?: string;
   workSchedule?: string | null;
@@ -602,7 +604,9 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
               <div className="py-8 text-center">
                 <div className="mb-3 text-[56px]">🥳</div>
                 <h3 className="fd mb-2 text-[26px]">Candidatura enviada!</h3>
-                <p className="mb-6 text-[14px] text-[#5B4C5B]">Recebemos tudo. Entramos em contato em até 5 dias úteis.</p>
+                <p className="mb-6 whitespace-pre-line text-[14px] text-[#5B4C5B]">
+                  {opening.applicationSuccessMessage || "Recebemos sua candidatura. A equipe de recrutamento vai analisar suas informações e entrar em contato quando houver atualização."}
+                </p>
                 <Link href="/vagas" className="btn inline-flex h-10 items-center gap-2 bg-[#F4ECD8] px-5 text-[13px] font-bold text-[#2A1F2A]">
                   <ArrowLeft className="h-3.5 w-3.5" /> Ver outras vagas
                 </Link>
@@ -611,7 +615,7 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
                   <h2 className="fd mb-1 text-[28px] leading-none">Candidatar-se</h2>
-                  <p className="text-[15px] text-[#5B4C5B]">Preencha abaixo. Respondemos em até 5 dias úteis.</p>
+                  <p className="text-[15px] text-[#5B4C5B]">Preencha seus dados para enviar a candidatura.</p>
                 </div>
 
                 <div>
@@ -687,6 +691,12 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
                     Autorizo o tratamento dos meus dados para recrutamento, conforme a LGPD.
                   </span>
                 </label>
+                {opening.lgpdContractText ? (
+                  <details className="rounded-2xl border border-[#2A1F2A]/10 bg-[#F4ECD8] px-4 py-3 text-[11.5px] leading-relaxed text-[#5B4C5B]">
+                    <summary className="cursor-pointer font-bold text-[#2A1F2A]">Contrato LGPD</summary>
+                    <p className="mt-2 whitespace-pre-line">{opening.lgpdContractText}</p>
+                  </details>
+                ) : null}
 
                 {submitError ? (
                   <p className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-700">
@@ -705,8 +715,6 @@ export default function VagaDetailPage({ params }: { params: Promise<{ slug: str
 
                 <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-[#5B4C5B]">
                   <span>🔒 Dados protegidos pela LGPD</span>
-                  <span>·</span>
-                  <span>⏱ Respondemos em até 5 dias úteis</span>
                 </div>
               </form>
             )}

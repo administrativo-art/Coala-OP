@@ -36,6 +36,8 @@ const recruitmentDisplaySchema = z.object({
   contractTypeLabel: z.string().trim().max(80).optional(),
   deadlineLabel: z.string().trim().max(80).optional(),
   buttonText: z.string().trim().max(80).optional(),
+  successMessage: z.string().trim().max(500).optional(),
+  lgpdContractText: z.string().trim().max(4000).optional(),
 }).optional();
 
 const formQuestionSchema = z.object({
@@ -164,6 +166,7 @@ const jobRoleBaseSchema = z.object({
   salaryRange: salaryRangeSchema.optional(),
   publicSalaryRange: salaryRangeSchema.optional(),
   recruitmentDisplay: recruitmentDisplaySchema,
+  recruitmentModelSavedAt: z.string().trim().optional().nullable(),
   defaultProfileId: z.string().trim().min(1).optional(),
   loginRestricted: z.boolean().default(false),
   formQuestions: z.array(formQuestionSchema).default([]),
@@ -191,6 +194,7 @@ const jobFunctionBaseSchema = z.object({
   workSchedule: z.string().trim().max(250).optional(),
   publicSalaryRange: salaryRangeSchema.optional(),
   recruitmentDisplay: recruitmentDisplaySchema,
+  recruitmentModelSavedAt: z.string().trim().optional().nullable(),
   compatibleRoleIds: z.array(z.string().trim().min(1)).default([]),
   defaultProfileId: z.string().trim().min(1).optional(),
   formQuestions: z.array(formQuestionSchema).default([]),
@@ -345,6 +349,8 @@ function normalizeRecruitmentDisplay(
     contractTypeLabel: display.contractTypeLabel?.trim() || undefined,
     deadlineLabel: display.deadlineLabel?.trim() || undefined,
     buttonText: display.buttonText?.trim() || undefined,
+    successMessage: display.successMessage?.trim() || undefined,
+    lgpdContractText: display.lgpdContractText?.trim() || undefined,
   });
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }

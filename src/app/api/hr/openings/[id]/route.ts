@@ -43,6 +43,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     benefits,
     publicSalaryRange,
     applyButtonLabel,
+    applicationSuccessMessage,
+    lgpdContractText,
     location,
     workType,
     contractTypeLabel,
@@ -114,6 +116,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (publicSalaryRange !== undefined) update.publicSalaryRange = publicSalaryRange || null;
   if (applyButtonLabel !== undefined) {
     update.applyButtonLabel = typeof applyButtonLabel === 'string' ? applyButtonLabel.trim() || null : null;
+  }
+  if (applicationSuccessMessage !== undefined) {
+    update.applicationSuccessMessage = typeof applicationSuccessMessage === 'string'
+      ? applicationSuccessMessage.trim().slice(0, 500) || null
+      : null;
+  }
+  if (lgpdContractText !== undefined) {
+    update.lgpdContractText = typeof lgpdContractText === 'string'
+      ? lgpdContractText.trim().slice(0, 4000) || null
+      : null;
   }
   const shouldRecomputeScoring =
     formQuestions !== undefined ||

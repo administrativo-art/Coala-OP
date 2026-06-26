@@ -25,6 +25,7 @@ import type {
   OnboardingDocument,
   OnboardingProcess,
   RecruitmentCompositionPreset,
+  RecruitmentCriterionCategory,
   RecruitmentQuestionCondition,
   RecruitmentQuestionConditionOperator,
   RecruitmentQuestionScoringUse,
@@ -101,6 +102,7 @@ const OPENING_STATUS_CONFIG: Record<JobOpeningStatus, { label: string; color: st
 
 const SOURCE_OPTIONS = ['LinkedIn', 'Indicação', 'Site', 'Indeed', 'Catho', 'Espontâneo', 'Outro'];
 const PUBLIC_RECRUITMENT_URL = 'https://vagas.coalashakes.com';
+const PUBLIC_APPLY_BUTTON_LABEL = 'Enviar candidatura';
 const WORK_TYPE_OPTIONS = [
   { value: 'presencial', label: 'Presencial' },
   { value: 'remoto',     label: 'Remoto' },
@@ -156,8 +158,35 @@ const RECRUITMENT_CRITERIA_GROUPS = Object.entries(RECRUITMENT_CATEGORY_LABELS).
   criteria: STANDARD_RECRUITMENT_CRITERIA.filter(criterion => criterion.category === category),
 }));
 
+const MANDATORY_RECRUITMENT_SECTIONS = Object.entries(RECRUITMENT_CATEGORY_LABELS).map(([category, label]) => ({
+  category: category as RecruitmentCriterionCategory,
+  title: label,
+  baseWeight: RECRUITMENT_CATEGORY_BASE_WEIGHTS[category as RecruitmentCriterionCategory],
+  defaultCriterionCode: STANDARD_RECRUITMENT_CRITERIA.find(criterion => criterion.category === category)?.code ?? '',
+}));
+
+type RecruitmentModelEditorStep = 'general' | 'public' | 'form';
+type TalentPoolEditorStep = 'general' | 'fixed' | 'form';
+
+const MODEL_EDITOR_STEPS: Array<{ value: RecruitmentModelEditorStep; label: string }> = [
+  { value: 'general', label: 'Informações gerais' },
+  { value: 'public', label: 'Página pública' },
+  { value: 'form', label: 'Formulário' },
+];
+
+const TALENT_POOL_EDITOR_STEPS: Array<{ value: TalentPoolEditorStep; label: string }> = [
+  { value: 'general', label: 'Informações gerais' },
+  { value: 'fixed', label: 'Campos fixos' },
+  { value: 'form', label: 'Formulário' },
+];
+
 function getStandardRecruitmentCriterion(code: string) {
   return STANDARD_RECRUITMENT_CRITERIA.find(criterion => criterion.code === code);
+}
+
+function getRecruitmentSectionCriterionCode(sectionTitle: string) {
+  const normalized = sectionTitle.trim().toLowerCase();
+  return MANDATORY_RECRUITMENT_SECTIONS.find(section => section.title.toLowerCase() === normalized)?.defaultCriterionCode ?? '';
 }
 
 function getQuestionScoringUse(question: HrFormQuestion): RecruitmentQuestionScoringUse {
@@ -591,6 +620,95 @@ function QuestionDraftConditionControls({
             {item.label}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function QuestionDraftSectionControls({
+  draft,
+  questions,
+  onChange,
+}: {
+  draft: QuestionDraft;
+  questions: HrFormQuestion[];
+  onChange: (patch: Partial<QuestionDraft>) => void;
+}) {
+  const customSections = Array.from(new Set(
+    questions
+      .map(question => question.sectionTitle?.trim())
+      .filter((section): section is string => Boolean(section))
+      .filter(section => !MANDATORY_RECRUITMENT_SECTIONS.some(item => item.title === section))
+  ));
+
+  const selectSection = (sectionTitle: string, criterionCode?: string) => {
+    const nextCriterionCode = (criterionCode ?? draft.criterionCode) || getRecruitmentSectionCriterionCode(sectionTitle);
+    onChange({
+      sectionTitle,
+      criterionCode: nextCriterionCode,
+      scoringUse: nextCriterionCode ? 'scored' : draft.scoringUse,
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 lg:col-span-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Seção / critério</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Escolha uma seção antes de criar a pergunta. Os pontos-base aparecem ao lado de cada critério.
+          </p>
+        </div>
+        {draft.sectionTitle ? (
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+            {draft.sectionTitle}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {MANDATORY_RECRUITMENT_SECTIONS.map(section => {
+          const selected = draft.sectionTitle === section.title;
+          return (
+            <button
+              key={section.category}
+              type="button"
+              onClick={() => selectSection(section.title, section.defaultCriterionCode)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                selected
+                  ? 'border-slate-950 bg-slate-950 text-white'
+                  : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white'
+              }`}
+            >
+              {section.title} · {section.baseWeight} pts
+            </button>
+          );
+        })}
+        {customSections.map(section => (
+          <button
+            key={section}
+            type="button"
+            onClick={() => selectSection(section)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              draft.sectionTitle === section
+                ? 'border-indigo-600 bg-indigo-600 text-white'
+                : 'border-indigo-100 bg-indigo-50 text-indigo-700 hover:border-indigo-200'
+            }`}
+          >
+            {section}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3">
+        <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Nova seção personalizada</label>
+        <input
+          value={MANDATORY_RECRUITMENT_SECTIONS.some(section => section.title === draft.sectionTitle) ? '' : draft.sectionTitle}
+          onChange={event => onChange({
+            sectionTitle: event.target.value,
+            criterionCode: getRecruitmentSectionCriterionCode(event.target.value) || draft.criterionCode,
+          })}
+          placeholder="Ex: Teste prático, Cultura, Disponibilidade local"
+          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+        />
       </div>
     </div>
   );
@@ -1040,6 +1158,8 @@ type RecruitmentQuestionsDesignerProps = {
   showScoring?: boolean;
   optionPlaceholder?: string;
   dynamicRoleFunctionOptions?: string[];
+  dynamicDepartmentOptions?: string[];
+  dynamicCityOptions?: string[];
   onUpdateQuestion: (questionId: string, patch: Partial<HrFormQuestion>) => void;
   onUpdateQuestionOptions: (questionId: string, optionsText: string) => void;
   onMoveQuestion: (questionId: string, direction: -1 | 1) => void;
@@ -1197,6 +1317,8 @@ function RecruitmentQuestionsDesigner({
   showScoring = false,
   optionPlaceholder = 'Opções, uma por linha\nSim\nNão\nTalvez',
   dynamicRoleFunctionOptions = [],
+  dynamicDepartmentOptions = [],
+  dynamicCityOptions = [],
   onUpdateQuestion,
   onUpdateQuestionOptions,
   onMoveQuestion,
@@ -1461,7 +1583,75 @@ function RecruitmentQuestionsDesigner({
                       </p>
                     ) : null}
                   </div>
-                ) : (
+                ) : question.config?.source === 'public_departments' || question.config?.source === 'public_cities' ? (() => {
+                  const isDepartmentSource = question.config?.source === 'public_departments';
+                  const dynamicOptions = isDepartmentSource ? dynamicDepartmentOptions : dynamicCityOptions;
+                  const source = isDepartmentSource ? 'public_departments' : 'public_cities';
+                  const title = isDepartmentSource ? 'Departamentos públicos' : 'Cidades públicas';
+                  const description = isDepartmentSource
+                    ? 'Departamentos ativos são atualizados automaticamente. Desmarque o que não deve aparecer.'
+                    : 'Cidades disponíveis são atualizadas automaticamente a partir das unidades ativas.';
+                  const emptyText = isDepartmentSource ? 'Nenhum departamento ativo encontrado.' : 'Nenhuma cidade ativa encontrada.';
+                  return (
+                    <div className={`lg:col-span-2 rounded-xl border p-3 ${
+                      isDark ? 'border-slate-800 bg-slate-900/70' : 'border-slate-100 bg-slate-50'
+                    }`}>
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className={labelClass}>{title}</p>
+                          <p className={isDark ? 'text-xs text-slate-500' : 'text-xs text-slate-500'}>{description}</p>
+                        </div>
+                        <span className={isDark ? 'text-[11px] font-semibold text-slate-500' : 'text-[11px] font-semibold text-slate-500'}>
+                          {pluralizePt(getRecruitmentQuestionOptions(question, {
+                            departments: dynamicDepartmentOptions,
+                            cities: dynamicCityOptions,
+                          }).length, 'visível', 'visíveis')}
+                        </span>
+                      </div>
+                      <div className="grid max-h-44 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+                        {dynamicOptions.map(option => {
+                          const hiddenOptions = Array.isArray(question.config?.hiddenOptions)
+                            ? question.config.hiddenOptions.filter((entry): entry is string => typeof entry === 'string')
+                            : [];
+                          const checked = !hiddenOptions.includes(option);
+                          return (
+                            <label
+                              key={option}
+                              className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-semibold ${
+                                checked
+                                  ? isDark ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-emerald-100 bg-white text-slate-700'
+                                  : isDark ? 'border-slate-800 bg-slate-950 text-slate-500' : 'border-slate-200 bg-white/60 text-slate-400'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={!canManage}
+                                onChange={event => {
+                                  const nextHidden = event.target.checked
+                                    ? hiddenOptions.filter(item => item !== option)
+                                    : Array.from(new Set([...hiddenOptions, option]));
+                                  onUpdateQuestion(question.id, {
+                                    config: {
+                                      ...(question.config ?? {}),
+                                      source,
+                                      hiddenOptions: nextHidden,
+                                    },
+                                  });
+                                }}
+                                className={checkboxClass}
+                              />
+                              <span className="truncate">{option}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {dynamicOptions.length === 0 ? (
+                        <p className={isDark ? 'text-xs text-slate-500' : 'text-xs text-slate-500'}>{emptyText}</p>
+                      ) : null}
+                    </div>
+                  );
+                })() : (
                   <div className="lg:col-span-2">
                     <label className={labelClass}>Opções</label>
                     <textarea
@@ -1646,7 +1836,7 @@ function RecruitmentQuestionsDesigner({
           {canManage && onPrepareAddQuestion && (
             <button
               type="button"
-              onClick={() => onPrepareAddQuestion({ sectionTitle: fallbackSectionTitle })}
+              onClick={() => onPrepareAddQuestion({ sectionTitle: '' })}
               className={`mt-4 inline-flex h-9 items-center justify-center rounded-xl border px-3 text-xs font-semibold ${
                 isDark
                   ? 'border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
@@ -2939,8 +3129,10 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     requirements: (opening?.requirements ?? []).join('\n'),
     benefits: listToText(opening?.benefits),
     salaryLabel: salaryTextFromRange(opening?.publicSalaryRange),
-    salaryVisible: opening?.publicSalaryRange?.visible !== false,
-    applyButtonLabel: opening?.applyButtonLabel ?? 'Enviar candidatura',
+    salaryVisible: opening?.publicSalaryRange?.visible === true,
+    applyButtonLabel: opening?.applyButtonLabel ?? PUBLIC_APPLY_BUTTON_LABEL,
+    successMessage: opening?.applicationSuccessMessage ?? '',
+    lgpdContractText: opening?.lgpdContractText ?? '',
   });
   const [questions, setQuestions] = useState<HrFormQuestion[]>(opening?.formQuestions ?? []);
   const [questionsTouched, setQuestionsTouched] = useState(isEdit);
@@ -2988,7 +3180,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
   const finalRequirements = textToList(form.requirements);
   const finalBenefits = textToList(form.benefits);
   const openingSalaryPreview = formatSalaryRange(salaryRangeFromText(form.salaryLabel, form.salaryVisible));
-  const openingButtonText = form.applyButtonLabel.trim() || 'Enviar candidatura';
+  const openingButtonText = PUBLIC_APPLY_BUTTON_LABEL;
   const scoringPreview = useMemo(
     () => applyRecruitmentScoring(questions, form.functionId ? form.compositionPreset : 'role_100'),
     [form.compositionPreset, form.functionId, questions]
@@ -3028,6 +3220,8 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
     const displayLocation = recruitmentDisplay.locationLabel?.trim();
     const displayContractType = recruitmentDisplay.contractTypeLabel?.trim();
     const displayButton = recruitmentDisplay.buttonText?.trim();
+    const displaySuccessMessage = recruitmentDisplay.successMessage?.trim();
+    const displayLgpdContractText = recruitmentDisplay.lgpdContractText?.trim();
     const inheritedQuestions = getModelQuestions(role, fn);
     const inheritedStages = mergeRecruitmentStageModels(role?.pipelineStages, fn?.pipelineStages);
 
@@ -3044,8 +3238,10 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         contractTypeLabel: prev.contractTypeLabel.trim() || !displayContractType ? prev.contractTypeLabel : displayContractType,
         workSchedule: prev.workSchedule.trim() || !inheritedWorkSchedule ? prev.workSchedule : inheritedWorkSchedule,
         salaryLabel: hasSalary || !publicSalaryRange ? prev.salaryLabel : salaryTextFromRange(publicSalaryRange),
-        salaryVisible: hasSalary || publicSalaryRange === undefined ? prev.salaryVisible : publicSalaryRange.visible !== false,
+        salaryVisible: hasSalary || publicSalaryRange === undefined ? prev.salaryVisible : publicSalaryRange.visible === true,
         applyButtonLabel: prev.applyButtonLabel.trim() || !displayButton ? prev.applyButtonLabel : displayButton,
+        successMessage: prev.successMessage.trim() || !displaySuccessMessage ? prev.successMessage : displaySuccessMessage,
+        lgpdContractText: prev.lgpdContractText.trim() || !displayLgpdContractText ? prev.lgpdContractText : displayLgpdContractText,
       };
     });
     setQuestions(prev => questionsTouched ? prev : inheritedQuestions);
@@ -3220,6 +3416,8 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
         benefits: finalBenefits,
         publicSalaryRange: salaryRangeFromText(form.salaryLabel, form.salaryVisible),
         applyButtonLabel: openingButtonText,
+        applicationSuccessMessage: form.successMessage.trim() || null,
+        lgpdContractText: form.lgpdContractText.trim() || null,
         formQuestions: questions,
         pipelineStages: stages.map((stage, index) => ({ ...stage, order: index })),
       };
@@ -3481,18 +3679,8 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 placeholder="Vale-transporte&#10;Bonificações&#10;Day-off aniversário"
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Salário</label>
-              <input
-                type="text"
-                value={form.salaryLabel}
-                onChange={set('salaryLabel')}
-                placeholder="Ex: R$ 1.800, R$ 1.800 a R$ 2.750 ou A combinar"
-                className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-              />
-            </div>
-            <div className="flex flex-wrap items-end gap-4">
-              <label className="flex items-center gap-2 text-sm text-slate-400">
+            <div className="col-span-2 grid gap-3 sm:grid-cols-2">
+              <label className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-400">
                 <input
                   type="checkbox"
                   checked={form.salaryVisible}
@@ -3501,16 +3689,38 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 />
                 Mostrar salário na vaga pública
               </label>
-              <div className="min-w-[220px] flex-1">
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Texto do botão público</label>
+              {form.salaryVisible && (
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Salário</label>
                 <input
                   type="text"
-                  value={form.applyButtonLabel}
-                  onChange={set('applyButtonLabel')}
+                  value={form.salaryLabel}
+                  onChange={set('salaryLabel')}
+                  placeholder="Ex: R$ 1.800, R$ 1.800 a R$ 2.750 ou A combinar"
                   className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-                  placeholder="Enviar candidatura"
                 />
               </div>
+              )}
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Mensagem após envio da candidatura</label>
+              <textarea
+                value={form.successMessage}
+                onChange={set('successMessage')}
+                rows={3}
+                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                placeholder="Ex: Recebemos sua candidatura. A equipe de recrutamento vai analisar suas informações e entrar em contato quando houver atualização."
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Contrato LGPD da candidatura</label>
+              <textarea
+                value={form.lgpdContractText}
+                onChange={set('lgpdContractText')}
+                rows={4}
+                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                placeholder="Texto completo do contrato/termo LGPD exibido ao candidato antes do envio."
+              />
             </div>
             <details className="group col-span-2 rounded-xl border border-slate-800 bg-slate-900/40">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
@@ -4586,36 +4796,8 @@ function hasModelText(value?: string | null) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function hasModelList(value?: string[]) {
-  return Array.isArray(value) && value.some(item => hasModelText(item));
-}
-
-function hasSalaryModelContent(value?: JobRoleSalaryRange) {
-  return Boolean(value && (hasModelText(value.label) || value.min !== undefined || value.max !== undefined));
-}
-
-function hasRecruitmentDisplayModelContent(display?: JobRole['recruitmentDisplay']) {
-  return Boolean(display && (
-    hasModelText(display.locationLabel) ||
-    Boolean(display.workType) ||
-    hasModelText(display.contractTypeLabel) ||
-    hasModelText(display.deadlineLabel) ||
-    hasModelText(display.buttonText)
-  ));
-}
-
 function hasSavedQuestionModelContent(item: JobRole | JobFunction) {
-  return Boolean(
-    (item.formQuestions?.length ?? 0) > 0 ||
-    (hasModelText(item.publicTitle) && item.publicTitle.trim() !== item.name.trim()) ||
-    hasModelText(item.publicDescription) ||
-    hasModelList(item.publicResponsibilities) ||
-    hasModelList(item.publicRequirements) ||
-    hasModelList(item.benefits) ||
-    hasModelText(item.workSchedule) ||
-    hasSalaryModelContent(item.publicSalaryRange) ||
-    hasRecruitmentDisplayModelContent(item.recruitmentDisplay)
-  );
+  return Boolean(item.recruitmentModelSavedAt || (item.formQuestions?.length ?? 0) > 0);
 }
 
 function cloneRecruitmentQuestions(questions: HrFormQuestion[] | undefined) {
@@ -4638,6 +4820,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
   const [selectorQuery, setSelectorQuery] = useState('');
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [showModelsModal, setShowModelsModal] = useState(false);
+  const [modelStep, setModelStep] = useState<RecruitmentModelEditorStep>('general');
   const [questions, setQuestions] = useState<HrFormQuestion[]>([]);
   const [modelText, setModelText] = useState({
     publicTitle: '',
@@ -4647,12 +4830,14 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
     benefits: '',
     workSchedule: '',
     salaryLabel: '',
-    salaryVisible: true,
+    salaryVisible: false,
     locationLabel: '',
     workType: '',
     contractTypeLabel: '',
     deadlineLabel: '',
-    buttonText: 'Enviar candidatura',
+    buttonText: PUBLIC_APPLY_BUTTON_LABEL,
+    successMessage: '',
+    lgpdContractText: '',
   });
   const [draft, setDraft] = useState(EMPTY_QUESTION_DRAFT);
   const [saving, setSaving] = useState(false);
@@ -4713,7 +4898,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
   const selected = selectedOption?.item ?? null;
   const kind: QuestionModelKind = selectedOption?.kind ?? 'role';
   const modelLabel = kind === 'role' ? 'cargo' : 'função';
-  const title = 'Modelos por cargo e função';
+  const title = 'Modelos de formulários';
   const primaryQuestionCount = questions.filter(question => !question.parentQuestionId).length;
   const subquestionCount = questions.filter(question => question.parentQuestionId).length;
   const sectionCount = groupRecruitmentQuestionsBySection(questions, 'Perguntas do modelo').length;
@@ -4722,20 +4907,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
     option.key === selectedOption?.key ? questions : (option.item.formQuestions ?? []);
   const hasCurrentModelContent = () => Boolean(
     savedAt ||
-    questions.length > 0 ||
-    (hasModelText(modelText.publicTitle) && selected && modelText.publicTitle.trim() !== selected.name.trim()) ||
-    hasModelText(modelText.publicDescription) ||
-    hasModelText(modelText.publicResponsibilities) ||
-    hasModelText(modelText.publicRequirements) ||
-    hasModelText(modelText.benefits) ||
-    hasModelText(modelText.workSchedule) ||
-    hasModelText(modelText.salaryLabel) ||
-    !modelText.salaryVisible ||
-    hasModelText(modelText.locationLabel) ||
-    Boolean(modelText.workType) ||
-    hasModelText(modelText.contractTypeLabel) ||
-    hasModelText(modelText.deadlineLabel) ||
-    (hasModelText(modelText.buttonText) && modelText.buttonText.trim() !== 'Enviar candidatura')
+    (selected ? hasSavedQuestionModelContent(selected) : false)
   );
   const getModelOptionHasModel = (option: QuestionModelOption) =>
     option.key === selectedOption?.key ? hasCurrentModelContent() : hasSavedQuestionModelContent(option.item);
@@ -4756,23 +4928,29 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
     setModelText({
       publicTitle: selected?.publicTitle || selected?.name || '',
       publicDescription: selected?.publicDescription || selected?.description || '',
-      publicResponsibilities: listToText(selected?.publicResponsibilities),
+      publicResponsibilities: '',
       publicRequirements: listToText(
-        selected?.publicRequirements?.length
-          ? selected.publicRequirements
-          : selected?.requirements
+        Array.from(new Set([
+          ...(selected?.publicResponsibilities ?? []),
+          ...(selected?.publicRequirements?.length
+            ? selected.publicRequirements
+            : selected?.requirements ?? []),
+        ]))
       ),
       benefits: listToText(selected?.benefits),
       workSchedule: selected?.workSchedule || '',
       salaryLabel: salaryTextFromRange(selected?.publicSalaryRange),
-      salaryVisible: selected?.publicSalaryRange?.visible !== false,
+      salaryVisible: selected?.publicSalaryRange?.visible === true,
       locationLabel: selected?.recruitmentDisplay?.locationLabel || '',
       workType: selected?.recruitmentDisplay?.workType || '',
       contractTypeLabel: selected?.recruitmentDisplay?.contractTypeLabel || '',
       deadlineLabel: selected?.recruitmentDisplay?.deadlineLabel || '',
-      buttonText: selected?.recruitmentDisplay?.buttonText || 'Enviar candidatura',
+      buttonText: PUBLIC_APPLY_BUTTON_LABEL,
+      successMessage: selected?.recruitmentDisplay?.successMessage || selected?.applicationSuccessMessage || '',
+      lgpdContractText: selected?.recruitmentDisplay?.lgpdContractText || selected?.lgpdContractText || '',
     });
     setDraft(EMPTY_QUESTION_DRAFT);
+    setModelStep('general');
     setError(null);
     setSavedAt(null);
   }, [
@@ -4786,6 +4964,8 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
     selected?.workSchedule,
     selected?.publicSalaryRange,
     selected?.recruitmentDisplay,
+    selected?.applicationSuccessMessage,
+    selected?.lgpdContractText,
     selected?.requirements,
   ]);
 
@@ -4818,6 +4998,10 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
 
   function addQuestion() {
     const text = draft.text.trim();
+    if (!draft.sectionTitle.trim()) {
+      setError('Selecione ou crie uma seção antes de adicionar a pergunta.');
+      return;
+    }
     if (!text) return;
     const options = draft.optionsText
       .split('\n')
@@ -4866,7 +5050,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
         body: JSON.stringify({
           publicTitle: modelText.publicTitle.trim() || selected.name,
           publicDescription: modelText.publicDescription.trim(),
-          publicResponsibilities: textToList(modelText.publicResponsibilities),
+          publicResponsibilities: [],
           publicRequirements: textToList(modelText.publicRequirements),
           benefits: textToList(modelText.benefits),
           workSchedule: modelText.workSchedule.trim(),
@@ -4876,8 +5060,11 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
             workType: modelText.workType || undefined,
             contractTypeLabel: modelText.contractTypeLabel.trim(),
             deadlineLabel: modelText.deadlineLabel.trim(),
-            buttonText: modelText.buttonText.trim(),
+            buttonText: PUBLIC_APPLY_BUTTON_LABEL,
+            successMessage: modelText.successMessage.trim(),
+            lgpdContractText: modelText.lgpdContractText.trim(),
           },
+          recruitmentModelSavedAt: new Date().toISOString(),
           formQuestions: questions.map((question, index) => ({ ...question, order: index })),
         }),
       });
@@ -4896,7 +5083,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
   const modelSalaryPreview = formatSalaryRange(salaryRangeFromText(modelText.salaryLabel, modelText.salaryVisible));
   const modelWorkTypeLabel = WORK_TYPE_OPTIONS.find(option => option.value === modelText.workType)?.label;
   const modelContractTypeLabel = modelText.contractTypeLabel.trim();
-  const modelButtonText = modelText.buttonText.trim() || 'Enviar candidatura';
+  const modelButtonText = modelText.buttonText.trim() || PUBLIC_APPLY_BUTTON_LABEL;
   const normalizedSelectorQuery = selectorQuery.trim().toLowerCase();
   const filteredModelOptions = normalizedSelectorQuery
     ? modelOptions.filter(option => option.searchText.includes(normalizedSelectorQuery))
@@ -4990,6 +5177,15 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
             <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500">
               {configuredModelOptions.length}/{modelOptions.length} com modelo
             </span>
+            <a
+              href={PUBLIC_RECRUITMENT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Ver no site
+            </a>
             <button
               type="button"
               onClick={() => setShowModelsModal(true)}
@@ -5045,18 +5241,42 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
         ) : null}
       </section>
 
+      <div className="flex max-w-full flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
+        {MODEL_EDITOR_STEPS.map(step => (
+          <button
+            key={step.value}
+            type="button"
+            onClick={() => setModelStep(step.value)}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              modelStep === step.value
+                ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
+                : 'text-slate-500 hover:bg-white/70 hover:text-slate-950'
+            }`}
+          >
+            {step.label}
+          </button>
+        ))}
+      </div>
+
+      {modelStep !== 'form' && (
       <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div>
-            <h3 className="text-sm font-bold text-slate-950">Informações gerais</h3>
+            <h3 className="text-sm font-bold text-slate-950">
+              {modelStep === 'general' ? 'Informações gerais' : 'Página pública da vaga'}
+            </h3>
             <p className="mt-1 text-xs text-slate-500">
-              Dados públicos usados quando uma vaga usa este {modelLabel}. A vaga ainda pode ser revisada antes de publicar.
+              {modelStep === 'general'
+                ? `Dados operacionais usados quando uma vaga usa este ${modelLabel}.`
+                : 'Textos e prévia da página pública apresentada ao candidato.'}
             </p>
           </div>
         </div>
-        <div className="grid min-w-0 gap-5 border-t border-slate-100 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
+        <div className={`grid min-w-0 gap-5 border-t border-slate-100 p-4 ${
+          modelStep === 'public' ? 'xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]' : ''
+        }`}>
           <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-            <div>
+            <div className={modelStep === 'general' ? '' : 'hidden'}>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Título público</label>
               <input
                 value={modelText.publicTitle}
@@ -5066,7 +5286,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 placeholder={selected?.name ?? 'Título público'}
               />
             </div>
-            <div>
+            <div className={modelStep === 'general' ? '' : 'hidden'}>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Unidade/local padrão</label>
               <input
                 value={modelText.locationLabel}
@@ -5076,7 +5296,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 placeholder="Ex: JK - São Paulo"
               />
             </div>
-            <div>
+            <div className={modelStep === 'general' ? '' : 'hidden'}>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Jornada padrão</label>
               <input
                 value={modelText.workSchedule}
@@ -5086,7 +5306,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 placeholder="Ex: Escala 6x1, fins de semana alternados"
               />
             </div>
-            <div>
+            <div className={modelStep === 'general' ? '' : 'hidden'}>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Modalidade padrão</label>
               <select
                 value={modelText.workType}
@@ -5100,7 +5320,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 ))}
               </select>
             </div>
-            <div>
+            <div className={modelStep === 'general' ? '' : 'hidden'}>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Forma de contratação padrão</label>
               <input
                 value={modelText.contractTypeLabel}
@@ -5110,7 +5330,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 placeholder="Ex: CLT, PJ, temporário"
               />
             </div>
-            <div>
+            <div className={modelStep === 'general' ? '' : 'hidden'}>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Período de inscrições padrão</label>
               <input
                 value={modelText.deadlineLabel}
@@ -5120,7 +5340,17 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 placeholder="Ex: Inscrições de 01/07 a 15/07"
               />
             </div>
-            <div>
+            <label className={modelStep === 'general' ? 'flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600' : 'hidden'}>
+              <input
+                type="checkbox"
+                checked={modelText.salaryVisible}
+                onChange={event => setModelText(prev => ({ ...prev, salaryVisible: event.target.checked }))}
+                disabled={!canManage}
+              />
+              Mostrar salário na vaga
+            </label>
+            {modelText.salaryVisible && (
+            <div className={modelStep === 'general' ? '' : 'hidden'}>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Salário</label>
               <input
                 value={modelText.salaryLabel}
@@ -5130,26 +5360,8 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 placeholder="Ex: R$ 1.800, R$ 1.800 a R$ 2.750 ou A combinar"
               />
             </div>
-            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              <input
-                type="checkbox"
-                checked={modelText.salaryVisible}
-                onChange={event => setModelText(prev => ({ ...prev, salaryVisible: event.target.checked }))}
-                disabled={!canManage}
-              />
-              Mostrar salário na vaga
-            </label>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Texto do botão</label>
-              <input
-                value={modelText.buttonText}
-                onChange={event => setModelText(prev => ({ ...prev, buttonText: event.target.value }))}
-                disabled={!canManage}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                placeholder="Enviar candidatura"
-              />
-            </div>
-            <div className="lg:col-span-2">
+            )}
+            <div className={modelStep === 'public' ? 'lg:col-span-2' : 'hidden'}>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Sobre a vaga</label>
               <textarea
                 value={modelText.publicDescription}
@@ -5160,29 +5372,18 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 placeholder="Texto base que aparecerá na vaga pública."
               />
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Responsabilidades públicas</label>
-              <textarea
-                value={modelText.publicResponsibilities}
-                onChange={event => setModelText(prev => ({ ...prev, publicResponsibilities: event.target.value }))}
-                disabled={!canManage}
-                rows={5}
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                placeholder={'Uma por linha\nAtendimento ao cliente\nOrganização da rotina'}
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Requisitos públicos</label>
+            <div className={modelStep === 'public' ? 'lg:col-span-2' : 'hidden'}>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Requisitos e responsabilidades públicas</label>
               <textarea
                 value={modelText.publicRequirements}
                 onChange={event => setModelText(prev => ({ ...prev, publicRequirements: event.target.value }))}
                 disabled={!canManage}
                 rows={5}
                 className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                placeholder={'Um por linha\nDisponibilidade de horário\nExperiência com atendimento'}
+                placeholder={'Um por linha\nAtendimento ao cliente\nDisponibilidade de horário\nExperiência com atendimento'}
               />
             </div>
-            <div>
+            <div className={modelStep === 'public' ? '' : 'hidden'}>
               <label className="mb-1.5 block text-xs font-medium text-slate-500">Benefícios</label>
               <textarea
                 value={modelText.benefits}
@@ -5193,9 +5394,31 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 placeholder={'Um por linha\nVale-transporte\nBonificações'}
               />
             </div>
+            <div className={modelStep === 'public' ? 'lg:col-span-2' : 'hidden'}>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Mensagem após envio da candidatura</label>
+              <textarea
+                value={modelText.successMessage}
+                onChange={event => setModelText(prev => ({ ...prev, successMessage: event.target.value }))}
+                disabled={!canManage}
+                rows={3}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Ex: Recebemos sua candidatura. A equipe de recrutamento vai analisar suas informações e entrar em contato quando houver atualização."
+              />
+            </div>
+            <div className={modelStep === 'public' ? 'lg:col-span-2' : 'hidden'}>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">Contrato LGPD da candidatura</label>
+              <textarea
+                value={modelText.lgpdContractText}
+                onChange={event => setModelText(prev => ({ ...prev, lgpdContractText: event.target.value }))}
+                disabled={!canManage}
+                rows={5}
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Texto completo do contrato/termo LGPD exibido ao candidato antes do envio."
+              />
+            </div>
           </div>
 
-          <div className="min-w-0 rounded-2xl border border-slate-200 bg-[#f0eee9] p-4">
+          <div className={modelStep === 'public' ? 'min-w-0 rounded-2xl border border-slate-200 bg-[#f0eee9] p-4' : 'hidden'}>
             <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Prévia da página pública</p>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="bg-[#2A1F2A] p-4 text-white">
@@ -5210,9 +5433,9 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                       {modelWorkTypeLabel || 'Modalidade na vaga'}
                     </span>
                   )}
-                  {(modelSalaryPreview || 'Salário a combinar') && (
+                  {(modelSalaryPreview || 'Salário definido na vaga') && (
                     <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">
-                      {modelSalaryPreview || 'Salário a combinar'}
+                      {modelSalaryPreview || 'Salário definido na vaga'}
                     </span>
                   )}
                   {(modelContractTypeLabel || 'Contratação na vaga') && (
@@ -5278,7 +5501,9 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
           </div>
         </div>
       </section>
+      )}
 
+      {modelStep === 'form' && (
       <section className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -5329,6 +5554,13 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
         {canManage && (
         <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-4">
           <h3 className="text-sm font-bold text-slate-950">Adicionar campo ao modelo</h3>
+          <div className="mt-4">
+            <QuestionDraftSectionControls
+              draft={draft}
+              questions={questions}
+              onChange={(patch) => setDraft(prev => ({ ...prev, ...patch }))}
+            />
+          </div>
           <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,180px)_minmax(0,180px)]">
             <div>
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Pergunta</label>
@@ -5336,15 +5568,6 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={draft.text}
                 onChange={event => setDraft(prev => ({ ...prev, text: event.target.value }))}
                 placeholder="Ex: Tem disponibilidade aos domingos?"
-                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Seção</label>
-              <input
-                value={draft.sectionTitle}
-                onChange={event => setDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
-                placeholder="Ex: Disponibilidade"
                 className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
               />
             </div>
@@ -5407,6 +5630,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
         </div>
         )}
       </section>
+      )}
 
       {showModelsModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
@@ -5491,6 +5715,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   onModelsUpdated: () => void;
 }) {
   const [formSection, setFormSection] = useState<'talent' | 'models'>('talent');
+  const [talentStep, setTalentStep] = useState<TalentPoolEditorStep>('general');
   const [form, setForm] = useState<RecruitmentFormConfig>(DEFAULT_TALENT_POOL_FORM);
   const [questionDraft, setQuestionDraft] = useState(EMPTY_QUESTION_DRAFT);
   const [loading, setLoading] = useState(true);
@@ -5559,6 +5784,10 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
 
   const addQuestion = () => {
     const text = questionDraft.text.trim();
+    if (!questionDraft.sectionTitle.trim()) {
+      setError('Selecione ou crie uma seção antes de adicionar a pergunta.');
+      return;
+    }
     if (!text) return;
     const options = questionDraft.optionsText
       .split('\n')
@@ -5630,6 +5859,16 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
     return Array.from(new Set([...roleOptions, ...functionOptions]))
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [roles, functions]);
+  const dynamicDepartmentOptions = useMemo(() => {
+    const names = [
+      ...roles.map(role => role.departmentName),
+      ...functions.map(item => item.departmentName),
+    ]
+      .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+      .map(name => name.trim());
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [roles, functions]);
+  const dynamicCityOptions = useMemo(() => ['São Luís'], []);
 
   if (loading) {
     return (
@@ -5643,7 +5882,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
     <div className="flex max-w-full flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
       {([
         { value: 'talent', label: 'Banco de talentos' },
-        { value: 'models', label: 'Modelos por cargo e função' },
+        { value: 'models', label: 'Modelos de formulários' },
       ] as const).map(item => (
         <button
           key={item.value}
@@ -5687,9 +5926,6 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Formulário público</p>
           <h2 className="mt-1 text-xl font-bold text-slate-950">Banco de talentos</h2>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Configure textos, campos fixos e perguntas personalizadas exibidas em <span className="break-all font-semibold text-slate-700">vagas.coalashakes.com/banco-de-talentos</span>.
-          </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <a
@@ -5721,6 +5957,25 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
         </p>
       ) : null}
 
+      <div className="flex max-w-full flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
+        {TALENT_POOL_EDITOR_STEPS.map(step => (
+          <button
+            key={step.value}
+            type="button"
+            onClick={() => setTalentStep(step.value)}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              talentStep === step.value
+                ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
+                : 'text-slate-500 hover:bg-white/70 hover:text-slate-950'
+            }`}
+          >
+            {step.label}
+          </button>
+        ))}
+      </div>
+
+      {talentStep === 'general' && (
+      <>
       <div>
         <p className="mb-2 text-xs font-bold text-slate-700">Resumo</p>
         <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -5779,15 +6034,6 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Texto do botão</label>
-              <input
-                value={form.submitLabel ?? ''}
-                onChange={event => setForm(prev => ({ ...prev, submitLabel: event.target.value }))}
-                disabled={!canManage}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-              />
-            </div>
-            <div>
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Descrição</label>
               <textarea
                 value={form.description ?? ''}
@@ -5798,13 +6044,35 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Texto LGPD</label>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Texto curto LGPD</label>
               <textarea
                 value={form.consentText ?? ''}
                 onChange={event => setForm(prev => ({ ...prev, consentText: event.target.value }))}
                 disabled={!canManage}
                 rows={3}
                 className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Mensagem após envio</label>
+              <textarea
+                value={form.successMessage ?? ''}
+                onChange={event => setForm(prev => ({ ...prev, successMessage: event.target.value }))}
+                disabled={!canManage}
+                rows={3}
+                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Mensagem exibida depois que o candidato envia o cadastro."
+              />
+            </div>
+            <div className="lg:col-span-2">
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Contrato LGPD</label>
+              <textarea
+                value={form.lgpdContractText ?? ''}
+                onChange={event => setForm(prev => ({ ...prev, lgpdContractText: event.target.value }))}
+                disabled={!canManage}
+                rows={5}
+                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                placeholder="Texto completo do contrato/termo LGPD exibido ao candidato antes do envio."
               />
             </div>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-600 lg:col-span-2">
@@ -5820,7 +6088,10 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
           </div>
         </div>
       </section>
+      </>
+      )}
 
+      {talentStep === 'fixed' && (
       <section className="min-w-0 space-y-3">
         <div>
           <h3 className="text-sm font-bold text-slate-950">Campos fixos</h3>
@@ -5840,7 +6111,10 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
           ))}
         </div>
       </section>
+      )}
 
+      {talentStep === 'form' && (
+      <>
       <section className="min-w-0 space-y-3">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="min-w-0">
@@ -5872,6 +6146,8 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
           activeLabel="Exibir no site"
           showActiveToggle
           dynamicRoleFunctionOptions={dynamicRoleFunctionOptions}
+          dynamicDepartmentOptions={dynamicDepartmentOptions}
+          dynamicCityOptions={dynamicCityOptions}
           onUpdateQuestion={updateQuestion}
           onUpdateQuestionOptions={updateQuestionOptions}
           onMoveQuestion={moveQuestion}
@@ -5893,22 +6169,18 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
         <section className="min-w-0 space-y-3">
           <h3 className="text-sm font-bold text-slate-950">Adicionar campo</h3>
           <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,180px)_minmax(0,180px)]">
+            <QuestionDraftSectionControls
+              draft={questionDraft}
+              questions={form.questions}
+              onChange={(patch) => setQuestionDraft(prev => ({ ...prev, ...patch }))}
+            />
+            <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,180px)_minmax(0,180px)]">
               <div>
                 <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Pergunta</label>
                 <input
                   value={questionDraft.text}
                   onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
                   placeholder="Ex: Tem disponibilidade aos domingos?"
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Seção</label>
-                <input
-                  value={questionDraft.sectionTitle}
-                  onChange={event => setQuestionDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
-                  placeholder="Ex: Preferências"
                   className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
                 />
               </div>
@@ -5974,6 +6246,8 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
             </div>
           </div>
         </section>
+      )}
+      </>
       )}
     </div>
   );

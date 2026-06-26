@@ -134,6 +134,8 @@ export async function GET() {
           benefits: Array.isArray(data.benefits) ? data.benefits : [],
           publicSalaryRange: data.publicSalaryRange ?? null,
           applyButtonLabel: data.applyButtonLabel ?? null,
+          applicationSuccessMessage: data.applicationSuccessMessage ?? null,
+          lgpdContractText: data.lgpdContractText ?? null,
           formQuestions,
           location: data.unitName ?? data.location ?? null,
           workSchedule: data.workSchedule ?? data.shiftDefinitionName ?? null,

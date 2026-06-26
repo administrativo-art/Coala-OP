@@ -942,6 +942,8 @@ export type RecruitmentFormConfig = {
   status: RecruitmentFormStatus;
   questions: HrFormQuestion[];
   consentText?: string;
+  lgpdContractText?: string;
+  successMessage?: string;
   submitLabel?: string;
   version: number;
   createdAt?: string;
@@ -964,6 +966,8 @@ export type RecruitmentDisplaySettings = {
   contractTypeLabel?: string;
   deadlineLabel?: string;
   buttonText?: string;
+  successMessage?: string;
+  lgpdContractText?: string;
 };
 
 export type CandidateStatus = 'applied' | 'screening' | 'interview' | 'technical_test' | 'offer' | 'hired' | 'rejected' | 'withdrawn' | 'talent_pool';
@@ -1141,6 +1145,8 @@ export type JobOpening = {
   benefits?: string[];
   publicSalaryRange?: JobRoleSalaryRange;
   applyButtonLabel?: string;
+  applicationSuccessMessage?: string | null;
+  lgpdContractText?: string | null;
   formQuestions?: HrFormQuestion[];
   recruitmentScoring?: RecruitmentScoringSnapshot;
   compositionPreset?: RecruitmentCompositionPreset;
@@ -1195,6 +1201,9 @@ export type JobRole = {
   salaryRange?: JobRoleSalaryRange;
   publicSalaryRange?: JobRoleSalaryRange;
   recruitmentDisplay?: RecruitmentDisplaySettings;
+  applicationSuccessMessage?: string | null;
+  lgpdContractText?: string | null;
+  recruitmentModelSavedAt?: string | null;
   defaultProfileId?: string;
   loginRestricted?: boolean;
   formQuestions?: HrFormQuestion[];
@@ -1226,6 +1235,9 @@ export type JobFunction = {
   workSchedule?: string;
   publicSalaryRange?: JobRoleSalaryRange;
   recruitmentDisplay?: RecruitmentDisplaySettings;
+  applicationSuccessMessage?: string | null;
+  lgpdContractText?: string | null;
+  recruitmentModelSavedAt?: string | null;
   compatibleRoleIds?: string[];
   defaultProfileId?: string;
   formQuestions?: HrFormQuestion[];

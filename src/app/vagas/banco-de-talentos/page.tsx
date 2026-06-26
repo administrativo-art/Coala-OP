@@ -100,6 +100,10 @@ function TalentQuestionField({
   const options = getRecruitmentQuestionOptions(question, { units });
   const label = `${question.text}${question.required ? " *" : ""}`;
   const placeholder = typeof question.config?.placeholder === "string" ? question.config.placeholder : "";
+  const optionDescriptions = question.config?.optionDescriptions && typeof question.config.optionDescriptions === "object"
+    ? question.config.optionDescriptions as Record<string, unknown>
+    : {};
+  const hasOptionDescriptions = options.some((option) => typeof optionDescriptions[option] === "string" && String(optionDescriptions[option]).trim().length > 0);
 
   if (question.type === "yes_no") {
     return (
@@ -129,6 +133,37 @@ function TalentQuestionField({
   }
 
   if (question.type === "select") {
+    if (hasOptionDescriptions) {
+      const selectedValue = typeof value === "string" ? value : "";
+      return (
+        <div>
+          <p className="mb-2 block text-[11.5px] font-bold">{label}</p>
+          <div className="grid gap-2">
+            {options.map((option) => {
+              const description = typeof optionDescriptions[option] === "string" ? String(optionDescriptions[option]) : "";
+              const selected = selectedValue === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => onChange(option)}
+                  className={`rounded-2xl border px-4 py-3 text-left transition ${
+                    selected
+                      ? "border-[#EE6FA8] bg-[#FCDFEB]"
+                      : "border-[#2A1F2A]/10 bg-[#F4ECD8] hover:border-[#EE6FA8]/60"
+                  }`}
+                >
+                  <span className="block text-[13px] font-bold text-[#2A1F2A]">{option}</span>
+                  {description ? (
+                    <span className="mt-1 block text-[11.5px] leading-relaxed text-[#5B4C5B]">{description}</span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
     return (
       <div>
         <label className="mb-1.5 block text-[11.5px] font-bold">{label}</label>
@@ -323,6 +358,8 @@ export default function BancoDeTalentosPage() {
         rolePreference: Array.isArray(formAnswers.preferred_role)
           ? formAnswers.preferred_role.filter((entry): entry is string => typeof entry === "string").join(", ")
           : typeof formAnswers.preferred_role === "string" ? formAnswers.preferred_role.trim() : "",
+        departmentPreference: typeof formAnswers.preferred_department === "string" ? formAnswers.preferred_department.trim() : "",
+        cityPreference: typeof formAnswers.preferred_city === "string" ? formAnswers.preferred_city.trim() : "",
         unitPreference: typeof formAnswers.preferred_unit === "string" ? formAnswers.preferred_unit.trim() : "",
         message: typeof formAnswers.message === "string" ? formAnswers.message.trim() : "",
         formAnswers,
@@ -407,7 +444,9 @@ export default function BancoDeTalentosPage() {
                   <CheckCircle2 className="h-7 w-7 text-[#2A1F2A]" />
                 </div>
                 <h2 className="fd mb-2 text-[26px]">Cadastro realizado!</h2>
-                <p className="mb-6 text-[14px] text-[#5B4C5B]">Recebemos tudo. Te avisamos assim que abrir algo perto do seu perfil.</p>
+                <p className="mb-6 whitespace-pre-line text-[14px] text-[#5B4C5B]">
+                  {formConfig.successMessage || "Recebemos tudo. Te avisamos assim que abrir algo perto do seu perfil."}
+                </p>
                 <Link href="/vagas" className="btn inline-flex h-10 items-center gap-2 bg-[#F4ECD8] px-5 text-[13px] font-bold text-[#2A1F2A]">
                   Ver vagas abertas <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
@@ -495,6 +534,12 @@ export default function BancoDeTalentosPage() {
                     {formConfig.consentText || "Autorizo o tratamento dos meus dados para fins de recrutamento, conforme a LGPD."}
                   </span>
                 </label>
+                {formConfig.lgpdContractText ? (
+                  <details className="rounded-2xl border border-[#2A1F2A]/10 bg-[#F4ECD8] px-4 py-3 text-[11.5px] leading-relaxed text-[#5B4C5B]">
+                    <summary className="cursor-pointer font-bold text-[#2A1F2A]">Contrato LGPD</summary>
+                    <p className="mt-2 whitespace-pre-line">{formConfig.lgpdContractText}</p>
+                  </details>
+                ) : null}
 
                 {error ? <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-700">{error}</p> : null}
 
@@ -504,13 +549,11 @@ export default function BancoDeTalentosPage() {
                   className="btn inline-flex h-[52px] w-full items-center justify-center gap-2 bg-[#EE6FA8] text-[15px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  {submitting ? "Enviando..." : formConfig.submitLabel || "Enviar cadastro"}
+                  {submitting ? "Enviando..." : formConfig.submitLabel || "Enviar candidatura"}
                 </button>
 
                 <div className="flex items-center justify-center gap-4 text-[11px] text-[#5B4C5B]">
                   <span>🔒 Dados protegidos pela LGPD</span>
-                  <span>·</span>
-                  <span>⏱ Retorno em até 5 dias úteis</span>
                 </div>
               </form>
             )}
