@@ -139,10 +139,16 @@ export function PurchasingPeriodControl({
   );
 }
 
-export function PurchasingPageFrame({ children }: { children: ReactNode }) {
+export function PurchasingPageFrame({
+  children,
+  fullWidth = false,
+}: {
+  children: ReactNode;
+  fullWidth?: boolean;
+}) {
   return (
     <div className="min-h-[calc(100vh-1px)] bg-[#f5f5f6]">
-      <div className="mx-auto w-full max-w-[1500px] px-6 py-7 lg:px-8">
+      <div className={cn('mx-auto w-full px-6 py-7 lg:px-8', fullWidth ? 'max-w-none' : 'max-w-[1500px]')}>
         {children}
       </div>
     </div>

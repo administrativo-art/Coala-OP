@@ -111,7 +111,7 @@ export default function ReceiptsPage() {
 
   return (
     <PermissionGuard allowed={canView}>
-      <PurchasingPageFrame>
+      <PurchasingPageFrame fullWidth>
         <PurchasingHeader
           crumb={['Coala', 'Compras', 'Recebimentos']}
           title="Recebimentos"

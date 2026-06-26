@@ -9,6 +9,7 @@ import {
   type Product,
   type BaseProduct,
   type PurchaseAssetComponentAction,
+  type PurchaseDivergenceExcessBillingMode,
   type PurchaseDivergenceResolutionAction,
   type PurchaseItemTreatment,
   type PurchaseStockEntryType,
@@ -96,6 +97,8 @@ export interface ConfirmStockEntryPayload {
 export interface ResolveDivergenceItemInput {
   receiptItemId: string;
   action: PurchaseDivergenceResolutionAction;
+  excessBillingMode?: PurchaseDivergenceExcessBillingMode;
+  excessUnitPrice?: number | null;
   notes?: string;
 }
 

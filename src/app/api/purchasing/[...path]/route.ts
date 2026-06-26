@@ -34,6 +34,7 @@ import {
 import {
   type Product,
   type BaseProduct,
+  type PurchaseDivergenceExcessBillingMode,
   type PurchaseDivergenceResolutionAction,
   type PurchaseItemTreatment,
   type PurchaseStockEntryType,
@@ -204,6 +205,10 @@ function normalizeDivergenceResolutionAction(value: unknown): PurchaseDivergence
     : null;
 }
 
+function normalizeDivergenceExcessBillingMode(value: unknown): PurchaseDivergenceExcessBillingMode {
+  return value === 'custom_unit_price' ? 'custom_unit_price' : 'same_unit_price';
+}
+
 function isClosingDivergenceAction(action?: PurchaseDivergenceResolutionAction | null) {
   return (
     action === 'accept_charged' ||
@@ -240,6 +245,17 @@ function chargeableReceiptItemTotal(item: Record<string, any>) {
 
   if (action === 'bonus' || action === 'return_excess') {
     return Math.max(Math.min(quantityReceived, quantityOrdered), 0) * unitPriceConfirmed;
+  }
+
+  if (action === 'accept_charged' && quantityReceived > quantityOrdered) {
+    const orderedQuantity = Math.max(quantityOrdered, 0);
+    const excessQuantity = Math.max(quantityReceived - quantityOrdered, 0);
+    const excessBillingMode = normalizeDivergenceExcessBillingMode(item.divergenceExcessBillingMode);
+    const excessUnitPrice =
+      excessBillingMode === 'custom_unit_price'
+        ? Number(item.divergenceExcessUnitPrice ?? unitPriceConfirmed)
+        : unitPriceConfirmed;
+    return orderedQuantity * unitPriceConfirmed + excessQuantity * excessUnitPrice;
   }
 
   return Math.max(quantityReceived, 0) * unitPriceConfirmed;
@@ -949,16 +965,43 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       data: itemDoc.data(),
     }));
     const receiptItemsById = new Map(receiptItems.map((item) => [item.id, item]));
-    const resolutions = new Map<string, { action: PurchaseDivergenceResolutionAction; notes?: string }>();
+    const resolutions = new Map<
+      string,
+      {
+        action: PurchaseDivergenceResolutionAction;
+        notes?: string;
+        excessBillingMode?: PurchaseDivergenceExcessBillingMode;
+        excessUnitPrice?: number | null;
+      }
+    >();
 
     for (const item of items) {
       const receiptItemId = String(item.receiptItemId ?? '');
       const action = normalizeDivergenceResolutionAction(item.action);
       if (!receiptItemId || !action) return jsonError('Ação de divergência inválida.', 400);
       if (!receiptItemsById.has(receiptItemId)) return jsonError('Item de recebimento inválido.', 404);
+      const excessBillingMode =
+        action === 'accept_charged'
+          ? normalizeDivergenceExcessBillingMode(item.excessBillingMode)
+          : undefined;
+      const excessUnitPrice: number | null =
+        action === 'accept_charged' && excessBillingMode === 'custom_unit_price'
+          ? Number(item.excessUnitPrice)
+          : null;
+      const invalidCustomExcessPrice =
+        excessBillingMode === 'custom_unit_price' &&
+        (excessUnitPrice === null || !Number.isFinite(excessUnitPrice) || excessUnitPrice < 0);
+      if (
+        action === 'accept_charged' &&
+        invalidCustomExcessPrice
+      ) {
+        return jsonError('Informe um valor válido para o excedente.', 400);
+      }
       resolutions.set(receiptItemId, {
         action,
         notes: typeof item.notes === 'string' ? item.notes.trim() : '',
+        excessBillingMode,
+        excessUnitPrice,
       });
     }
 
@@ -971,8 +1014,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       const nextItem = { ...item.data };
 
       if (resolution) {
-        const { action, notes } = resolution;
+        const { action, notes, excessBillingMode, excessUnitPrice } = resolution;
         const quantityReceived = Number(nextItem.quantityReceived ?? 0);
+        const quantityOrdered = Number(nextItem.quantityOrdered ?? 0);
+        const hasExcess = quantityReceived > quantityOrdered;
+        const nextExcessBillingMode =
+          action === 'accept_charged' && hasExcess
+            ? excessBillingMode ?? 'same_unit_price'
+            : null;
+        const nextExcessUnitPrice =
+          action === 'accept_charged' && hasExcess && nextExcessBillingMode === 'custom_unit_price'
+            ? excessUnitPrice
+            : null;
+        const nextTotalConfirmed = chargeableReceiptItemTotal({
+          ...nextItem,
+          divergenceResolutionAction: action,
+          divergenceExcessBillingMode: nextExcessBillingMode,
+          divergenceExcessUnitPrice: nextExcessUnitPrice,
+        });
         const status =
           action === 'keep_pending' || action === 'request_replacement'
             ? 'partial'
@@ -991,6 +1050,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const auditEntry = {
           action,
           label: DIVERGENCE_RESOLUTION_LABELS[action],
+          excessBillingMode: nextExcessBillingMode,
+          excessUnitPrice: nextExcessUnitPrice,
           notes: notes || null,
           resolvedAt: now,
           resolvedBy: decoded.uid,
@@ -1001,6 +1062,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           status,
           receiptDisposition: disposition,
           divergenceResolutionAction: action,
+          divergenceExcessBillingMode: nextExcessBillingMode,
+          divergenceExcessUnitPrice: nextExcessUnitPrice,
+          totalConfirmed: nextTotalConfirmed,
           divergenceResolvedAt: now,
           divergenceResolvedBy: decoded.uid,
           resolutionNotes: notes || DIVERGENCE_RESOLUTION_LABELS[action],
@@ -1010,6 +1074,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           status,
           receiptDisposition: disposition,
           divergenceResolutionAction: action,
+          divergenceExcessBillingMode: nextExcessBillingMode,
+          divergenceExcessUnitPrice: nextExcessUnitPrice,
+          totalConfirmed: nextTotalConfirmed,
           divergenceResolvedAt: now,
           divergenceResolvedBy: decoded.uid,
           resolutionNotes: notes || DIVERGENCE_RESOLUTION_LABELS[action],

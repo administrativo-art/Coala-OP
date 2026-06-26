@@ -1753,6 +1753,7 @@ export type PurchaseDivergenceResolutionAction =
   | 'request_replacement'
   | 'credit_discount'
   | 'correct_entry';
+export type PurchaseDivergenceExcessBillingMode = 'same_unit_price' | 'custom_unit_price';
 export type PurchaseStockEntryType = 'stock' | 'uniform' | 'asset';
 export type PurchaseItemTreatment =
   | 'stock'
@@ -1786,6 +1787,8 @@ export type PurchaseReceiptItem = {
   receiptDisposition?: 'pending' | 'receive' | 'receive_less' | 'receive_more' | 'exchange_pending' | 'returned';
   divergenceReason?: string;
   divergenceResolutionAction?: PurchaseDivergenceResolutionAction | null;
+  divergenceExcessBillingMode?: PurchaseDivergenceExcessBillingMode | null;
+  divergenceExcessUnitPrice?: number | null;
   divergenceResolvedAt?: string;
   divergenceResolvedBy?: string;
   resolutionNotes?: string;

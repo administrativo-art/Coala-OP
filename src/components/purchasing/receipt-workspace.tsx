@@ -50,6 +50,7 @@ import {
 } from '@/lib/purchasing-item-treatment';
 import {
   type PurchaseAssetComponentAction,
+  type PurchaseDivergenceExcessBillingMode,
   type PurchaseDivergenceResolutionAction,
   type PurchaseItemTreatment,
   type PurchaseReceipt,
@@ -171,6 +172,8 @@ interface ItemDraft {
   unitPriceConfirmed: number;
   divergenceReason: string;
   divergenceResolutionAction?: PurchaseDivergenceResolutionAction | null;
+  divergenceExcessBillingMode?: PurchaseDivergenceExcessBillingMode | null;
+  divergenceExcessUnitPrice?: number | null;
   divergenceResolvedAt?: string;
   resolutionNotes: string;
   lots: LotDraft[];
@@ -207,6 +210,8 @@ const DIVERGENCE_RESOLUTION_LABELS: Record<PurchaseDivergenceResolutionAction, s
 
 type DivergenceResolutionDraft = {
   action: PurchaseDivergenceResolutionAction | '';
+  excessBillingMode?: PurchaseDivergenceExcessBillingMode;
+  excessUnitPrice?: number | null;
   notes: string;
 };
 
@@ -341,6 +346,36 @@ export function ReceiptWorkspace({ receipt }: Props) {
     return 'correct_entry';
   };
 
+  const displayNameForDraft = (draft: ItemDraft) => {
+    const product = draft.productId ? products.find((entry) => entry.id === draft.productId) : null;
+    const base = draft.baseItemId ? baseProducts.find((entry) => entry.id === draft.baseItemId) : null;
+    return (product ? getProductFullName(product) : '') || draft.itemName || base?.name || draft.baseItemId || 'Item da compra';
+  };
+
+  const excessQuantityForDraft = (draft: ItemDraft) =>
+    Math.max(confirmedQuantityForDraft(draft) - Number(draft.quantityOrdered || 0), 0);
+
+  const excessUnitPriceForResolution = (draft: ItemDraft, resolution?: DivergenceResolutionDraft) => {
+    if (resolution?.excessBillingMode === 'custom_unit_price') {
+      return Number(resolution.excessUnitPrice ?? draft.divergenceExcessUnitPrice ?? draft.unitPriceConfirmed ?? 0);
+    }
+    return Number(draft.unitPriceConfirmed ?? 0);
+  };
+
+  const chargedTotalForResolution = (draft: ItemDraft, resolution?: DivergenceResolutionDraft) => {
+    const action = resolution?.action || draft.divergenceResolutionAction;
+    const confirmedQuantity = confirmedQuantityForDraft(draft);
+    const orderedQuantity = Number(draft.quantityOrdered || 0);
+    const unitPrice = Number(draft.unitPriceConfirmed || 0);
+    if (action === 'bonus' || action === 'return_excess') {
+      return Math.max(Math.min(confirmedQuantity, orderedQuantity), 0) * unitPrice;
+    }
+    if (action === 'accept_charged' && confirmedQuantity > orderedQuantity) {
+      return Math.max(orderedQuantity, 0) * unitPrice + excessQuantityForDraft(draft) * excessUnitPriceForResolution(draft, resolution);
+    }
+    return Math.max(confirmedQuantity, 0) * unitPrice;
+  };
+
   const divergenceDrafts = useMemo(
     () =>
       drafts.filter((draft) => {
@@ -362,6 +397,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
         if (!next[draft.receiptItemId]) {
           next[draft.receiptItemId] = {
             action: draft.divergenceResolutionAction ?? suggestedResolutionAction(draft),
+            excessBillingMode: draft.divergenceExcessBillingMode ?? 'same_unit_price',
+            excessUnitPrice: draft.divergenceExcessUnitPrice ?? draft.unitPriceConfirmed,
             notes: draft.resolutionNotes ?? '',
           };
         }
@@ -430,6 +467,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
               unitPriceConfirmed: item.unitPriceConfirmed || item.unitPriceOrdered,
               divergenceReason: '',
               divergenceResolutionAction: item.divergenceResolutionAction ?? null,
+              divergenceExcessBillingMode: item.divergenceExcessBillingMode ?? null,
+              divergenceExcessUnitPrice: item.divergenceExcessUnitPrice ?? null,
               divergenceResolvedAt: item.divergenceResolvedAt,
               resolutionNotes: item.resolutionNotes ?? '',
               expiryDate: '',
@@ -720,6 +759,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
       return {
         receiptItemId: draft.receiptItemId,
         action: resolution?.action,
+        excessBillingMode: resolution?.excessBillingMode,
+        excessUnitPrice: resolution?.excessUnitPrice,
         notes: resolution?.notes,
       };
     });
@@ -732,6 +773,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
         items: items.map((item) => ({
           receiptItemId: item.receiptItemId,
           action: item.action as PurchaseDivergenceResolutionAction,
+          excessBillingMode: item.excessBillingMode,
+          excessUnitPrice: item.excessUnitPrice,
           notes: item.notes,
         })),
       });
@@ -744,7 +787,18 @@ export function ReceiptWorkspace({ receipt }: Props) {
     canReceive &&
     isDivergenceTreatment &&
     divergenceDrafts.length > 0 &&
-    divergenceDrafts.every((draft) => !!resolutionDrafts[draft.receiptItemId]?.action);
+    divergenceDrafts.every((draft) => {
+      const resolution = resolutionDrafts[draft.receiptItemId];
+      if (!resolution?.action) return false;
+      if (
+        resolution.action === 'accept_charged' &&
+        excessQuantityForDraft(draft) > 0 &&
+        resolution.excessBillingMode === 'custom_unit_price'
+      ) {
+        return Number.isFinite(Number(resolution.excessUnitPrice)) && Number(resolution.excessUnitPrice) >= 0;
+      }
+      return true;
+    });
 
   const resolutionOptionsForDraft = (draft: ItemDraft): PurchaseDivergenceResolutionAction[] => {
     const { quantityDiff, priceDiff } = getDraftDivergenceReasons(draft);
@@ -920,7 +974,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                           <div key={draft.receiptItemId} className="rounded-xl border bg-background p-3">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div>
-                                <p className="font-semibold">{draft.itemName || draft.baseItemId}</p>
+                                <p className="font-semibold">{displayNameForDraft(draft)}</p>
                                 <p className="text-xs text-muted-foreground">
                                   Pedido: {fmtQty(draft.quantityOrdered)} {draft.purchaseUnitLabel} · Recebido: {fmtQty(confirmedQuantityForDraft(draft))} {draft.purchaseUnitLabel}
                                 </p>
@@ -1564,13 +1618,19 @@ export function ReceiptWorkspace({ receipt }: Props) {
                   const { reasons, confirmedQuantity } = getDraftDivergenceReasons(draft);
                   const resolution = resolutionDrafts[draft.receiptItemId] ?? {
                     action: suggestedResolutionAction(draft),
+                    excessBillingMode: 'same_unit_price' as const,
+                    excessUnitPrice: draft.unitPriceConfirmed,
                     notes: '',
                   };
+                  const excessQuantity = excessQuantityForDraft(draft);
+                  const excessUnitPrice = excessUnitPriceForResolution(draft, resolution);
+                  const chargedTotal = chargedTotalForResolution(draft, resolution);
+                  const orderedChargeQuantity = Math.max(Number(draft.quantityOrdered || 0), 0);
                   return (
                     <div key={draft.receiptItemId} className="rounded-xl border bg-white p-4">
                       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
                         <div className="min-w-0">
-                          <p className="font-semibold">{draft.itemName || draft.baseItemId}</p>
+                          <p className="font-semibold">{displayNameForDraft(draft)}</p>
                           <p className="mt-1 text-sm text-muted-foreground">
                             Pedido: {fmtQty(draft.quantityOrdered)} {draft.purchaseUnitLabel} · Recebido: {fmtQty(confirmedQuantity)} {draft.purchaseUnitLabel} · Preço: {fmt(draft.unitPriceConfirmed)}
                           </p>
@@ -1581,6 +1641,16 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                   {reason}
                                 </span>
                               ))}
+                            </div>
+                          )}
+                          {resolution.action === 'accept_charged' && excessQuantity > 0 && (
+                            <div className="mt-3 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                              <span className="font-semibold text-foreground">Cálculo do item: </span>
+                              {fmtQty(orderedChargeQuantity)} × {fmt(draft.unitPriceConfirmed)}
+                              {' + '}
+                              {fmtQty(excessQuantity)} excedente × {fmt(excessUnitPrice)}
+                              {' = '}
+                              <span className="font-semibold text-foreground">{fmt(chargedTotal)}</span>
                             </div>
                           )}
                         </div>
@@ -1596,6 +1666,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                   ...previous,
                                   [draft.receiptItemId]: {
                                     action,
+                                    excessBillingMode: previous[draft.receiptItemId]?.excessBillingMode ?? 'same_unit_price',
+                                    excessUnitPrice: previous[draft.receiptItemId]?.excessUnitPrice ?? draft.unitPriceConfirmed,
                                     notes: previous[draft.receiptItemId]?.notes ?? '',
                                   },
                                 }));
@@ -1613,6 +1685,62 @@ export function ReceiptWorkspace({ receipt }: Props) {
                               </SelectContent>
                             </Select>
                           </div>
+                          {resolution.action === 'accept_charged' && excessQuantity > 0 && (
+                            <div className="space-y-3 rounded-xl border bg-muted/20 p-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Cobrança do excedente</Label>
+                                <Select
+                                  value={resolution.excessBillingMode ?? 'same_unit_price'}
+                                  disabled={!canReceive || resolvingDivergence}
+                                  onValueChange={(excessBillingMode: PurchaseDivergenceExcessBillingMode) => {
+                                    setResolutionDrafts((previous) => ({
+                                      ...previous,
+                                      [draft.receiptItemId]: {
+                                        action: previous[draft.receiptItemId]?.action ?? suggestedResolutionAction(draft),
+                                        excessBillingMode,
+                                        excessUnitPrice:
+                                          excessBillingMode === 'custom_unit_price'
+                                            ? previous[draft.receiptItemId]?.excessUnitPrice ?? draft.unitPriceConfirmed
+                                            : draft.unitPriceConfirmed,
+                                        notes: previous[draft.receiptItemId]?.notes ?? '',
+                                      },
+                                    }));
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="same_unit_price">Mesmo valor unitário</SelectItem>
+                                    <SelectItem value="custom_unit_price">Valor diferente no excedente</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              {resolution.excessBillingMode === 'custom_unit_price' && (
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Valor unitário do excedente (R$)</Label>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={resolution.excessUnitPrice ?? ''}
+                                    disabled={!canReceive || resolvingDivergence}
+                                    onChange={(event) => {
+                                      setResolutionDrafts((previous) => ({
+                                        ...previous,
+                                        [draft.receiptItemId]: {
+                                          action: previous[draft.receiptItemId]?.action ?? suggestedResolutionAction(draft),
+                                          excessBillingMode: 'custom_unit_price',
+                                          excessUnitPrice: event.target.value === '' ? null : Number(event.target.value),
+                                          notes: previous[draft.receiptItemId]?.notes ?? '',
+                                        },
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
                           <div className="space-y-1">
                             <Label className="text-xs">Observação</Label>
                             <Textarea
@@ -1625,6 +1753,8 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                   ...previous,
                                   [draft.receiptItemId]: {
                                     action: previous[draft.receiptItemId]?.action ?? suggestedResolutionAction(draft),
+                                    excessBillingMode: previous[draft.receiptItemId]?.excessBillingMode ?? 'same_unit_price',
+                                    excessUnitPrice: previous[draft.receiptItemId]?.excessUnitPrice ?? draft.unitPriceConfirmed,
                                     notes: event.target.value,
                                   },
                                 }));
@@ -1640,7 +1770,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
 
               <div className="mt-5 flex flex-col gap-3 border-t border-rose-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-muted-foreground">
-                  Aceitar com cobrança recalcula o financeiro pelo valor recebido. Manter saldo pendente devolve a compra para parcial.
+                  Aceitar com cobrança recalcula o financeiro pela quantidade recebida e pelo valor escolhido para o excedente. Manter saldo pendente devolve a compra para parcial.
                 </p>
                 <Button
                   onClick={handleResolveDivergence}
