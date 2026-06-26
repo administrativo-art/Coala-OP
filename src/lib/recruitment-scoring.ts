@@ -44,7 +44,7 @@ export const RECRUITMENT_CATEGORY_LABELS: Record<RecruitmentCriterionCategory, s
   differentials: "Diferenciais",
 };
 
-const CATEGORY_BASE_WEIGHTS: Record<RecruitmentCriterionCategory, number> = {
+export const RECRUITMENT_CATEGORY_BASE_WEIGHTS: Record<RecruitmentCriterionCategory, number> = {
   availability: 25,
   experience: 20,
   technical: 20,
@@ -326,7 +326,7 @@ export function applyRecruitmentScoring(
     for (const question of layerQuestions) {
       const scoring = scoringById[question.id]!;
       const groupKey = `${scoring.category ?? "experience"}:${scoring.groupId ?? scoring.groupName ?? "default"}`;
-      const current = groups.get(groupKey) ?? { value: CATEGORY_BASE_WEIGHTS[scoring.category ?? "experience"], questions: [] };
+      const current = groups.get(groupKey) ?? { value: RECRUITMENT_CATEGORY_BASE_WEIGHTS[scoring.category ?? "experience"], questions: [] };
       current.questions.push(question);
       groups.set(groupKey, current);
     }

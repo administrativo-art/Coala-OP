@@ -43,6 +43,7 @@ import {
 } from '@/lib/recruitment-forms';
 import {
   applyRecruitmentScoring,
+  RECRUITMENT_CATEGORY_BASE_WEIGHTS,
   RECRUITMENT_CATEGORY_LABELS,
   RECRUITMENT_COMPOSITION_PRESETS,
   RECRUITMENT_DEFAULT_RUBRICS,
@@ -126,6 +127,7 @@ const EMPTY_QUESTION_DRAFT = {
   optionsText: '',
   required: false,
   eliminatory: false,
+  criterionCode: '',
   scoringUse: 'informational' as RecruitmentQuestionScoringUse,
   importance: 'medium' as HrQuestionWeight,
 };
@@ -147,6 +149,16 @@ const IMPORTANCE_OPTIONS: Array<{ value: HrQuestionWeight; label: string }> = [
 
 const COMPOSITION_PRESET_OPTIONS = Object.entries(RECRUITMENT_COMPOSITION_PRESETS)
   .map(([value, config]) => ({ value: value as RecruitmentCompositionPreset, label: config.label }));
+
+const RECRUITMENT_CRITERIA_GROUPS = Object.entries(RECRUITMENT_CATEGORY_LABELS).map(([category, label]) => ({
+  category: category as keyof typeof RECRUITMENT_CATEGORY_LABELS,
+  label,
+  criteria: STANDARD_RECRUITMENT_CRITERIA.filter(criterion => criterion.category === category),
+}));
+
+function getStandardRecruitmentCriterion(code: string) {
+  return STANDARD_RECRUITMENT_CRITERIA.find(criterion => criterion.code === code);
+}
 
 function getQuestionScoringUse(question: HrFormQuestion): RecruitmentQuestionScoringUse {
   if (question.eliminatory || question.scoring?.use === 'eliminatory') return 'eliminatory';
@@ -250,6 +262,7 @@ function questionScoringFromDraft(
   sourceLayer: RecruitmentScoringSourceLayer
 ): Pick<HrFormQuestion, 'scored' | 'weight' | 'eliminatory' | 'scoring'> {
   const use = getDraftScoringUse(draft);
+  const criterion = getStandardRecruitmentCriterion(draft.criterionCode);
   return {
     scored: use === 'scored',
     weight: draft.importance,
@@ -258,6 +271,14 @@ function questionScoringFromDraft(
       use,
       importance: draft.importance,
       sourceLayer,
+      ...(criterion ? {
+        criterionCode: criterion.code,
+        criterionLabel: criterion.label,
+        category: criterion.category,
+        groupId: criterion.category,
+        groupName: RECRUITMENT_CATEGORY_LABELS[criterion.category],
+        rubric: RECRUITMENT_DEFAULT_RUBRICS[criterion.code],
+      } : {}),
     },
   };
 }
@@ -578,16 +599,71 @@ function QuestionDraftConditionControls({
 function QuestionDraftScoringControls({
   draft,
   onChange,
+  variant = 'light',
+  className = 'lg:col-span-3',
 }: {
   draft: QuestionDraft;
   onChange: (patch: Partial<QuestionDraft>) => void;
+  variant?: 'dark' | 'light';
+  className?: string;
 }) {
   const use = getDraftScoringUse(draft);
+  const criterion = getStandardRecruitmentCriterion(draft.criterionCode);
+  const scoringUseOptions = criterion
+    ? SCORING_USE_OPTIONS.filter(option => criterion.allowedUses.includes(option.value))
+    : SCORING_USE_OPTIONS;
+  const categoryWeight = criterion ? RECRUITMENT_CATEGORY_BASE_WEIGHTS[criterion.category] : null;
+  const isDark = variant === 'dark';
+  const labelClass = isDark
+    ? 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400'
+    : 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
+  const fieldClass = isDark
+    ? 'h-10 w-full rounded-lg border border-slate-800 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
 
   return (
-    <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 lg:col-span-3 md:grid-cols-[minmax(0,1fr)_minmax(0,180px)]">
+    <div className={`grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,180px)_minmax(0,180px)] ${
+      isDark ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-white'
+    } ${className}`}>
       <div>
-        <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <label className={labelClass}>
+          Critério / agrupamento
+        </label>
+        <select
+          value={draft.criterionCode}
+          onChange={event => {
+            const criterionCode = event.target.value;
+            const nextCriterion = getStandardRecruitmentCriterion(criterionCode);
+            let nextUse = getDraftScoringUse(draft);
+            if (nextCriterion && nextUse === 'informational' && nextCriterion.allowedUses.includes('scored')) {
+              nextUse = 'scored';
+            }
+            if (nextCriterion && !nextCriterion.allowedUses.includes(nextUse)) {
+              nextUse = nextCriterion.allowedUses.includes('scored') ? 'scored' : nextCriterion.allowedUses[0] ?? 'informational';
+            }
+            onChange({
+              criterionCode,
+              scoringUse: nextUse,
+              eliminatory: nextUse === 'eliminatory',
+            });
+          }}
+          className={fieldClass}
+        >
+          <option value="">Sem agrupamento</option>
+          {RECRUITMENT_CRITERIA_GROUPS.map(group => (
+            <optgroup
+              key={group.category}
+              label={`${group.label} · ${RECRUITMENT_CATEGORY_BASE_WEIGHTS[group.category]} pts base`}
+            >
+              {group.criteria.map(option => (
+                <option key={option.code} value={option.code}>{option.label}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={labelClass}>
           Pontuação
         </label>
         <select
@@ -599,30 +675,32 @@ function QuestionDraftScoringControls({
               eliminatory: nextUse === 'eliminatory',
             });
           }}
-          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
+          className={fieldClass}
         >
-          {SCORING_USE_OPTIONS.map(option => (
+          {scoringUseOptions.map(option => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
       </div>
       <div>
-        <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <label className={labelClass}>
           Peso
         </label>
         <select
           value={draft.importance}
           onChange={event => onChange({ importance: event.target.value as HrQuestionWeight })}
           disabled={use === 'informational'}
-          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+          className={fieldClass}
         >
           {IMPORTANCE_OPTIONS.map(option => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
       </div>
-      <p className="text-xs text-slate-500 md:col-span-2">
-        Informativa não entra no ranking. Pontuável soma score conforme o peso. Eliminatória reprova quando a resposta não atende o critério.
+      <p className={`text-xs md:col-span-3 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+        {criterion && categoryWeight !== null
+          ? `${RECRUITMENT_CATEGORY_LABELS[criterion.category]} tem ${categoryWeight} pts base dentro da camada. O sistema redistribui esse peso entre as perguntas desse agrupamento conforme a importância.`
+          : 'Sem agrupamento, a pergunta não entra no cálculo final. Escolha um critério para usar os pesos predefinidos.'}
       </p>
     </div>
   );
@@ -862,7 +940,7 @@ function QuestionScoringEditor({
           </select>
           {category ? (
             <p className={`mt-1 text-[10px] ${mutedClass}`}>
-              Categoria: {RECRUITMENT_CATEGORY_LABELS[category]}
+              Categoria: {RECRUITMENT_CATEGORY_LABELS[category]} · {RECRUITMENT_CATEGORY_BASE_WEIGHTS[category]} pts base
             </p>
           ) : null}
         </div>
@@ -3806,43 +3884,12 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                   Obrigatória
                 </label>
                 </div>
-                <div className="col-span-2 grid gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 md:grid-cols-2">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Pontuação</label>
-                    <select
-                      value={getDraftScoringUse(questionDraft)}
-                      onChange={event => {
-                        const nextUse = event.target.value as RecruitmentQuestionScoringUse;
-                        setQuestionDraft(prev => ({
-                          ...prev,
-                          scoringUse: nextUse,
-                          eliminatory: nextUse === 'eliminatory',
-                        }));
-                      }}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-                    >
-                      {SCORING_USE_OPTIONS.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Peso</label>
-                    <select
-                      value={questionDraft.importance}
-                      onChange={event => setQuestionDraft(prev => ({ ...prev, importance: event.target.value as HrQuestionWeight }))}
-                      disabled={getDraftScoringUse(questionDraft) === 'informational'}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50"
-                    >
-                      {IMPORTANCE_OPTIONS.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <p className="text-xs text-slate-500 md:col-span-2">
-                    Informativa não entra no ranking. Pontuável soma score. Eliminatória reprova quando não atende.
-                  </p>
-                </div>
+                <QuestionDraftScoringControls
+                  draft={questionDraft}
+                  onChange={(patch) => setQuestionDraft(prev => ({ ...prev, ...patch }))}
+                  variant="dark"
+                  className="col-span-2"
+                />
                 {(questionDraft.type === 'select' || questionDraft.type === 'multi_select') && (
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-slate-400 mb-1.5">Opções, uma por linha</label>
