@@ -312,7 +312,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
   }, [goodsGrossSubtotal, order?.deliveryFee]);
 
   const confirmedQuantityForDraft = (draft: ItemDraft) =>
-    isDivergenceTreatment || isDone || isInStockEntry
+    isDivergenceTreatment || isDone || isInStockEntry || isAwaitingStock
       ? Number(draft.quantityPreviouslyReceived || draft.quantityReceived || 0)
       : Number(draft.quantityPreviouslyReceived || 0) + Number(draft.quantityReceived || 0);
 
@@ -387,7 +387,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
           draft.resolutionNotes.trim()
         );
       }),
-    [drafts, receiptItems, isDivergenceTreatment, isDone, isInStockEntry],
+    [drafts, receiptItems, isDivergenceTreatment, isDone, isInStockEntry, isAwaitingStock],
   );
 
   useEffect(() => {
