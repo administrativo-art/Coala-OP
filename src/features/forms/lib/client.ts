@@ -232,6 +232,31 @@ export async function createFormModel(
   );
 }
 
+export async function updateFormModel(
+  firebaseUser: FirebaseUserLike,
+  modelId: string,
+  body: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ model: FormModel }>(
+    `/api/forms/models/${modelId}`,
+    firebaseUser,
+    "PATCH",
+    body,
+    "Falha ao editar modelo."
+  );
+}
+
+export async function deleteFormModel(
+  firebaseUser: FirebaseUserLike,
+  modelId: string
+) {
+  return authorizedDeleteRequest<{ ok: true }>(
+    `/api/forms/models/${modelId}`,
+    firebaseUser,
+    "Falha ao arquivar modelo."
+  );
+}
+
 export async function fetchMyFormExecutions(firebaseUser: FirebaseUserLike) {
   return authorizedGet<{ executions: FormExecution[] }>(
     "/api/forms/executions?assignedToMe=true&limit=100",

@@ -27,13 +27,16 @@ import type { FormExecution, FormProject, FormTemplate, FormType } from "@/types
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import {
+  createFormModel,
   createFormProject,
   createFormTemplate,
   createFormType,
+  deleteFormModel,
   deleteFormProject,
   fetchFormModels,
   fetchFormsBootstrap,
   runFormsScheduler,
+  updateFormModel,
   updateFormTemplateApplication,
   updateFormProject,
 } from "@/features/forms/lib/client";
@@ -161,9 +164,13 @@ type UiFormModel = {
   id: string;
   name: string;
   description?: string;
+  category?: string;
+  context?: "operational" | "recruitment";
+  is_active?: boolean;
   sections: Array<{
     id: string;
     title: string;
+    order?: number;
     items: Array<{
       id: string;
       title: string;
@@ -176,6 +183,45 @@ type UiFormModel = {
     }>;
   }>;
 };
+
+const FORM_ITEM_TYPE_OPTIONS = [
+  { value: "checkbox", label: "Checkbox" },
+  { value: "text", label: "Texto" },
+  { value: "number", label: "Número" },
+  { value: "temperature", label: "Temperatura" },
+  { value: "yes_no", label: "Sim/não" },
+  { value: "select", label: "Seleção" },
+  { value: "multi_select", label: "Múltipla seleção" },
+  { value: "photo", label: "Foto" },
+  { value: "signature", label: "Assinatura" },
+  { value: "date", label: "Data" },
+  { value: "file_upload", label: "Arquivo" },
+  { value: "location", label: "Localização" },
+] as const;
+
+type FormItemTypeValue = (typeof FORM_ITEM_TYPE_OPTIONS)[number]["value"];
+
+type ModelFormItemState = {
+  id: string;
+  title: string;
+  type: FormItemTypeValue;
+};
+
+type ModelFormSectionState = {
+  id: string;
+  title: string;
+  items: ModelFormItemState[];
+};
+
+type ModelFormState = {
+  name: string;
+  description: string;
+  category: string;
+  context: "operational" | "recruitment";
+  sections: ModelFormSectionState[];
+};
+
+type ModelDialogMode = "create" | "edit" | "customize";
 
 const STATUS_META: Record<
   FormExecution["status"],
@@ -282,40 +328,145 @@ function formatRelative(value: unknown) {
   return `${absDays} dia(s) ${diffMs < 0 ? "atrás" : "à frente"}`;
 }
 
+function makeDraftId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeItemType(value?: string): FormItemTypeValue {
+  return FORM_ITEM_TYPE_OPTIONS.some((option) => option.value === value)
+    ? (value as FormItemTypeValue)
+    : "text";
+}
+
+function createDefaultModelItem(): ModelFormItemState {
+  return {
+    id: makeDraftId("item"),
+    title: "Nova pergunta",
+    type: "text",
+  };
+}
+
+function createDefaultModelSection(): ModelFormSectionState {
+  return {
+    id: makeDraftId("section"),
+    title: "Seção principal",
+    items: [createDefaultModelItem()],
+  };
+}
+
+function createEmptyModelForm(): ModelFormState {
+  return {
+    name: "",
+    description: "",
+    category: "",
+    context: "operational",
+    sections: [createDefaultModelSection()],
+  };
+}
+
+function modelToFormState(model: UiFormModel, mode: ModelDialogMode): ModelFormState {
+  return {
+    name: mode === "customize" ? `${model.name} personalizado` : model.name,
+    description: model.description ?? "",
+    category: model.category ?? "",
+    context: model.context ?? "operational",
+    sections:
+      model.sections.length > 0
+        ? model.sections.map((section) => ({
+            id: section.id || makeDraftId("section"),
+            title: section.title,
+            items:
+              section.items.length > 0
+                ? section.items.map((item) => ({
+                    id: item.id || makeDraftId("item"),
+                    title: item.title,
+                    type: normalizeItemType(item.type),
+                  }))
+                : [createDefaultModelItem()],
+          }))
+        : [createDefaultModelSection()],
+  };
+}
+
+function isModelFormInvalid(modelForm: ModelFormState) {
+  return (
+    modelForm.name.trim().length < 2 ||
+    modelForm.sections.length === 0 ||
+    modelForm.sections.some(
+      (section) =>
+        section.title.trim().length === 0 ||
+        section.items.length === 0 ||
+        section.items.some((item) => item.title.trim().length < 2)
+    )
+  );
+}
+
 function KpiCard({
   label,
   value,
   subtitle,
   tone,
+  unit,
 }: {
   label: string;
   value: number;
   subtitle: string;
   tone: "amber" | "blue" | "emerald" | "red" | "purple";
+  unit?: string;
 }) {
-  const toneClass =
-    tone === "amber"
-      ? "from-amber-50 to-white text-amber-700 border-amber-200"
-      : tone === "blue"
-        ? "from-blue-50 to-white text-blue-700 border-blue-200"
-        : tone === "emerald"
-          ? "from-emerald-50 to-white text-emerald-700 border-emerald-200"
-          : tone === "purple"
-            ? "from-violet-50 to-white text-violet-700 border-violet-200"
-            : "from-red-50 to-white text-red-700 border-red-200";
+  const toneMeta = {
+    amber: {
+      accent: "bg-amber-500",
+      icon: Clock,
+      iconWrap: "border-amber-100 bg-amber-50 text-amber-700",
+      value: "text-amber-700",
+    },
+    blue: {
+      accent: "bg-blue-500",
+      icon: UserCheck,
+      iconWrap: "border-blue-100 bg-blue-50 text-blue-700",
+      value: "text-blue-700",
+    },
+    emerald: {
+      accent: "bg-emerald-500",
+      icon: CheckSquare,
+      iconWrap: "border-emerald-100 bg-emerald-50 text-emerald-700",
+      value: "text-emerald-700",
+    },
+    red: {
+      accent: "bg-rose-500",
+      icon: CalendarClock,
+      iconWrap: "border-rose-100 bg-rose-50 text-rose-700",
+      value: "text-rose-700",
+    },
+    purple: {
+      accent: "bg-violet-500",
+      icon: BarChart3,
+      iconWrap: "border-violet-100 bg-violet-50 text-violet-700",
+      value: "text-violet-700",
+    },
+  }[tone];
+  const Icon = toneMeta.icon;
 
   return (
-    <Card className={cn("overflow-hidden bg-gradient-to-br", toneClass)}>
-      <CardContent className="flex min-h-[132px] flex-col justify-between gap-3 p-5">
-        <div className="space-y-3">
-          <p className="text-[11px] font-bold uppercase leading-tight tracking-[0.12em] text-muted-foreground">
-            {label}
-          </p>
-          <p className="text-4xl font-semibold leading-none tracking-tight tabular-nums">
-            {value}
-          </p>
+    <Card className="relative overflow-hidden border-slate-200 bg-white shadow-sm">
+      <div className={cn("absolute inset-x-0 top-0 h-1", toneMeta.accent)} />
+      <CardContent className="flex min-h-[116px] flex-col justify-between gap-4 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-semibold uppercase leading-none tracking-[0.12em] text-muted-foreground">
+              {label}
+            </p>
+            <p className={cn("mt-3 flex items-baseline gap-1 text-3xl font-semibold leading-none tabular-nums", toneMeta.value)}>
+              <span>{value}</span>
+              {unit ? <span className="text-sm font-medium text-muted-foreground">{unit}</span> : null}
+            </p>
+          </div>
+          <span className={cn("inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border", toneMeta.iconWrap)}>
+            <Icon className="h-4 w-4" />
+          </span>
         </div>
-        <p className="text-sm leading-snug text-muted-foreground">{subtitle}</p>
+        <p className="text-xs leading-snug text-muted-foreground">{subtitle}</p>
       </CardContent>
     </Card>
   );
@@ -375,16 +526,21 @@ export function FormsDashboardShell() {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [subprojectDialogOpen, setSubprojectDialogOpen] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [projectDeleteTarget, setProjectDeleteTarget] = useState<FormProject | null>(null);
+  const [modelArchiveTarget, setModelArchiveTarget] = useState<UiFormModel | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
   const [projectsInitialized, setProjectsInitialized] = useState(false);
   const [editingProject, setEditingProject] = useState<FormProject | null>(null);
-  const [saving, setSaving] = useState<"project" | "template" | "deleteProject" | "scheduler" | null>(null);
+  const [modelDialogMode, setModelDialogMode] = useState<ModelDialogMode>("create");
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [saving, setSaving] = useState<"project" | "template" | "deleteProject" | "scheduler" | "model" | "archiveModel" | null>(null);
   const [projectForm, setProjectForm] = useState({
     name: "",
     description: "",
     color: "",
   });
+  const [modelForm, setModelForm] = useState<ModelFormState>(() => createEmptyModelForm());
   const [subprojectForm, setSubprojectForm] = useState({
     form_project_id: "",
     name: "",
@@ -469,11 +625,12 @@ export function FormsDashboardShell() {
   }, [executions]);
 
   const availableModels = useMemo(() => {
-    if (models.length > 0) return models;
-    return DEFAULT_FORM_MODELS.map((model) => ({
+    const defaultModels = DEFAULT_FORM_MODELS.map((model) => ({
       id: model.id,
       name: model.name,
       description: model.description,
+      context: "operational" as const,
+      is_active: true,
       sections: model.sections.map((section) => ({
         id: section.id,
         title: section.title,
@@ -484,6 +641,11 @@ export function FormsDashboardShell() {
         })),
       })),
     }));
+    const storedModelIds = new Set(models.map((model) => model.id));
+    return [
+      ...models,
+      ...defaultModels.filter((model) => !storedModelIds.has(model.id)),
+    ];
   }, [models]);
 
   const selectedModel = useMemo(() => {
@@ -641,6 +803,125 @@ export function FormsDashboardShell() {
       color: project.color ?? "",
     });
     setProjectDialogOpen(true);
+  }
+
+  function isStoredModel(modelId: string) {
+    return models.some((model) => model.id === modelId);
+  }
+
+  function openCreateModelDialog() {
+    setModelDialogMode("create");
+    setEditingModelId(null);
+    setModelForm(createEmptyModelForm());
+    setModelDialogOpen(true);
+  }
+
+  function openEditModelDialog(model: UiFormModel) {
+    const stored = isStoredModel(model.id);
+    setModelDialogMode(stored ? "edit" : "customize");
+    setEditingModelId(stored ? model.id : null);
+    setModelForm(modelToFormState(model, stored ? "edit" : "customize"));
+    setModelDialogOpen(true);
+  }
+
+  function updateModelSection(sectionId: string, patch: Partial<ModelFormSectionState>) {
+    setModelForm((current) => ({
+      ...current,
+      sections: current.sections.map((section) =>
+        section.id === sectionId ? { ...section, ...patch } : section
+      ),
+    }));
+  }
+
+  function addModelSection() {
+    setModelForm((current) => ({
+      ...current,
+      sections: [...current.sections, createDefaultModelSection()],
+    }));
+  }
+
+  function removeModelSection(sectionId: string) {
+    setModelForm((current) => ({
+      ...current,
+      sections:
+        current.sections.length <= 1
+          ? current.sections
+          : current.sections.filter((section) => section.id !== sectionId),
+    }));
+  }
+
+  function updateModelItem(
+    sectionId: string,
+    itemId: string,
+    patch: Partial<ModelFormItemState>
+  ) {
+    setModelForm((current) => ({
+      ...current,
+      sections: current.sections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              items: section.items.map((item) =>
+                item.id === itemId ? { ...item, ...patch } : item
+              ),
+            }
+          : section
+      ),
+    }));
+  }
+
+  function addModelItem(sectionId: string) {
+    setModelForm((current) => ({
+      ...current,
+      sections: current.sections.map((section) =>
+        section.id === sectionId
+          ? { ...section, items: [...section.items, createDefaultModelItem()] }
+          : section
+      ),
+    }));
+  }
+
+  function removeModelItem(sectionId: string, itemId: string) {
+    setModelForm((current) => ({
+      ...current,
+      sections: current.sections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              items:
+                section.items.length <= 1
+                  ? section.items
+                  : section.items.filter((item) => item.id !== itemId),
+            }
+          : section
+      ),
+    }));
+  }
+
+  function buildModelPayload() {
+    return {
+      name: modelForm.name.trim(),
+      description: modelForm.description.trim() || undefined,
+      category: modelForm.category.trim() || undefined,
+      context: modelForm.context,
+      is_active: true,
+      sections: modelForm.sections.map((section, sectionIndex) => ({
+        id: section.id,
+        title: section.title.trim(),
+        order: sectionIndex,
+        items: section.items.map((item, itemIndex) => ({
+          id: item.id,
+          order: itemIndex,
+          title: item.title.trim(),
+          type: item.type,
+          required: true,
+          weight: 1,
+          block_next: false,
+          criticality: "medium",
+          action_required: item.type === "temperature" || item.type === "yes_no",
+        })),
+      })),
+    };
   }
 
   function toggleProject(projectId: string) {
@@ -819,6 +1100,61 @@ export function FormsDashboardShell() {
       toast({
         variant: "destructive",
         title: deleteError instanceof Error ? deleteError.message : "Falha ao excluir projeto.",
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleSaveModel() {
+    if (!firebaseUser) return;
+
+    if (isModelFormInvalid(modelForm)) {
+      toast({
+        variant: "destructive",
+        title: "Preencha o nome, as seções e as perguntas do modelo.",
+      });
+      return;
+    }
+
+    try {
+      setSaving("model");
+      const payload = buildModelPayload();
+      if (modelDialogMode === "edit" && editingModelId) {
+        await updateFormModel(firebaseUser, editingModelId, payload);
+      } else {
+        await createFormModel(firebaseUser, payload);
+      }
+
+      await reloadBootstrap();
+      setModelDialogOpen(false);
+      setEditingModelId(null);
+      setModelForm(createEmptyModelForm());
+      toast({ title: modelDialogMode === "edit" ? "Modelo atualizado" : "Modelo criado" });
+    } catch (saveError) {
+      toast({
+        variant: "destructive",
+        title: saveError instanceof Error ? saveError.message : "Falha ao salvar modelo.",
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleArchiveModel() {
+    if (!firebaseUser || !modelArchiveTarget) return;
+
+    try {
+      setSaving("archiveModel");
+      await deleteFormModel(firebaseUser, modelArchiveTarget.id);
+      setModels((current) => current.filter((model) => model.id !== modelArchiveTarget.id));
+      setModelArchiveTarget(null);
+      await reloadBootstrap();
+      toast({ title: "Modelo arquivado" });
+    } catch (archiveError) {
+      toast({
+        variant: "destructive",
+        title: archiveError instanceof Error ? archiveError.message : "Falha ao arquivar modelo.",
       });
     } finally {
       setSaving(null);
@@ -1046,12 +1382,12 @@ export function FormsDashboardShell() {
         </div>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <KpiCard label="Pendentes" value={stats.pending} subtitle="Preenchimentos aguardando início" tone="amber" />
         <KpiCard label="Em andamento" value={stats.inProgress} subtitle="Preenchimentos já assumidos" tone="blue" />
         <KpiCard label="Concluídas" value={stats.completed} subtitle="Fluxos encerrados" tone="emerald" />
         <KpiCard label="Atrasadas" value={stats.overdue} subtitle="Preenchimentos em atenção" tone="red" />
-        <KpiCard label="Tempo médio" value={stats.averageDuration} subtitle="Minutos por preenchimento" tone="purple" />
+        <KpiCard label="Tempo médio" value={stats.averageDuration} subtitle="Por preenchimento concluído" tone="purple" unit="min" />
       </div>
 
       <Tabs defaultValue="operations" className="space-y-4">
@@ -1363,16 +1699,34 @@ export function FormsDashboardShell() {
         </TabsContent>
 
         <TabsContent value="models" className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Modelos-base</h2>
+              <p className="text-sm text-muted-foreground">
+                Estruturas reutilizáveis para criar formulários operacionais.
+              </p>
+            </div>
+            {canManageTemplates ? (
+              <Button type="button" variant="outline" onClick={openCreateModelDialog}>
+                <Plus className="mr-2 h-4 w-4" />
+                Novo modelo
+              </Button>
+            ) : null}
+          </div>
           <div className="grid gap-4 xl:grid-cols-3">
             {availableModels.map((model, modelIndex) => {
               const itemCount = model.sections.reduce((total, section) => total + section.items.length, 0);
               const visual = getModelVisual(model.id, modelIndex);
               const Icon = visual.icon;
+              const storedModel = isStoredModel(model.id);
               return (
                 <Card key={model.id}>
                   <CardHeader>
-                    <div className={cn("mb-2 flex h-10 w-10 items-center justify-center rounded-xl", visual.className)}>
-                      <Icon className="h-5 w-5" />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", visual.className)}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <Badge variant="outline">{storedModel ? "Personalizado" : "Sistema"}</Badge>
                     </div>
                     <CardTitle className="text-base">{model.name}</CardTitle>
                     <CardDescription>{model.description}</CardDescription>
@@ -1413,6 +1767,31 @@ export function FormsDashboardShell() {
                         <Copy className="mr-2 h-4 w-4" />
                         Criar formulário
                       </Button>
+                    ) : null}
+                    {canManageTemplates ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditModelDialog(model)}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" />
+                          {storedModel ? "Editar" : "Personalizar"}
+                        </Button>
+                        {storedModel ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setModelArchiveTarget(model)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Arquivar
+                          </Button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </CardContent>
                 </Card>
@@ -2047,6 +2426,189 @@ export function FormsDashboardShell() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={modelDialogOpen}
+        onOpenChange={(open) => {
+          setModelDialogOpen(open);
+          if (!open) {
+            setEditingModelId(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-6 py-5 text-left">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500 text-white shadow-sm">
+                <Layers3 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle>
+                  {modelDialogMode === "edit"
+                    ? "Editar modelo"
+                    : modelDialogMode === "customize"
+                      ? "Personalizar modelo"
+                      : "Novo modelo"}
+                </DialogTitle>
+                <DialogDescription>
+                  Estrutura base para criação de formulários.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="max-h-[calc(92vh-145px)] space-y-5 overflow-y-auto px-6 py-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Nome do modelo</Label>
+                <Input
+                  value={modelForm.name}
+                  onChange={(event) => setModelForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Ex: Checklist de fechamento"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Categoria</Label>
+                <Input
+                  value={modelForm.category}
+                  onChange={(event) => setModelForm((current) => ({ ...current, category: event.target.value }))}
+                  placeholder="Ex: Operação"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <Textarea
+                value={modelForm.description}
+                onChange={(event) => setModelForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Descreva o uso esperado deste modelo."
+                className="min-h-20"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Seções e perguntas</p>
+                  <p className="text-xs text-muted-foreground">
+                    A ordem abaixo será usada quando um formulário for criado por este modelo.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addModelSection}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nova seção
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {modelForm.sections.map((section, sectionIndex) => (
+                  <div key={section.id} className="rounded-xl border p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-semibold">
+                        {sectionIndex + 1}
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <Label>Título da seção</Label>
+                        <Input
+                          value={section.title}
+                          onChange={(event) => updateModelSection(section.id, { title: event.target.value })}
+                          placeholder="Título da seção"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="self-end text-muted-foreground hover:text-destructive sm:self-auto"
+                        disabled={modelForm.sections.length <= 1}
+                        onClick={() => removeModelSection(section.id)}
+                        aria-label="Remover seção"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      {section.items.map((item) => (
+                        <div key={item.id} className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_180px_40px] md:items-end">
+                          <div className="space-y-2">
+                            <Label>Pergunta</Label>
+                            <Input
+                              value={item.title}
+                              onChange={(event) => updateModelItem(section.id, item.id, { title: event.target.value })}
+                              placeholder="Texto da pergunta"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Tipo</Label>
+                            <Select
+                              value={item.type}
+                              onValueChange={(value) =>
+                                updateModelItem(section.id, item.id, { type: value as FormItemTypeValue })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {FORM_ITEM_TYPE_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-muted-foreground hover:text-destructive"
+                            disabled={section.items.length <= 1}
+                            onClick={() => removeModelItem(section.id, item.id)}
+                            aria-label="Remover pergunta"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => addModelItem(section.id)}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Nova pergunta
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t bg-background px-6 py-4">
+            <Button type="button" variant="outline" onClick={() => setModelDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleSaveModel()}
+              disabled={saving === "model" || isModelFormInvalid(modelForm)}
+            >
+              {saving === "model"
+                ? "Salvando..."
+                : modelDialogMode === "edit"
+                  ? "Salvar modelo"
+                  : "Criar modelo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={projectDeleteTarget !== null} onOpenChange={(open) => !open && setProjectDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -2066,6 +2628,30 @@ export function FormsDashboardShell() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {saving === "deleteProject" ? "Excluindo..." : "Excluir projeto"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={modelArchiveTarget !== null} onOpenChange={(open) => !open && setModelArchiveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Arquivar modelo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O modelo "{modelArchiveTarget?.name}" deixará de aparecer na lista. Formulários já criados a partir dele permanecem preservados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving === "archiveModel"}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={saving === "archiveModel"}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleArchiveModel();
+              }}
+            >
+              {saving === "archiveModel" ? "Arquivando..." : "Arquivar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
