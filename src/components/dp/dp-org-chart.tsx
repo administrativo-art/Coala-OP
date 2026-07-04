@@ -17,9 +17,10 @@ import {
   Workflow,
 } from "lucide-react";
 
-import type { DPUnit, JobFunction, JobRole, User } from "@/types";
+import type { DPUnit, DPUnitGroup, DPUnitOrganization, JobFunction, JobRole, User } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
+import { useDP } from "@/components/dp-context";
 import { matchDPUnitForKiosk } from "@/lib/dp-kiosk-match";
 import { cn } from "@/lib/utils";
 
@@ -592,6 +593,95 @@ function getUserUnitNames(user: User, units: DPUnit[]) {
   return names.length > 0 ? names : ["Sem unidade"];
 }
 
+function getUserUnits(user: User, units: DPUnit[]) {
+  const unitById = new Map(units.map((unit) => [unit.id, unit]));
+  const unitIds = new Set<string>();
+
+  for (const unitId of user.unitIds ?? []) {
+    unitIds.add(getCanonicalUnitReference(unitId, units));
+  }
+
+  for (const kioskId of user.assignedKioskIds ?? []) {
+    unitIds.add(getCanonicalUnitReference(kioskId, units));
+  }
+
+  return Array.from(unitIds).flatMap((unitId) => {
+    const unit = unitById.get(unitId);
+    return unit ? [unit] : [];
+  });
+}
+
+function getUserOperationalLinks(
+  user: User,
+  units: DPUnit[],
+  unitGroups: DPUnitGroup[],
+  unitOrganizations: DPUnitOrganization[]
+) {
+  const userUnits = getUserUnits(user, units);
+  const groupById = new Map(unitGroups.map((group) => [group.id, group]));
+  const organizationById = new Map(unitOrganizations.map((organization) => [organization.id, organization]));
+  const groupNames = new Set<string>();
+  const organizationNames = new Set<string>();
+
+  for (const unit of userUnits) {
+    const group = unit.groupId ? groupById.get(unit.groupId) : undefined;
+    if (group) groupNames.add(group.name);
+
+    const organizationId = unit.organizationId ?? group?.organizationId;
+    const organization = organizationId ? organizationById.get(organizationId) : undefined;
+    if (organization) organizationNames.add(organization.name);
+  }
+
+  return {
+    groupNames: Array.from(groupNames).sort((left, right) => left.localeCompare(right, "pt-BR")),
+    organizationNames: Array.from(organizationNames).sort((left, right) => left.localeCompare(right, "pt-BR")),
+  };
+}
+
+function sourceMatchesUser(
+  sourceType: "job_role" | "job_function" | undefined,
+  sourceId: string | undefined,
+  user: User
+) {
+  if (!sourceType || !sourceId) return false;
+  if (sourceType === "job_role") return user.jobRoleId === sourceId;
+  return user.jobFunctionIds?.includes(sourceId) === true;
+}
+
+function userOwnsResponsibility(
+  entity: Pick<DPUnitGroup | DPUnitOrganization, "responsibleUserId" | "responsibleSourceType" | "responsibleSourceId">,
+  user: User
+) {
+  if (entity.responsibleUserId) return entity.responsibleUserId === user.id;
+  return sourceMatchesUser(entity.responsibleSourceType, entity.responsibleSourceId, user);
+}
+
+function getUserResponsibilityTargets(
+  user: User,
+  unitGroups: DPUnitGroup[],
+  unitOrganizations: DPUnitOrganization[]
+) {
+  const organizations = unitOrganizations
+    .filter((organization) => userOwnsResponsibility(organization, user))
+    .map((organization) => ({
+      type: "Organização",
+      name: organization.name,
+      sourceName: organization.responsibleSourceName,
+    }));
+
+  const groups = unitGroups
+    .filter((group) => userOwnsResponsibility(group, user))
+    .map((group) => ({
+      type: "Grupo",
+      name: group.name,
+      sourceName: group.responsibleSourceName,
+    }));
+
+  return [...organizations, ...groups].sort((left, right) =>
+    `${left.type} ${left.name}`.localeCompare(`${right.type} ${right.name}`, "pt-BR")
+  );
+}
+
 function getLeaderUnitIds(user: User, units: DPUnit[] = []) {
   if (user.responsibleUnitIds !== undefined) {
     return Array.from(
@@ -660,7 +750,7 @@ function CollaboratorPill({
         <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
         <AvatarFallback className="bg-amber-100 text-xs font-bold text-amber-600">{initials(user.username)}</AvatarFallback>
       </Avatar>
-      <div className="min-w-0 flex-1 text-left">
+      <div className="min-w-0 flex-1 overflow-hidden text-left">
         <p className="truncate text-sm font-bold text-slate-950">{user.username}</p>
         <p className="truncate text-xs text-slate-500">{user.email}</p>
         <p className="truncate text-xs text-slate-400">
@@ -677,7 +767,7 @@ function CollaboratorPill({
 
   if (!onSelect) {
     return (
-      <div className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+      <div className="flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
         {content}
       </div>
     );
@@ -688,7 +778,7 @@ function CollaboratorPill({
       type="button"
       onClick={() => onSelect(user)}
       className={cn(
-        "flex min-w-0 items-center gap-3 rounded-xl border bg-white px-3 py-2.5 shadow-sm transition",
+        "flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border bg-white px-3 py-2.5 text-left shadow-sm transition",
         selected
           ? "border-pink-300 ring-2 ring-pink-100"
           : "border-slate-200 hover:border-pink-200 hover:bg-pink-50/30"
@@ -759,10 +849,9 @@ function PersonTreeCard({
         </div>
         <div className="px-3 py-3">
           <p className="truncate text-xs font-bold text-slate-950">{node.user?.username ?? "Cargo vago"}</p>
-          <p className="mt-0.5 truncate text-[11px] text-slate-500">{node.role.publicTitle || node.role.name}</p>
           <p
             className={cn(
-              "mt-1 truncate text-[10px] font-bold",
+              "mt-0.5 truncate text-[10px] font-bold",
               effectiveFunctionNames.length === 0
                 ? "text-slate-400"
                 : isVacant
@@ -772,6 +861,7 @@ function PersonTreeCard({
           >
             {functionLine}
           </p>
+          <p className="mt-1 truncate text-[11px] text-slate-500">{node.role.publicTitle || node.role.name}</p>
           {unitNames.length > 0 ? (
             <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-wide text-sky-600">
               {unitNames.join(", ")}
@@ -870,17 +960,24 @@ function PersonTreeNodeView({
 function UserDetailPanel({
   detail,
   units,
+  unitGroups,
+  unitOrganizations,
   onClose,
   onSelectUser,
 }: {
   detail: UserDetail;
   units: DPUnit[];
+  unitGroups: DPUnitGroup[];
+  unitOrganizations: DPUnitOrganization[];
   onClose: () => void;
   onSelectUser: (user: User) => void;
 }) {
   const phone = getUserPhone(detail.user);
   const department = detail.role?.departmentName ?? "Sem departamento";
+  const functionLine = summarizeFunctions(detail.user.jobFunctionNames?.filter(Boolean));
   const unitNames = getUserUnitNames(detail.user, units);
+  const operationalLinks = getUserOperationalLinks(detail.user, units, unitGroups, unitOrganizations);
+  const responsibilityTargets = getUserResponsibilityTargets(detail.user, unitGroups, unitOrganizations);
   const responsibleUnitNames =
     detail.user.responsibleUnitIds && detail.user.responsibleUnitIds.length > 0
       ? detail.user.responsibleUnitIds.map((unitId) => units.find((unit) => unit.id === unitId)?.name ?? unitId)
@@ -911,6 +1008,9 @@ function UserDetailPanel({
           </AvatarFallback>
         </Avatar>
         <h3 className="mt-3 truncate text-lg font-bold text-slate-950">{detail.user.username}</h3>
+        <p className="mt-1 truncate text-sm font-bold text-emerald-700">
+          {functionLine}
+        </p>
         <p className="truncate text-sm text-slate-500">
           {detail.role?.publicTitle || detail.user.jobRoleName || detail.role?.name || "Sem cargo"}
         </p>
@@ -948,13 +1048,49 @@ function UserDetailPanel({
         )}
 
         <div className="px-5 py-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Responsabilidade</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Organização</p>
           <p className="mt-2 text-sm text-slate-600">
-            {responsibleUnitNames.length > 0
-              ? responsibleUnitNames.join(", ")
-              : "Geral / unidades remanescentes"}
+            {operationalLinks.organizationNames.length > 0
+              ? operationalLinks.organizationNames.join(", ")
+              : "Sem organização vinculada"}
           </p>
         </div>
+
+        <div className="px-5 py-4">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Grupo</p>
+          <p className="mt-2 text-sm text-slate-600">
+            {operationalLinks.groupNames.length > 0
+              ? operationalLinks.groupNames.join(", ")
+              : "Sem grupo vinculado"}
+          </p>
+        </div>
+
+        <div className="px-5 py-4">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Responsável por</p>
+          <div className="mt-2 space-y-2">
+            {responsibilityTargets.length > 0 ? (
+              responsibilityTargets.map((target) => (
+                <div key={`${target.type}-${target.name}`} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-sm font-bold text-slate-700">{target.type} · {target.name}</p>
+                  {target.sourceName ? (
+                    <p className="mt-0.5 text-xs text-slate-400">{target.sourceName}</p>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-slate-600">Nenhum grupo ou organização.</p>
+            )}
+          </div>
+        </div>
+
+        {responsibleUnitNames.length > 0 && responsibilityTargets.length === 0 ? (
+          <div className="px-5 py-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Responsabilidade por unidade</p>
+            <p className="mt-2 text-sm text-slate-600">
+              {responsibleUnitNames.join(", ")}
+            </p>
+          </div>
+        ) : null}
 
         <div className="px-5 py-4">
           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -1006,6 +1142,7 @@ function UserDetailPanel({
 export function DPOrgChart() {
   const { activeUsers } = useAuth();
   const { roles, functions, units, loading, error, refresh, access } = useHrBootstrap();
+  const { unitGroups, unitOrganizations } = useDP();
 
   const [viewMode, setViewMode] = React.useState<OrgViewMode>("tree");
   const [query, setQuery] = React.useState("");
@@ -1456,8 +1593,8 @@ export function DPOrgChart() {
       <div className={cn("grid gap-4", selectedUserDetail && "xl:grid-cols-[minmax(0,1fr)_320px]")}>
         <div className="min-w-0 space-y-4">
           {viewMode === "tree" && (
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc] shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -1505,7 +1642,7 @@ export function DPOrgChart() {
                 </div>
               </div>
               <div
-                className="min-h-[640px] cursor-grab overflow-hidden bg-[radial-gradient(circle_at_1px_1px,rgba(236,72,153,0.12)_1px,transparent_0)] bg-[length:24px_24px] p-10 active:cursor-grabbing xl:min-h-[720px]"
+                className="min-h-[640px] cursor-grab overflow-hidden bg-[#f8fafc] bg-[radial-gradient(circle_at_1px_1px,rgba(100,116,139,0.14)_1px,transparent_0)] bg-[length:24px_24px] p-10 active:cursor-grabbing xl:min-h-[720px]"
                 onWheel={handleTreeWheel}
                 onPointerDown={handlePanPointerDown}
                 onPointerMove={handlePanPointerMove}
@@ -1579,15 +1716,12 @@ export function DPOrgChart() {
                       {group.items.map(({ node }) => {
                         const roleFunctions = functionsByRoleId.get(node.role.id) ?? [];
                         return (
-                          <div key={node.role.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                          <div key={node.role.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-bold text-slate-950">{node.role.name}</p>
                                 <p className="truncate text-xs text-slate-500">{node.role.publicTitle || node.role.name}</p>
                               </div>
-                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                {node.directUsers.length}
-                              </span>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1">
                               {displayFunctionBadges(roleFunctions).map((name) => (
@@ -1667,15 +1801,12 @@ export function DPOrgChart() {
                           ? node.user.jobFunctionNames ?? []
                           : functionsByRoleId.get(node.role.id) ?? [];
                         return (
-                          <div key={node.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                          <div key={node.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-bold text-slate-950">{node.user?.username ?? "Cargo vago"}</p>
                                 <p className="truncate text-xs text-slate-500">{node.role.publicTitle || node.role.name}</p>
                               </div>
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
-                                {node.totalReports}
-                              </span>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1">
                               {displayFunctionBadges(roleFunctions).map((name) => (
@@ -1748,6 +1879,8 @@ export function DPOrgChart() {
           <UserDetailPanel
             detail={selectedUserDetail}
             units={units}
+            unitGroups={unitGroups}
+            unitOrganizations={unitOrganizations}
             onClose={() => setSelectedUserId(null)}
             onSelectUser={handleSelectUser}
           />
