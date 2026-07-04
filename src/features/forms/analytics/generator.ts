@@ -208,19 +208,43 @@ async function writeDrafts(
           : null;
 
       batch.set(collection.doc(dedupeDocId(draft.dedupe_key)), {
-        ...draft,
-        execution_completed_at: Timestamp.fromDate(draft.execution_completed_at),
-        occurred_at: Timestamp.fromDate(draft.occurred_at),
-        is_anonymized: false,
-        anonymize_after: anonymizeAfter,
-        opened_at: FieldValue.serverTimestamp(),
-        created_at: FieldValue.serverTimestamp(),
-        updated_at: FieldValue.serverTimestamp(),
-        created_by: userId,
+        ...stripUndefinedDeep({
+          ...draft,
+          execution_completed_at: Timestamp.fromDate(draft.execution_completed_at),
+          occurred_at: Timestamp.fromDate(draft.occurred_at),
+          is_anonymized: false,
+          anonymize_after: anonymizeAfter,
+          opened_at: FieldValue.serverTimestamp(),
+          created_at: FieldValue.serverTimestamp(),
+          updated_at: FieldValue.serverTimestamp(),
+          created_by: userId,
+        }),
       });
     });
     await batch.commit();
   }
+}
+
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as T;
+  }
+
+  if (
+    value &&
+    typeof value === "object" &&
+    !(value instanceof Date) &&
+    !(value instanceof Timestamp) &&
+    !(value instanceof FieldValue)
+  ) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .map(([key, entry]) => [key, stripUndefinedDeep(entry)])
+    ) as T;
+  }
+
+  return value;
 }
 
 function readPersonalRetentionDays() {
