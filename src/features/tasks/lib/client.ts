@@ -13,6 +13,12 @@ type TasksBootstrapResponse = {
   tasks: Task[];
 };
 
+const TRANSIENT_STATUSES = new Set([404, 502, 503, 504]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => null)) as
     | { error?: string }
@@ -20,11 +26,12 @@ async function parseJson<T>(response: Response): Promise<T> {
     | null;
 
   if (!response.ok) {
+    const fallback = `Falha na operação de tarefas. (HTTP ${response.status})`;
     const message =
       payload && typeof payload === "object" && "error" in payload
         ? payload.error
-        : "Falha na operação de tarefas.";
-    throw new Error(message || "Falha na operação de tarefas.");
+        : fallback;
+    throw new Error(message || fallback);
   }
 
   return payload as T;
@@ -47,9 +54,15 @@ async function authedFetch(
 }
 
 export async function fetchTasksBootstrap(firebaseUser: FirebaseUserLike) {
-  const response = await authedFetch(firebaseUser, "/api/tasks", {
+  let response = await authedFetch(firebaseUser, "/api/tasks", {
     method: "GET",
   });
+  if (TRANSIENT_STATUSES.has(response.status)) {
+    await sleep(600);
+    response = await authedFetch(firebaseUser, "/api/tasks", {
+      method: "GET",
+    });
+  }
   return parseJson<TasksBootstrapResponse>(response);
 }
 

@@ -40,6 +40,33 @@ service cloud.firestore {
       return getPerms().get('stock', {}).get('uniforms', {}).get(key, false) == true;
     }
 
+    function settingsPerm(key) {
+      return getPerms().get('settings', {}).get(key, false) == true;
+    }
+
+    function dpSettingsPerm(key) {
+      return getPerms().get('dp', {}).get('settings', {}).get(key, false) == true;
+    }
+
+    function canReadOperationalUnits() {
+      return isAuth() && (
+        isAdmin() ||
+        getPerms().get('dp', {}).get('view', false) == true ||
+        settingsPerm('view') ||
+        settingsPerm('manageKiosks') ||
+        canViewCollaboratorPanel()
+      );
+    }
+
+    function canManageOperationalUnits() {
+      return isAuth() && (
+        isAdmin() ||
+        settingsPerm('manageUsers') ||
+        settingsPerm('manageKiosks') ||
+        dpSettingsPerm('manageUnits')
+      );
+    }
+
     function dpCollaboratorPerm(key) {
       return getPerms().get('dp', {}).get('collaborators', {}).get(key, false) == true;
     }
@@ -608,24 +635,29 @@ service cloud.firestore {
 
     // Unidades
     match /dp_units/{id} {
-      allow read: if isAuth() && (
-        isAdmin() ||
-        getPerms().dp.view == true ||
-        canViewCollaboratorPanel()
-      );
-      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true)
+      allow read: if canReadOperationalUnits();
+      allow create, update: if canManageOperationalUnits()
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2;
-      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true);
+      allow delete: if canManageOperationalUnits();
     }
 
     // Grupos de unidades
     match /dp_unitGroups/{id} {
-      allow read: if isAuth() && (isAdmin() || getPerms().dp.view == true);
-      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true)
+      allow read: if canReadOperationalUnits();
+      allow create, update: if canManageOperationalUnits()
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2;
-      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageUnits == true);
+      allow delete: if canManageOperationalUnits();
+    }
+
+    // Organizações de unidades
+    match /dp_unitOrganizations/{id} {
+      allow read: if canReadOperationalUnits();
+      allow create, update: if canManageOperationalUnits()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2;
+      allow delete: if canManageOperationalUnits();
     }
 
     // Definições de turno

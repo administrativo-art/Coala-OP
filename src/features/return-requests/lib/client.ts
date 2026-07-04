@@ -14,6 +14,12 @@ type ReturnRequestCreateInput = {
   motivo: string;
 };
 
+const TRANSIENT_STATUSES = new Set([404, 502, 503, 504]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => null)) as
     | { error?: string }
@@ -21,11 +27,12 @@ async function parseJson<T>(response: Response): Promise<T> {
     | null;
 
   if (!response.ok) {
+    const fallback = `Falha na operação da avaria. (HTTP ${response.status})`;
     const message =
       payload && typeof payload === "object" && "error" in payload
         ? payload.error
-        : "Falha na operação da avaria.";
-    throw new Error(message || "Falha na operação da avaria.");
+        : fallback;
+    throw new Error(message || fallback);
   }
 
   return payload as T;
@@ -48,9 +55,15 @@ async function authedFetch(
 }
 
 export async function fetchReturnRequests(firebaseUser: FirebaseUserLike) {
-  const response = await authedFetch(firebaseUser, "/api/stock/return-requests", {
+  let response = await authedFetch(firebaseUser, "/api/stock/return-requests", {
     method: "GET",
   });
+  if (TRANSIENT_STATUSES.has(response.status)) {
+    await sleep(600);
+    response = await authedFetch(firebaseUser, "/api/stock/return-requests", {
+      method: "GET",
+    });
+  }
 
   return parseJson<{ requests: ReturnRequest[] }>(response);
 }

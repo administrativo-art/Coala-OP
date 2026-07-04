@@ -306,14 +306,14 @@ export function KioskManagement({ compact = false }: { compact?: boolean } = {})
             onKeyDown={e => e.key === 'Enter' && handleAdd()}
             disabled={adding}
             className={cn(
-              'rounded-2xl border-border/70 bg-background/70 text-base shadow-none',
-              compact ? 'h-14 px-5' : 'h-12'
+              'min-w-0 flex-1 rounded-2xl border-border/70 bg-background/70 shadow-none',
+              compact ? 'h-12 px-4 text-sm' : 'h-12 text-base'
             )}
           />
           <Button
             size={compact ? "sm" : "default"}
             variant="outline"
-            className={cn('rounded-2xl px-5', compact ? 'h-14 text-base' : '')}
+            className={cn('rounded-2xl px-5', compact ? 'h-12 text-sm' : '')}
             onClick={handleAdd}
             disabled={adding || !newName.trim()}
           >

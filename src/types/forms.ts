@@ -48,6 +48,9 @@ export type FormProject = {
   description?: string;
   color?: string;
   icon?: string;
+  source?: 'unit_auto' | 'manual';
+  unit_id?: string;
+  unit_name_snapshot?: string;
   is_active: boolean;
   members: FormProjectMember[];
   created_at: Timestamp | string;

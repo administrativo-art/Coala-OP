@@ -7,6 +7,7 @@ import type {
   DPShiftDefinition,
   DPUnit,
   DPUnitGroup,
+  DPUnitOrganization,
   DPVacationRecord,
 } from '@/types';
 import { useDP } from '@/components/dp-context';
@@ -14,6 +15,7 @@ import { useDP } from '@/components/dp-context';
 export type DPBootstrapPayload = {
   units: DPUnit[];
   unitGroups: DPUnitGroup[];
+  unitOrganizations: DPUnitOrganization[];
   shiftDefinitions: DPShiftDefinition[];
   schedules: DPSchedule[];
   vacations: DPVacationRecord[];
@@ -24,6 +26,7 @@ export function useDPBootstrap() {
   const {
     units,
     unitGroups,
+    unitOrganizations,
     shiftDefinitions,
     schedules,
     vacations,
@@ -57,6 +60,7 @@ export function useDPBootstrap() {
   return {
     units,
     unitGroups,
+    unitOrganizations,
     shiftDefinitions,
     schedules,
     vacations,

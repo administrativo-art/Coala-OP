@@ -7,6 +7,7 @@ import {
 import {
   getFormExecutionById,
   getFormTemplateById,
+  ensureUnitFormProjects,
   listFormExecutions,
   listFormProjects,
   listFormTemplates,
@@ -29,9 +30,16 @@ export async function buildFormsBootstrap(params: {
     throw new Error("O novo motor de formulários ainda não foi liberado.");
   }
 
-  const [projects, templates, executions, types] = await Promise.all([
+  if (!canAccessFormsModule(params.permissions, params.isDefaultAdmin)) {
+    throw new Error("Sem permissão para acessar formulários.");
+  }
+
+  await ensureUnitFormProjects(params.workspaceId);
+
+  const [projects, templates, templateOptions, executions, types] = await Promise.all([
     listFormProjects(params.workspaceId),
     listFormTemplates({ workspaceId: params.workspaceId, isActive: true }),
+    listFormTemplates({ workspaceId: params.workspaceId }),
     listFormExecutions({ workspaceId: params.workspaceId, limit: 30 }),
     listFormTypes({ workspaceId: params.workspaceId, isActive: true }),
   ]);
@@ -54,13 +62,6 @@ export async function buildFormsBootstrap(params: {
   });
 
   const visibleProjectIds = new Set(visibleProjects.map((project) => project.id));
-
-  if (
-    visibleProjects.length === 0 &&
-    !canAccessFormsModule(params.permissions, params.isDefaultAdmin)
-  ) {
-    throw new Error("Sem permissão para acessar formulários.");
-  }
 
   return {
     flags,
@@ -103,6 +104,9 @@ export async function buildFormsBootstrap(params: {
     projects: visibleProjects,
     types: types.filter((type) => visibleProjectIds.has(type.form_project_id)),
     templates: templates.filter((template) =>
+      visibleProjectIds.has(template.form_project_id)
+    ),
+    template_options: templateOptions.filter((template) =>
       visibleProjectIds.has(template.form_project_id)
     ),
     executions: executions.filter((execution) =>

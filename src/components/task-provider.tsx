@@ -88,7 +88,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
                     setTasks(payload.tasks);
                 }
             } catch (error) {
-                console.error("Error fetching tasks:", error);
+                console.warn("Error fetching tasks:", error);
             } finally {
                 if (isMounted) {
                     setLoading(false);

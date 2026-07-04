@@ -169,13 +169,13 @@ type RecruitmentModelEditorStep = 'general' | 'public' | 'form';
 type TalentPoolEditorStep = 'general' | 'fixed' | 'form';
 
 const MODEL_EDITOR_STEPS: Array<{ value: RecruitmentModelEditorStep; label: string }> = [
-  { value: 'general', label: 'Informações gerais' },
-  { value: 'public', label: 'Página pública' },
+  { value: 'general', label: 'Geral' },
+  { value: 'public', label: 'Público' },
   { value: 'form', label: 'Formulário' },
 ];
 
 const TALENT_POOL_EDITOR_STEPS: Array<{ value: TalentPoolEditorStep; label: string }> = [
-  { value: 'general', label: 'Informações gerais' },
+  { value: 'general', label: 'Geral' },
   { value: 'fixed', label: 'Campos fixos' },
   { value: 'form', label: 'Formulário' },
 ];
@@ -499,6 +499,7 @@ function questionSectionFromDraft(sectionTitle: string): Pick<HrFormQuestion, 's
 
 function conditionFromDraft(parent: HrFormQuestion | undefined, value: QuestionDraftConditionValue) {
   if (!parent || value === 'always') return undefined;
+  if (parent.type !== 'yes_no') return undefined;
   return [{
     questionId: parent.id,
     operator: 'equals' as RecruitmentQuestionConditionOperator,
@@ -593,11 +594,12 @@ function QuestionDraftConditionControls({
 }) {
   if (!draft.parentQuestionId) return null;
 
-  const label = parentQuestion?.text || 'pergunta selecionada';
+  if (!parentQuestion || parentQuestion.type !== 'yes_no') return null;
+  const label = parentQuestion.text;
 
   return (
-    <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 lg:col-span-3">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+    <div className="rounded-lg border border-pink-100 bg-pink-50/70 p-3 lg:col-span-3">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-[#993556]">
         Subpergunta
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
@@ -613,8 +615,8 @@ function QuestionDraftConditionControls({
             onClick={() => onChange({ conditionValue: item.value })}
             className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
               draft.conditionValue === item.value
-                ? 'bg-slate-950 text-white'
-                : 'bg-white text-slate-500 hover:text-slate-950'
+                ? 'bg-[#EE6FA8] text-white'
+                : 'bg-white text-slate-500 hover:text-[#993556]'
             }`}
           >
             {item.label}
@@ -675,8 +677,8 @@ function QuestionDraftSectionControls({
               onClick={() => selectSection(section.title, section.defaultCriterionCode)}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                 selected
-                  ? 'border-slate-950 bg-slate-950 text-white'
-                  : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white'
+                  ? 'border-[#EE6FA8] bg-[#EE6FA8] text-white'
+                  : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-pink-200 hover:bg-white hover:text-[#993556]'
               }`}
             >
               {section.title} · {section.baseWeight} pts
@@ -690,8 +692,8 @@ function QuestionDraftSectionControls({
             onClick={() => selectSection(section)}
             className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
               draft.sectionTitle === section
-                ? 'border-indigo-600 bg-indigo-600 text-white'
-                : 'border-indigo-100 bg-indigo-50 text-indigo-700 hover:border-indigo-200'
+                ? 'border-[#EE6FA8] bg-[#EE6FA8] text-white'
+                : 'border-pink-100 bg-pink-50 text-[#993556] hover:border-pink-200'
             }`}
           >
             {section}
@@ -1212,6 +1214,88 @@ function RecruitmentMetricCard({
   );
 }
 
+function RecruitmentModernStepTabs<T extends string>({
+  steps,
+  active,
+  onChange,
+}: {
+  steps: Array<{ value: T; label: string }>;
+  active: T;
+  onChange: (value: T) => void;
+}) {
+  const activeIndex = Math.max(0, steps.findIndex(step => step.value === active));
+
+  return (
+    <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
+      {steps.map((step, index) => {
+        const isActive = step.value === active;
+        const isDone = index < activeIndex;
+        return (
+          <React.Fragment key={step.value}>
+            <button
+              type="button"
+              onClick={() => onChange(step.value)}
+              className={`group flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold transition ${
+                isActive
+                  ? 'text-[#993556]'
+                  : isDone
+                    ? 'text-emerald-700 hover:text-emerald-800'
+                    : 'text-slate-500 hover:text-slate-950'
+              }`}
+            >
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
+                isActive
+                  ? 'bg-[#EE6FA8] text-white shadow-sm'
+                  : isDone
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+              }`}>
+                {isDone ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+              </span>
+              {step.label}
+            </button>
+            {index < steps.length - 1 ? (
+              <span className={`hidden h-px min-w-8 flex-1 sm:block ${index < activeIndex ? 'bg-emerald-200' : 'bg-slate-200'}`} />
+            ) : null}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function RecruitmentFormSectionTabs({
+  active,
+  onChange,
+}: {
+  active: 'talent' | 'models';
+  onChange: (value: 'talent' | 'models') => void;
+}) {
+  const tabs = [
+    { value: 'talent', label: 'Banco de talentos' },
+    { value: 'models', label: 'Modelos de formulários' },
+  ] as const;
+
+  return (
+    <div className="flex min-w-0 gap-6 border-b border-slate-200">
+      {tabs.map(item => (
+        <button
+          key={item.value}
+          type="button"
+          onClick={() => onChange(item.value)}
+          className={`border-b-2 px-1 pb-3 text-sm font-semibold transition ${
+            active === item.value
+              ? 'border-[#EE6FA8] text-[#993556]'
+              : 'border-transparent text-slate-500 hover:text-slate-950'
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function formatConditionValue(value: unknown) {
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
   if (value === null || value === undefined || value === '') return 'valor';
@@ -1223,7 +1307,7 @@ function conditionSummary(
   questionsById: Map<string, HrFormQuestion>
 ): { label: string; tone: 'emerald' | 'red' | 'slate' } | null {
   const condition = question.conditions?.[0];
-  if (!condition) return question.parentQuestionId ? { label: 'Sem regra', tone: 'slate' } : null;
+  if (!condition) return question.parentQuestionId ? { label: 'Sempre', tone: 'slate' } : null;
   const parent = questionsById.get(condition.questionId);
   const value = formatConditionValue(condition.value);
   const prefix = condition.operator === 'not_equals'
@@ -1264,11 +1348,11 @@ function conditionBadgeClass(tone: 'emerald' | 'red' | 'slate', isDark: boolean)
 
 const RECRUITMENT_SECTION_TONES = [
   {
-    header: 'border-pink-100 bg-pink-50/80',
-    circle: 'bg-pink-600 text-white',
-    text: 'text-pink-700',
-    chip: 'bg-pink-50 text-pink-700',
-    progress: 'bg-pink-600',
+    header: 'border-slate-100 bg-white',
+    circle: 'bg-[#EE6FA8] text-white',
+    text: 'text-[#993556]',
+    chip: 'bg-pink-50 text-[#993556]',
+    progress: 'bg-[#EE6FA8]',
   },
   {
     header: 'border-violet-100 bg-violet-50/80',
@@ -1303,7 +1387,7 @@ function recruitmentSectionTone(index: number, isDark: boolean) {
       progress: 'bg-indigo-500',
     };
   }
-  return RECRUITMENT_SECTION_TONES[index % RECRUITMENT_SECTION_TONES.length];
+  return RECRUITMENT_SECTION_TONES[0];
 }
 
 function RecruitmentQuestionsDesigner({
@@ -1336,10 +1420,10 @@ function RecruitmentQuestionsDesigner({
   const questionsById = new Map(questions.map(question => [question.id, question]));
   const checkboxClass = isDark
     ? 'h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500 disabled:opacity-40'
-    : 'h-4 w-4 rounded border-slate-300 text-slate-950 disabled:opacity-40';
+    : 'h-4 w-4 rounded border-slate-300 text-[#EE6FA8] disabled:opacity-40';
   const inputClass = isDark
     ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
-    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+    : 'rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-pink-200 disabled:opacity-60';
   const labelClass = isDark
     ? 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500'
     : 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
@@ -1365,12 +1449,12 @@ function RecruitmentQuestionsDesigner({
         : 'border-slate-100 bg-white shadow-sm';
     const summaryClass = isDark
       ? 'text-slate-200 hover:bg-slate-900/70'
-      : 'text-slate-900 hover:bg-slate-50/80';
+      : 'text-slate-900 hover:bg-pink-50/40';
     const editorBorderClass = isDark ? 'border-slate-800' : 'border-slate-100';
 
     return (
       <div key={question.id} className={`min-w-0 ${isSubquestion ? 'pl-5' : ''}`}>
-        <details className={`group min-w-0 rounded-xl border open:border-indigo-300 open:ring-1 open:ring-indigo-200 ${rowClass} ${question.active === false ? 'opacity-65' : ''}`}>
+        <details className={`group min-w-0 rounded-lg border open:border-pink-200 open:ring-1 open:ring-pink-100 ${rowClass} ${question.active === false ? 'opacity-65' : ''}`}>
           <summary className={`flex cursor-pointer list-none items-center gap-3 px-3 py-2.5 text-left transition [&::-webkit-details-marker]:hidden ${summaryClass}`}>
             <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${
               isSubquestion
@@ -1393,7 +1477,7 @@ function RecruitmentQuestionsDesigner({
                 )}
               </div>
               {subquestionCount > 0 && (
-                <p className={isDark ? 'mt-0.5 text-[11px] font-medium text-indigo-300' : 'mt-0.5 text-[11px] font-medium text-indigo-500'}>
+                <p className={isDark ? 'mt-0.5 text-[11px] font-medium text-indigo-300' : 'mt-0.5 text-[11px] font-medium text-[#993556]'}>
                   {pluralizePt(subquestionCount, 'subpergunta', 'subperguntas')}
                 </p>
               )}
@@ -1410,7 +1494,7 @@ function RecruitmentQuestionsDesigner({
             </span>
             {question.required && (
               <span className={`hidden shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-bold sm:inline-flex ${
-                isDark ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300' : 'border-indigo-100 bg-indigo-50 text-indigo-600'
+                isDark ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300' : 'border-pink-100 bg-pink-50 text-[#993556]'
               }`}>
                 Obr.
               </span>
@@ -1730,10 +1814,10 @@ function RecruitmentQuestionsDesigner({
         {depth === 0 && canManage && onPrepareAddQuestion && (
           inlineDraft?.parentQuestionId === question.id && onInlineDraftChange && onInlineDraftAdd && onInlineDraftCancel ? (
             <div className={`ml-8 mt-2 min-w-0 rounded-xl border p-3 ${
-              isDark ? 'border-indigo-500/25 bg-indigo-500/5' : 'border-indigo-200 bg-indigo-50/35'
+              isDark ? 'border-indigo-500/25 bg-indigo-500/5' : 'border-pink-200 bg-pink-50/40'
             }`}>
               <p className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${
-                isDark ? 'text-indigo-300' : 'text-indigo-600'
+                isDark ? 'text-indigo-300' : 'text-[#993556]'
               }`}>
                 Nova subpergunta
               </p>
@@ -1745,7 +1829,7 @@ function RecruitmentQuestionsDesigner({
                   className={`h-9 rounded-lg border px-3 text-xs outline-none focus:ring-2 ${
                     isDark
                       ? 'border-slate-800 bg-slate-950 text-slate-100 placeholder-slate-600 focus:ring-indigo-500/30'
-                      : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:ring-indigo-200'
+                      : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:ring-pink-200'
                   }`}
                 />
                 <select
@@ -1754,40 +1838,44 @@ function RecruitmentQuestionsDesigner({
                   className={`h-9 rounded-lg border px-3 text-xs outline-none focus:ring-2 ${
                     isDark
                       ? 'border-slate-800 bg-slate-950 text-slate-100 focus:ring-indigo-500/30'
-                      : 'border-slate-200 bg-white text-slate-700 focus:ring-indigo-200'
+                      : 'border-slate-200 bg-white text-slate-700 focus:ring-pink-200'
                   }`}
                 >
                   {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
                 </select>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className={isDark ? 'text-[11px] text-slate-500' : 'text-[11px] text-slate-500'}>
-                  Exibir se resposta =
-                </span>
-                {([
-                  { value: 'true', label: 'Sim' },
-                  { value: 'false', label: 'Não' },
-                  { value: 'always', label: 'Sempre' },
-                ] as const).map(item => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => onInlineDraftChange({ conditionValue: item.value })}
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${
-                      inlineDraft.conditionValue === item.value
-                        ? 'bg-slate-950 text-white'
-                        : isDark
-                          ? 'bg-slate-900 text-slate-400 hover:text-slate-200'
-                          : 'bg-white text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+                {question.type === 'yes_no' ? (
+                  <>
+                    <span className={isDark ? 'text-[11px] text-slate-500' : 'text-[11px] text-slate-500'}>
+                      Exibir se resposta =
+                    </span>
+                    {([
+                      { value: 'true', label: 'Sim' },
+                      { value: 'false', label: 'Não' },
+                      { value: 'always', label: 'Sempre' },
+                    ] as const).map(item => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onClick={() => onInlineDraftChange({ conditionValue: item.value })}
+                        className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${
+                          inlineDraft.conditionValue === item.value
+                            ? 'bg-[#EE6FA8] text-white'
+                            : isDark
+                              ? 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                              : 'bg-white text-slate-500 hover:text-[#993556]'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </>
+                ) : null}
                 <button
                   type="button"
                   onClick={onInlineDraftAdd}
-                  className="ml-0 inline-flex h-8 items-center rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-500 sm:ml-2"
+                  className="ml-0 inline-flex h-8 items-center rounded-full bg-[#EE6FA8] px-3 text-xs font-semibold text-white hover:bg-[#D9528E] sm:ml-2"
                 >
                   + Adicionar
                 </button>
@@ -1809,11 +1897,11 @@ function RecruitmentQuestionsDesigner({
                 sectionTitle: question.sectionTitle || sectionTitle,
                 parentQuestionId: question.id,
               })}
-              className={`ml-8 mt-2 text-xs font-medium ${
-                isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-700'
+              className={`ml-8 mt-2 inline-flex rounded-lg border border-dashed px-3 py-2 text-xs font-semibold ${
+                isDark ? 'border-slate-800 text-slate-500 hover:text-slate-300' : 'border-pink-200 bg-pink-50/40 text-[#993556] hover:bg-pink-50'
               }`}
             >
-              + Sub-pergunta
+              + Subpergunta
             </button>
           )
         )}
@@ -1837,10 +1925,10 @@ function RecruitmentQuestionsDesigner({
             <button
               type="button"
               onClick={() => onPrepareAddQuestion({ sectionTitle: '' })}
-              className={`mt-4 inline-flex h-9 items-center justify-center rounded-xl border px-3 text-xs font-semibold ${
+              className={`mt-4 inline-flex h-9 items-center justify-center rounded-full border px-3 text-xs font-semibold ${
                 isDark
                   ? 'border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                  : 'border-pink-200 bg-white text-[#993556] hover:bg-pink-50'
               }`}
             >
               Preparar primeira pergunta
@@ -1851,10 +1939,10 @@ function RecruitmentQuestionsDesigner({
           <button
             type="button"
             onClick={() => onPrepareAddQuestion({ sectionTitle: 'Nova seção' })}
-            className={`flex w-full items-center justify-center rounded-2xl border border-dashed px-3 py-3 text-xs font-medium ${
+            className={`flex w-full items-center justify-center rounded-lg border border-dashed px-3 py-3 text-xs font-semibold ${
               isDark
                 ? 'border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'
-                : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-700'
+                : 'border-pink-200 bg-pink-50/40 text-[#993556] hover:bg-pink-50'
             }`}
           >
             + Adicionar seção
@@ -1876,8 +1964,8 @@ function RecruitmentQuestionsDesigner({
         return (
           <section
             key={section.id}
-            className={`overflow-hidden rounded-2xl border shadow-sm ${
-              isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-200 bg-white'
+            className={`overflow-hidden rounded-lg border shadow-sm ${
+              isDark ? 'border-slate-800 bg-slate-950/50' : 'border-l-4 border-slate-200 border-l-[#EE6FA8] bg-white'
             }`}
           >
             <div className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${
@@ -1913,10 +2001,10 @@ function RecruitmentQuestionsDesigner({
                 <button
                   type="button"
                   onClick={() => onPrepareAddQuestion({ sectionTitle: section.title })}
-                  className={`flex w-full items-center justify-start rounded-xl border border-dashed px-3 py-2 text-xs font-medium ${
+                  className={`flex w-full items-center justify-start rounded-lg border border-dashed px-3 py-2 text-xs font-semibold ${
                     isDark
                       ? 'border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'
-                      : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-700'
+                      : 'border-pink-200 bg-pink-50/30 text-[#993556] hover:bg-pink-50'
                   }`}
                 >
                   + Adicionar pergunta
@@ -1930,10 +2018,10 @@ function RecruitmentQuestionsDesigner({
         <button
           type="button"
           onClick={() => onPrepareAddQuestion({ sectionTitle: '' })}
-          className={`flex w-full items-center justify-center rounded-2xl border border-dashed px-3 py-3 text-xs font-medium ${
+          className={`flex w-full items-center justify-center rounded-lg border border-dashed px-3 py-3 text-xs font-semibold ${
             isDark
               ? 'border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'
-              : 'border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-700'
+              : 'border-pink-200 bg-pink-50/40 text-[#993556] hover:bg-pink-50'
           }`}
         >
           + Adicionar seção
@@ -5150,7 +5238,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                           setSelectorOpen(false);
                         }}
                         className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition ${
-                          isSelected ? 'bg-slate-950 text-white' : 'hover:bg-slate-50'
+                          isSelected ? 'bg-[#EE6FA8] text-white' : 'hover:bg-slate-50'
                         }`}
                       >
                         <span className="min-w-0">
@@ -5160,7 +5248,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                           </span>
                         </span>
                         <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
-                          isSelected ? 'bg-white/15 text-white' : optionHasModel ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'
+                          isSelected ? 'bg-white/15 text-white' : optionHasModel ? 'bg-pink-50 text-[#993556]' : 'bg-slate-100 text-slate-400'
                         }`}>
                           {optionQuestionCount > 0 ? pluralizePt(optionQuestionCount, 'pergunta', 'perguntas') : optionHasModel ? 'modelo' : 'sem modelo'}
                         </span>
@@ -5209,7 +5297,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
                 {pluralizePt(primaryQuestionCount, 'pergunta', 'perguntas')}
               </span>
-              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600">
+              <span className="rounded-full bg-pink-50 px-2.5 py-1 text-[11px] font-bold text-[#993556]">
                 {pluralizePt(subquestionCount, 'subpergunta', 'subperguntas')}
               </span>
               <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
@@ -5225,7 +5313,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
               type="button"
               onClick={saveModel}
               disabled={saving || !selected}
-              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-[#EE6FA8] px-5 text-sm font-semibold text-white shadow-sm hover:bg-[#D9528E] disabled:opacity-60"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar modelo
@@ -5241,22 +5329,11 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
         ) : null}
       </section>
 
-      <div className="flex max-w-full flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
-        {MODEL_EDITOR_STEPS.map(step => (
-          <button
-            key={step.value}
-            type="button"
-            onClick={() => setModelStep(step.value)}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-              modelStep === step.value
-                ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
-                : 'text-slate-500 hover:bg-white/70 hover:text-slate-950'
-            }`}
-          >
-            {step.label}
-          </button>
-        ))}
-      </div>
+      <RecruitmentModernStepTabs
+        steps={MODEL_EDITOR_STEPS}
+        active={modelStep}
+        onChange={setModelStep}
+      />
 
       {modelStep !== 'form' && (
       <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -5516,7 +5593,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
               {pluralizePt(primaryQuestionCount, 'pergunta', 'perguntas')}
             </span>
-            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600">
+            <span className="rounded-full bg-pink-50 px-2.5 py-1 text-[11px] font-bold text-[#993556]">
               {pluralizePt(subquestionCount, 'subpergunta', 'subperguntas')}
             </span>
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
@@ -5539,12 +5616,21 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
           onUpdateQuestionOptions={updateQuestionOptions}
           onMoveQuestion={moveQuestion}
           onRemoveQuestion={(questionId) => setQuestions(prev => prev.filter(item => item.id !== questionId))}
-          onPrepareAddQuestion={(patch) => setDraft(prev => ({
-            ...prev,
-            ...(patch.parentQuestionId ? { text: '', optionsText: '', conditionValue: 'true' as QuestionDraftConditionValue } : {}),
-            sectionTitle: patch.sectionTitle !== undefined ? patch.sectionTitle : prev.sectionTitle,
-            parentQuestionId: patch.parentQuestionId ?? '',
-          }))}
+          onPrepareAddQuestion={(patch) => setDraft(prev => {
+            const parentQuestion = patch.parentQuestionId
+              ? questions.find(question => question.id === patch.parentQuestionId)
+              : undefined;
+            return {
+              ...prev,
+              ...(patch.parentQuestionId ? {
+                text: '',
+                optionsText: '',
+                conditionValue: (parentQuestion?.type === 'yes_no' ? 'true' : 'always') as QuestionDraftConditionValue,
+              } : {}),
+              sectionTitle: patch.sectionTitle !== undefined ? patch.sectionTitle : prev.sectionTitle,
+              parentQuestionId: patch.parentQuestionId ?? '',
+            };
+          })}
           inlineDraft={draft}
           onInlineDraftChange={(patch) => setDraft(prev => ({ ...prev, ...patch }))}
           onInlineDraftAdd={addQuestion}
@@ -5622,7 +5708,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
             <button
               type="button"
               onClick={addQuestion}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 lg:col-span-3"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#EE6FA8] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#D9528E] lg:col-span-3"
             >
               <Plus className="h-4 w-4" /> Adicionar campo
             </button>
@@ -5668,7 +5754,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                         }}
                         className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${
                           isSelected
-                            ? 'border-slate-950 bg-slate-950 text-white'
+                            ? 'border-[#EE6FA8] bg-[#EE6FA8] text-white'
                             : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50'
                         }`}
                       >
@@ -5686,7 +5772,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                           </span>
                         </span>
                         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
-                          isSelected ? 'bg-white/15 text-white' : 'bg-indigo-50 text-indigo-600'
+                          isSelected ? 'bg-white/15 text-white' : 'bg-pink-50 text-[#993556]'
                         }`}>
                           {primaryQuestions > 0 ? pluralizePt(primaryQuestions, 'pergunta', 'perguntas') : 'Informações gerais'}
                         </span>
@@ -5879,25 +5965,10 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   }
 
   const formTabs = (
-    <div className="flex max-w-full flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
-      {([
-        { value: 'talent', label: 'Banco de talentos' },
-        { value: 'models', label: 'Modelos de formulários' },
-      ] as const).map(item => (
-        <button
-          key={item.value}
-          type="button"
-          onClick={() => setFormSection(item.value)}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            formSection === item.value
-              ? 'bg-pink-50 text-pink-700 shadow-sm ring-1 ring-pink-200'
-              : 'text-slate-500 hover:bg-white hover:text-slate-950'
-          }`}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
+    <RecruitmentFormSectionTabs
+      active={formSection}
+      onChange={setFormSection}
+    />
   );
   const talentPrimaryQuestionCount = form.questions.filter(question => !question.parentQuestionId).length;
   const talentSubquestionCount = form.questions.filter(question => question.parentQuestionId).length;
@@ -5941,7 +6012,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
               type="button"
               onClick={saveForm}
               disabled={saving}
-              className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-[#EE6FA8] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#D9528E] disabled:opacity-60"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar alterações
@@ -5957,22 +6028,11 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
         </p>
       ) : null}
 
-      <div className="flex max-w-full flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1">
-        {TALENT_POOL_EDITOR_STEPS.map(step => (
-          <button
-            key={step.value}
-            type="button"
-            onClick={() => setTalentStep(step.value)}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-              talentStep === step.value
-                ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
-                : 'text-slate-500 hover:bg-white/70 hover:text-slate-950'
-            }`}
-          >
-            {step.label}
-          </button>
-        ))}
-      </div>
+      <RecruitmentModernStepTabs
+        steps={TALENT_POOL_EDITOR_STEPS}
+        active={talentStep}
+        onChange={setTalentStep}
+      />
 
       {talentStep === 'general' && (
       <>
@@ -6015,7 +6075,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
               type="button"
               onClick={saveForm}
               disabled={saving}
-              className="hidden h-8 items-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60 md:inline-flex"
+              className="hidden h-8 items-center gap-2 rounded-full bg-[#EE6FA8] px-3 text-xs font-semibold text-white shadow-sm hover:bg-[#D9528E] disabled:opacity-60 md:inline-flex"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
               Salvar alterações
@@ -6124,7 +6184,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
                 {pluralizePt(talentPrimaryQuestionCount, 'pergunta', 'perguntas')}
               </span>
-              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600">
+              <span className="rounded-full bg-pink-50 px-2.5 py-1 text-[11px] font-bold text-[#993556]">
                 {pluralizePt(talentSubquestionCount, 'subpergunta', 'subperguntas')}
               </span>
               <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
@@ -6152,12 +6212,21 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
           onUpdateQuestionOptions={updateQuestionOptions}
           onMoveQuestion={moveQuestion}
           onRemoveQuestion={removeQuestion}
-          onPrepareAddQuestion={(patch) => setQuestionDraft(prev => ({
-            ...prev,
-            ...(patch.parentQuestionId ? { text: '', optionsText: '', conditionValue: 'true' as QuestionDraftConditionValue } : {}),
-            sectionTitle: patch.sectionTitle !== undefined ? patch.sectionTitle : prev.sectionTitle,
-            parentQuestionId: patch.parentQuestionId ?? '',
-          }))}
+          onPrepareAddQuestion={(patch) => setQuestionDraft(prev => {
+            const parentQuestion = patch.parentQuestionId
+              ? form.questions.find(question => question.id === patch.parentQuestionId)
+              : undefined;
+            return {
+              ...prev,
+              ...(patch.parentQuestionId ? {
+                text: '',
+                optionsText: '',
+                conditionValue: (parentQuestion?.type === 'yes_no' ? 'true' : 'always') as QuestionDraftConditionValue,
+              } : {}),
+              sectionTitle: patch.sectionTitle !== undefined ? patch.sectionTitle : prev.sectionTitle,
+              parentQuestionId: patch.parentQuestionId ?? '',
+            };
+          })}
           inlineDraft={questionDraft}
           onInlineDraftChange={(patch) => setQuestionDraft(prev => ({ ...prev, ...patch }))}
           onInlineDraftAdd={addQuestion}
@@ -6239,7 +6308,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
               <button
                 type="button"
                 onClick={addQuestion}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 lg:col-span-3"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#EE6FA8] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#D9528E] lg:col-span-3"
               >
                 <Plus className="h-4 w-4" /> Adicionar campo
               </button>

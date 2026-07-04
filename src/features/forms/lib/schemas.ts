@@ -115,6 +115,9 @@ export const formProjectSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   color: z.string().trim().max(40).optional(),
   icon: z.string().trim().max(100).optional(),
+  source: z.enum(["manual", "unit_auto"]).optional(),
+  unit_id: z.string().trim().max(200).optional(),
+  unit_name_snapshot: z.string().trim().max(300).optional(),
   is_active: z.boolean().default(true),
   members: z
     .array(

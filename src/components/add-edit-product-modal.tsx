@@ -10,11 +10,13 @@ import dynamic from 'next/dynamic';
 
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { getUnitsForCategory, convertValue, formatQuantity, type UnitCategory, unitCategories, packageTypes, type PackageType } from '@/lib/conversion';
 import { type Product } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useClassifications } from '@/hooks/use-classifications';
+import type { NormalizedProductData, ProductLookupResponse, ProductLookupSourceResult } from '@/lib/barcode/product-lookup-types';
 
 
 import { Button } from "@/components/ui/button";
@@ -23,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, Link2, ScanLine } from 'lucide-react';
+import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, Link2, ScanLine, Search, Database, AlertTriangle } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
@@ -46,6 +48,8 @@ const productFormSchema = z.object({
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
   brand: z.string().optional(),
   barcode: z.string().optional(),
+  ncm: z.string().optional(),
+  cest: z.string().optional(),
   imageUrl: z.string().optional(),
   packageType: z.string().min(1, 'O tipo de embalagem é obrigatório.'),
   category: z.enum(unitCategories),
@@ -122,8 +126,17 @@ function normalizeApparelSizeOption(value?: string | null) {
     return text;
 }
 
+function lookupSourceLabel(source: ProductLookupSourceResult['fonte']) {
+    if (source === 'internal') return 'Base interna';
+    if (source === 'open_food_facts') return 'Open Food Facts';
+    if (source === 'gs1') return 'GS1';
+    if (source === 'brazilian_commercial') return 'API brasileira';
+    return 'Cache';
+}
+
 export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
+    const { firebaseUser } = useAuth();
     const { baseProducts } = useBaseProducts();
     const { classifications } = useClassifications();
     const { activeCategories } = useOperationalItemCategories();
@@ -138,6 +151,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const [aliases, setAliases] = useState<string[]>([]);
     const [aliasInput, setAliasInput] = useState('');
     const [currentStep, setCurrentStep] = useState(1);
+    const [barcodeLookup, setBarcodeLookup] = useState<ProductLookupResponse | null>(null);
+    const [selectedLookupProduct, setSelectedLookupProduct] = useState<NormalizedProductData | null>(null);
+    const [barcodeLookupLoading, setBarcodeLookupLoading] = useState(false);
+    const [barcodeLookupError, setBarcodeLookupError] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const instructionFileInputRef = useRef<HTMLInputElement>(null);
     const nutritionalTableFileInputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +165,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         resolver: zodResolver(productFormSchema),
         defaultValues: {
             baseName: '', brand: '', barcode: '', imageUrl: '',
+            ncm: '', cest: '',
             packageType: '',
             category: 'Massa', packageSize: undefined, unit: 'g',
             notes: '', baseProductId: '',
@@ -259,6 +278,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     baseName: productToEdit.baseName,
                     brand: productToEdit.brand || '',
                     barcode: productToEdit.barcode || '',
+                    ncm: productToEdit.ncm || '',
+                    cest: productToEdit.cest || '',
                     imageUrl: productToEdit.imageUrl || '',
                     packageType: productToEdit.packageType || '',
                     category: productToEdit.category,
@@ -285,6 +306,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             } else {
                 form.reset({
                     baseName: '', brand: '', barcode: '', imageUrl: '',
+                    ncm: '', cest: '',
                     packageType: '',
                     category: 'Massa', packageSize: undefined, unit: 'g',
                     notes: '', baseProductId: '',
@@ -298,6 +320,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                 setAliases([]);
             }
             setAliasInput('');
+            setBarcodeLookup(null);
+            setSelectedLookupProduct(null);
+            setBarcodeLookupError(null);
         }
     }, [open, productToEdit, form]);
 
@@ -311,6 +336,69 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const handleScanSuccess = (decodedText: string) => {
         form.setValue('barcode', decodedText, { shouldValidate: true });
         setIsScannerOpen(false);
+    };
+
+    const applyLookupProduct = (product: NormalizedProductData) => {
+        const defaultOperationalCategory = activeCategories.find((category) =>
+            category.slug === 'insumo' || category.name.toLowerCase() === 'insumo'
+        );
+        setSelectedLookupProduct(product);
+        form.setValue('baseName', product.nome || '', { shouldDirty: true, shouldValidate: true });
+        form.setValue('brand', product.marca || '', { shouldDirty: true });
+        form.setValue('barcode', product.codigo_barras || product.gtin || '', { shouldDirty: true, shouldValidate: true });
+        form.setValue('imageUrl', product.imagem_url || '', { shouldDirty: true });
+        form.setValue('ncm', product.ncm || '', { shouldDirty: true });
+        form.setValue('cest', product.cest || '', { shouldDirty: true });
+        if (product.unitCategory) form.setValue('category', product.unitCategory, { shouldDirty: true, shouldValidate: true });
+        if (product.quantidade) form.setValue('packageSize', product.quantidade, { shouldDirty: true, shouldValidate: true });
+        if (product.unidade_medida) form.setValue('unit', product.unidade_medida, { shouldDirty: true, shouldValidate: true });
+        if (!form.getValues('packageType')) form.setValue('packageType', 'Unidade', { shouldDirty: true, shouldValidate: true });
+        if (!form.getValues('operationalCategoryId') && defaultOperationalCategory) {
+            form.setValue('operationalCategoryId', defaultOperationalCategory.id, { shouldDirty: true, shouldValidate: true });
+        }
+
+        const lookupNotes = [
+            `Dados preenchidos por lookup de codigo de barras. Fonte: ${product.origem_dados}. Confianca: ${Math.round(product.confianca * 100)}%.`,
+            product.categoria ? `Categoria externa: ${product.categoria}.` : null,
+            product.ingredientes ? `Ingredientes: ${product.ingredientes}` : null,
+        ].filter(Boolean).join('\n');
+        const currentNotes = form.getValues('notes')?.trim();
+        if (lookupNotes && !currentNotes?.includes('Dados preenchidos por lookup de codigo de barras')) {
+            form.setValue('notes', [currentNotes, lookupNotes].filter(Boolean).join('\n\n'), { shouldDirty: true });
+        }
+    };
+
+    const handleBarcodeLookup = async () => {
+        const barcode = form.getValues('barcode')?.trim();
+        setBarcodeLookupError(null);
+        if (!barcode) {
+            setBarcodeLookupError('Informe ou escaneie um codigo de barras antes de consultar.');
+            return;
+        }
+        if (!firebaseUser) {
+            setBarcodeLookupError('Usuario nao autenticado.');
+            return;
+        }
+
+        setBarcodeLookupLoading(true);
+        try {
+            const token = await firebaseUser.getIdToken();
+            const response = await fetch(`/api/products/barcode/${encodeURIComponent(barcode)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || payload.mensagem || 'Falha ao consultar codigo de barras.');
+            const lookup = payload as ProductLookupResponse;
+            setBarcodeLookup(lookup);
+            if (lookup.produto) applyLookupProduct(lookup.produto);
+            if (!lookup.found) setBarcodeLookupError(lookup.mensagem || 'Produto não encontrado nas bases consultadas.');
+        } catch (error) {
+            setBarcodeLookup(null);
+            setSelectedLookupProduct(null);
+            setBarcodeLookupError(error instanceof Error ? error.message : 'Falha ao consultar codigo de barras.');
+        } finally {
+            setBarcodeLookupLoading(false);
+        }
     };
 
     /** Redimensiona e comprime um data URL para caber no limite do Firestore (1MB/doc). */
@@ -360,7 +448,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
     };
 
-    const onSubmit = (values: ProductFormValues) => {
+    const onSubmit = async (values: ProductFormValues) => {
 
 
         const productData: Omit<Product, 'id'> = {
@@ -370,7 +458,30 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             baseName: values.baseName,
             brand: values.brand,
             barcode: values.barcode,
+            gtin: values.barcode,
             imageUrl: values.imageUrl,
+            description: selectedLookupProduct?.descricao,
+            externalCategory: selectedLookupProduct?.categoria,
+            ingredients: selectedLookupProduct?.ingredientes,
+            nutritionFacts: selectedLookupProduct?.informacoes_nutricionais,
+            ncm: values.ncm,
+            cest: values.cest,
+            dataSource: selectedLookupProduct?.origem_dados,
+            confidence: selectedLookupProduct?.confianca,
+            lastBarcodeLookupAt: selectedLookupProduct?.data_consulta,
+            codigo_barras: values.barcode,
+            nome: values.baseName,
+            marca: values.brand,
+            descricao: selectedLookupProduct?.descricao,
+            categoria_id: values.operationalCategoryId,
+            quantidade: values.packageSize,
+            unidade_medida: values.unit,
+            imagem_url: values.imageUrl,
+            ingredientes: selectedLookupProduct?.ingredientes,
+            informacoes_nutricionais: selectedLookupProduct?.informacoes_nutricionais,
+            origem_dados: selectedLookupProduct?.origem_dados,
+            confianca: selectedLookupProduct?.confianca,
+            data_consulta: selectedLookupProduct?.data_consulta,
             packageType: values.packageType as PackageType,
             category: values.category,
             packageSize: values.packageSize,
@@ -395,12 +506,51 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             aliases: aliases.length > 0 ? aliases : undefined,
         };
 
-        if (productToEdit) {
-            updateProduct({ ...productToEdit, ...productData });
-        } else {
-            addProduct(productData);
+        setIsSaving(true);
+        try {
+            if (productToEdit) {
+                await updateProduct({ ...productToEdit, ...productData });
+            } else if (barcodeLookup?.internalProduct?.id) {
+                if (!firebaseUser) throw new Error('Usuario nao autenticado.');
+                const token = await firebaseUser.getIdToken();
+                const response = await fetch(`/api/products/${barcodeLookup.internalProduct.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify(productData),
+                });
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw new Error(payload.error || 'Falha ao atualizar produto existente.');
+                }
+            } else if (selectedLookupProduct || barcodeLookup?.sources?.length) {
+                if (!firebaseUser) throw new Error('Usuario nao autenticado.');
+                const token = await firebaseUser.getIdToken();
+                const response = await fetch('/api/products', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({
+                        product: productData,
+                        lookupProduct: selectedLookupProduct ?? undefined,
+                        sources: barcodeLookup?.sources ?? [],
+                    }),
+                });
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw new Error(payload.error || 'Falha ao salvar produto.');
+                }
+            } else {
+                await addProduct(productData);
+            }
+            onOpenChange(false);
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Falha ao salvar produto',
+                description: error instanceof Error ? error.message : 'Tente novamente.',
+            });
+        } finally {
+            setIsSaving(false);
         }
-        onOpenChange(false);
     };
 
     const fieldStep: Partial<Record<keyof ProductFormValues, number>> = {
@@ -582,16 +732,94 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     <FormItem>
                                                         <div className="flex items-center justify-between">
                                                             <FormLabel>Código de barras</FormLabel>
-                                                            <span className="text-xs text-muted-foreground">EAN-13 / GTIN</span>
+                                                            <span className="text-xs text-muted-foreground">EAN-8 / EAN-13 / UPC / GTIN</span>
                                                         </div>
                                                         <div className="flex gap-2">
                                                             <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
                                                             <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><ScanLine className="h-4 w-4" /></Button>
+                                                            <Button type="button" variant="outline" onClick={handleBarcodeLookup} disabled={barcodeLookupLoading}>
+                                                                <Search className="mr-1.5 h-4 w-4" />
+                                                                {barcodeLookupLoading ? 'Consultando' : 'Consultar'}
+                                                            </Button>
                                                         </div>
+                                                        {barcodeLookupError ? <p className="text-xs text-destructive">{barcodeLookupError}</p> : null}
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}/>
                                             </div>
+
+                                            {barcodeLookup && (
+                                                <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                                        <div>
+                                                            <p className="flex items-center gap-1.5 text-sm font-semibold">
+                                                                <Database className="h-4 w-4" />
+                                                                Resultado da consulta
+                                                            </p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {barcodeLookup.cacheHit ? 'Usando cache recente.' : 'Fontes consultadas em tempo real ou configuradas.'}
+                                                            </p>
+                                                        </div>
+                                                        {barcodeLookup.internalProduct ? (
+                                                            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                                                                Produto já cadastrado
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+
+                                                    {barcodeLookup.conflitos.length > 0 ? (
+                                                        <Alert>
+                                                            <AlertTriangle className="h-4 w-4" />
+                                                            <AlertTitle>Diferenças entre fontes</AlertTitle>
+                                                            <AlertDescription>
+                                                                Revise os campos destacados abaixo e aplique a fonte que preferir antes de salvar.
+                                                            </AlertDescription>
+                                                        </Alert>
+                                                    ) : null}
+
+                                                    <div className="grid gap-2 md:grid-cols-2">
+                                                        {barcodeLookup.sources.map((source, index) => (
+                                                            <div key={`${source.fonte}-${source.status}-${index}`} className="rounded-lg border bg-background p-3">
+                                                                <div className="mb-2 flex items-center justify-between gap-2">
+                                                                    <span className="text-sm font-semibold">{lookupSourceLabel(source.fonte)}</span>
+                                                                    <span className={cn(
+                                                                        'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase',
+                                                                        source.status === 'found' ? 'bg-emerald-100 text-emerald-700' :
+                                                                            source.status === 'error' ? 'bg-rose-100 text-rose-700' :
+                                                                                source.status === 'skipped' ? 'bg-zinc-100 text-zinc-600' :
+                                                                                    'bg-amber-100 text-amber-700',
+                                                                    )}>
+                                                                        {source.status === 'found' ? 'encontrado' : source.status === 'skipped' ? 'não configurado' : source.status === 'error' ? 'erro' : 'não encontrado'}
+                                                                    </span>
+                                                                </div>
+                                                                {source.dados ? (
+                                                                    <div className="space-y-1 text-xs text-muted-foreground">
+                                                                        <p className="line-clamp-1 font-medium text-foreground">{source.dados.nome}</p>
+                                                                        {source.dados.marca ? <p>Marca: {source.dados.marca}</p> : null}
+                                                                        {source.dados.ncm ? <p>NCM: {source.dados.ncm}</p> : null}
+                                                                        <Button type="button" variant="outline" size="sm" className="mt-2 h-8" onClick={() => applyLookupProduct(source.dados!)}>
+                                                                            Aplicar esta fonte
+                                                                        </Button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-xs text-muted-foreground">{source.mensagem || 'Sem dados para aplicar.'}</p>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    {barcodeLookup.conflitos.length > 0 ? (
+                                                        <div className="space-y-1 text-xs text-muted-foreground">
+                                                            {barcodeLookup.conflitos.slice(0, 4).map((conflict) => (
+                                                                <p key={conflict.campo}>
+                                                                    <span className="font-semibold text-foreground">{conflict.campo}:</span>{' '}
+                                                                    {conflict.valores.map((value) => `${lookupSourceLabel(value.fonte)} = ${String(value.valor)}`).join(' | ')}
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            )}
 
                                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                                 <FormField control={form.control} name="operationalCategoryId" render={({ field }) => (
@@ -657,6 +885,23 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     )} />
                                                 </div>
                                             )}
+
+                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                <FormField control={form.control} name="ncm" render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>NCM</FormLabel>
+                                                        <FormControl><Input placeholder="ex: 19019020" {...field} value={field.value ?? ''} /></FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}/>
+                                                <FormField control={form.control} name="cest" render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>CEST</FormLabel>
+                                                        <FormControl><Input placeholder="ex: 17.089.00" {...field} value={field.value ?? ''} /></FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}/>
+                                            </div>
 
                                             {activeCategories.length === 0 && (
                                                 <Alert>
@@ -1045,7 +1290,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                 {currentStepPosition < wizardSteps.length - 1 ? (
                                     <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
                                 ) : (
-                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600">{productToEdit ? 'Salvar alterações' : 'Adicionar insumo'}</Button>
+                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600" disabled={isSaving}>
+                                        {isSaving ? 'Salvando' : productToEdit ? 'Salvar alterações' : 'Adicionar insumo'}
+                                    </Button>
                                 )}
                             </div>
                         </DialogFooter>

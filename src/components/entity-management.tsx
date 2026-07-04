@@ -2,17 +2,20 @@
 
 "use client"
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEntities } from '@/hooks/use-entities';
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Plus, Trash2, Edit, Building, User, Phone, Mail, MapPin, Search, Eraser, Upload, Check, ChevronLeft, ChevronRight, MapPinned, MoreHorizontal, Tags } from 'lucide-react';
+import { Plus, Trash2, Edit, Building, User, Phone, Mail, MapPin, Search, Eraser, Upload, Check, ChevronLeft, ChevronRight, MapPinned, MoreHorizontal, Tags, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { type Entity } from '@/types';
+import { CnpjValidator } from '@/lib/company/cnpj-validator';
+import type { CompanyLookupResponse, NormalizedCompanyData } from '@/lib/company/company-lookup-types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Skeleton } from './ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -25,6 +28,7 @@ import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 const entitySchema = z.object({
   type: z.enum(['pessoa_fisica', 'pessoa_juridica']),
@@ -47,6 +51,17 @@ const entitySchema = z.object({
   }),
   responsible: z.string().optional(),
   status: z.enum(['active', 'inactive']).optional(),
+  cadastralStatus: z.string().optional(),
+  openingDate: z.string().optional(),
+  legalNature: z.string().optional(),
+  primaryCnaeCode: z.string().optional(),
+  primaryCnaeDescription: z.string().optional(),
+  stateRegistration: z.string().optional(),
+  icmsTaxpayer: z.enum(['sim', 'nao', 'nao_informado']).optional(),
+  stateRegistrationStatus: z.enum(['ativa', 'inativa', 'suspensa', 'baixada', 'nao_consultada', 'nao_informado']).optional(),
+  businessType: z.string().optional(),
+  dataSource: z.enum(['internal', 'brasilapi', 'viacep', 'cache', 'manual', 'sintegra']).optional(),
+  lastCnpjLookupAt: z.string().optional(),
   rg: z.string().optional(),
   birthDate: z.string().optional(),
   notes: z.string().optional(),
@@ -85,6 +100,17 @@ const emptyEntityFormValues: EntityFormValues = {
     contact: { phone: '', email: '' },
     responsible: '',
     status: 'active',
+    cadastralStatus: '',
+    openingDate: '',
+    legalNature: '',
+    primaryCnaeCode: '',
+    primaryCnaeDescription: '',
+    stateRegistration: '',
+    icmsTaxpayer: 'nao_informado',
+    stateRegistrationStatus: 'nao_consultada',
+    businessType: '',
+    dataSource: 'manual',
+    lastCnpjLookupAt: '',
     rg: '',
     birthDate: '',
     notes: '',
@@ -129,10 +155,118 @@ function getEntityFormValues(entity: Entity | null): EntityFormValues {
         },
         responsible: entity.responsible ?? '',
         status: entity.status ?? 'active',
+        cadastralStatus: entity.situacao_cadastral ?? '',
+        openingDate: entity.data_abertura ?? '',
+        legalNature: entity.natureza_juridica ?? '',
+        primaryCnaeCode: entity.cnae_principal_codigo ?? '',
+        primaryCnaeDescription: entity.cnae_principal_descricao ?? '',
+        stateRegistration: entity.inscricao_estadual ?? '',
+        icmsTaxpayer: entity.contribuinte_icms ?? 'nao_informado',
+        stateRegistrationStatus: entity.situacao_inscricao_estadual ?? 'nao_consultada',
+        businessType: entity.tipo_empresa ?? '',
+        dataSource: entity.origem_dados ?? 'manual',
+        lastCnpjLookupAt: entity.data_ultima_consulta_cnpj ?? '',
         rg: entity.rg ?? '',
         birthDate: entity.birthDate ?? '',
         notes: entity.notes ?? '',
         imageUrl: entity.imageUrl ?? '',
+    };
+}
+
+function maskCnpjInput(value: string) {
+    const digits = CnpjValidator.clean(value).slice(0, 14);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+    if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+    return CnpjValidator.format(digits);
+}
+
+function companyFromForm(values: EntityFormValues, fallbackSource: NormalizedCompanyData['origem_dados'] = 'manual'): NormalizedCompanyData {
+    const cnpj = CnpjValidator.clean(values.document ?? '');
+    return {
+        cnpj,
+        razao_social: values.name ?? '',
+        nome_fantasia: values.fantasyName ?? '',
+        situacao_cadastral: values.cadastralStatus ?? '',
+        data_abertura: values.openingDate ?? '',
+        natureza_juridica: values.legalNature ?? '',
+        cnae_principal_codigo: values.primaryCnaeCode ?? '',
+        cnae_principal_descricao: values.primaryCnaeDescription ?? '',
+        cnaes_secundarios: [],
+        inscricao_estadual: values.stateRegistration ?? '',
+        contribuinte_icms: values.icmsTaxpayer ?? 'nao_informado',
+        situacao_inscricao_estadual: values.stateRegistrationStatus ?? 'nao_consultada',
+        cep: values.address?.zipCode ?? '',
+        logradouro: values.address?.street ?? '',
+        numero: values.address?.number ?? '',
+        complemento: values.address?.complement ?? '',
+        bairro: values.address?.neighborhood ?? '',
+        cidade: values.address?.city ?? '',
+        uf: values.address?.state ?? '',
+        telefone: values.contact?.phone ?? '',
+        email: values.contact?.email ?? '',
+        tipo_empresa: values.businessType ?? '',
+        origem_dados: values.dataSource ?? fallbackSource,
+        data_ultima_consulta: values.lastCnpjLookupAt || new Date().toISOString(),
+        observacoes: values.notes ?? '',
+    };
+}
+
+function entityPayloadFromForm(values: EntityFormValues): Omit<Entity, 'id'> & Record<string, unknown> {
+    const cnpj = CnpjValidator.clean(values.document ?? '');
+    const document = values.type === 'pessoa_juridica' && cnpj.length === 14 ? CnpjValidator.format(cnpj) : values.document;
+
+    return {
+        type: values.type,
+        name: values.name,
+        fantasyName: values.fantasyName,
+        nickname: values.nickname,
+        document,
+        address: {
+            street: values.address?.street ?? '',
+            number: values.address?.number ?? '',
+            complement: values.address?.complement ?? '',
+            neighborhood: values.address?.neighborhood ?? '',
+            city: values.address?.city ?? '',
+            state: values.address?.state ?? '',
+            zipCode: values.address?.zipCode ?? '',
+        },
+        contact: {
+            phone: values.contact?.phone,
+            email: values.contact?.email,
+        },
+        responsible: values.responsible,
+        status: values.status ?? 'active',
+        rg: values.type === 'pessoa_fisica' ? values.rg : undefined,
+        birthDate: values.type === 'pessoa_fisica' ? values.birthDate : undefined,
+        notes: values.notes,
+        imageUrl: values.imageUrl,
+        cnpj: values.type === 'pessoa_juridica' ? cnpj : undefined,
+        razao_social: values.type === 'pessoa_juridica' ? values.name : undefined,
+        nome_fantasia: values.type === 'pessoa_juridica' ? values.fantasyName : undefined,
+        situacao_cadastral: values.cadastralStatus,
+        data_abertura: values.openingDate,
+        natureza_juridica: values.legalNature,
+        cnae_principal_codigo: values.primaryCnaeCode,
+        cnae_principal_descricao: values.primaryCnaeDescription,
+        cnaes_secundarios_json: [],
+        inscricao_estadual: values.stateRegistration,
+        contribuinte_icms: values.icmsTaxpayer ?? 'nao_informado',
+        situacao_inscricao_estadual: values.stateRegistrationStatus ?? 'nao_consultada',
+        cep: values.address?.zipCode ?? '',
+        logradouro: values.address?.street ?? '',
+        numero: values.address?.number ?? '',
+        complemento: values.address?.complement ?? '',
+        bairro: values.address?.neighborhood ?? '',
+        cidade: values.address?.city ?? '',
+        uf: values.address?.state ?? '',
+        telefone: values.contact?.phone ?? '',
+        email: values.contact?.email ?? '',
+        tipo_empresa: values.businessType,
+        origem_dados: values.dataSource ?? 'manual',
+        data_ultima_consulta_cnpj: values.lastCnpjLookupAt,
+        observacoes: values.notes,
     };
 }
 
@@ -159,9 +293,16 @@ const ENTITY_WIZARD_STEPS = [
 
 function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolean, onOpenChange: (open: boolean) => void, entityToEdit: Entity | null }) {
     const { addEntity, updateEntity } = useEntities();
+    const { firebaseUser } = useAuth();
 
     const [currentStep, setCurrentStep] = useState(1);
     const avatarInputRef = useRef<HTMLInputElement>(null);
+    const [cnpjLookupLoading, setCnpjLookupLoading] = useState(false);
+    const [cnpjLookupMessage, setCnpjLookupMessage] = useState<string | null>(null);
+    const [cnpjLookupResult, setCnpjLookupResult] = useState<CompanyLookupResponse | null>(null);
+    const [loadedCompanyEntityId, setLoadedCompanyEntityId] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const lastAutoLookupCnpjRef = useRef<string>('');
 
     const form = useForm<EntityFormValues>({
         resolver: zodResolver(entitySchema),
@@ -172,12 +313,17 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
         if (!open) return;
         setCurrentStep(1);
         form.reset(getEntityFormValues(entityToEdit));
+        setCnpjLookupMessage(null);
+        setCnpjLookupResult(null);
+        setLoadedCompanyEntityId(entityToEdit?.id ?? null);
+        lastAutoLookupCnpjRef.current = CnpjValidator.clean(entityToEdit?.document ?? '');
     }, [entityToEdit, form, open]);
 
     const entityType = form.watch('type');
     const statusWatch = form.watch('status') ?? 'active';
     const nameWatch = form.watch('name');
     const documentWatch = form.watch('document');
+    const cleanCnpjWatch = entityType === 'pessoa_juridica' ? CnpjValidator.clean(documentWatch ?? '') : '';
     const imageUrlWatch = form.watch('imageUrl');
     const isPF = entityType === 'pessoa_fisica';
     const initials = (nameWatch || '')
@@ -212,56 +358,159 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
         const numericZipCode = zipCode.replace(/\D/g, '');
         if(numericZipCode.length !== 8) return;
         try {
-            const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${numericZipCode}`);
+            const res = await fetch(`https://viacep.com.br/ws/${numericZipCode}/json/`);
             if (!res.ok) {
                 throw new Error('Falha ao buscar CEP');
             }
             const data = await res.json();
             if(!data.erro) {
-                form.setValue('address.street', data.street);
-                form.setValue('address.neighborhood', data.neighborhood);
-                form.setValue('address.city', data.city);
-                form.setValue('address.state', data.state);
+                form.setValue('address.street', data.logradouro ?? '');
+                form.setValue('address.neighborhood', data.bairro ?? '');
+                form.setValue('address.city', data.localidade ?? '');
+                form.setValue('address.state', data.uf ?? '');
             }
         } catch (error) {
             console.error("Failed to fetch address from CEP", error);
         }
     };
 
-    const onSubmit = (values: EntityFormValues) => {
-        const payload: Omit<Entity, 'id'> = {
-            type: values.type,
-            name: values.name,
-            fantasyName: values.fantasyName,
-            nickname: values.nickname,
-            document: values.document,
-            address: {
-                street: values.address?.street ?? '',
-                number: values.address?.number ?? '',
-                complement: values.address?.complement ?? '',
-                neighborhood: values.address?.neighborhood ?? '',
-                city: values.address?.city ?? '',
-                state: values.address?.state ?? '',
-                zipCode: values.address?.zipCode ?? '',
-            },
-            contact: {
-                phone: values.contact?.phone,
-                email: values.contact?.email,
-            },
-            responsible: values.responsible,
-            status: values.status ?? 'active',
-            rg: values.type === 'pessoa_fisica' ? values.rg : undefined,
-            birthDate: values.type === 'pessoa_fisica' ? values.birthDate : undefined,
-            notes: values.notes,
-            imageUrl: values.imageUrl,
-        };
+    const applyCompanyLookup = useCallback((payload: CompanyLookupResponse) => {
+        const company = payload.company;
+        if (!company) return;
 
-        if (entityToEdit) {
-            updateEntity({ ...entityToEdit, ...payload });
-        } else {
-            addEntity(payload);
+        form.setValue('type', 'pessoa_juridica', { shouldDirty: true });
+        form.setValue('document', CnpjValidator.format(company.cnpj), { shouldDirty: true });
+        form.setValue('name', company.razao_social, { shouldDirty: true });
+        form.setValue('fantasyName', company.nome_fantasia || company.razao_social, { shouldDirty: true });
+        form.setValue('nickname', company.nome_fantasia || company.razao_social, { shouldDirty: true });
+        form.setValue('cadastralStatus', company.situacao_cadastral, { shouldDirty: true });
+        form.setValue('openingDate', company.data_abertura, { shouldDirty: true });
+        form.setValue('legalNature', company.natureza_juridica, { shouldDirty: true });
+        form.setValue('primaryCnaeCode', company.cnae_principal_codigo, { shouldDirty: true });
+        form.setValue('primaryCnaeDescription', company.cnae_principal_descricao, { shouldDirty: true });
+        form.setValue('stateRegistration', company.inscricao_estadual, { shouldDirty: true });
+        form.setValue('icmsTaxpayer', company.contribuinte_icms, { shouldDirty: true });
+        form.setValue('stateRegistrationStatus', company.situacao_inscricao_estadual, { shouldDirty: true });
+        form.setValue('businessType', company.tipo_empresa, { shouldDirty: true });
+        form.setValue('dataSource', company.origem_dados, { shouldDirty: true });
+        form.setValue('lastCnpjLookupAt', company.data_ultima_consulta, { shouldDirty: true });
+        form.setValue('address.zipCode', company.cep, { shouldDirty: true });
+        form.setValue('address.street', company.logradouro, { shouldDirty: true });
+        form.setValue('address.number', company.numero, { shouldDirty: true });
+        form.setValue('address.complement', company.complemento, { shouldDirty: true });
+        form.setValue('address.neighborhood', company.bairro, { shouldDirty: true });
+        form.setValue('address.city', company.cidade, { shouldDirty: true });
+        form.setValue('address.state', company.uf, { shouldDirty: true });
+        form.setValue('contact.phone', company.telefone, { shouldDirty: true });
+        form.setValue('contact.email', company.email, { shouldDirty: true });
+        form.setValue('status', /baixad|inapt|suspens|inativa/i.test(company.situacao_cadastral) ? 'inactive' : 'active', { shouldDirty: true });
+        if (company.observacoes) form.setValue('notes', company.observacoes, { shouldDirty: true });
+
+        setLoadedCompanyEntityId(payload.entity?.id ?? company.id ?? null);
+    }, [form]);
+
+    const handleCnpjLookup = useCallback(async (options: { forceRefresh?: boolean; silentInvalid?: boolean } = {}) => {
+        const document = form.getValues('document')?.trim();
+        const validation = CnpjValidator.validate(document ?? '');
+        setCnpjLookupMessage(null);
+        if (!document) {
+            if (!options.silentInvalid) setCnpjLookupMessage('Informe o CNPJ antes de buscar.');
+            return;
         }
-        onOpenChange(false);
+
+        if (!validation.valid) {
+            if (!options.silentInvalid || validation.clean.length === 14) {
+                setCnpjLookupMessage(validation.message ?? 'CNPJ inválido. Verifique os números informados.');
+            }
+            return;
+        }
+
+        if (!firebaseUser) {
+            setCnpjLookupMessage('Usuário não autenticado.');
+            return;
+        }
+
+        setCnpjLookupLoading(true);
+        try {
+            const token = await firebaseUser.getIdToken();
+            const endpoint = options.forceRefresh
+                ? `/api/companies/cnpj/${encodeURIComponent(validation.clean)}/refresh`
+                : `/api/companies/cnpj/${encodeURIComponent(validation.clean)}`;
+            const response = await fetch(endpoint, {
+                method: options.forceRefresh ? 'POST' : 'GET',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.message || payload.error || 'Falha ao consultar CNPJ.');
+
+            const lookup = payload as CompanyLookupResponse;
+            setCnpjLookupResult(lookup);
+            applyCompanyLookup(lookup);
+            lastAutoLookupCnpjRef.current = validation.clean;
+            setCnpjLookupMessage(lookup.message);
+        } catch (error) {
+            setCnpjLookupMessage(error instanceof Error ? error.message : 'Falha ao consultar CNPJ.');
+        } finally {
+            setCnpjLookupLoading(false);
+        }
+    }, [applyCompanyLookup, firebaseUser, form]);
+
+    useEffect(() => {
+        if (!open || entityType !== 'pessoa_juridica') return;
+        if (cleanCnpjWatch.length !== 14) return;
+        if (cleanCnpjWatch === lastAutoLookupCnpjRef.current) return;
+
+        const timeout = window.setTimeout(() => {
+            void handleCnpjLookup({ silentInvalid: true });
+        }, 650);
+
+        return () => window.clearTimeout(timeout);
+    }, [cleanCnpjWatch, entityType, handleCnpjLookup, open]);
+
+    const onSubmit = async (values: EntityFormValues) => {
+        const payload = entityPayloadFromForm(values);
+        setSaving(true);
+        setCnpjLookupMessage(null);
+
+        try {
+            if (values.type === 'pessoa_juridica') {
+                if (!firebaseUser) throw new Error('Usuário não autenticado.');
+                if (/baixad|inapt|suspens/i.test(values.cadastralStatus ?? '')) {
+                    const confirmed = window.confirm('A situação cadastral desta empresa exige atenção antes do cadastro. Deseja salvar mesmo assim?');
+                    if (!confirmed) return;
+                }
+                const token = await firebaseUser.getIdToken();
+                const targetId = entityToEdit?.id ?? loadedCompanyEntityId;
+                const company = companyFromForm(values, cnpjLookupResult?.company?.origem_dados ?? cnpjLookupResult?.source ?? 'manual');
+                const response = await fetch(targetId ? `/api/companies/${targetId}` : '/api/companies', {
+                    method: targetId ? 'PUT' : 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(
+                        targetId
+                            ? { entity: payload }
+                            : {
+                                company,
+                                entity: payload,
+                                sourceResults: cnpjLookupResult?.sources ?? [],
+                            },
+                    ),
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(result.error || 'Falha ao salvar empresa.');
+            } else if (entityToEdit) {
+                await updateEntity({ ...entityToEdit, ...payload });
+            } else {
+                await addEntity(payload);
+            }
+            onOpenChange(false);
+        } catch (error) {
+            setCnpjLookupMessage(error instanceof Error ? error.message : 'Falha ao salvar cadastro.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -402,12 +651,111 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                             ) : (
                                                 <>
                                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                        <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CNPJ <span className="text-rose-500">*</span></FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                                        <FormField control={form.control} name="document" render={({ field }) => (
+                                                            <FormItem>
+                                                                <FormLabel>CNPJ <span className="text-rose-500">*</span></FormLabel>
+                                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
+                                                                    <FormControl>
+                                                                        <Input
+                                                                            {...field}
+                                                                            inputMode="numeric"
+                                                                            placeholder="00.000.000/0000-00"
+                                                                            value={field.value ?? ''}
+                                                                            onChange={(event) => field.onChange(maskCnpjInput(event.target.value))}
+                                                                            onBlur={(event) => {
+                                                                                field.onBlur();
+                                                                                if (CnpjValidator.clean(event.target.value).length === 14) {
+                                                                                    void handleCnpjLookup({ silentInvalid: true });
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    </FormControl>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        className="shrink-0"
+                                                                        onClick={() => void handleCnpjLookup()}
+                                                                        disabled={cnpjLookupLoading}
+                                                                    >
+                                                                        {cnpjLookupLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
+                                                                        Consultar
+                                                                    </Button>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        className="shrink-0"
+                                                                        onClick={() => void handleCnpjLookup({ forceRefresh: true })}
+                                                                        disabled={cnpjLookupLoading || cleanCnpjWatch.length !== 14}
+                                                                    >
+                                                                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                                                                        Atualizar
+                                                                    </Button>
+                                                                </div>
+                                                                {cnpjLookupLoading ? <p className="text-xs text-muted-foreground">Buscando dados da empresa...</p> : null}
+                                                                {cnpjLookupMessage ? <p className="text-xs text-muted-foreground">{cnpjLookupMessage}</p> : null}
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}/>
                                                         <FormField control={form.control} name="fantasyName" render={({ field }) => (<FormItem><FormLabel>Nome fantasia <span className="text-rose-500">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                                     </div>
+                                                    {cnpjLookupResult?.alerts?.length ? (
+                                                        <div className="space-y-2">
+                                                            {cnpjLookupResult.alerts.map((alert, index) => (
+                                                                <Alert key={`${alert.message}-${index}`} variant={alert.type === 'error' ? 'destructive' : 'default'} className={cn(alert.type === 'warning' && 'border-amber-200 bg-amber-50 text-amber-900')}>
+                                                                    <AlertTriangle className="h-4 w-4" />
+                                                                    <AlertTitle>{alert.type === 'warning' ? 'Atenção' : alert.type === 'error' ? 'Erro' : 'Informação'}</AlertTitle>
+                                                                    <AlertDescription>{alert.message}</AlertDescription>
+                                                                </Alert>
+                                                            ))}
+                                                        </div>
+                                                    ) : null}
                                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                                         <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Responsável</FormLabel><span className="text-xs text-muted-foreground">opcional</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                                         <FormField control={form.control} name="nickname" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Apelido</FormLabel><span className="text-xs text-muted-foreground">busca interna</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                                        <FormField control={form.control} name="cadastralStatus" render={({ field }) => (<FormItem><FormLabel>Situação cadastral</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                        <FormField control={form.control} name="openingDate" render={({ field }) => (<FormItem><FormLabel>Data de abertura</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                        <FormField control={form.control} name="businessType" render={({ field }) => (<FormItem><FormLabel>Tipo de fornecedor</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Fornecedor, cliente, serviço..." /></FormControl><FormMessage /></FormItem>)}/>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_2fr]">
+                                                        <FormField control={form.control} name="primaryCnaeCode" render={({ field }) => (<FormItem><FormLabel>CNAE principal</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                        <FormField control={form.control} name="primaryCnaeDescription" render={({ field }) => (<FormItem><FormLabel>Descrição do CNAE</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                    </div>
+                                                    <FormField control={form.control} name="legalNature" render={({ field }) => (<FormItem><FormLabel>Natureza jurídica</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                                        <FormField control={form.control} name="stateRegistration" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Inscrição estadual</FormLabel><span className="text-xs text-muted-foreground">opcional</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                        <FormField control={form.control} name="icmsTaxpayer" render={({ field }) => (
+                                                            <FormItem>
+                                                                <FormLabel>Contribuinte ICMS</FormLabel>
+                                                                <Select onValueChange={field.onChange} value={field.value ?? 'nao_informado'}>
+                                                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="nao_informado">Não informado</SelectItem>
+                                                                        <SelectItem value="sim">Sim</SelectItem>
+                                                                        <SelectItem value="nao">Não</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}/>
+                                                        <FormField control={form.control} name="stateRegistrationStatus" render={({ field }) => (
+                                                            <FormItem>
+                                                                <FormLabel>Situação IE</FormLabel>
+                                                                <Select onValueChange={field.onChange} value={field.value ?? 'nao_consultada'}>
+                                                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="nao_consultada">Não consultada</SelectItem>
+                                                                        <SelectItem value="nao_informado">Não informado</SelectItem>
+                                                                        <SelectItem value="ativa">Ativa</SelectItem>
+                                                                        <SelectItem value="inativa">Inativa</SelectItem>
+                                                                        <SelectItem value="suspensa">Suspensa</SelectItem>
+                                                                        <SelectItem value="baixada">Baixada</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )}/>
                                                     </div>
                                                 </>
                                             )}
@@ -464,7 +812,10 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                 {currentStep < ENTITY_WIZARD_STEPS.length ? (
                                     <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
                                 ) : (
-                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600">{entityToEdit ? 'Salvar alterações' : 'Adicionar'}</Button>
+                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600" disabled={saving}>
+                                        {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                                        {entityToEdit || loadedCompanyEntityId ? 'Salvar alterações' : 'Adicionar'}
+                                    </Button>
                                 )}
                             </div>
                         </DialogFooter>

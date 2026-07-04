@@ -2564,18 +2564,40 @@ export interface EmployeeGoal {
 export type DPUnit = {
   id: string;
   name: string;
+  organizationId?: string;
   groupId?: string;
+  externalSource?: 'manual' | 'kiosk' | 'pdvlegal' | 'bizneo';
+  externalId?: string;
+  pdvFilialId?: string;
   bizneoTaxonId?: number; // ID do taxon (local) no Bizneo
   auditChecklistThreshold?: number;
   createdAt: Timestamp;
 };
 
+export type DPUnitResponsibilitySource = 'job_role' | 'job_function';
+
+export type DPUnitResponsibility = {
+  responsibleSourceType?: DPUnitResponsibilitySource;
+  responsibleSourceId?: string;
+  responsibleSourceName?: string;
+  responsibleUserId?: string;
+  responsibleUserName?: string;
+};
+
+export type DPUnitOrganization = {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: Timestamp;
+} & DPUnitResponsibility;
+
 export type DPUnitGroup = {
   id: string;
   name: string;
+  organizationId?: string;
   unitCount?: number;
   createdAt: Timestamp;
-};
+} & DPUnitResponsibility;
 
 export type DPShiftDefinition = {
   id: string;

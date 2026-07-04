@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type {
   FormExecution,
   FormAssignment,
@@ -9,6 +11,7 @@ import type {
   FormType,
 } from "@/types/forms";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
+import { dbAdmin } from "@/lib/firebase-admin";
 
 export function serializeFormValue(value: unknown): unknown {
   if (value === null || value === undefined) return value;
@@ -35,6 +38,142 @@ function collectionWithWorkspace(collectionName: string, workspaceId: string) {
   return checklistDbAdmin
     .collection(collectionName)
     .where("workspace_id", "==", workspaceId);
+}
+
+type UnitProjectSeed = {
+  id: string;
+  name: string;
+  groupId?: string;
+  is_active?: boolean;
+};
+
+const UNIT_PROJECT_COLORS = [
+  "#6366f1",
+  "#10b981",
+  "#f59e0b",
+  "#0ea5e9",
+  "#8b5cf6",
+  "#14b8a6",
+];
+
+function unitProjectDocId(unitId: string) {
+  const hash = createHash("sha1").update(unitId).digest("hex").slice(0, 16);
+  return `unit_auto_${hash}`;
+}
+
+function unitProjectName(unit: UnitProjectSeed, groupName?: string) {
+  const unitName = String(unit.name ?? "").trim();
+  const baseName = unitName.toLowerCase().startsWith("unidade ")
+    ? unitName
+    : `Unidade ${unitName}`;
+  return groupName ? `${baseName} | ${groupName}` : baseName;
+}
+
+function colorForUnit(unitId: string) {
+  const hash = createHash("sha1").update(unitId).digest("hex");
+  const index = Number.parseInt(hash.slice(0, 2), 16) % UNIT_PROJECT_COLORS.length;
+  return UNIT_PROJECT_COLORS[index];
+}
+
+export async function ensureUnitFormProjects(workspaceId: string) {
+  const [unitsSnap, groupsSnap, projectsSnap] = await Promise.all([
+    dbAdmin.collection("dp_units").orderBy("name").get(),
+    dbAdmin.collection("dp_unitGroups").get(),
+    collectionWithWorkspace("form_projects", workspaceId).get(),
+  ]);
+
+  const groupNameById = new Map(
+    groupsSnap.docs.map((doc) => [doc.id, String(doc.get("name") ?? "").trim()])
+  );
+  const projects = projectsSnap.docs.map((doc) => ({
+    ref: doc.ref,
+    id: doc.id,
+    data: doc.data(),
+  }));
+  const projectByUnitId = new Map<string, (typeof projects)[number]>();
+  const projectByName = new Map<string, (typeof projects)[number]>();
+
+  projects.forEach((project) => {
+    const unitId = project.data.unit_id;
+    if (typeof unitId === "string" && unitId) {
+      projectByUnitId.set(unitId, project);
+    }
+    const name = String(project.data.name ?? "").trim().toLowerCase();
+    if (name) {
+      projectByName.set(name, project);
+    }
+  });
+
+  const writes: Array<{
+    ref: FirebaseFirestore.DocumentReference;
+    data: Record<string, unknown>;
+  }> = [];
+
+  unitsSnap.docs.forEach((doc) => {
+    const data = doc.data() as Partial<UnitProjectSeed>;
+    const name = typeof data.name === "string" ? data.name.trim() : "";
+    if (!name) return;
+
+    const unit: UnitProjectSeed = {
+      id: doc.id,
+      name,
+      groupId: typeof data.groupId === "string" ? data.groupId : undefined,
+      is_active: data.is_active,
+    };
+    const groupName = unit.groupId ? groupNameById.get(unit.groupId) : undefined;
+    const projectName = unitProjectName(unit, groupName);
+    const existing =
+      projectByUnitId.get(unit.id) ??
+      projectByName.get(projectName.toLowerCase());
+    const now = new Date();
+
+    if (existing) {
+      writes.push({
+        ref: existing.ref,
+        data: {
+          name: projectName,
+          source: "unit_auto",
+          unit_id: unit.id,
+          unit_name_snapshot: name,
+          is_active: unit.is_active === false ? false : true,
+          updated_at: now,
+        },
+      });
+      return;
+    }
+
+    writes.push({
+      ref: checklistDbAdmin.collection("form_projects").doc(unitProjectDocId(unit.id)),
+      data: {
+        workspace_id: workspaceId,
+        name: projectName,
+        description: "Projeto operacional da unidade.",
+        color: colorForUnit(unit.id),
+        icon: "building",
+        source: "unit_auto",
+        unit_id: unit.id,
+        unit_name_snapshot: name,
+        is_active: unit.is_active === false ? false : true,
+        members: [],
+        created_at: now,
+        updated_at: now,
+        created_by: {
+          user_id: "system",
+          username: "Sistema",
+        },
+      },
+    });
+  });
+
+  for (let index = 0; index < writes.length; index += 400) {
+    const batch = checklistDbAdmin.batch();
+    writes.slice(index, index + 400).forEach((write) => {
+      batch.set(write.ref, write.data, { merge: true });
+    });
+    await batch.commit();
+  }
+
+  return { ensured: writes.length };
 }
 
 export async function listFormAssignments(params: {

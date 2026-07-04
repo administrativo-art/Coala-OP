@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Box, ChevronRight, Group, Loader2, Menu, Package, Settings2, SlidersHorizontal, Users2, UsersRound } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
+import { DPRuntimeGuard } from "@/components/dp-runtime-guard";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { ChartLineUp, Storefront, Users, Wallet } from "@phosphor-icons/react";
@@ -109,8 +110,8 @@ const GoalsProvider = dynamic(
   () => import("@/components/goals-provider").then((m) => m.GoalsProvider),
   { ssr: false }
 );
-const KioskManagement = dynamic(
-  () => import("@/components/kiosk-management").then((m) => m.KioskManagement),
+const DPSettingsUnits = dynamic(
+  () => import("@/components/dp/dp-settings-units").then((m) => m.DPSettingsUnits),
   { ssr: false }
 );
 const PdvSyncManagement = dynamic(
@@ -367,6 +368,14 @@ function OperationalFormsPanel() {
   );
 }
 
+function OperationalUnitsPanel() {
+  return (
+    <DPRuntimeGuard area="Unidades">
+      <DPSettingsUnits />
+    </DPRuntimeGuard>
+  );
+}
+
 type NestedTab = {
   value: string;
   label: string;
@@ -517,7 +526,7 @@ export default function SettingsPage() {
       label: "Unidades",
       title: "Unidades",
       description: "Gerencie as unidades operacionais e integrações principais.",
-      content: <KioskManagement compact />,
+      content: <OperationalUnitsPanel />,
     },
     {
       value: "pdv-sync",
