@@ -24,10 +24,14 @@ export type FormsBootstrapPayload = {
     can_configure_analytics_templates: boolean;
     can_reprocess_occurrences: boolean;
     can_manage_retention_policy: boolean;
+    can_resolve_occurrences: boolean;
+    can_validate_occurrence_resolution: boolean;
+    can_view_personal_targets: boolean;
   };
   projects: FormProject[];
   types: FormType[];
   templates: FormTemplate[];
+  template_options?: FormTemplate[];
   executions: FormExecution[];
 };
 
@@ -528,18 +532,58 @@ export async function updateFormSubtype(
   );
 }
 
+export type TemplateValidationIssue = {
+  level: "error" | "warning";
+  item_id: string;
+  field?: string;
+  code: string;
+  message: string;
+};
+
+export class TemplatePublicationError extends Error {
+  constructor(
+    message: string,
+    public readonly issues: TemplateValidationIssue[]
+  ) {
+    super(message);
+    this.name = "TemplatePublicationError";
+  }
+}
+
 export async function updateFormTemplate(
   firebaseUser: FirebaseUserLike,
   templateId: string,
   body: Record<string, unknown>
 ) {
-  return authorizedJsonRequest<{ template: FormTemplate }>(
+  const token = await firebaseUser.getIdToken();
+  const response = await fetchWithTimeout(
     `/api/forms/templates/${templateId}`,
-    firebaseUser,
-    "PATCH",
-    body,
-    "Falha ao atualizar o formulário."
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    },
+    20000
   );
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const issues = (payload?.validation?.issues ??
+      []) as TemplateValidationIssue[];
+    if (issues.length > 0) {
+      throw new TemplatePublicationError(
+        payload?.error || "Configuração analítica inválida.",
+        issues
+      );
+    }
+    throw new Error(payload?.error || "Falha ao atualizar o formulário.");
+  }
+
+  return (await response.json()) as { template: FormTemplate };
 }
 
 export async function fetchFormTemplateApplication(
@@ -629,5 +673,332 @@ export async function deleteFormAsset(
     "PATCH",
     { action: "delete", ...input },
     "Falha ao remover arquivo."
+  );
+}
+
+// ─── Analytics: dashboard, ocorrências e taxonomia ─────────────────────────────
+
+export type AnalyticsDashboardCards = {
+  evaluations: number;
+  non_conformities: number;
+  open_occurrences: number;
+  conformity_rate: number | null;
+};
+
+export type AnalyticsRankingRow = {
+  key: string;
+  label: string;
+  non_conformities: number;
+};
+
+export type AnalyticsOccurrenceRow = {
+  id: string;
+  occurred_at: string;
+  occurred_local_date: string;
+  domain_name_snapshot: string;
+  criterion_name_snapshot?: string;
+  result_name_snapshot: string;
+  severity?: string;
+  target_name_snapshot: string;
+  unit_name_snapshot?: string;
+  resolution_status: string;
+  description?: string;
+  execution_id: string;
+  contains_personal_data: boolean;
+  collaborator_name_snapshot?: string;
+  template_item_id?: string;
+  option_label_snapshot?: string;
+  has_active_task?: boolean;
+  current_primary_task_id?: string;
+  last_task_lifecycle_state?: string;
+  resolved_at?: string;
+  resolution_time_minutes?: number;
+};
+
+export type AnalyticsDashboardFilters = {
+  from?: string;
+  to?: string;
+  domainId?: string;
+  unitId?: string;
+  statusGroup?: "open" | "resolved" | "all";
+};
+
+function analyticsFilterParams(filters: AnalyticsDashboardFilters) {
+  const params = new URLSearchParams();
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  if (filters.domainId && filters.domainId !== "all") {
+    params.set("domain_id", filters.domainId);
+  }
+  if (filters.unitId && filters.unitId !== "all") {
+    params.set("unit_id", filters.unitId);
+  }
+  if (filters.statusGroup && filters.statusGroup !== "all") {
+    params.set("status_group", filters.statusGroup);
+  }
+  return params;
+}
+
+export type AnalyticsExtendedMetrics = {
+  resolved_occurrences: number;
+  overdue_occurrences: number;
+  open_without_task: number;
+  open_with_cancelled_task: number;
+  pending_validation: number;
+  avg_resolution_time_minutes: number | null;
+};
+
+export type AnalyticsRecurrenceRow = {
+  target_identity_key: string;
+  target_name_snapshot: string;
+  occurrences: number;
+};
+
+export type AnalyticsBrandRankingRow = {
+  brand: string;
+  non_conformities: number;
+};
+
+export async function fetchAnalyticsSummary(
+  firebaseUser: FirebaseUserLike,
+  filters: AnalyticsDashboardFilters,
+  options: {
+    groupBy?: "criterion" | "target";
+    extended?: boolean;
+    recurrence?: boolean;
+    brandRanking?: boolean;
+  } = {}
+) {
+  const params = analyticsFilterParams(filters);
+  if (options.groupBy) params.set("group_by", options.groupBy);
+  if (options.extended) params.set("extended", "true");
+  if (options.recurrence) params.set("recurrence", "true");
+  if (options.brandRanking) params.set("brand_ranking", "true");
+  return authorizedGet<{
+    cards: AnalyticsDashboardCards;
+    cards_source: "live" | "daily";
+    ranking: AnalyticsRankingRow[] | null;
+    extended: AnalyticsExtendedMetrics | null;
+    recurrence: AnalyticsRecurrenceRow[] | null;
+    brand_ranking: AnalyticsBrandRankingRow[] | null;
+  }>(
+    `/api/forms/analytics/summary?${params.toString()}`,
+    firebaseUser,
+    "Falha ao carregar indicadores."
+  );
+}
+
+export async function fetchAnalyticsOccurrences(
+  firebaseUser: FirebaseUserLike,
+  filters: AnalyticsDashboardFilters,
+  options: { cursor?: string | null; pageSize?: number } = {}
+) {
+  const params = analyticsFilterParams(filters);
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.pageSize) params.set("page_size", String(options.pageSize));
+  return authorizedGet<{
+    items: AnalyticsOccurrenceRow[];
+    next_cursor: string | null;
+  }>(
+    `/api/forms/analytics/occurrences?${params.toString()}`,
+    firebaseUser,
+    "Falha ao listar ocorrências."
+  );
+}
+
+export async function fetchExecutionOccurrences(
+  firebaseUser: FirebaseUserLike,
+  executionId: string
+) {
+  return authorizedGet<{ items: AnalyticsOccurrenceRow[] }>(
+    `/api/forms/analytics/occurrences?execution_id=${encodeURIComponent(executionId)}`,
+    firebaseUser,
+    "Falha ao carregar ocorrências da execução."
+  );
+}
+
+export async function resolveAnalyticsOccurrence(
+  firebaseUser: FirebaseUserLike,
+  occurrenceId: string,
+  note?: string
+) {
+  return authorizedJsonRequest<{ ok: true }>(
+    `/api/forms/analytics/occurrences/${occurrenceId}/resolve`,
+    firebaseUser,
+    "POST",
+    { note },
+    "Falha ao resolver ocorrência."
+  );
+}
+
+export async function cancelAnalyticsOccurrence(
+  firebaseUser: FirebaseUserLike,
+  occurrenceId: string,
+  reason?: string
+) {
+  return authorizedJsonRequest<{ ok: true }>(
+    `/api/forms/analytics/occurrences/${occurrenceId}/cancel`,
+    firebaseUser,
+    "POST",
+    { reason },
+    "Falha ao cancelar ocorrência."
+  );
+}
+
+export async function validateAnalyticsOccurrence(
+  firebaseUser: FirebaseUserLike,
+  occurrenceId: string
+) {
+  return authorizedJsonRequest<{ ok: true }>(
+    `/api/forms/analytics/occurrences/${occurrenceId}/validate-resolution`,
+    firebaseUser,
+    "POST",
+    {},
+    "Falha ao validar resolução."
+  );
+}
+
+export async function rejectAnalyticsOccurrence(
+  firebaseUser: FirebaseUserLike,
+  occurrenceId: string,
+  rejectionReason: string
+) {
+  return authorizedJsonRequest<{
+    ok: true;
+    follow_up_task_id: string | null;
+  }>(
+    `/api/forms/analytics/occurrences/${occurrenceId}/reject-resolution`,
+    firebaseUser,
+    "POST",
+    { rejection_reason: rejectionReason },
+    "Falha ao rejeitar resolução."
+  );
+}
+
+export type AnalyticsTaxonomyEntry = {
+  id: string;
+  name: string;
+  slug?: string;
+  description?: string;
+  color?: string;
+  order?: number;
+  is_active: boolean;
+  is_editable?: boolean;
+  is_deletable?: boolean;
+  source?: string;
+  domain_id?: string;
+  polarity?: string;
+  severity?: string;
+  counts_as_evaluation?: boolean;
+  counts_as_occurrence?: boolean;
+  counts_as_non_conformity?: boolean;
+  type?: string;
+  target_scope?: string;
+  unit_ids?: string[];
+  code?: string;
+};
+
+export type AnalyticsTaxonomyKind =
+  | "domains"
+  | "criteria"
+  | "results"
+  | "targets";
+
+export async function fetchAnalyticsTaxonomy(
+  firebaseUser: FirebaseUserLike,
+  kind: AnalyticsTaxonomyKind
+) {
+  const payload = await authorizedGet<Record<string, AnalyticsTaxonomyEntry[]>>(
+    `/api/forms/analytics/${kind}`,
+    firebaseUser,
+    "Falha ao carregar taxonomia."
+  );
+  return payload[kind] ?? [];
+}
+
+export async function createAnalyticsTaxonomyEntry(
+  firebaseUser: FirebaseUserLike,
+  kind: AnalyticsTaxonomyKind,
+  body: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ id: string }>(
+    `/api/forms/analytics/${kind}`,
+    firebaseUser,
+    "POST",
+    body,
+    "Falha ao criar registro."
+  );
+}
+
+export async function updateAnalyticsTaxonomyEntry(
+  firebaseUser: FirebaseUserLike,
+  kind: AnalyticsTaxonomyKind,
+  id: string,
+  body: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ ok: true }>(
+    `/api/forms/analytics/${kind}/${id}`,
+    firebaseUser,
+    "PATCH",
+    body,
+    "Falha ao atualizar registro."
+  );
+}
+
+export async function seedAnalyticsTaxonomy(firebaseUser: FirebaseUserLike) {
+  return authorizedJsonRequest<Record<string, unknown>>(
+    "/api/forms/analytics/seed",
+    firebaseUser,
+    "POST",
+    {},
+    "Falha ao aplicar seed de taxonomia."
+  );
+}
+
+// ─── Analytics: políticas de retenção ──────────────────────────────────────────
+
+export type AnalyticsRetentionPolicy = {
+  id: string;
+  name: string;
+  subject_type: "collaborator" | "customer" | "third_party" | "any";
+  retention_days: number;
+  keep_original_in_vault: boolean;
+  is_default: boolean;
+  is_active: boolean;
+};
+
+export async function fetchRetentionPolicies(firebaseUser: FirebaseUserLike) {
+  const payload = await authorizedGet<{ policies: AnalyticsRetentionPolicy[] }>(
+    "/api/forms/analytics/retention-policies",
+    firebaseUser,
+    "Falha ao carregar políticas de retenção."
+  );
+  return payload.policies;
+}
+
+export async function createRetentionPolicy(
+  firebaseUser: FirebaseUserLike,
+  body: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ id: string }>(
+    "/api/forms/analytics/retention-policies",
+    firebaseUser,
+    "POST",
+    body,
+    "Falha ao criar política de retenção."
+  );
+}
+
+export async function updateRetentionPolicy(
+  firebaseUser: FirebaseUserLike,
+  id: string,
+  body: Record<string, unknown>
+) {
+  return authorizedJsonRequest<{ ok: true }>(
+    `/api/forms/analytics/retention-policies/${id}`,
+    firebaseUser,
+    "PATCH",
+    body,
+    "Falha ao atualizar política de retenção."
   );
 }

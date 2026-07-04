@@ -94,8 +94,11 @@ export interface OccurrenceDraft {
   target_metadata_snapshot?: Record<string, unknown>;
   description?: string;
   description_source_item_id?: string;
+  description_extraction?: "shared_text" | "parsed_by_prefix" | "per_option_detail";
+  description_confidence?: "high" | "medium" | "low";
   evidence_refs?: AnalyticsEvidenceRef[];
   occurred_at: Date;
+  due_at?: Date;
   bucket_timezone: string;
   occurred_local_date: string;
   occurred_year_month: string;
@@ -107,6 +110,9 @@ export interface OccurrenceDraft {
     | "auto_resolve_on_task_completion"
     | "require_validation_after_task_completion"
     | "manual_resolution_only";
+  create_task?: boolean;
+  task_trigger_id?: string;
+  has_active_task: boolean;
   contains_personal_data: boolean;
   personal_data_subject_type?: "collaborator";
   occurrence_identity_key: string;

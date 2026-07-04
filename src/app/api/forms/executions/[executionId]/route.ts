@@ -5,7 +5,6 @@ import { buildFormExecutionPayload } from "@/features/forms/lib/service";
 import { formExecutionUpdateSchema } from "@/features/forms/lib/schemas";
 import { assertFormExecutionAccess } from "@/features/forms/lib/server-access";
 import {
-  DEFAULT_FORMS_ANALYTICS_TIMEZONE,
   loadGenerationLookups,
   mapExecutionToAnalyticsView,
   mapTemplateToAnalyticsViews,
@@ -16,9 +15,13 @@ import {
   supersedeOccurrencesForExecution,
 } from "@/features/forms/analytics/generator";
 import {
+  ensureTasksForOccurrences,
   orphanLinksForExecution,
   relinkTasksForExecution,
+  type OccurrenceTaskSeed,
 } from "@/features/forms/analytics/task-integration";
+import { getWorkspaceAnalyticsSettings } from "@/features/forms/analytics/workspace-settings";
+import { resolveRetentionForSubject } from "@/features/forms/analytics/retention-policy-service";
 import { hasEnabledAnalyticsConfig } from "@/features/forms/analytics/template-publication";
 import { ensureTaskFromOrigin } from "@/features/tasks/lib/server";
 import { requireUser } from "@/lib/auth-server";
@@ -261,6 +264,84 @@ function shouldCreateTaskForItem(item: Record<string, unknown>) {
   }
 
   return false;
+}
+
+async function createTaskForOccurrenceSeed(params: {
+  seed: OccurrenceTaskSeed;
+  executionId: string;
+  execution: Record<string, unknown>;
+  template: FormTemplate | undefined;
+  defaultTrigger?: FormTaskTrigger;
+  actor: { user_id: string; username: string };
+  workspaceId: string;
+}): Promise<{ id: string } | null> {
+  const { seed } = params;
+  const templateItem = flattenTemplateItems(params.template).find(
+    (item) => item.id === seed.template_item_id
+  );
+  const triggers = Array.isArray(templateItem?.task_triggers)
+    ? (templateItem?.task_triggers as FormTaskTrigger[])
+    : [];
+  const trigger =
+    (seed.task_trigger_id
+      ? triggers.find((entry) => entry.id === seed.task_trigger_id)
+      : undefined) ??
+    triggers[0] ??
+    params.defaultTrigger;
+  if (!trigger) return null;
+
+  const items = Array.isArray(params.execution.items)
+    ? (params.execution.items as Record<string, unknown>[])
+    : [];
+  const executionItem = items.find(
+    (item) => String(item.template_item_id) === seed.template_item_id
+  );
+  const sectionId = String(
+    executionItem?.template_section_id ?? executionItem?.section_id ?? "analytics"
+  );
+  const dueDate =
+    typeof trigger.sla_hours === "number"
+      ? new Date(Date.now() + trigger.sla_hours * 3600000).toISOString()
+      : undefined;
+  const answerLabel = seed.option_label_snapshot ?? seed.answer_label ?? "";
+
+  const ensured = await ensureTaskFromOrigin({
+    workspaceId: params.workspaceId,
+    actor: params.actor,
+    trigger,
+    origin: {
+      kind: "form_trigger",
+      execution_id: params.executionId,
+      template_item_id: seed.template_item_id,
+      template_section_id: sectionId,
+      details: {
+        template_id: String(params.execution.template_id ?? ""),
+        template_name: String(params.execution.template_name ?? ""),
+        form_project_id: String(params.execution.form_project_id ?? ""),
+        unit_id: seed.unit_id ?? String(params.execution.unit_id ?? ""),
+        unit_name:
+          seed.unit_name_snapshot ?? String(params.execution.unit_name ?? ""),
+        occurred_at: new Date().toISOString(),
+        item_title: seed.item_title_snapshot,
+        occurrence_id: seed.occurrence_id,
+        answer: answerLabel || null,
+      },
+    },
+    title: `${seed.result_name_snapshot}: ${seed.target_name_snapshot}`,
+    description: [
+      `Formulário: ${String(params.execution.template_name ?? "")}`,
+      `Unidade: ${seed.unit_name_snapshot ?? String(params.execution.unit_name ?? seed.unit_id ?? "")}`,
+      `Domínio: ${seed.domain_name_snapshot}`,
+      `Pergunta: ${seed.item_title_snapshot}`,
+      ...(answerLabel ? [`Resposta: ${answerLabel}`] : []),
+      ...(seed.severity ? [`Gravidade: ${seed.severity}`] : []),
+      ...(seed.description ? [`Descrição: ${seed.description}`] : []),
+      `Execução: /dashboard/forms/${params.executionId}/view`,
+    ].join("\n"),
+    dueDate,
+  });
+
+  return { id: ensured.task.id };
 }
 
 function flattenTemplateItems(template: FormTemplate | undefined) {
@@ -673,33 +754,67 @@ export async function PATCH(
       templateForAnalytics &&
       hasEnabledAnalyticsConfig(templateForAnalytics.sections)
     ) {
-      const lookups = await loadGenerationLookups({
-        db: checklistDbAdmin,
-        workspaceId: user.workspace_id,
-      });
+      const [lookups, analyticsSettings, retention] = await Promise.all([
+        loadGenerationLookups({
+          db: checklistDbAdmin,
+          workspaceId: user.workspace_id,
+        }),
+        getWorkspaceAnalyticsSettings(checklistDbAdmin, user.workspace_id),
+        resolveRetentionForSubject(
+          { db: checklistDbAdmin, workspaceId: user.workspace_id },
+          "collaborator"
+        ),
+      ]);
       const report = await generateOccurrencesForExecution(
         { db: checklistDbAdmin, executionsCollection: "form_executions" },
         {
           execution: mapExecutionToAnalyticsView(executionForAnalytics),
           items: mapTemplateToAnalyticsViews(templateForAnalytics),
           lookups,
-          workspaceTimezone: DEFAULT_FORMS_ANALYTICS_TIMEZONE,
+          workspaceTimezone: analyticsSettings.timezone,
           userId: user.userDoc.id,
           requestId: randomUUID(),
           mode: "complete",
+          retention,
         }
       );
+      const taskIntegrationDeps = {
+        db: checklistDbAdmin,
+        taskDb: dbAdmin,
+        tasksCollection: "tasks",
+      };
       const relinkReport = await relinkTasksForExecution(
-        {
-          db: checklistDbAdmin,
-          taskDb: dbAdmin,
-          tasksCollection: "tasks",
-        },
+        taskIntegrationDeps,
         user.workspace_id,
         executionId,
         user.userDoc.id
       );
-      analyticsReport = { ...report, relink: relinkReport };
+      const occurrenceTasksReport = await ensureTasksForOccurrences(
+        taskIntegrationDeps,
+        {
+          workspaceId: user.workspace_id,
+          executionId,
+          createdBy: user.userDoc.id,
+          createTask: (seed) =>
+            createTaskForOccurrenceSeed({
+              seed,
+              executionId,
+              execution: result,
+              template: templateForAnalytics,
+              defaultTrigger: analyticsSettings.default_task_trigger,
+              actor: {
+                user_id: user.userDoc.id,
+                username: user.userDoc.username,
+              },
+              workspaceId: user.workspace_id,
+            }),
+        }
+      );
+      analyticsReport = {
+        ...report,
+        relink: relinkReport,
+        occurrence_tasks: occurrenceTasksReport,
+      };
     } else if (parsed.action === "reopen") {
       const superseded = await supersedeOccurrencesForExecution(
         { db: checklistDbAdmin, executionsCollection: "form_executions" },

@@ -7,11 +7,11 @@ import {
 import { type FormExecution, type FormTemplate } from "@/types/forms";
 
 import {
-  DEFAULT_FORMS_ANALYTICS_TIMEZONE,
   loadGenerationLookups,
   mapExecutionToAnalyticsView,
   mapTemplateToAnalyticsViews,
 } from "./execution-adapter";
+import { getWorkspaceAnalyticsSettings } from "./workspace-settings";
 import type { ExecutionLoader, ReprocessScope } from "./reprocess-service";
 
 const MAX_REPROCESS_EXECUTIONS = 200;
@@ -59,13 +59,15 @@ export async function buildReprocessScope(
     );
   }
 
-  const lookups = await loadGenerationLookups({ db, workspaceId });
+  const [lookups, settings] = await Promise.all([
+    loadGenerationLookups({ db, workspaceId }),
+    getWorkspaceAnalyticsSettings(db, workspaceId),
+  ]);
   return {
     workspaceId,
     executionIds,
     lookups,
-    workspaceTimezone:
-      input.workspaceTimezone?.trim() || DEFAULT_FORMS_ANALYTICS_TIMEZONE,
+    workspaceTimezone: input.workspaceTimezone?.trim() || settings.timezone,
   };
 }
 

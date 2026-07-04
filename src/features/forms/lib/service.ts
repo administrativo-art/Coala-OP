@@ -90,6 +90,15 @@ export async function buildFormsBootstrap(params: {
       can_manage_retention_policy:
         params.isDefaultAdmin ||
         params.permissions.forms.analytics.manage_retention_policy,
+      can_resolve_occurrences:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.resolve_occurrences,
+      can_validate_occurrence_resolution:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.validate_occurrence_resolution,
+      can_view_personal_targets:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.view_personal_targets,
     },
     projects: visibleProjects,
     types: types.filter((type) => visibleProjectIds.has(type.form_project_id)),

@@ -21,6 +21,16 @@ import {
 } from "lucide-react";
 
 import type { FormAssignment, FormItemConfig, FormTemplate } from "@/types/forms";
+import type { FormItemOption } from "@/features/forms/analytics/analytics-config-schema";
+import {
+  AnalyticsConfigPanel,
+  analyticsConfigToEditor,
+  buildStructuredOptionsPayload,
+  editorAnalyticsToPayload,
+  emptyEditorAnalyticsConfig,
+  type EditorAnalyticsConfig,
+  type EditorOptionAnalytics,
+} from "@/components/forms/analytics-config-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import {
@@ -28,6 +38,8 @@ import {
   fetchFormTemplateApplication,
   updateFormTemplate,
   updateFormTemplateApplication,
+  TemplatePublicationError,
+  type TemplateValidationIssue,
 } from "@/features/forms/lib/client";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -154,6 +166,9 @@ type EditorItem = {
   show_if_value: string;
   task_triggers: EditorTaskTrigger[];
   conditional_branches: EditorConditionalBranch[];
+  analytics_config: EditorAnalyticsConfig;
+  option_analytics: Record<string, EditorOptionAnalytics>;
+  structured_options: FormItemOption[];
 };
 
 type EditorSection = {
@@ -236,6 +251,67 @@ function createEmptyEditorItem(): EditorItem {
     show_if_value: "",
     task_triggers: [],
     conditional_branches: [],
+    analytics_config: emptyEditorAnalyticsConfig(),
+    option_analytics: {},
+    structured_options: [],
+  };
+}
+
+function extractStructuredOptions(
+  options?: FormItemConfig["options"]
+): FormItemOption[] {
+  return (options ?? []).filter(
+    (option): option is FormItemOption => typeof option !== "string"
+  );
+}
+
+function extractOptionAnalytics(
+  options?: FormItemConfig["options"]
+): Record<string, EditorOptionAnalytics> {
+  const map: Record<string, EditorOptionAnalytics> = {};
+  for (const option of options ?? []) {
+    if (typeof option === "string") continue;
+    map[option.label] = {
+      criterion_id: option.analytics?.criterion_id ?? "",
+      result_id: option.analytics?.result_id ?? "",
+      severity: option.analytics?.severity ?? "",
+    };
+  }
+  return map;
+}
+
+function splitOptionLabels(optionsText: string) {
+  return optionsText
+    .split("\n")
+    .map((option) => option.trim())
+    .filter(Boolean);
+}
+
+function buildItemConfigPayload(item: EditorItem) {
+  const labels = splitOptionLabels(item.options_text);
+  if (labels.length === 0 && item.type !== "photo") return undefined;
+
+  const useStructuredOptions =
+    labels.length > 0 &&
+    (item.analytics_config.enabled ||
+      item.structured_options.length > 0 ||
+      Object.values(item.option_analytics).some(
+        (entry) => entry.criterion_id || entry.result_id || entry.severity
+      ));
+
+  return {
+    ...(item.type === "photo" ? { min_photos: 1, allow_multiple: true } : {}),
+    ...(labels.length > 0
+      ? {
+          options: useStructuredOptions
+            ? buildStructuredOptionsPayload({
+                labels,
+                structuredOptions: item.structured_options,
+                optionAnalytics: item.option_analytics,
+              })
+            : labels,
+        }
+      : {}),
   };
 }
 
@@ -264,6 +340,9 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
   const [applicationOpen, setApplicationOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingApplication, setSavingApplication] = useState(false);
+  const [publicationIssues, setPublicationIssues] = useState<
+    TemplateValidationIssue[]
+  >([]);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [formState, setFormState] = useState({
     name: "",
@@ -282,6 +361,17 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
   });
   const defaultTaskProjectId = template?.form_project_id ?? "";
   const displayedSections = formState.sections.length > 0 ? formState.sections : [];
+  const itemTitleById = new Map<string, string>();
+  for (const section of displayedSections) {
+    for (const item of section.items) itemTitleById.set(item.id, item.title);
+  }
+  const issuesByItem = new Map<string, TemplateValidationIssue[]>();
+  for (const issue of publicationIssues) {
+    issuesByItem.set(issue.item_id, [
+      ...(issuesByItem.get(issue.item_id) ?? []),
+      issue,
+    ]);
+  }
   const questionCount = displayedSections.reduce((total, section) => total + section.items.length, 0);
   const conditionalCount = displayedSections.reduce(
     (total, section) =>
@@ -389,6 +479,9 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                       ? String(trigger.sla_hours)
                       : "",
                 })),
+                analytics_config: analyticsConfigToEditor(item.analytics_config),
+                option_analytics: extractOptionAnalytics(item.config?.options),
+                structured_options: extractStructuredOptions(item.config?.options),
                 conditional_branches: (item.conditional_branches ?? []).map(
                   (branch) => ({
                     id: createLocalId(),
@@ -423,6 +516,9 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           : String(branchItem.show_if.value),
                       task_triggers: [],
                       conditional_branches: [],
+                      analytics_config: emptyEditorAnalyticsConfig(),
+                      option_analytics: {},
+                      structured_options: [],
                     })),
                   })
                 ),
@@ -514,20 +610,10 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                 ? undefined
                 : Number(item.tolerance_percent),
             action_required: item.action_required,
-            config:
-              item.options_text.trim() || item.type === "photo"
-                ? {
-                    ...(item.type === "photo" ? { min_photos: 1, allow_multiple: true } : {}),
-                    ...(item.options_text.trim()
-                      ? {
-                          options: item.options_text
-                            .split("\n")
-                            .map((option) => option.trim())
-                            .filter(Boolean),
-                        }
-                      : {}),
-                  }
-                : undefined,
+            config: buildItemConfigPayload(item),
+            ...(editorAnalyticsToPayload(item.analytics_config)
+              ? { analytics_config: editorAnalyticsToPayload(item.analytics_config) }
+              : {}),
             show_if:
               item.show_if_enabled && item.show_if_item_id
                 ? {
@@ -620,13 +706,23 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
 
       const refreshed = await fetchFormTemplate(firebaseUser, template.id);
       setTemplate(refreshed);
+      setPublicationIssues([]);
       setEditorOpen(false);
       toast({ title: "Formulário atualizado" });
     } catch (saveError) {
-      toast({
-        variant: "destructive",
-        title: saveError instanceof Error ? saveError.message : "Falha ao atualizar formulário.",
-      });
+      if (saveError instanceof TemplatePublicationError) {
+        setPublicationIssues(saveError.issues);
+        toast({
+          variant: "destructive",
+          title: "Configuração analítica inválida",
+          description: `${saveError.issues.filter((issue) => issue.level === "error").length} erro(s) impedem a publicação. Veja o resumo no topo do editor.`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: saveError instanceof Error ? saveError.message : "Falha ao atualizar formulário.",
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -1122,6 +1218,34 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
             </Button>
           </div>
 
+          {publicationIssues.length > 0 ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+              <p className="text-sm font-semibold text-destructive">
+                A configuração analítica impede a publicação
+              </p>
+              <ul className="mt-2 space-y-1 text-xs">
+                {publicationIssues.map((issue, index) => {
+                  const item = itemTitleById.get(issue.item_id);
+                  return (
+                    <li
+                      key={`${issue.item_id}-${issue.code}-${index}`}
+                      className={
+                        issue.level === "error"
+                          ? "text-destructive"
+                          : "text-amber-700"
+                      }
+                    >
+                      <span className="font-medium">
+                        {item ?? issue.item_id}
+                      </span>
+                      {issue.field ? ` · ${issue.field}` : ""}: {issue.message}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+
           {displayedSections.length === 0 ? (
             <Card>
               <CardContent className="p-6 text-sm text-muted-foreground">
@@ -1249,6 +1373,11 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">
                               {item.title.trim() || "Pergunta sem título"}
+                              {(issuesByItem.get(item.id)?.length ?? 0) > 0 ? (
+                                <span className="ml-2 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
+                                  {issuesByItem.get(item.id)!.length} problema(s)
+                                </span>
+                              ) : null}
                             </p>
                             <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                               <span>{getItemTypeLabel(item.type)}</span>
@@ -1662,6 +1791,31 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           ) : null}
                         </div>
                       </div>
+                      <AnalyticsConfigPanel
+                        itemType={item.type}
+                        value={item.analytics_config}
+                        optionLabels={splitOptionLabels(item.options_text)}
+                        optionAnalytics={item.option_analytics}
+                        taskTriggerOptions={item.task_triggers.map((trigger) => ({
+                          id: trigger.id,
+                          label: trigger.title_template || trigger.id,
+                        }))}
+                        siblingItems={formState.sections.flatMap((candidateSection) =>
+                          candidateSection.items
+                            .filter((candidate) => candidate.id !== item.id)
+                            .map((candidate) => ({
+                              id: candidate.id,
+                              title: candidate.title,
+                              type: candidate.type,
+                            }))
+                        )}
+                        onChange={(next) =>
+                          updateItem(section.id, item.id, { analytics_config: next })
+                        }
+                        onOptionAnalyticsChange={(next) =>
+                          updateItem(section.id, item.id, { option_analytics: next })
+                        }
+                      />
                         </div>
                       ) : null}
                     </div>

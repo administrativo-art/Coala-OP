@@ -35,6 +35,11 @@ export interface GeneratorDeps {
   executionsCollection: string;
 }
 
+export interface RetentionResolution {
+  id?: string;
+  days: number;
+}
+
 export interface GenerateOccurrencesParams {
   execution: ExecutionView;
   items: readonly AnalyticsItemView[];
@@ -43,6 +48,8 @@ export interface GenerateOccurrencesParams {
   userId: string;
   requestId: string;
   mode: "complete" | "reprocess";
+  // Política de retenção resolvida para dados pessoais. Ausente → fallback env.
+  retention?: RetentionResolution | null;
 }
 
 export interface GenerateOccurrencesReport {
@@ -172,7 +179,7 @@ export async function generateOccurrencesForExecution(
       }
     );
 
-    await writeDrafts(deps, drafts, params.userId);
+    await writeDrafts(deps, drafts, params.userId, params.retention ?? null);
     await finalizeGeneration(deps, params.execution.id, { ok: true });
 
     return {
@@ -193,17 +200,20 @@ export async function generateOccurrencesForExecution(
 async function writeDrafts(
   deps: GeneratorDeps,
   drafts: readonly OccurrenceDraft[],
-  userId: string
+  userId: string,
+  retention: { id?: string; days: number } | null
 ) {
   const collection = deps.db.collection(ANALYTICS_COLLECTIONS.occurrences);
-  const personalRetentionDays = readPersonalRetentionDays();
+  // Política resolvida vence; sem política, cai no fallback por env.
+  const retentionDays = retention?.days ?? readPersonalRetentionDays();
+  const retentionPolicyId = retention?.id;
   for (let index = 0; index < drafts.length; index += WRITE_BATCH_LIMIT) {
     const batch = deps.db.batch();
     drafts.slice(index, index + WRITE_BATCH_LIMIT).forEach((draft) => {
       const anonymizeAfter =
-        draft.contains_personal_data && personalRetentionDays
+        draft.contains_personal_data && retentionDays
           ? Timestamp.fromDate(
-              computeAnonymizeAfter(draft.occurred_at, personalRetentionDays)
+              computeAnonymizeAfter(draft.occurred_at, retentionDays)
             )
           : null;
 
@@ -212,6 +222,10 @@ async function writeDrafts(
           ...draft,
           execution_completed_at: Timestamp.fromDate(draft.execution_completed_at),
           occurred_at: Timestamp.fromDate(draft.occurred_at),
+          ...(draft.due_at ? { due_at: Timestamp.fromDate(draft.due_at) } : {}),
+          ...(draft.contains_personal_data && retentionPolicyId
+            ? { retention_policy_id: retentionPolicyId }
+            : {}),
           is_anonymized: false,
           anonymize_after: anonymizeAfter,
           opened_at: FieldValue.serverTimestamp(),

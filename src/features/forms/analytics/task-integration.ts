@@ -121,6 +121,124 @@ export async function linkOccurrenceToTask(
   return ref.id;
 }
 
+export interface OccurrenceTaskSeed {
+  occurrence_id: string;
+  template_item_id: string;
+  task_trigger_id?: string;
+  item_title_snapshot: string;
+  target_name_snapshot: string;
+  domain_name_snapshot: string;
+  result_name_snapshot: string;
+  severity?: string;
+  description?: string;
+  answer_label?: string;
+  option_label_snapshot?: string;
+  unit_id?: string;
+  unit_name_snapshot?: string;
+}
+
+const OPEN_RESOLUTION_STATUSES = new Set([
+  "open",
+  "in_progress",
+  "waiting",
+  "blocked",
+  "pending_validation",
+]);
+
+async function activeLinkByOccurrence(db: Firestore, occurrenceId: string) {
+  const snap = await db
+    .collection(OCCURRENCE_TASK_LINKS_COLLECTION)
+    .where("occurrence_id", "==", occurrenceId)
+    .where("is_active", "==", true)
+    .limit(1)
+    .get();
+
+  return snap.docs[0] ?? null;
+}
+
+export async function ensureTasksForOccurrences(
+  deps: TaskIntegrationDeps,
+  params: {
+    workspaceId: string;
+    executionId: string;
+    createdBy: string;
+    createTask: (seed: OccurrenceTaskSeed) => Promise<{ id: string } | null>;
+  }
+): Promise<{ tasks_linked: number; skipped: number }> {
+  const snap = await deps.db
+    .collection(ANALYTICS_COLLECTIONS.occurrences)
+    .where("workspace_id", "==", params.workspaceId)
+    .where("execution_id", "==", params.executionId)
+    .where("is_current", "==", true)
+    .where("create_task", "==", true)
+    .get();
+
+  let tasksLinked = 0;
+  let skipped = 0;
+
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    if (data.record_type !== "occurrence") continue;
+    if (!OPEN_RESOLUTION_STATUSES.has(String(data.resolution_status))) continue;
+
+    const existingLink = await activeLinkByOccurrence(deps.db, doc.id);
+    if (existingLink) {
+      // Retry técnico reescreveu o doc por dedupe_key; restaura o snapshot do vínculo.
+      if (data.has_active_task !== true) {
+        await doc.ref.update({
+          has_active_task: true,
+          current_primary_task_id: String(existingLink.get("task_id") ?? ""),
+          updated_at: now(),
+        });
+      }
+      skipped += 1;
+      continue;
+    }
+
+    const task = await params.createTask({
+      occurrence_id: doc.id,
+      template_item_id: String(data.template_item_id ?? ""),
+      task_trigger_id:
+        typeof data.task_trigger_id === "string" ? data.task_trigger_id : undefined,
+      item_title_snapshot: String(data.item_title_snapshot ?? ""),
+      target_name_snapshot: String(data.target_name_snapshot ?? ""),
+      domain_name_snapshot: String(data.domain_name_snapshot ?? ""),
+      result_name_snapshot: String(data.result_name_snapshot ?? ""),
+      severity: typeof data.severity === "string" ? data.severity : undefined,
+      description:
+        typeof data.description === "string" ? data.description : undefined,
+      answer_label:
+        typeof data.answer_label === "string" ? data.answer_label : undefined,
+      option_label_snapshot:
+        typeof data.option_label_snapshot === "string"
+          ? data.option_label_snapshot
+          : undefined,
+      unit_id: typeof data.unit_id === "string" ? data.unit_id : undefined,
+      unit_name_snapshot:
+        typeof data.unit_name_snapshot === "string"
+          ? data.unit_name_snapshot
+          : undefined,
+    });
+
+    if (!task) {
+      skipped += 1;
+      continue;
+    }
+
+    await linkOccurrenceToTask(deps, {
+      workspaceId: params.workspaceId,
+      occurrenceId: doc.id,
+      taskId: task.id,
+      linkType: "primary",
+      createdBy: params.createdBy,
+    });
+    await syncOccurrencesFromTask(deps, task.id);
+    tasksLinked += 1;
+  }
+
+  return { tasks_linked: tasksLinked, skipped };
+}
+
 export async function hasActiveOccurrenceLink(
   db: Firestore,
   taskId: string
@@ -442,6 +560,120 @@ async function runSyncTransaction(
         });
     }
   });
+}
+
+export class OccurrenceActionError extends Error {
+  constructor(
+    message: string,
+    public readonly code: "not_found" | "invalid_state"
+  ) {
+    super(message);
+    this.name = "OccurrenceActionError";
+  }
+}
+
+function assertActionableOccurrence(data: FirebaseFirestore.DocumentData) {
+  if (data.record_type !== "occurrence") {
+    throw new OccurrenceActionError(
+      "Apenas ocorrências têm tratativa operacional.",
+      "invalid_state"
+    );
+  }
+  if (data.is_current !== true || data.record_status !== "valid") {
+    throw new OccurrenceActionError(
+      "Ocorrência substituída ou cancelada não pode ser tratada.",
+      "invalid_state"
+    );
+  }
+  if (!OPEN_RESOLUTION_STATUSES.has(String(data.resolution_status))) {
+    throw new OccurrenceActionError(
+      `Ocorrência em "${String(data.resolution_status)}" não permite esta ação.`,
+      "invalid_state"
+    );
+  }
+}
+
+export async function resolveOccurrenceManually(
+  deps: TaskIntegrationDeps,
+  params: { occurrenceId: string; resolvedBy: string; note?: string }
+) {
+  const ref = deps.db
+    .collection(ANALYTICS_COLLECTIONS.occurrences)
+    .doc(params.occurrenceId);
+
+  await deps.db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (!snap.exists) {
+      throw new OccurrenceActionError("Ocorrência não encontrada.", "not_found");
+    }
+    const data = snap.data() ?? {};
+    assertActionableOccurrence(data);
+
+    const resolvedAt = new Date();
+    const occurredAt = toDate(data.occurred_at) ?? resolvedAt;
+    const firstActionAt = toDate(data.first_action_at);
+
+    transaction.update(ref, {
+      resolution_status: "resolved",
+      resolved_at: Timestamp.fromDate(resolvedAt),
+      resolved_by: params.resolvedBy,
+      resolution_source: "manual_resolution",
+      resolution_time_minutes: differenceInMinutes(resolvedAt, occurredAt),
+      ...(firstActionAt
+        ? {}
+        : { first_action_at: Timestamp.fromDate(resolvedAt) }),
+      ...(params.note ? { resolution_note: params.note } : {}),
+      updated_at: now(),
+      updated_by: params.resolvedBy,
+    });
+  });
+}
+
+export async function cancelOccurrenceManually(
+  deps: TaskIntegrationDeps,
+  params: { occurrenceId: string; cancelledBy: string; reason?: string }
+) {
+  const ref = deps.db
+    .collection(ANALYTICS_COLLECTIONS.occurrences)
+    .doc(params.occurrenceId);
+
+  await deps.db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (!snap.exists) {
+      throw new OccurrenceActionError("Ocorrência não encontrada.", "not_found");
+    }
+    const data = snap.data() ?? {};
+    assertActionableOccurrence(data);
+
+    transaction.update(ref, {
+      resolution_status: "cancelled",
+      resolution_source: "manual_resolution",
+      has_active_task: false,
+      current_primary_task_id: null,
+      ...(params.reason ? { resolution_note: params.reason } : {}),
+      updated_at: now(),
+      updated_by: params.cancelledBy,
+    });
+  });
+
+  const links = await deps.db
+    .collection(OCCURRENCE_TASK_LINKS_COLLECTION)
+    .where("occurrence_id", "==", params.occurrenceId)
+    .where("is_active", "==", true)
+    .get();
+  for (const link of links.docs) {
+    await deactivateLink(
+      deps.db,
+      link.id,
+      "cancelled",
+      "occurrence_cancelled",
+      params.cancelledBy
+    );
+  }
+}
+
+function differenceInMinutes(later: Date, earlier: Date) {
+  return Math.max(0, Math.round((later.getTime() - earlier.getTime()) / 60000));
 }
 
 export async function validateOccurrenceResolution(

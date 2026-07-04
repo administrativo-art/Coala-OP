@@ -114,6 +114,7 @@ export const formItemAnalyticsConfigSchema = z
     evidence_item_ids: z.array(idRef).max(20).optional(),
     create_task: z.boolean().optional(),
     task_trigger_id: idRef.optional(),
+    sla_hours: z.number().int().min(1).max(24 * 365).optional(),
     resolution_behavior: z
       .enum([
         "none",

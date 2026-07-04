@@ -5,7 +5,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
+  BadgeCheck,
+  Bell,
+  Boxes,
+  Building2,
   CalendarClock,
+  CalendarDays,
   ChevronDown,
   CheckSquare,
   ClipboardCheck,
@@ -17,24 +22,43 @@ import {
   Flag,
   Folder,
   FolderKanban,
+  Gauge,
+  HeartPulse,
+  Home,
+  Landmark,
   Layers3,
   Lock,
   MapPin,
+  Megaphone,
+  Package,
   Pencil,
   Plus,
   Save,
   Shield,
+  Shirt,
+  ShoppingBag,
+  ShoppingCart,
+  Sparkles,
+  Store,
   Thermometer,
   Trash2,
+  Truck,
+  Utensils,
   Users,
   UserCheck,
   WalletCards,
+  Warehouse,
+  Workflow,
+  Wrench,
   Zap,
 } from "lucide-react";
 
 import type { FormExecution, FormProject, FormTemplate, FormType } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
+import { FormsAnalyticsOverview } from "@/components/forms/analytics-overview";
+import { FormsAnalyticsTaxonomyManager } from "@/components/forms/analytics-taxonomy-manager";
+import { RetentionPolicyManager } from "@/components/forms/retention-policy-manager";
 import {
   anonymizeDueAnalyticsOccurrences,
   backfillAnalyticsRetention,
@@ -111,10 +135,33 @@ const APPLICATION_MODE_LABELS: Record<string, string> = {
   event: "Evento do sistema",
 };
 
-const PROJECT_COLOR_PRESETS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#0ea5e9"];
+const PROJECT_COLOR_PRESETS = [
+  "#6366f1",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#0ea5e9",
+  "#14b8a6",
+  "#84cc16",
+  "#eab308",
+  "#f97316",
+  "#ec4899",
+  "#d946ef",
+  "#06b6d4",
+  "#3b82f6",
+  "#64748b",
+  "#111827",
+  "#92400e",
+  "#be123c",
+];
 
 const PROJECT_ICON_PRESETS = [
   { value: "clipboard", icon: ClipboardList },
+  { value: "building", icon: Building2 },
+  { value: "store", icon: Store },
+  { value: "warehouse", icon: Warehouse },
+  { value: "home", icon: Home },
   { value: "shield", icon: Shield },
   { value: "thermometer", icon: Thermometer },
   { value: "zap", icon: Zap },
@@ -124,6 +171,23 @@ const PROJECT_ICON_PRESETS = [
   { value: "wallet", icon: WalletCards },
   { value: "users", icon: Users },
   { value: "folder", icon: Folder },
+  { value: "package", icon: Package },
+  { value: "boxes", icon: Boxes },
+  { value: "truck", icon: Truck },
+  { value: "wrench", icon: Wrench },
+  { value: "sparkles", icon: Sparkles },
+  { value: "shirt", icon: Shirt },
+  { value: "badge-check", icon: BadgeCheck },
+  { value: "landmark", icon: Landmark },
+  { value: "workflow", icon: Workflow },
+  { value: "shopping-bag", icon: ShoppingBag },
+  { value: "shopping-cart", icon: ShoppingCart },
+  { value: "utensils", icon: Utensils },
+  { value: "gauge", icon: Gauge },
+  { value: "heart-pulse", icon: HeartPulse },
+  { value: "megaphone", icon: Megaphone },
+  { value: "bell", icon: Bell },
+  { value: "calendar", icon: CalendarDays },
 ] as const;
 
 const DEFAULT_FORM_MODELS = [
@@ -549,12 +613,16 @@ export function FormsDashboardShell() {
   const [projects, setProjects] = useState<FormProject[]>([]);
   const [formTypes, setFormTypes] = useState<FormType[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
+  const [templateOptions, setTemplateOptions] = useState<FormTemplate[]>([]);
   const [executions, setExecutions] = useState<FormExecution[]>([]);
   const [models, setModels] = useState<UiFormModel[]>([]);
   const [canCreateProjects, setCanCreateProjects] = useState(false);
   const [canManageTemplates, setCanManageTemplates] = useState(false);
   const [canViewAnalytics, setCanViewAnalytics] = useState(false);
   const [canReprocessAnalytics, setCanReprocessAnalytics] = useState(false);
+  const [canManageTaxonomy, setCanManageTaxonomy] = useState(false);
+  const [canResolveOccurrences, setCanResolveOccurrences] = useState(false);
+  const [canValidateResolution, setCanValidateResolution] = useState(false);
   const [canManageRetentionPolicy, setCanManageRetentionPolicy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -611,8 +679,8 @@ export function FormsDashboardShell() {
     description: "",
   });
   const [templateForm, setTemplateForm] = useState<TemplateFormState>({
-    source: "model",
-    model_id: DEFAULT_FORM_MODELS[0]?.id ?? "",
+    source: "blank",
+    model_id: "",
     duplicate_template_id: "",
     form_project_id: "",
     form_type_id: "",
@@ -727,8 +795,15 @@ export function FormsDashboardShell() {
   }, [selectedModel]);
 
   const selectedDuplicateTemplate = useMemo(() => {
-    return templates.find((template) => template.id === templateForm.duplicate_template_id) ?? null;
-  }, [templateForm.duplicate_template_id, templates]);
+    return templateOptions.find((template) => template.id === templateForm.duplicate_template_id) ?? null;
+  }, [templateForm.duplicate_template_id, templateOptions]);
+
+  const sortedTemplateOptions = useMemo(() => {
+    return [...templateOptions].sort((left, right) => {
+      if (left.is_active !== right.is_active) return left.is_active ? -1 : 1;
+      return String(left.name).localeCompare(String(right.name), "pt-BR");
+    });
+  }, [templateOptions]);
 
   const projectSummaries = useMemo(() => {
     return projects.map((project) => {
@@ -824,6 +899,7 @@ export function FormsDashboardShell() {
           setProjects(data.projects);
           setFormTypes(data.types ?? []);
           setTemplates(data.templates);
+          setTemplateOptions(data.template_options ?? data.templates);
           setExecutions(data.executions);
           setModels(modelsPayload.models as UiFormModel[]);
           setCanCreateProjects(data.access.can_create_projects);
@@ -831,6 +907,9 @@ export function FormsDashboardShell() {
           setCanViewAnalytics(data.access.can_view_analytics);
           setCanReprocessAnalytics(data.access.can_reprocess_occurrences);
           setCanManageRetentionPolicy(data.access.can_manage_retention_policy);
+          setCanManageTaxonomy(data.access.can_manage_analytics_taxonomy);
+          setCanResolveOccurrences(data.access.can_resolve_occurrences);
+          setCanValidateResolution(data.access.can_validate_occurrence_resolution);
         }
       } catch (requestError) {
         if (!cancelled) {
@@ -1108,6 +1187,7 @@ export function FormsDashboardShell() {
     setProjects(data.projects);
     setFormTypes(data.types ?? []);
     setTemplates(data.templates);
+    setTemplateOptions(data.template_options ?? data.templates);
     setExecutions(data.executions);
     setModels(modelsPayload.models as UiFormModel[]);
     setCanCreateProjects(data.access.can_create_projects);
@@ -1115,6 +1195,9 @@ export function FormsDashboardShell() {
     setCanViewAnalytics(data.access.can_view_analytics);
     setCanReprocessAnalytics(data.access.can_reprocess_occurrences);
     setCanManageRetentionPolicy(data.access.can_manage_retention_policy);
+    setCanManageTaxonomy(data.access.can_manage_analytics_taxonomy);
+    setCanResolveOccurrences(data.access.can_resolve_occurrences);
+    setCanValidateResolution(data.access.can_validate_occurrence_resolution);
   }
 
   async function handleSaveProject() {
@@ -1280,13 +1363,13 @@ export function FormsDashboardShell() {
         context: templateForm.context,
         name:
           templateForm.name ||
-          selectedModel?.name ||
-          selectedDuplicateTemplate?.name ||
-          "Novo formulário",
+          (templateForm.source === "model" ? selectedModel?.name : undefined) ||
+          (templateForm.source === "duplicate" ? selectedDuplicateTemplate?.name : undefined) ||
+          "Formulário em branco",
         description:
           templateForm.description ||
-          selectedModel?.description ||
-          selectedDuplicateTemplate?.description ||
+          (templateForm.source === "model" ? selectedModel?.description : undefined) ||
+          (templateForm.source === "duplicate" ? selectedDuplicateTemplate?.description : undefined) ||
           "",
         occurrence_type: templateForm.occurrence_type,
         application_mode: templateForm.application_mode,
@@ -1332,8 +1415,8 @@ export function FormsDashboardShell() {
       setTemplateDialogOpen(false);
       setTemplateForm((current) => ({
         ...current,
-        source: "model",
-        model_id: availableModels[0]?.id ?? DEFAULT_FORM_MODELS[0]?.id ?? "",
+        source: "blank",
+        model_id: "",
         duplicate_template_id: "",
         form_type_id: "",
         name: "",
@@ -1601,14 +1684,15 @@ export function FormsDashboardShell() {
                 const firstSubproject = firstProject ? (subprojectsByProject[firstProject.id] ?? [])[0] : undefined;
                 setTemplateForm((current) => ({
                   ...current,
-                  source: "model",
-                  model_id: availableModels[0]?.id ?? "",
+                  source: "blank",
+                  model_id: "",
+                  duplicate_template_id: "",
                   form_project_id: current.form_project_id || firstProject?.id || "",
                   form_type_id: current.form_type_id || firstSubproject?.id || "",
-                  name: availableModels[0]?.name ?? "",
-                  description: availableModels[0]?.description ?? "",
+                  name: "",
+                  description: "",
+                  selected_model_item_ids: [],
                 }));
-                selectAllModelItems(availableModels[0]?.id);
                 setTemplateDialogOpen(true);
               }}
             >
@@ -1645,13 +1729,17 @@ export function FormsDashboardShell() {
               </CardContent>
             </Card>
           ) : (
-            projectSummaries.map(({ project, subprojects, templates: projectTemplates, executions: projectExecutions, completionRate, items }) => {
+            <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
+            {projectSummaries.map(({ project, subprojects, templates: projectTemplates, executions: projectExecutions, completionRate, items }) => {
               const isExpanded = expandedProjectIds.includes(project.id);
               const pendingExecutions = projectExecutions.filter((execution) => execution.status === "pending").length;
               return (
-              <Card key={project.id}>
-                <CardHeader className="pb-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <Card
+                key={project.id}
+                className="overflow-hidden"
+              >
+                <CardHeader className="p-4">
+                  <div className="flex flex-col gap-3">
                     <button
                       type="button"
                       onClick={() => toggleProject(project.id)}
@@ -1664,19 +1752,26 @@ export function FormsDashboardShell() {
                         )}
                       />
                       <span
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
                         style={{ backgroundColor: project.color || "#5b5cf6" }}
                       >
-                        <FolderKanban className="h-5 w-5" />
+                        <FolderKanban className="h-4 w-4" />
                       </span>
                       <span className="min-w-0 space-y-1">
-                        <CardTitle className="text-lg">{project.name}</CardTitle>
-                        <CardDescription className="line-clamp-2">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <CardTitle className="line-clamp-1 text-base">{project.name}</CardTitle>
+                          {project.source === "unit_auto" ? (
+                            <Badge variant="outline" className="shrink-0 text-[10px]">
+                              Unidade
+                            </Badge>
+                          ) : null}
+                        </span>
+                        <CardDescription className="line-clamp-1">
                           {project.description?.trim() || "Projeto operacional no domínio de formulários."}
                         </CardDescription>
                       </span>
                     </button>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <div className="grid grid-cols-4 overflow-hidden rounded-2xl border bg-muted/20 text-center">
                         {[
                           { value: projectTemplates.length, label: "Forms", className: "text-foreground" },
@@ -1687,24 +1782,25 @@ export function FormsDashboardShell() {
                           <div
                             key={metric.label}
                             className={cn(
-                              "min-w-[72px] px-3 py-2",
+                              "min-w-[58px] px-2 py-1.5",
                               metricIndex > 0 && "border-l"
                             )}
                           >
-                            <p className={cn("text-sm font-semibold leading-none", metric.className)}>{metric.value}</p>
-                            <p className="mt-1 text-[10px] uppercase leading-none text-muted-foreground">{metric.label}</p>
+                            <p className={cn("text-xs font-semibold leading-none", metric.className)}>{metric.value}</p>
+                            <p className="mt-1 text-[9px] uppercase leading-none text-muted-foreground">{metric.label}</p>
                           </div>
                         ))}
                       </div>
                       {canCreateProjects ? (
                         <>
-                          <Button variant="ghost" size="sm" onClick={() => openEditProjectDialog(project)}>
-                            <Pencil className="mr-2 h-4 w-4" />
+                          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => openEditProjectDialog(project)}>
+                            <Pencil className="mr-1.5 h-3.5 w-3.5" />
                             Editar projeto
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-8 px-2 text-xs"
                             onClick={() => {
                               setSubprojectForm({
                                 form_project_id: project.id,
@@ -1714,16 +1810,16 @@ export function FormsDashboardShell() {
                               setSubprojectDialogOpen(true);
                             }}
                           >
-                            <Plus className="mr-2 h-4 w-4" />
+                            <Plus className="mr-1.5 h-3.5 w-3.5" />
                             Novo subprojeto
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-destructive hover:text-destructive"
+                            className="h-8 px-2 text-xs text-destructive hover:text-destructive"
                             onClick={() => setProjectDeleteTarget(project)}
                           >
-                            <Trash2 className="mr-2 h-4 w-4" />
+                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                             Excluir
                           </Button>
                         </>
@@ -1732,7 +1828,7 @@ export function FormsDashboardShell() {
                   </div>
                 </CardHeader>
                 {isExpanded && (subprojects.length > 0 || projectExecutions.length > 0) ? (
-                <CardContent className="space-y-4 border-t pt-4">
+                <CardContent className="space-y-4 pt-4">
                   {subprojects.length > 0 ? (
                     <div className="space-y-4">
                       {subprojects.map((subproject) => {
@@ -1755,14 +1851,15 @@ export function FormsDashboardShell() {
                                   onClick={() => {
                                     setTemplateForm((current) => ({
                                       ...current,
-                                      source: "model",
-                                      model_id: availableModels[0]?.id ?? "",
+                                      source: "blank",
+                                      model_id: "",
+                                      duplicate_template_id: "",
                                       form_project_id: project.id,
                                       form_type_id: subproject.id,
-                                      name: availableModels[0]?.name ?? "",
-                                      description: availableModels[0]?.description ?? "",
+                                      name: "",
+                                      description: "",
+                                      selected_model_item_ids: [],
                                     }));
-                                    selectAllModelItems(availableModels[0]?.id);
                                     setTemplateDialogOpen(true);
                                   }}
                                 >
@@ -1772,7 +1869,7 @@ export function FormsDashboardShell() {
                               </div>
                             </div>
                             {subprojectTemplates.length > 0 ? (
-                              <div className="grid gap-3 xl:grid-cols-3">
+                              <div className="grid gap-3">
                                 {subprojectTemplates.map((template) => {
                                   const templateExecutions = projectExecutions.filter(
                                     (execution) => execution.template_id === template.id
@@ -1864,7 +1961,8 @@ export function FormsDashboardShell() {
                 ) : null}
               </Card>
               );
-            })
+            })}
+            </div>
           )}
         </TabsContent>
 
@@ -2005,6 +2103,15 @@ export function FormsDashboardShell() {
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-4">
+          <FormsAnalyticsOverview
+            canResolve={canResolveOccurrences}
+            canValidate={canValidateResolution}
+          />
+
+          {canManageTaxonomy ? <FormsAnalyticsTaxonomyManager /> : null}
+
+          {canManageRetentionPolicy ? <RetentionPolicyManager /> : null}
+
           <div className="grid gap-4 xl:grid-cols-2">
             <Card>
               <CardHeader>
@@ -2548,7 +2655,7 @@ export function FormsDashboardShell() {
       </Dialog>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-w-3xl overflow-hidden rounded-2xl p-0">
+        <DialogContent className="!w-[min(94vw,1040px)] !max-w-[1040px] overflow-hidden rounded-2xl p-0">
           <DialogHeader className="border-b px-6 py-5 text-left">
             <div className="flex items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white">
@@ -2561,128 +2668,127 @@ export function FormsDashboardShell() {
             </div>
           </DialogHeader>
           <div className="space-y-5 px-6 py-5">
-            <div className="inline-flex rounded-full bg-slate-100 p-1">
-              {[
-                { value: "model", label: "A partir de modelo" },
-                { value: "blank", label: "Em branco" },
-                { value: "duplicate", label: "Duplicar" },
-              ].map((option) => {
-                const active = templateForm.source === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={cn(
-                      "rounded-full px-4 py-2 text-sm font-medium transition-colors",
-                      active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                    onClick={() =>
+            <div className="space-y-3 rounded-2xl border bg-muted/10 p-4">
+              <div className="grid gap-4 md:grid-cols-[minmax(0,360px)_1fr]">
+                <div className="space-y-2">
+                  <Label>Usar estrutura existente</Label>
+                  <Select
+                    value={templateForm.source}
+                    onValueChange={(value) => {
+                      const nextSource = value as TemplateDialogSource;
+                      const firstModel = availableModels[0];
+                      const modelId = nextSource === "model"
+                        ? templateForm.model_id || firstModel?.id || ""
+                        : "";
+                      const selectedModelForSource = availableModels.find((model) => model.id === modelId);
+                      const itemIds = selectedModelForSource?.sections.flatMap((section) =>
+                        section.items.map((item) => item.id)
+                      ) ?? [];
                       setTemplateForm((current) => ({
                         ...current,
-                        source: option.value as TemplateDialogSource,
-                        selected_model_item_ids:
-                          option.value === "model"
-                            ? selectedModel?.sections.flatMap((section) => section.items.map((item) => item.id)) ?? []
-                            : current.selected_model_item_ids,
-                      }))
-                    }
+                        source: nextSource,
+                        model_id: modelId,
+                        duplicate_template_id:
+                          nextSource === "duplicate" ? current.duplicate_template_id : "",
+                        selected_model_item_ids: nextSource === "model" ? itemIds : [],
+                      }));
+                    }}
                   >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="blank">Nenhuma, criar em branco</SelectItem>
+                      <SelectItem value="model">Modelos</SelectItem>
+                      <SelectItem value="duplicate">Formulários publicados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {templateForm.source === "blank" ? (
+                  <div className="rounded-xl border border-dashed bg-background px-4 py-3 text-sm text-muted-foreground">
+                    Para criar um formulário em branco, deixe “Usar estrutura existente” como “Nenhuma”.
+                    O sistema criará uma seção inicial e uma pergunta inicial para você editar na próxima tela.
+                  </div>
+                ) : null}
+                {templateForm.source === "duplicate" && selectedDuplicateTemplate?.is_active === false ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Este formulário não está ativo. A cópia usará apenas a estrutura, sem histórico de preenchimentos.
+                  </div>
+                ) : null}
+              </div>
 
-            {templateForm.source === "model" ? (
-              <div className="grid gap-3 md:grid-cols-3">
-                {availableModels.slice(0, 3).map((model, modelIndex) => {
-                  const visual = getModelVisual(model.id, modelIndex);
-                  const Icon = visual.icon;
-                  const active = templateForm.model_id === model.id;
-                  const itemCount = model.sections.reduce((total, section) => total + section.items.length, 0);
-                  return (
-                    <button
-                      key={model.id}
-                      type="button"
-                      className={cn(
-                        "relative min-h-[136px] rounded-xl border p-4 text-left transition-colors",
-                        active ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/40"
-                      )}
-                      onClick={() => {
-                        const itemIds = model.sections.flatMap((section) => section.items.map((item) => item.id));
-                        setTemplateForm((current) => ({
-                          ...current,
-                          model_id: model.id,
-                          name: current.name || model.name,
-                          description: current.description || model.description || "",
-                          selected_model_item_ids: itemIds,
-                        }));
-                      }}
-                    >
-                      {active ? (
-                        <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                          <CheckSquare className="h-3 w-3" />
+              {templateForm.source === "model" ? (
+                <div className="grid gap-4 md:grid-cols-3">
+                  {availableModels.map((model, modelIndex) => {
+                    const visual = getModelVisual(model.id, modelIndex);
+                    const Icon = visual.icon;
+                    const active = templateForm.model_id === model.id;
+                    const itemCount = model.sections.reduce((total, section) => total + section.items.length, 0);
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        className={cn(
+                          "relative min-h-[132px] rounded-xl border p-4 text-left transition-colors",
+                          active ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-background hover:bg-muted/40"
+                        )}
+                        onClick={() => {
+                          const itemIds = model.sections.flatMap((section) => section.items.map((item) => item.id));
+                          setTemplateForm((current) => ({
+                            ...current,
+                            model_id: model.id,
+                            name: current.name || model.name,
+                            description: current.description || model.description || "",
+                            selected_model_item_ids: itemIds,
+                          }));
+                        }}
+                      >
+                        {active ? (
+                          <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                            <CheckSquare className="h-3 w-3" />
+                          </span>
+                        ) : null}
+                        <span className={cn("mb-3 flex h-9 w-9 items-center justify-center rounded-lg", visual.className)}>
+                          <Icon className="h-4 w-4" />
                         </span>
-                      ) : null}
-                      <span className={cn("mb-3 flex h-9 w-9 items-center justify-center rounded-lg", visual.className)}>
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="block text-sm font-semibold">{model.name}</span>
-                      <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">{model.description}</span>
-                      <span className="mt-3 block text-xs text-muted-foreground">{itemCount} itens</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-
-            {templateForm.source === "duplicate" ? (
-              <div className="space-y-2">
-                <Label>Formulário base</Label>
-                <Select
-                  value={templateForm.duplicate_template_id}
-                  onValueChange={(value) => {
-                    const template = templates.find((entry) => entry.id === value);
-                    setTemplateForm((current) => ({
-                      ...current,
-                      duplicate_template_id: value,
-                      name: current.name || (template ? `${template.name} - cópia` : ""),
-                      description: current.description || template?.description || "",
-                    }));
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um formulário" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates.map((template) => (
-                      <SelectItem key={template.id} value={template.id}>
-                        {template.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-
-            {templateForm.source === "blank" ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Primeira seção</Label>
-                  <Input
-                    value={templateForm.section_title}
-                    onChange={(event) => setTemplateForm((current) => ({ ...current, section_title: event.target.value }))}
-                  />
+                        <span className="block text-sm font-semibold">{model.name}</span>
+                        <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">{model.description}</span>
+                        <span className="mt-3 block text-xs text-muted-foreground">{itemCount} itens</span>
+                      </button>
+                    );
+                  })}
                 </div>
+              ) : null}
+
+              {templateForm.source === "duplicate" ? (
                 <div className="space-y-2">
-                  <Label>Primeira pergunta</Label>
-                  <Input
-                    value={templateForm.item_title}
-                    onChange={(event) => setTemplateForm((current) => ({ ...current, item_title: event.target.value }))}
-                  />
+                  <Label>Formulário publicado</Label>
+                  <Select
+                    value={templateForm.duplicate_template_id}
+                    onValueChange={(value) => {
+                      const template = templateOptions.find((entry) => entry.id === value);
+                      setTemplateForm((current) => ({
+                        ...current,
+                        duplicate_template_id: value,
+                        name: current.name || (template ? `${template.name} - cópia` : ""),
+                        description: current.description || template?.description || "",
+                      }));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um formulário" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortedTemplateOptions.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name} · {template.is_active ? "Publicado" : "Inativo"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -2690,7 +2796,13 @@ export function FormsDashboardShell() {
                 <Input
                   value={templateForm.name}
                   onChange={(event) => setTemplateForm((current) => ({ ...current, name: event.target.value }))}
-                  placeholder={selectedModel?.name ?? "Nome do formulário"}
+                  placeholder={
+                    templateForm.source === "model"
+                      ? selectedModel?.name ?? "Nome do formulário"
+                      : templateForm.source === "duplicate"
+                        ? selectedDuplicateTemplate?.name ?? "Nome do formulário"
+                        : "Ex.: Checklist de abertura"
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -2713,6 +2825,25 @@ export function FormsDashboardShell() {
                     {projects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Subprojeto</Label>
+                <Select
+                  value={templateForm.form_type_id}
+                  onValueChange={(value) => setTemplateForm((current) => ({ ...current, form_type_id: value }))}
+                  disabled={!templateForm.form_project_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o subprojeto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(subprojectsByProject[templateForm.form_project_id] ?? []).map((subproject) => (
+                      <SelectItem key={subproject.id} value={subproject.id}>
+                        {subproject.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

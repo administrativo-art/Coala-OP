@@ -10,6 +10,8 @@ import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { type PermissionSet } from "@/types";
 
 import { TaxonomyError } from "./taxonomy-service";
+import { OccurrenceActionError } from "./task-integration";
+import { ResolutionFlowError } from "./task-sync-core";
 
 export async function requireAnalyticsContext(
   request: NextRequest,
@@ -47,6 +49,27 @@ export function parseActiveFilter(request: NextRequest) {
   const value = request.nextUrl.searchParams.get("active");
   if (value === null) return undefined;
   return value.toLowerCase() === "true";
+}
+
+export function occurrenceActionErrorResponse(
+  error: unknown,
+  fallback: string
+) {
+  if (error instanceof OccurrenceActionError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.code === "not_found" ? 404 : 409 }
+    );
+  }
+
+  if (error instanceof ResolutionFlowError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.code === "factory_required" ? 500 : 409 }
+    );
+  }
+
+  return taxonomyErrorResponse(error, fallback);
 }
 
 export function taxonomyErrorResponse(error: unknown, fallback: string) {

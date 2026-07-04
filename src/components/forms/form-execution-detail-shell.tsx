@@ -35,9 +35,11 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   claimFormExecution,
   deleteFormAsset,
+  fetchExecutionOccurrences,
   fetchFormExecution,
   updateFormExecution,
   uploadFormAsset,
+  type AnalyticsOccurrenceRow,
 } from "@/features/forms/lib/client";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -242,6 +244,24 @@ function isDraftOutOfRange(item: FormExecutionItem, draft: DraftItem) {
   const range = getNumericRange(item);
   if (!range) return false;
   return draft.number_value < range.min || draft.number_value > range.max;
+}
+
+const OCCURRENCE_STATUS_LABELS: Record<string, string> = {
+  open: "Aberta",
+  in_progress: "Em andamento",
+  waiting: "Aguardando",
+  blocked: "Bloqueada",
+  pending_validation: "Aguardando validação",
+  resolved: "Resolvida",
+  cancelled: "Cancelada",
+};
+
+function formatResolutionMinutes(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ${minutes % 60}min`;
+  const days = Math.floor(hours / 24);
+  return `${days} dia(s) e ${hours % 24}h`;
 }
 
 function formatRelative(value: unknown) {
@@ -496,6 +516,9 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
   const [evidenceTarget, setEvidenceTarget] = useState<EvidenceTarget | null>(null);
   const [sectionsMode, setSectionsMode] = useState(false);
   const [sectionIdx, setSectionIdx] = useState(0);
+  const [itemOccurrences, setItemOccurrences] = useState<
+    Map<string, AnalyticsOccurrenceRow[]>
+  >(new Map());
   const initializedRef = useRef(false);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedDraftRef = useRef<string>("");
@@ -548,6 +571,32 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
     execution?.status === "in_progress" ||
     execution?.status === "pending" ||
     execution?.status === "overdue";
+
+  useEffect(() => {
+    if (!firebaseUser || execution?.status !== "completed") {
+      setItemOccurrences(new Map());
+      return;
+    }
+    let cancelled = false;
+    fetchExecutionOccurrences(firebaseUser, executionId)
+      .then((payload) => {
+        if (cancelled) return;
+        const grouped = new Map<string, AnalyticsOccurrenceRow[]>();
+        for (const row of payload.items) {
+          const key = row.template_item_id ?? "";
+          if (!key) continue;
+          grouped.set(key, [...(grouped.get(key) ?? []), row]);
+        }
+        setItemOccurrences(grouped);
+      })
+      .catch(() => {
+        // sem permissão de analytics: badge simplesmente não aparece
+        if (!cancelled) setItemOccurrences(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser, executionId, execution?.status]);
 
   const executionView = useMemo(() => {
     if (!execution) return null;
@@ -1067,6 +1116,36 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                         {item.description ? (
                           <div className="mt-1 text-sm text-muted-foreground">{item.description}</div>
                         ) : null}
+                        {(itemOccurrences.get(item.template_item_id) ?? []).map((occurrence) => (
+                          <div
+                            key={occurrence.id}
+                            className={cn(
+                              "mt-2 rounded-md border px-2 py-1 text-xs",
+                              occurrence.resolution_status === "resolved"
+                                ? "border-emerald-200 bg-emerald-50/60"
+                                : "border-amber-200 bg-amber-50/60"
+                            )}
+                          >
+                            <span className="font-medium">
+                              Gerou ocorrência: {occurrence.result_name_snapshot}
+                              {occurrence.option_label_snapshot
+                                ? ` (${occurrence.option_label_snapshot})`
+                                : ""}
+                              {" — "}
+                              {occurrence.target_name_snapshot}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {" · "}
+                              {OCCURRENCE_STATUS_LABELS[occurrence.resolution_status] ??
+                                occurrence.resolution_status}
+                              {occurrence.resolution_status === "resolved" &&
+                              typeof occurrence.resolution_time_minutes === "number"
+                                ? ` em ${formatResolutionMinutes(occurrence.resolution_time_minutes)}`
+                                : ""}
+                              {occurrence.has_active_task ? " · Tarefa ativa" : ""}
+                            </span>
+                          </div>
+                        ))}
                       </div>
 
                       {item.type === "checkbox" ? (

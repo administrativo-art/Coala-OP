@@ -533,9 +533,11 @@ function makeDraft(params: {
     execution.completed_at,
     context.workspace_timezone
   );
-  const description = config.description_item_id
-    ? asText(execution.answers.get(config.description_item_id)?.value)
-    : undefined;
+  const resolvedDescription = resolveDescription({
+    config,
+    execution,
+    option: params.option,
+  });
   const evidence = (config.evidence_item_ids ?? []).flatMap((itemId) => {
     const answer = execution.answers.get(itemId);
     return [
@@ -604,9 +606,15 @@ function makeDraft(params: {
     personal_data_subject_type: params.target.contains_personal_data
       ? "collaborator"
       : undefined,
-    description,
-    description_source_item_id: description
+    description: resolvedDescription.text,
+    description_source_item_id: resolvedDescription.text
       ? config.description_item_id
+      : undefined,
+    description_extraction: resolvedDescription.text
+      ? resolvedDescription.extraction
+      : undefined,
+    description_confidence: resolvedDescription.text
+      ? resolvedDescription.confidence
       : undefined,
     evidence_refs: evidence.length > 0 ? evidence : undefined,
     occurred_at: execution.completed_at,
@@ -621,12 +629,92 @@ function makeDraft(params: {
           ? "open"
           : "not_required",
     resolution_behavior: config.resolution_behavior ?? "none",
+    ...(params.record_type === "occurrence" &&
+    result.counts_as_occurrence &&
+    config.create_task === true
+      ? {
+          create_task: true,
+          ...(config.task_trigger_id
+            ? { task_trigger_id: config.task_trigger_id }
+            : {}),
+        }
+      : {}),
+    ...(params.record_type === "occurrence" &&
+    result.counts_as_occurrence &&
+    typeof config.sla_hours === "number"
+      ? {
+          due_at: new Date(
+            execution.completed_at.getTime() + config.sla_hours * 3600000
+          ),
+        }
+      : {}),
+    has_active_task: false,
     occurrence_identity_key: identityKey,
     dedupe_key: buildDedupeKey(identityKey, context.analytics_revision),
     analytics_revision: context.analytics_revision,
     generation_batch_id: context.generation_batch_id,
     created_from: context.created_from,
   };
+}
+
+interface ResolvedDescription {
+  text?: string;
+  extraction?: "shared_text" | "parsed_by_prefix" | "per_option_detail";
+  confidence?: "high" | "medium" | "low";
+}
+
+function resolveDescription(params: {
+  config: FormItemAnalyticsConfig;
+  execution: ExecutionView;
+  option?: FormItemOption;
+}): ResolvedDescription {
+  const { config, execution, option } = params;
+  if (!config.description_item_id) return {};
+
+  const answer = execution.answers.get(config.description_item_id);
+  const mode = config.description_mapping_mode ?? "shared_text";
+
+  if (mode === "per_option_detail") {
+    // Espera um mapa opção→detalhe (por option_id ou label) na resposta.
+    const detail = pickPerOptionDetail(answer?.value, option);
+    return detail
+      ? { text: detail, extraction: "per_option_detail", confidence: "high" }
+      : {};
+  }
+
+  if (mode === "prefix_parser" && option) {
+    // Texto com linhas "Label: detalhe"; extrai a linha da opção.
+    const parsed = parseByPrefix(asText(answer?.value), option.label);
+    return parsed
+      ? { text: parsed, extraction: "parsed_by_prefix", confidence: "medium" }
+      : {};
+  }
+
+  const shared = asText(answer?.value);
+  return shared
+    ? { text: shared, extraction: "shared_text", confidence: "high" }
+    : {};
+}
+
+function pickPerOptionDetail(value: unknown, option?: FormItemOption) {
+  if (!option || value === null || typeof value !== "object") return undefined;
+  const map = value as Record<string, unknown>;
+  return asText(map[option.id]) ?? asText(map[option.label]);
+}
+
+function parseByPrefix(text: string | undefined, label: string) {
+  if (!text) return undefined;
+  const target = label.trim().toLowerCase();
+  for (const line of text.split(/\r?\n/)) {
+    const separatorIndex = line.search(/[:\-–]/);
+    if (separatorIndex < 0) continue;
+    const prefix = line.slice(0, separatorIndex).trim().toLowerCase();
+    if (prefix === target) {
+      const detail = line.slice(separatorIndex + 1).trim();
+      if (detail) return detail;
+    }
+  }
+  return undefined;
 }
 
 function activeAnalyticOptions(item: AnalyticsItemView): FormItemOption[] {
