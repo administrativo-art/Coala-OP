@@ -25,6 +25,35 @@
       ]
     },
     {
+      "collectionGroup": "form_executions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspace_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "completed_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "form_executions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspace_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "template_id", "order": "ASCENDING" },
+        { "fieldPath": "completed_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "form_executions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspace_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "form_project_id", "order": "ASCENDING" },
+        { "fieldPath": "completed_at", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "form_analytics_domains",
       "queryScope": "COLLECTION",
       "fields": [
