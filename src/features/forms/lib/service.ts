@@ -73,7 +73,23 @@ export async function buildFormsBootstrap(params: {
         params.permissions.forms.global.manage_templates,
       can_view_analytics:
         params.isDefaultAdmin ||
-        params.permissions.forms.global.view_analytics,
+        params.permissions.forms.global.view_analytics ||
+        params.permissions.forms.analytics.view,
+      can_manage_analytics_taxonomy:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.manage_taxonomy ||
+        params.permissions.forms.global.manage_templates ||
+        params.permissions.forms.global.create_projects,
+      can_configure_analytics_templates:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.configure_templates ||
+        params.permissions.forms.global.manage_templates,
+      can_reprocess_occurrences:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.reprocess_occurrences,
+      can_manage_retention_policy:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.manage_retention_policy,
     },
     projects: visibleProjects,
     types: types.filter((type) => visibleProjectIds.has(type.form_project_id)),

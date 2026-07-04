@@ -20,7 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import type { FormAssignment, FormTemplate } from "@/types/forms";
+import type { FormAssignment, FormItemConfig, FormTemplate } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import {
@@ -114,6 +114,16 @@ function formatPendingPolicy(policy?: FormAssignment["pending_policy"]) {
   if (policy === "cancel") return "Cancelar pendentes substituídos";
   if (policy === "manual_migration") return "Migrar pendentes manualmente";
   return "Manter pendentes antigos";
+}
+
+type FormOptionValue = NonNullable<FormItemConfig["options"]>[number];
+
+function getOptionLabel(option: FormOptionValue) {
+  return typeof option === "string" ? option : option.label;
+}
+
+function formatOptionsText(options?: FormItemConfig["options"]) {
+  return (options ?? []).map(getOptionLabel).join("\n");
 }
 
 type EditorItem = {
@@ -355,7 +365,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   typeof item.tolerance_percent === "number"
                     ? String(item.tolerance_percent)
                     : "",
-                options_text: (item.config?.options ?? []).join("\n"),
+                options_text: formatOptionsText(item.config?.options),
                 action_required: item.action_required ?? false,
                 show_if_enabled: !!item.show_if,
                 show_if_item_id: item.show_if?.item_id ?? "",
@@ -402,7 +412,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                         typeof branchItem.tolerance_percent === "number"
                           ? String(branchItem.tolerance_percent)
                           : "",
-                      options_text: (branchItem.config?.options ?? []).join("\n"),
+                      options_text: formatOptionsText(branchItem.config?.options),
                       action_required: branchItem.action_required ?? false,
                       show_if_enabled: !!branchItem.show_if,
                       show_if_item_id: branchItem.show_if?.item_id ?? "",

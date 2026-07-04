@@ -7,7 +7,7 @@ import {
   canActOnTask,
 } from "@/features/tasks/lib/server-access";
 import { getTaskById, updateTaskStatus } from "@/features/tasks/lib/server";
-import { type Task } from "@/types";
+import { type Task, type TaskCompletionResult } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +47,11 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
     }
 
     const body = (await request.json().catch(() => null)) as
-      | { status?: Task["status"]; details?: string }
+      | {
+          status?: Task["status"];
+          completionResult?: TaskCompletionResult;
+          details?: string;
+        }
       | null;
 
     if (!body?.status) {
@@ -61,6 +65,9 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
       context,
       taskId,
       status: body.status,
+      ...(typeof body.completionResult === "string"
+        ? { completionResult: body.completionResult }
+        : {}),
       ...(typeof body.details === "string" ? { details: body.details } : {}),
     });
 

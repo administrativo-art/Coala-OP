@@ -55,6 +55,19 @@ function applyCommercialPermissionFallbacks(permissions: PermissionSet) {
   permissions.commercial.technicalSheets.export ||= legacyCanViewSheets || legacyCanEditSheets;
 }
 
+function applyFormsPermissionFallbacks(permissions: PermissionSet) {
+  const canViewAnalytics = permissions.forms.global.view_analytics === true;
+  const canManageForms =
+    permissions.forms.global.manage_templates === true ||
+    permissions.forms.global.create_projects === true;
+
+  permissions.forms.analytics.view ||= canViewAnalytics || canManageForms;
+  permissions.forms.analytics.view_occurrences ||= canViewAnalytics;
+  permissions.forms.analytics.manage_taxonomy ||= canManageForms;
+  permissions.forms.analytics.configure_templates ||= canManageForms;
+  permissions.forms.analytics.manage_task_rules ||= canManageForms;
+}
+
 export function buildPermissionSet(
   profilePermissions: Partial<PermissionSet> | undefined,
   isDefaultAdmin: boolean
@@ -73,6 +86,7 @@ export function buildPermissionSet(
   }
 
   applyCommercialPermissionFallbacks(merged);
+  applyFormsPermissionFallbacks(merged);
 
   return merged;
 }

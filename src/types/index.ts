@@ -705,6 +705,22 @@ export type PermissionSet = {
       manage_templates: boolean;
       view_analytics: boolean;
     };
+    analytics: {
+      view: boolean;
+      manage_taxonomy: boolean;
+      configure_templates: boolean;
+      view_occurrences: boolean;
+      edit_occurrences_admin: boolean;
+      export_occurrences: boolean;
+      reprocess_occurrences: boolean;
+      view_personal_targets: boolean;
+      export_personal_targets: boolean;
+      view_collaborator_rankings: boolean;
+      manage_retention_policy: boolean;
+      manage_task_rules: boolean;
+      resolve_occurrences: boolean;
+      validate_occurrence_resolution: boolean;
+    };
     projects: Record<
       string,
       { view: boolean; operate: boolean; manage: boolean }
@@ -1338,7 +1354,31 @@ export type Product = {
   brand?: string;
   aliases?: string[];
   barcode?: string;
+  gtin?: string;
   imageUrl?: string;
+  description?: string;
+  externalCategory?: string;
+  ingredients?: string;
+  nutritionFacts?: Record<string, unknown>;
+  ncm?: string;
+  cest?: string;
+  dataSource?: 'internal' | 'open_food_facts' | 'gs1' | 'brazilian_commercial' | 'manual' | string;
+  confidence?: number;
+  lastBarcodeLookupAt?: string;
+  // Campos normalizados do cadastro inteligente por codigo de barras.
+  codigo_barras?: string;
+  nome?: string;
+  marca?: string;
+  descricao?: string;
+  categoria_id?: string;
+  quantidade?: number;
+  unidade_medida?: string;
+  imagem_url?: string;
+  ingredientes?: string;
+  informacoes_nutricionais?: Record<string, unknown>;
+  origem_dados?: string;
+  confianca?: number;
+  data_consulta?: string;
   packageType?: PackageType;
   category: UnitCategory;
   packageSize: number;
@@ -1533,6 +1573,31 @@ export type Entity = {
   birthDate?: string; // Only for pessoa_fisica
   notes?: string;
   imageUrl?: string; // avatar
+  cnpj?: string;
+  razao_social?: string;
+  nome_fantasia?: string;
+  situacao_cadastral?: string;
+  data_abertura?: string;
+  natureza_juridica?: string;
+  cnae_principal_codigo?: string;
+  cnae_principal_descricao?: string;
+  cnaes_secundarios_json?: Array<{ codigo: string; descricao: string }>;
+  inscricao_estadual?: string;
+  contribuinte_icms?: 'sim' | 'nao' | 'nao_informado';
+  situacao_inscricao_estadual?: 'ativa' | 'inativa' | 'suspensa' | 'baixada' | 'nao_consultada' | 'nao_informado';
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  telefone?: string;
+  email?: string;
+  tipo_empresa?: string;
+  origem_dados?: 'internal' | 'brasilapi' | 'viacep' | 'cache' | 'manual' | 'sintegra';
+  data_ultima_consulta_cnpj?: string;
+  observacoes?: string;
 };
 
 // Purchase Module Types (legacy — cotação v1)
@@ -2123,6 +2188,22 @@ export const defaultGuestPermissions: PermissionSet = {
         manage_templates: false,
         view_analytics: false,
       },
+      analytics: {
+        view: false,
+        manage_taxonomy: false,
+        configure_templates: false,
+        view_occurrences: false,
+        edit_occurrences_admin: false,
+        export_occurrences: false,
+        reprocess_occurrences: false,
+        view_personal_targets: false,
+        export_personal_targets: false,
+        view_collaborator_rankings: false,
+        manage_retention_policy: false,
+        manage_task_rules: false,
+        resolve_occurrences: false,
+        validate_occurrence_resolution: false,
+      },
       projects: {},
     },
 };
@@ -2194,6 +2275,22 @@ export const defaultAdminPermissions: PermissionSet = {
         create_projects: true,
         manage_templates: true,
         view_analytics: true,
+      },
+      analytics: {
+        view: true,
+        manage_taxonomy: true,
+        configure_templates: true,
+        view_occurrences: true,
+        edit_occurrences_admin: true,
+        export_occurrences: true,
+        reprocess_occurrences: true,
+        view_personal_targets: true,
+        export_personal_targets: true,
+        view_collaborator_rankings: true,
+        manage_retention_policy: true,
+        manage_task_rules: true,
+        resolve_occurrences: true,
+        validate_occurrence_resolution: true,
       },
       projects: {},
     },
@@ -2276,6 +2373,9 @@ export type Task = {
     title: string;
     description?: string;
     status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
+    lifecycleState?: TaskLifecycleState;
+    completionResult?: TaskCompletionResult;
+    version?: number;
     assigneeType: TaskAssigneeType;
     assigneeId: string; // userId or profileId
     requiresApproval: boolean;
@@ -2297,6 +2397,9 @@ export type Task = {
     updatedAt: string; // ISO string
     dueDate?: string; // ISO string
     completedAt?: string; // ISO string
+    cancelledAt?: string; // ISO string
+    sourceStatus?: string;
+    requiresRelinkDecision?: boolean;
     // Properties for adapted legacy tasks
     legacyLink?: string;
     legacyIcon?: React.FC<any>;
@@ -2564,6 +2667,20 @@ export type DPVacationRecord = {
 // ─── New task motor — Etapa 8 (task_projects / task_statuses / tasks) ──────────
 
 export type TaskStatusCategory = 'not_started' | 'active' | 'done' | 'canceled';
+export type TaskLifecycleState =
+  | 'open'
+  | 'in_progress'
+  | 'waiting'
+  | 'blocked'
+  | 'completed'
+  | 'cancelled';
+export type TaskCompletionResult =
+  | 'resolved'
+  | 'not_resolved'
+  | 'partially_resolved'
+  | 'cancelled'
+  | 'duplicate'
+  | 'not_applicable';
 
 export type TaskStatusDoc = {
   id: string;
@@ -2572,10 +2689,13 @@ export type TaskStatusDoc = {
   name: string;
   slug: string;
   category: TaskStatusCategory;
+  lifecycle_state?: TaskLifecycleState;
   is_initial: boolean;
   is_terminal: boolean;
   order: number;
   color?: string;
+  requires_completion_note?: boolean;
+  requires_evidence?: boolean;
 };
 
 export type TaskProject = {

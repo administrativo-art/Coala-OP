@@ -1,4 +1,8 @@
 import { type Timestamp } from 'firebase/firestore';
+import type {
+  FormItemAnalyticsConfig,
+  FormItemOption,
+} from '@/features/forms/analytics/analytics-config-schema';
 
 // ─── Context discriminator ─────────────────────────────────────────────────────
 
@@ -128,7 +132,7 @@ export type FormItemConfig = {
   max?: number;
   unit?: string;
   alert_out_of_range?: boolean;
-  options?: string[];
+  options?: Array<string | FormItemOption>;
   min_photos?: number;
   max_photos?: number;
   allow_multiple?: boolean;
@@ -156,6 +160,7 @@ export type FormTemplateItem = {
   conditional_branches?: FormConditionalBranch[];
   task_triggers?: FormTaskTrigger[];
   config?: FormItemConfig;
+  analytics_config?: FormItemAnalyticsConfig;
 };
 
 export type FormTemplateSection = {
@@ -457,6 +462,13 @@ export type FormExecution = {
   completed_at?: string | null;
   canceled_by_user_id?: string | null;
   canceled_at?: string | null;
+  analytics_revision?: number;
+  analytics_generation_state?: 'generating' | 'generated' | 'failed';
+  analytics_generation_batch_id?: string;
+  analytics_generation_lock_id?: string;
+  analytics_generation_lock_at?: Timestamp | string;
+  analytics_generated_at?: Timestamp | string;
+  analytics_generation_error?: string;
   created_at: Timestamp | string;
   updated_at?: Timestamp | string;
 };

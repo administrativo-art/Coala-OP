@@ -21,3 +21,9 @@ env:
     secret: FORMS_SCHEDULER_SECRET
   - variable: FORMS_SCHEDULER_WORKSPACE_ID
     value: coala
+  - variable: FORMS_ANALYTICS_JOB_SECRET
+    secret: FORMS_SCHEDULER_SECRET
+  - variable: FORMS_ANALYTICS_JOB_WORKSPACE_IDS
+    value: coala
+  - variable: FORMS_ANALYTICS_PERSONAL_RETENTION_DAYS
+    value: "365"

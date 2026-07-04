@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 
 import { buildFormExecutionPayload } from "@/features/forms/lib/service";
 import { formExecutionUpdateSchema } from "@/features/forms/lib/schemas";
 import { assertFormExecutionAccess } from "@/features/forms/lib/server-access";
+import {
+  DEFAULT_FORMS_ANALYTICS_TIMEZONE,
+  loadGenerationLookups,
+  mapExecutionToAnalyticsView,
+  mapTemplateToAnalyticsViews,
+} from "@/features/forms/analytics/execution-adapter";
+import {
+  cancelOccurrencesForExecution,
+  generateOccurrencesForExecution,
+  supersedeOccurrencesForExecution,
+} from "@/features/forms/analytics/generator";
+import {
+  orphanLinksForExecution,
+  relinkTasksForExecution,
+} from "@/features/forms/analytics/task-integration";
+import { hasEnabledAnalyticsConfig } from "@/features/forms/analytics/template-publication";
 import { ensureTaskFromOrigin } from "@/features/tasks/lib/server";
 import { requireUser } from "@/lib/auth-server";
+import { dbAdmin } from "@/lib/firebase-admin";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
 import {
@@ -645,6 +663,68 @@ export async function PATCH(
       }
     }
 
+    let analyticsReport: Record<string, unknown> | null = null;
+    const executionForAnalytics = { id: executionId, ...result } as FormExecution;
+    const templateForAnalytics =
+      executionForAnalytics.template_snapshot as FormTemplate | undefined;
+
+    if (
+      parsed.action === "complete" &&
+      templateForAnalytics &&
+      hasEnabledAnalyticsConfig(templateForAnalytics.sections)
+    ) {
+      const lookups = await loadGenerationLookups({
+        db: checklistDbAdmin,
+        workspaceId: user.workspace_id,
+      });
+      const report = await generateOccurrencesForExecution(
+        { db: checklistDbAdmin, executionsCollection: "form_executions" },
+        {
+          execution: mapExecutionToAnalyticsView(executionForAnalytics),
+          items: mapTemplateToAnalyticsViews(templateForAnalytics),
+          lookups,
+          workspaceTimezone: DEFAULT_FORMS_ANALYTICS_TIMEZONE,
+          userId: user.userDoc.id,
+          requestId: randomUUID(),
+          mode: "complete",
+        }
+      );
+      const relinkReport = await relinkTasksForExecution(
+        {
+          db: checklistDbAdmin,
+          taskDb: dbAdmin,
+          tasksCollection: "tasks",
+        },
+        user.workspace_id,
+        executionId,
+        user.userDoc.id
+      );
+      analyticsReport = { ...report, relink: relinkReport };
+    } else if (parsed.action === "reopen") {
+      const superseded = await supersedeOccurrencesForExecution(
+        { db: checklistDbAdmin, executionsCollection: "form_executions" },
+        user.workspace_id,
+        executionId
+      );
+      const orphaned_links = await orphanLinksForExecution(
+        {
+          db: checklistDbAdmin,
+          taskDb: dbAdmin,
+          tasksCollection: "tasks",
+        },
+        user.workspace_id,
+        executionId
+      );
+      analyticsReport = { superseded, orphaned_links };
+    } else if (parsed.action === "cancel") {
+      const cancelled = await cancelOccurrencesForExecution(
+        { db: checklistDbAdmin, executionsCollection: "form_executions" },
+        user.workspace_id,
+        executionId
+      );
+      analyticsReport = { cancelled };
+    }
+
     await logAction({
       workspace_id: user.workspace_id,
       user_id: user.userDoc.id,
@@ -656,6 +736,7 @@ export async function PATCH(
         item_count: parsed.items.length,
         section_count: parsed.sections.length,
         created_task_ids: createdTaskIds,
+        analytics: analyticsReport,
       },
     });
 

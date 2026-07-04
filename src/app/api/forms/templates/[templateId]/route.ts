@@ -3,7 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildFormTemplatePayload } from "@/features/forms/lib/service";
 import { getFormProjectById } from "@/features/forms/lib/server";
 import { formTemplateSchema } from "@/features/forms/lib/schemas";
-import { assertFormPermission } from "@/features/forms/lib/server-access";
+import {
+  assertFormAnalyticsPermission,
+  assertFormPermission,
+} from "@/features/forms/lib/server-access";
+import {
+  hasEnabledAnalyticsConfig,
+  validateTemplateAnalyticsPublication,
+} from "@/features/forms/analytics/template-publication";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
@@ -69,6 +76,27 @@ export async function PATCH(
       parsed.form_project_id,
       "manage"
     );
+    if (hasEnabledAnalyticsConfig(parsed.sections)) {
+      assertFormAnalyticsPermission(
+        user.permissions,
+        user.isDefaultAdmin,
+        "configure_templates"
+      );
+      const analyticsReport = await validateTemplateAnalyticsPublication({
+        db: checklistDbAdmin,
+        workspaceId: user.workspace_id,
+        sections: parsed.sections,
+      });
+      if (!analyticsReport.ok) {
+        return NextResponse.json(
+          {
+            error: "Configuração analítica inválida.",
+            validation: analyticsReport,
+          },
+          { status: 422 }
+        );
+      }
+    }
 
     const currentVersion =
       typeof currentData.version === "number" ? currentData.version : 1;

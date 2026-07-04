@@ -4,6 +4,21 @@ import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { getFeatureFlags } from "@/lib/feature-flags";
 
 type ProjectPermissionLevel = "view" | "operate" | "manage";
+export type FormAnalyticsPermission =
+  | "view"
+  | "manage_taxonomy"
+  | "configure_templates"
+  | "view_occurrences"
+  | "edit_occurrences_admin"
+  | "export_occurrences"
+  | "reprocess_occurrences"
+  | "view_personal_targets"
+  | "export_personal_targets"
+  | "view_collaborator_rankings"
+  | "manage_retention_policy"
+  | "manage_task_rules"
+  | "resolve_occurrences"
+  | "validate_occurrence_resolution";
 
 export const FORM_UNIT_POOL_ASSIGNEE_ID = "__unit_pool__";
 
@@ -36,6 +51,9 @@ export function canAccessFormsModule(
     permissions.forms.global.create_projects ||
     permissions.forms.global.manage_templates ||
     permissions.forms.global.view_analytics ||
+    permissions.forms.analytics.view ||
+    permissions.forms.analytics.manage_taxonomy ||
+    permissions.forms.analytics.view_occurrences ||
     Object.values(permissions.forms.projects).some(
       (project) => project.view || project.operate || project.manage
     ) ||
@@ -89,6 +107,46 @@ export function assertFormPermission(
   }
 
   throw new Error("Sem permissão para visualizar formulários.");
+}
+
+export function assertFormAnalyticsPermission(
+  permissions: PermissionSet,
+  isDefaultAdmin: boolean,
+  permission: FormAnalyticsPermission
+) {
+  if (isDefaultAdmin) return;
+
+  const analytics = permissions.forms.analytics;
+  if (analytics[permission]) return;
+
+  if (permission === "view" && (
+    permissions.forms.global.view_analytics ||
+    permissions.forms.analytics.manage_taxonomy ||
+    permissions.forms.analytics.configure_templates ||
+    permissions.forms.global.manage_templates ||
+    permissions.forms.global.create_projects
+  )) {
+    return;
+  }
+
+  if (
+    permission === "view_occurrences" &&
+    permissions.forms.global.view_analytics
+  ) {
+    return;
+  }
+
+  if (
+    (permission === "manage_taxonomy" ||
+      permission === "configure_templates" ||
+      permission === "manage_task_rules") &&
+    (permissions.forms.global.manage_templates ||
+      permissions.forms.global.create_projects)
+  ) {
+    return;
+  }
+
+  throw new Error("Sem permissão para gerenciar analytics de formulários.");
 }
 
 export function getUserFormUnitIds(userDoc: Record<string, unknown>) {

@@ -20,6 +20,10 @@ export type FormsBootstrapPayload = {
     can_create_projects: boolean;
     can_manage_templates: boolean;
     can_view_analytics: boolean;
+    can_manage_analytics_taxonomy: boolean;
+    can_configure_analytics_templates: boolean;
+    can_reprocess_occurrences: boolean;
+    can_manage_retention_policy: boolean;
   };
   projects: FormProject[];
   types: FormType[];
@@ -99,7 +103,8 @@ async function authorizedJsonRequest<T>(
   firebaseUser: FirebaseUserLike,
   method: "POST" | "PATCH",
   body: unknown,
-  fallbackError: string
+  fallbackError: string,
+  timeoutMs = 20000
 ) {
   const token = await firebaseUser.getIdToken();
   const response = await fetchWithTimeout(
@@ -113,7 +118,7 @@ async function authorizedJsonRequest<T>(
       body: JSON.stringify(body),
       cache: "no-store",
     },
-    20000
+    timeoutMs
   );
 
   if (!response.ok) {
@@ -121,6 +126,141 @@ async function authorizedJsonRequest<T>(
   }
 
   return (await response.json()) as T;
+}
+
+export type AnalyticsSimulationReport = {
+  executions: Array<{
+    execution_id: string;
+    status: "ok" | "skipped" | "error";
+    skip_reason?: string;
+    error?: string;
+    will_create_evaluations: number;
+    will_create_occurrences: number;
+    will_supersede: number;
+  }>;
+  totals: {
+    executions_ok: number;
+    executions_skipped: number;
+    executions_error: number;
+    evaluations: number;
+    occurrences: number;
+    superseded: number;
+  };
+};
+
+export type AnalyticsReprocessScopeBody = {
+  from?: string;
+  to?: string;
+  templateId?: string;
+  projectId?: string;
+  executionIds?: string[];
+};
+
+export async function simulateAnalyticsReprocess(
+  firebaseUser: FirebaseUserLike,
+  body: AnalyticsReprocessScopeBody
+) {
+  return authorizedJsonRequest<{
+    simulation: AnalyticsSimulationReport;
+    simulated_at: string;
+    scope: {
+      execution_ids: string[];
+      execution_count: number;
+      workspace_timezone: string;
+      fromLocalDate: string;
+      toLocalDate: string;
+    };
+  }>(
+    "/api/forms/analytics/admin/reprocess/simulate",
+    firebaseUser,
+    "POST",
+    body,
+    "Falha ao simular reprocessamento.",
+    120000
+  );
+}
+
+export async function executeAnalyticsReprocess(
+  firebaseUser: FirebaseUserLike,
+  body: AnalyticsReprocessScopeBody & {
+    simulation: AnalyticsSimulationReport;
+    simulatedAt: string;
+    recomputeAggregates?: boolean;
+  }
+) {
+  return authorizedJsonRequest<{
+    results: Array<{
+      execution_id: string;
+      status: "ok" | "skipped" | "error";
+      error?: string;
+      written: number;
+      superseded: number;
+      analytics_revision?: number;
+    }>;
+    aggregates: { days: number; rows_read: number } | null;
+  }>(
+    "/api/forms/analytics/admin/reprocess/execute",
+    firebaseUser,
+    "POST",
+    body,
+    "Falha ao executar reprocessamento.",
+    180000
+  );
+}
+
+export async function recomputeAnalyticsAggregates(
+  firebaseUser: FirebaseUserLike,
+  body: { from?: string; to?: string }
+) {
+  return authorizedJsonRequest<{
+    days: number;
+    rows_read: number;
+    fromLocalDate: string;
+    toLocalDate: string;
+  }>(
+    "/api/forms/analytics/admin/aggregates/recompute",
+    firebaseUser,
+    "POST",
+    body,
+    "Falha ao recomputar agregados.",
+    120000
+  );
+}
+
+export async function backfillAnalyticsRetention(
+  firebaseUser: FirebaseUserLike,
+  body: { retentionDays: number; batchLimit?: number }
+) {
+  return authorizedJsonRequest<{
+    stamped: number;
+    has_more: boolean;
+    retention_days: number;
+  }>(
+    "/api/forms/analytics/admin/privacy/backfill",
+    firebaseUser,
+    "POST",
+    body,
+    "Falha ao executar backfill de retenção.",
+    120000
+  );
+}
+
+export async function anonymizeDueAnalyticsOccurrences(
+  firebaseUser: FirebaseUserLike,
+  body: { batchLimit?: number; keepOriginalInVault?: boolean }
+) {
+  return authorizedJsonRequest<{
+    anonymized: number;
+    vaulted: number;
+    remaining_due: number;
+  }>(
+    "/api/forms/analytics/admin/privacy/anonymize-due",
+    firebaseUser,
+    "POST",
+    body,
+    "Falha ao anonimizar ocorrências vencidas.",
+    120000
+  );
 }
 
 async function authorizedDeleteRequest<T>(

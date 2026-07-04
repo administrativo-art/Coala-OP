@@ -29,6 +29,7 @@ import type {
   FormExecutionEvent,
   FormExecutionItem,
   FormExecutionSection,
+  FormItemConfig,
 } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -65,6 +66,16 @@ type DraftSection = {
 type EvidenceTarget =
   | { scope: "item"; itemId: string; kind: "photo" | "signature" | "file" }
   | { scope: "section"; sectionId: string; kind: "photo" | "signature" };
+
+type FormOptionValue = NonNullable<FormItemConfig["options"]>[number];
+
+function getOptionLabel(option: FormOptionValue) {
+  return typeof option === "string" ? option : option.label;
+}
+
+function getOptionValue(option: FormOptionValue) {
+  return typeof option === "string" ? option : option.value ?? option.label;
+}
 
 const STATUS_META: Record<
   FormExecution["status"],
@@ -1083,19 +1094,23 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                       {(item.type === "text" || item.type === "select") ? (
                         options.length > 0 && item.type === "select" ? (
                           <div className="grid gap-2 sm:grid-cols-3">
-                            {options.map((option) => (
-                              <Button
-                                key={option}
-                                type="button"
-                                variant={draft.text_value === option ? "default" : "outline"}
-                                disabled={disabled}
-                                onClick={() => updateDraft(item.id, { text_value: option })}
-                                className="justify-start"
-                              >
-                                <span className={cn("mr-2 h-4 w-4 rounded-full border", draft.text_value === option && "border-primary-foreground bg-primary-foreground")} />
-                                {option}
-                              </Button>
-                            ))}
+                            {options.map((option) => {
+                              const value = getOptionValue(option);
+                              const label = getOptionLabel(option);
+                              return (
+                                <Button
+                                  key={value}
+                                  type="button"
+                                  variant={draft.text_value === value ? "default" : "outline"}
+                                  disabled={disabled}
+                                  onClick={() => updateDraft(item.id, { text_value: value })}
+                                  className="justify-start"
+                                >
+                                  <span className={cn("mr-2 h-4 w-4 rounded-full border", draft.text_value === value && "border-primary-foreground bg-primary-foreground")} />
+                                  {label}
+                                </Button>
+                              );
+                            })}
                           </div>
                         ) : (
                           <Textarea
@@ -1150,22 +1165,24 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                         options.length > 0 ? (
                           <div className="grid gap-2 sm:grid-cols-3">
                             {options.map((option) => {
+                              const value = getOptionValue(option);
+                              const label = getOptionLabel(option);
                               const values = Array.isArray(draft.multi_values) ? draft.multi_values : [];
-                              const checked = values.includes(option);
+                              const checked = values.includes(value);
                               return (
-                                <label key={option} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                <label key={value} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                                   <Checkbox
                                     checked={checked}
                                     disabled={disabled}
                                     onCheckedChange={(nextChecked) =>
                                       updateDraft(item.id, {
                                         multi_values: nextChecked === true
-                                          ? Array.from(new Set([...values, option]))
-                                          : values.filter((value) => value !== option),
+                                          ? Array.from(new Set([...values, value]))
+                                          : values.filter((entry) => entry !== value),
                                       })
                                     }
                                   />
-                                  {option}
+                                  {label}
                                 </label>
                               );
                             })}

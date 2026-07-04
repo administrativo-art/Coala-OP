@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  formItemAnalyticsConfigSchema,
+  formItemOptionSchema,
+} from "@/features/forms/analytics/analytics-config-schema";
+
 const isoDateSchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const formConditionalOperatorSchema = z.enum([
@@ -25,7 +30,9 @@ export const formItemConfigSchema = z.object({
   max: z.number().optional(),
   unit: z.string().trim().max(20).optional(),
   alert_out_of_range: z.boolean().optional(),
-  options: z.array(z.string().trim().min(1)).optional(),
+  options: z
+    .array(z.union([z.string().trim().min(1), formItemOptionSchema]))
+    .optional(),
   min_photos: z.number().int().min(1).optional(),
   max_photos: z.number().int().min(1).optional(),
   allow_multiple: z.boolean().optional(),
@@ -89,6 +96,7 @@ export const formTemplateItemSchema: z.ZodTypeAny = z.lazy(() =>
       .optional(),
     task_triggers: z.array(formTaskTriggerSchema).optional(),
     config: formItemConfigSchema.optional(),
+    analytics_config: formItemAnalyticsConfigSchema.optional(),
   })
 );
 

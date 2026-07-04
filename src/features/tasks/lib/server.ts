@@ -1,8 +1,23 @@
 import { createHash } from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
 
 import { dbAdmin } from "@/lib/firebase-admin";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { type ServerUserContext } from "@/lib/auth-server";
+import {
+  hasActiveOccurrenceLink,
+  syncOccurrencesFromTask,
+  type TaskIntegrationDeps,
+} from "@/features/forms/analytics/task-integration";
+import {
+  isTaskCompletionResult,
+  isTaskLifecycleState,
+  resolveCompletionResult,
+} from "@/features/forms/analytics/task-sync-core";
+import type {
+  TaskCompletionResult,
+  TaskLifecycleState,
+} from "@/features/forms/analytics/task-model";
 import { canViewTask } from "@/features/tasks/lib/server-access";
 import {
   type LegacyTaskOriginType,
@@ -21,6 +36,11 @@ const DEFAULT_PROJECT_SLUG = "general";
 const DEFAULT_PROJECT_NAME = "Tarefas gerais";
 const DEFAULT_SUBPROJECT_SLUG = "geral";
 const DEFAULT_SUBPROJECT_NAME = "Geral";
+const TASK_OCCURRENCE_SYNC_DEPS: TaskIntegrationDeps = {
+  db: checklistDbAdmin,
+  taskDb: dbAdmin,
+  tasksCollection: "tasks",
+};
 
 const DEFAULT_STATUSES: Array<
   Omit<TaskStatusDoc, "id" | "project_id" | "subproject_id"> & { id: string }
@@ -30,6 +50,7 @@ const DEFAULT_STATUSES: Array<
     name: "Pendente",
     slug: "pending",
     category: "not_started",
+    lifecycle_state: "open",
     is_initial: true,
     is_terminal: false,
     order: 10,
@@ -40,6 +61,7 @@ const DEFAULT_STATUSES: Array<
     name: "Em progresso",
     slug: "in_progress",
     category: "active",
+    lifecycle_state: "in_progress",
     is_initial: false,
     is_terminal: false,
     order: 20,
@@ -50,6 +72,7 @@ const DEFAULT_STATUSES: Array<
     name: "Aguardando aprovação",
     slug: "awaiting_approval",
     category: "active",
+    lifecycle_state: "waiting",
     is_initial: false,
     is_terminal: false,
     order: 30,
@@ -60,6 +83,7 @@ const DEFAULT_STATUSES: Array<
     name: "Concluída",
     slug: "completed",
     category: "done",
+    lifecycle_state: "completed",
     is_initial: false,
     is_terminal: true,
     order: 40,
@@ -142,6 +166,49 @@ function inferStatusFromDoc(data: FirestoreRecord) {
   return "pending";
 }
 
+function inferLifecycleFromTaskStatus(
+  status: Task["status"],
+  statusDoc?: Pick<TaskStatusDoc, "category" | "lifecycle_state" | "slug">
+): TaskLifecycleState {
+  if (isTaskLifecycleState(statusDoc?.lifecycle_state)) {
+    return statusDoc.lifecycle_state;
+  }
+
+  if (status === "in_progress") return "in_progress";
+  if (status === "awaiting_approval") return "waiting";
+  if (status === "completed") return "completed";
+
+  if (statusDoc?.category === "active") return "in_progress";
+  if (statusDoc?.category === "done") return "completed";
+  if (statusDoc?.category === "canceled") return "cancelled";
+
+  return "open";
+}
+
+function inferLifecycleFromStatusDoc(
+  statusDoc: Pick<TaskStatusDoc, "category" | "lifecycle_state" | "slug">
+): TaskLifecycleState {
+  if (isTaskLifecycleState(statusDoc.lifecycle_state)) {
+    return statusDoc.lifecycle_state;
+  }
+  if (statusDoc.slug === "in_progress") return "in_progress";
+  if (statusDoc.slug === "awaiting_approval") return "waiting";
+  if (statusDoc.slug === "completed") return "completed";
+  if (statusDoc.slug === "cancelled" || statusDoc.slug === "canceled") {
+    return "cancelled";
+  }
+  if (statusDoc.category === "active") return "in_progress";
+  if (statusDoc.category === "done") return "completed";
+  if (statusDoc.category === "canceled") return "cancelled";
+  return "open";
+}
+
+function normalizeCompletionResult(
+  value: unknown
+): TaskCompletionResult | undefined {
+  return isTaskCompletionResult(value) ? value : undefined;
+}
+
 function normalizeStringArray(value: unknown) {
   if (!Array.isArray(value)) return [] as string[];
   return value
@@ -178,6 +245,13 @@ function adaptTaskDoc(id: string, data: FirestoreRecord): Task {
     title: typeof data.title === "string" ? data.title : "Tarefa sem título",
     ...(typeof data.description === "string" ? { description: data.description } : {}),
     status: inferStatusFromDoc(data),
+    ...(isTaskLifecycleState(data.lifecycle_state)
+      ? { lifecycleState: data.lifecycle_state }
+      : {}),
+    ...(isTaskCompletionResult(data.completion_result)
+      ? { completionResult: data.completion_result }
+      : {}),
+    ...(typeof data.version === "number" ? { version: data.version } : {}),
     assigneeType:
       data.assigneeType === "profile" ||
       data.assigneeType === "role" ||
@@ -305,6 +379,17 @@ function adaptTaskDoc(id: string, data: FirestoreRecord): Task {
       : typeof data.completed_at === "string"
         ? { completedAt: data.completed_at }
         : {}),
+    ...(typeof data.cancelledAt === "string"
+      ? { cancelledAt: data.cancelledAt }
+      : typeof data.cancelled_at === "string"
+        ? { cancelledAt: data.cancelled_at }
+        : {}),
+    ...(typeof data.source_status === "string"
+      ? { sourceStatus: data.source_status }
+      : {}),
+    ...(typeof data.requires_relink_decision === "boolean"
+      ? { requiresRelinkDecision: data.requires_relink_decision }
+      : {}),
   };
 }
 
@@ -421,6 +506,7 @@ export async function ensureTaskProjectStatuses(projectId: string, subprojectId?
         name: status.name,
         slug: status.slug,
         category: status.category,
+        lifecycle_state: status.lifecycle_state,
         is_initial: status.is_initial,
         is_terminal: status.is_terminal,
         order: status.order,
@@ -682,6 +768,9 @@ export async function createManualTask(params: {
     ...(params.input.subprojectName ? { subproject_name: params.input.subprojectName, subprojectName: params.input.subprojectName } : {}),
     status_id: status.id,
     status_slug: status.slug,
+    status_name_snapshot: status.name,
+    lifecycle_state: inferLifecycleFromStatusDoc(status),
+    version: 0,
     title: params.input.title,
     description: params.input.description ?? "",
     assignee_type:
@@ -836,6 +925,9 @@ export async function ensureTaskFromOrigin(params: {
         subprojectId,
         status_id: pendingStatus.id,
         status_slug: pendingStatus.slug,
+        status_name_snapshot: pendingStatus.name,
+        lifecycle_state: inferLifecycleFromStatusDoc(pendingStatus),
+        version: 0,
         title: params.title,
         description: params.description ?? "",
         assignee_type:
@@ -962,6 +1054,7 @@ export async function updateTaskDocument(params: {
   const nextData: FirestoreRecord = {
     updated_at: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    version: FieldValue.increment(1),
   };
 
   if (typeof params.updates.title === "string") nextData.title = params.updates.title;
@@ -992,9 +1085,17 @@ export async function updateTaskDocument(params: {
           ? data.subproject_id
           : undefined;
     const statusDoc = await resolveStatusDoc(projectId, params.updates.status, subprojectId);
+    const lifecycleState = inferLifecycleFromTaskStatus(
+      params.updates.status,
+      statusDoc
+    );
+    const nextStatus =
+      params.updates.status === "reopened" ? "pending" : params.updates.status;
     nextData.status_id = statusDoc.id;
     nextData.status_slug = statusDoc.slug;
-    nextData.status = params.updates.status === "reopened" ? "pending" : params.updates.status;
+    nextData.status_name_snapshot = statusDoc.name;
+    nextData.lifecycle_state = lifecycleState;
+    nextData.status = nextStatus;
     nextData.statusId = statusDoc.id;
     if (params.updates.status === "completed" && !params.updates.completedAt) {
       nextData.completed_at = new Date().toISOString();
@@ -1003,6 +1104,20 @@ export async function updateTaskDocument(params: {
     if (params.updates.status === "pending" || params.updates.status === "reopened") {
       nextData.completed_at = null;
       nextData.completedAt = null;
+    }
+    if (nextStatus === "completed") {
+      const hasLinkedOccurrence = await hasActiveOccurrenceLink(
+        checklistDbAdmin,
+        params.taskId
+      );
+      nextData.completion_result = resolveCompletionResult(
+        normalizeCompletionResult(params.updates.completionResult),
+        hasLinkedOccurrence
+      );
+      nextData.completed_by = params.context.userDoc.id;
+    } else if (isTaskCompletionResult(data.completion_result)) {
+      nextData.completion_result = null;
+      nextData.completed_by = null;
     }
   }
   if (typeof params.updates.assigneeType === "string") {
@@ -1091,6 +1206,9 @@ export async function updateTaskDocument(params: {
       },
     });
   }
+  if (typeof params.updates.status === "string") {
+    await syncOccurrencesFromTask(TASK_OCCURRENCE_SYNC_DEPS, params.taskId);
+  }
 
   return updatedTask;
 }
@@ -1099,6 +1217,7 @@ export async function updateTaskStatus(params: {
   context: ServerUserContext;
   taskId: string;
   status: Task["status"];
+  completionResult?: TaskCompletionResult;
   details?: string;
   allowOriginStatusChange?: boolean;
 }) {
@@ -1129,6 +1248,7 @@ export async function updateTaskStatus(params: {
   const subprojectId =
     typeof data.subproject_id === "string" ? data.subproject_id : undefined;
   const statusDoc = await resolveStatusDoc(projectId, params.status, subprojectId);
+  const lifecycleState = inferLifecycleFromTaskStatus(params.status, statusDoc);
 
   let action: TaskHistoryItem["action"] = "status_changed";
   if (params.status === "completed") {
@@ -1146,15 +1266,36 @@ export async function updateTaskStatus(params: {
   ];
 
   const nextStatus = params.status === "reopened" ? "pending" : params.status;
+  const completedAt = nextStatus === "completed" ? now : null;
+  const completionPatch: FirestoreRecord = {};
+  if (nextStatus === "completed") {
+    const hasLinkedOccurrence = await hasActiveOccurrenceLink(
+      checklistDbAdmin,
+      params.taskId
+    );
+    completionPatch.completion_result = resolveCompletionResult(
+      params.completionResult,
+      hasLinkedOccurrence
+    );
+    completionPatch.completed_by = params.context.userDoc.id;
+  } else if (isTaskCompletionResult(data.completion_result)) {
+    completionPatch.completion_result = null;
+    completionPatch.completed_by = null;
+  }
+
   const payload: FirestoreRecord = {
     status_id: statusDoc.id,
     status_slug: statusDoc.slug,
+    status_name_snapshot: statusDoc.name,
     status: nextStatus,
+    lifecycle_state: lifecycleState,
     history,
     updated_at: now,
     updatedAt: now,
-    completed_at: nextStatus === "completed" ? now : null,
-    completedAt: nextStatus === "completed" ? now : null,
+    completed_at: completedAt,
+    completedAt,
+    version: FieldValue.increment(1),
+    ...completionPatch,
   };
 
   await taskRef.set(payload, { merge: true });
@@ -1170,6 +1311,7 @@ export async function updateTaskStatus(params: {
       },
     });
   }
+  await syncOccurrencesFromTask(TASK_OCCURRENCE_SYNC_DEPS, params.taskId);
 
   return updatedTask;
 }
