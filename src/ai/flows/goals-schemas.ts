@@ -6,6 +6,7 @@ export const GoalsAnalysisInputSchema = z.object({
   goalType: z.string(),
   targetValue: z.number(),
   upValue: z.number(),
+  topValue: z.number().optional(), // 3º nível; metas antigas não têm
   currentValue: z.number(),
   startDate: z.string(), // ISO String
   endDate: z.string(),   // ISO String
@@ -26,6 +27,7 @@ export const GoalsAnalysisOutputSchema = z.object({
     currentPace: z.number().describe("Média diária atual."),
     requiredPace: z.number().describe("Média diária necessária para bater a meta base."),
     requiredUpPace: z.number().describe("Média diária necessária para bater a super meta (UP)."),
+    requiredTopPace: z.number().optional().describe("Média diária necessária para bater a meta TOP (quando existir)."),
     projectedEndValue: z.number().describe("Valor projetado para o fim do mês no ritmo atual."),
     diagnosis: z.string().describe("Leitura analítica do ritmo e projeção."),
   }),

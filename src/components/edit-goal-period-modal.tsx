@@ -30,6 +30,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
 
   const [targetValue, setTargetValue] = useState<number>(0);
   const [upValue, setUpValue] = useState<number>(0);
+  const [topValue, setTopValue] = useState<number>(0);
   const [saving, setSaving] = useState(false);
   const [egLoading, setEgLoading] = useState(false);
   const [newEmp, setNewEmp] = useState<Record<string, string>>({});
@@ -72,14 +73,21 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
     if (open && period) {
       setTargetValue(period.targetValue);
       setUpValue(period.upValue ?? period.targetValue * 1.2);
+      setTopValue(period.topValue ?? 0);
     }
   }, [open, period]);
 
   async function handleSavePeriod() {
     if (!period) return;
+    if (topValue > 0 && topValue <= upValue) {
+      toast({ title: 'Meta TOP deve ser maior que a Meta UP', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
-    const nextPeriod = { ...period, targetValue, upValue };
-    await updatePeriod(period.id, { targetValue, upValue });
+    // Metas antigas (sem TOP) continuam com dois níveis se o campo ficar zerado
+    const updates = topValue > 0 ? { targetValue, upValue, topValue } : { targetValue, upValue };
+    const nextPeriod = { ...period, ...updates };
+    await updatePeriod(period.id, updates);
     await rebalanceWith(periodEmployeeGoals, nextPeriod);
     toast({ title: 'Meta atualizada.' });
     setSaving(false);
@@ -178,7 +186,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
           {/* ── Valores da meta ── */}
           <div className="space-y-3">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Valores</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Meta alvo</Label>
                 <CurrencyInput value={targetValue} onChange={setTargetValue} />
@@ -186,6 +194,10 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
               <div className="space-y-1.5">
                 <Label>Meta UP</Label>
                 <CurrencyInput value={upValue} onChange={setUpValue} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Meta TOP</Label>
+                <CurrencyInput value={topValue} onChange={setTopValue} />
               </div>
             </div>
           </div>

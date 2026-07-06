@@ -644,6 +644,7 @@ function SalesAnalysisDashboardInner() {
         prevDay: sumKioskRange(dateMap, prevMonthSameDay, prevMonthSameDay),
         targetValue: mainPeriod?.targetValue ?? 0,
         upValue: mainPeriod?.upValue ?? 0,
+        topValue: mainPeriod?.topValue ?? 0,
       };
     }).filter(k => k.month > 0 || k.week > 0 || k.day > 0).sort((a, b) => b.month - a.month);
 
@@ -701,7 +702,7 @@ function SalesAnalysisDashboardInner() {
     const byEmpKiosk = new Map<string, {
       employeeId: string; kioskId: string;
       dailyRev: Record<string, number>;
-      targetValue: number; upValue: number;
+      targetValue: number; upValue: number; topValue: number;
     }>();
 
     for (const eg of employeeGoals) {
@@ -714,15 +715,19 @@ function SalesAnalysisDashboardInner() {
       const upValue = period && period.targetValue > 0
         ? period.upValue * (eg.targetValue / period.targetValue)
         : 0;
+      const topValue = period && period.targetValue > 0 && period.topValue
+        ? period.topValue * (eg.targetValue / period.targetValue)
+        : 0;
 
       const key = `${eg.employeeId}|||${eg.kioskId}`;
       if (!byEmpKiosk.has(key)) {
-        byEmpKiosk.set(key, { employeeId: eg.employeeId, kioskId: eg.kioskId, dailyRev: {}, targetValue: eg.targetValue, upValue });
+        byEmpKiosk.set(key, { employeeId: eg.employeeId, kioskId: eg.kioskId, dailyRev: {}, targetValue: eg.targetValue, upValue, topValue });
       } else {
         // Same period can contain multiple goals for the employee, for example split shifts.
         const entry = byEmpKiosk.get(key)!;
         entry.targetValue += eg.targetValue;
         entry.upValue += upValue;
+        entry.topValue += topValue;
       }
       const entry = byEmpKiosk.get(key)!;
       for (const [date, amount] of Object.entries(eg.dailyProgress)) {
@@ -733,7 +738,7 @@ function SalesAnalysisDashboardInner() {
     }
 
     return Array.from(byEmpKiosk.values())
-      .map(({ employeeId, kioskId, dailyRev, targetValue, upValue }) => {
+      .map(({ employeeId, kioskId, dailyRev, targetValue, upValue, topValue }) => {
         const monthRevenue = Object.values(dailyRev).reduce((s, v) => s + v, 0);
         const u = users.find(u => u.id === employeeId);
         const kiosk = kiosks.find(k => k.id === kioskId);
@@ -745,6 +750,7 @@ function SalesAnalysisDashboardInner() {
           monthRevenue,
           targetValue,
           upValue,
+          topValue,
         };
       })
       .filter(c => c.monthRevenue > 0)
@@ -1281,18 +1287,19 @@ function SalesAnalysisDashboardInner() {
                 </span>
               );
 
-              const FatBlock = ({ label, month, prevMonth, week, prevWeek, day, prevDay, targetValue, upValue }: {
+              const FatBlock = ({ label, month, prevMonth, week, prevWeek, day, prevDay, targetValue, upValue, topValue }: {
                 label: string;
                 month: number; prevMonth: number;
                 week: number; prevWeek: number;
                 day: number; prevDay: number;
-                targetValue?: number; upValue?: number;
+                targetValue?: number; upValue?: number; topValue?: number;
               }) => {
                 const pctMonth = prevMonth > 0 ? ((month - prevMonth) / prevMonth) * 100 : null;
                 const pctWeek  = prevWeek  > 0 ? ((week  - prevWeek)  / prevWeek)  * 100 : null;
                 const pctDay   = prevDay   > 0 ? ((day   - prevDay)   / prevDay)   * 100 : null;
                 const pctAlvo  = targetValue && targetValue > 0 ? (month / targetValue) * 100 : null;
                 const pctUp    = upValue    && upValue    > 0 ? (month / upValue)    * 100 : null;
+                const pctTop   = topValue   && topValue   > 0 ? (month / topValue)   * 100 : null;
                 return (
                   <Card>
                     <CardContent className="pt-4">
@@ -1317,7 +1324,7 @@ function SalesAnalysisDashboardInner() {
                         </div>
                       </div>
                       {(targetValue || upValue) ? (
-                        <div className="grid grid-cols-2 gap-3 pt-3 border-t divide-x divide-border">
+                        <div className={cn("grid gap-3 pt-3 border-t divide-x divide-border", topValue ? "grid-cols-3" : "grid-cols-2")}>
                           <div>
                             <p className="text-[10px] text-muted-foreground">Meta alvo</p>
                             <p className="text-sm font-semibold leading-tight">R$ {fmt(targetValue ?? 0)}</p>
@@ -1336,6 +1343,17 @@ function SalesAnalysisDashboardInner() {
                               </span>
                             )}
                           </div>
+                          {topValue ? (
+                            <div className="pl-3">
+                              <p className="text-[10px] text-muted-foreground">Meta TOP</p>
+                              <p className="text-sm font-semibold leading-tight">R$ {fmt(topValue)}</p>
+                              {pctTop !== null && (
+                                <span className={cn("text-[10px] font-bold", pctTop >= 100 ? "text-green-500" : pctTop >= 70 ? "text-yellow-500" : "text-destructive")}>
+                                  {pctTop.toFixed(1)}% atingido
+                                </span>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </CardContent>
@@ -1361,6 +1379,7 @@ function SalesAnalysisDashboardInner() {
                       day={k.day}             prevDay={k.prevDay}
                       targetValue={k.targetValue}
                       upValue={k.upValue}
+                      topValue={k.topValue}
                     />
                   ))}
                 </div>
@@ -1397,14 +1416,18 @@ function SalesAnalysisDashboardInner() {
                             <th className="px-4 py-2.5 text-right">% Alvo</th>
                             <th className="px-4 py-2.5 text-right">Meta UP</th>
                             <th className="px-4 py-2.5 text-right">% UP</th>
+                            <th className="px-4 py-2.5 text-right">Meta TOP</th>
+                            <th className="px-4 py-2.5 text-right">% TOP</th>
                           </tr>
                         </thead>
                         <tbody>
                           {collaborators.map((c, i) => {
                             const pctAlvo = c.targetValue > 0 ? (c.monthRevenue / c.targetValue) * 100 : null;
                             const pctUp   = c.upValue    > 0 ? (c.monthRevenue / c.upValue)    * 100 : null;
+                            const pctTop  = c.topValue   > 0 ? (c.monthRevenue / c.topValue)   * 100 : null;
                             const colorAlvo = pctAlvo === null ? '' : pctAlvo >= 100 ? 'text-green-600' : pctAlvo >= 70 ? 'text-yellow-600' : 'text-destructive';
                             const colorUp   = pctUp   === null ? '' : pctUp   >= 100 ? 'text-green-600' : pctUp   >= 70 ? 'text-yellow-600' : 'text-destructive';
+                            const colorTop  = pctTop  === null ? '' : pctTop  >= 100 ? 'text-green-600' : pctTop  >= 70 ? 'text-yellow-600' : 'text-destructive';
                             return (
                               <tr key={i} className="border-t hover:bg-muted/50 transition-colors">
                                 <td className="px-4 py-2.5 font-medium">{c.userName}</td>
@@ -1423,6 +1446,14 @@ function SalesAnalysisDashboardInner() {
                                 <td className="px-4 py-2.5 text-right tabular-nums">
                                   {pctUp !== null
                                     ? <span className={cn('font-bold', colorUp)}>{pctUp.toFixed(1)}%</span>
+                                    : '—'}
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                                  {c.topValue > 0 ? `R$ ${fmt(c.topValue)}` : '—'}
+                                </td>
+                                <td className="px-4 py-2.5 text-right tabular-nums">
+                                  {pctTop !== null
+                                    ? <span className={cn('font-bold', colorTop)}>{pctTop.toFixed(1)}%</span>
                                     : '—'}
                                 </td>
                               </tr>

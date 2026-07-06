@@ -73,6 +73,7 @@ interface EmployeeAssignment {
 interface RevenueConfig {
   targetValue: number;
   upValue: number;
+  topValue: number;
 }
 interface TicketConfig {
   targetValue: number;
@@ -82,12 +83,14 @@ interface ProductLineConfig {
   lineName: string;
   targetValue: number;
   upValue: number;
+  topValue: number;
 }
 interface ProductSpecificConfig {
   productId: string;
   productName: string;
   targetValue: number;
   upValue: number;
+  topValue: number;
 }
 
 // Wizard step identifiers
@@ -153,7 +156,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   const [copiedFromMonth, setCopiedFromMonth] = useState('');
 
   // ── Revenue state ─────────────────────────────────────────────────────────
-  const [revenueConfig, setRevenueConfig] = useState<RevenueConfig>({ targetValue: 0, upValue: 0 });
+  const [revenueConfig, setRevenueConfig] = useState<RevenueConfig>({ targetValue: 0, upValue: 0, topValue: 0 });
   const [revenueConfigError, setRevenueConfigError] = useState('');
   // Overrides de % por turno digitados pelo usuário (chave = shiftDefinitionId)
   const [shiftPctOverrides, setShiftPctOverrides] = useState<Record<string, string>>({});
@@ -378,6 +381,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         setRevenueConfig({
           targetValue: period.targetValue,
           upValue: period.upValue ?? period.targetValue * 1.2,
+          topValue: period.topValue ?? 0,
         });
       }
 
@@ -391,6 +395,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           lineName: template.productLineName,
           targetValue: period.targetValue,
           upValue: period.upValue,
+          topValue: period.topValue ?? 0,
         });
       }
 
@@ -400,6 +405,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           productName: template.productName,
           targetValue: period.targetValue,
           upValue: period.upValue,
+          topValue: period.topValue ?? 0,
         });
       }
     }
@@ -424,6 +430,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     if (currentStep === 'revenue_config') {
       if (revenueConfig.targetValue <= 0) { setRevenueConfigError('Meta alvo deve ser maior que zero'); return; }
       if (revenueConfig.upValue <= revenueConfig.targetValue) { setRevenueConfigError('Meta UP deve ser maior que a Meta alvo'); return; }
+      if (revenueConfig.topValue <= revenueConfig.upValue) { setRevenueConfigError('Meta TOP deve ser maior que a Meta UP'); return; }
       setRevenueConfigError('');
       setStepIdx(i => i + 1);
       return;
@@ -447,6 +454,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       if (!productLineConfig.lineId) { setProductLineError('Selecione uma linha de produto'); return; }
       if (!productLineConfig.targetValue || productLineConfig.targetValue <= 0) { setProductLineError('Meta alvo deve ser maior que zero'); return; }
       if (!productLineConfig.upValue || productLineConfig.upValue <= (productLineConfig.targetValue ?? 0)) { setProductLineError('Meta UP deve ser maior que a Meta alvo'); return; }
+      if (!productLineConfig.topValue || productLineConfig.topValue <= (productLineConfig.upValue ?? 0)) { setProductLineError('Meta TOP deve ser maior que a Meta UP'); return; }
       setProductLineError('');
       setStepIdx(i => i + 1);
       return;
@@ -455,6 +463,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       if (!productSpecificConfig.productId) { setProductSpecificError('Selecione um produto'); return; }
       if (!productSpecificConfig.targetValue || productSpecificConfig.targetValue <= 0) { setProductSpecificError('Meta alvo deve ser maior que zero'); return; }
       if (!productSpecificConfig.upValue || productSpecificConfig.upValue <= (productSpecificConfig.targetValue ?? 0)) { setProductSpecificError('Meta UP deve ser maior que a Meta alvo'); return; }
+      if (!productSpecificConfig.topValue || productSpecificConfig.topValue <= (productSpecificConfig.upValue ?? 0)) { setProductSpecificError('Meta TOP deve ser maior que a Meta UP'); return; }
       setProductSpecificError('');
       setStepIdx(i => i + 1);
     }
@@ -481,6 +490,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         period: 'monthly',
         targetValue: revenueConfig.targetValue,
         upValue: revenueConfig.upValue,
+        topValue: revenueConfig.topValue,
       });
 
       if (templateId) {
@@ -493,6 +503,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           endDate: Timestamp.fromDate(end),
           targetValue: revenueConfig.targetValue,
           upValue: revenueConfig.upValue,
+          topValue: revenueConfig.topValue,
           currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
           shifts: goalShifts, status: 'active',
         } satisfies Omit<GoalPeriodDoc, 'id' | 'createdAt' | 'updatedAt'>;
@@ -530,6 +541,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         period: 'monthly',
         targetValue: ticketConfig.targetValue,
         upValue: ticketConfig.targetValue, // no UP concept, same value
+        topValue: ticketConfig.targetValue,
       });
 
       if (templateId) {
@@ -540,6 +552,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           endDate: Timestamp.fromDate(end),
           targetValue: ticketConfig.targetValue,
           upValue: ticketConfig.targetValue,
+          topValue: ticketConfig.targetValue,
           currentValue: 0,
           dailyProgress: {},
           distributionMode: 'scheduled_days',
@@ -558,6 +571,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         period: 'monthly',
         targetValue: productLineConfig.targetValue!,
         upValue: productLineConfig.upValue!,
+        topValue: productLineConfig.topValue!,
         productLineRef: productLineConfig.lineId,
         productLineName: productLineConfig.lineName,
       });
@@ -570,6 +584,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           endDate: Timestamp.fromDate(end),
           targetValue: productLineConfig.targetValue!,
           upValue: productLineConfig.upValue!,
+          topValue: productLineConfig.topValue!,
           currentValue: 0,
           dailyProgress: {},
           distributionMode: 'scheduled_days',
@@ -588,6 +603,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         period: 'monthly',
         targetValue: productSpecificConfig.targetValue!,
         upValue: productSpecificConfig.upValue!,
+        topValue: productSpecificConfig.topValue!,
         productRef: productSpecificConfig.productId,
         productName: productSpecificConfig.productName,
       });
@@ -600,6 +616,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           endDate: Timestamp.fromDate(end),
           targetValue: productSpecificConfig.targetValue!,
           upValue: productSpecificConfig.upValue!,
+          topValue: productSpecificConfig.topValue!,
           currentValue: 0,
           dailyProgress: {},
           distributionMode: 'scheduled_days',
@@ -627,7 +644,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     setSelectedTypes(new Set(['revenue']));
     setCopySourceMonth('none');
     setCopiedFromMonth('');
-    setRevenueConfig({ targetValue: 0, upValue: 0 });
+    setRevenueConfig({ targetValue: 0, upValue: 0, topValue: 0 });
     setRevenueConfigError('');
     setShiftPctOverrides({});
     setManualShiftCount(2);
@@ -767,7 +784,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         {/* ── STEP: REVENUE CONFIG ── */}
         {currentStep === 'revenue_config' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Meta alvo</Label>
                 <CurrencyInput
@@ -781,6 +798,14 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 <CurrencyInput
                   value={revenueConfig.upValue}
                   onChange={v => setRevenueConfig(prev => ({ ...prev, upValue: v }))}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Meta TOP</Label>
+                <CurrencyInput
+                  value={revenueConfig.topValue}
+                  onChange={v => setRevenueConfig(prev => ({ ...prev, topValue: v }))}
                   placeholder="0,00"
                 />
               </div>
@@ -1006,7 +1031,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Meta alvo (R$)</Label>
                 <CurrencyInput
@@ -1020,6 +1045,14 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 <CurrencyInput
                   value={productLineConfig.upValue ?? 0}
                   onChange={v => setProductLineConfig(prev => ({ ...prev, upValue: v }))}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Meta TOP (R$)</Label>
+                <CurrencyInput
+                  value={productLineConfig.topValue ?? 0}
+                  onChange={v => setProductLineConfig(prev => ({ ...prev, topValue: v }))}
                   placeholder="0,00"
                 />
               </div>
@@ -1059,7 +1092,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Meta alvo (R$)</Label>
                 <CurrencyInput
@@ -1073,6 +1106,14 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 <CurrencyInput
                   value={productSpecificConfig.upValue ?? 0}
                   onChange={v => setProductSpecificConfig(prev => ({ ...prev, upValue: v }))}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Meta TOP (R$)</Label>
+                <CurrencyInput
+                  value={productSpecificConfig.topValue ?? 0}
+                  onChange={v => setProductSpecificConfig(prev => ({ ...prev, topValue: v }))}
                   placeholder="0,00"
                 />
               </div>

@@ -76,6 +76,8 @@ function GoalProgressStack({ period }: { period: GoalPeriodDoc }) {
   const basePct = pct(period.currentValue, period.targetValue);
   const upTarget = period.upValue ?? period.targetValue * 1.2;
   const upPct = pct(period.currentValue, upTarget);
+  const topTarget = period.topValue && period.topValue > upTarget ? period.topValue : null;
+  const topPct = topTarget ? pct(period.currentValue, topTarget) : 0;
   const marker = calcLinearMarker(period);
 
   return (
@@ -109,6 +111,23 @@ function GoalProgressStack({ period }: { period: GoalPeriodDoc }) {
           <span>R$ {fmt(upTarget)} UP</span>
         </div>
       </div>
+
+      {topTarget && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-semibold text-violet-600">Meta TOP</span>
+            <span className="font-bold text-violet-500">{topPct.toFixed(1)}% · R$ {fmt(topTarget)}</span>
+          </div>
+          <div className="relative h-2 rounded-full bg-violet-100 dark:bg-violet-950/30 overflow-visible">
+            <div className="h-full rounded-full bg-violet-400" style={{ width: `${Math.min(topPct, 100)}%` }} />
+            <div className="absolute top-[-3px] bottom-[-3px] w-px bg-violet-300/80" style={{ left: `${marker}%` }} />
+          </div>
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>R$ {fmt(period.currentValue)} realizado</span>
+            <span>R$ {fmt(topTarget)} TOP</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -267,7 +286,7 @@ export function GoalsRegistrationDashboard() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 dark:bg-slate-900/40 border-b">
                   <tr>
-                    {['Quiosque', 'Mês', 'Tipo', 'Estrutura', 'Progressão', 'Pace', 'Ações'].map(header => (
+                    {['Quiosque', 'Mês', 'Tipo', 'Estrutura', 'Progressão', 'Ritmo', 'Ações'].map(header => (
                       <th key={header} className="text-left px-4 py-3 text-[11px] font-black text-muted-foreground uppercase tracking-[0.18em]">{header}</th>
                     ))}
                   </tr>
@@ -303,7 +322,7 @@ export function GoalsRegistrationDashboard() {
                             </div>
                             <div className="text-xs text-muted-foreground flex items-center gap-1.5">
                               <CalendarRange className="h-3.5 w-3.5" />
-                              Meta R$ {fmt(period.targetValue)} · UP R$ {fmt(period.upValue ?? 0)}
+                              Meta R$ {fmt(period.targetValue)} · UP R$ {fmt(period.upValue ?? 0)}{period.topValue ? ` · TOP R$ ${fmt(period.topValue)}` : ''}
                             </div>
                           </div>
                         </td>
@@ -315,7 +334,7 @@ export function GoalsRegistrationDashboard() {
                             <div className={`text-2xl font-black ${getStatusColor(progressPct).text}`}>{progressPct.toFixed(1)}%</div>
                             <div className="text-xs text-muted-foreground flex items-center gap-1.5">
                               <TrendingUp className="h-3.5 w-3.5" />
-                              R$ {fmt(currentPace)}/dia pace atual
+                              R$ {fmt(currentPace)}/dia ritmo atual
                             </div>
                             <div className="text-xs text-blue-600 flex items-center gap-1.5">
                               <Target className="h-3.5 w-3.5" />

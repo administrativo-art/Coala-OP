@@ -18,16 +18,16 @@ DADOS RECEBIDOS:
 - Quiosque: {{kioskName}}
 - Período: {{periodMonth}}
 - Tipo de Meta: {{goalType}} (Faturamento, Ticket Médio, etc.)
-- Alvo Base: {{targetValue}} | Alvo UP: {{upValue}}
+- Alvo Base: {{targetValue}} | Alvo UP: {{upValue}}{{#if topValue}} | Alvo TOP: {{topValue}}{{/if}}
 - Realizado Atual: {{currentValue}}
 - Intervalo: {{startDate}} até {{endDate}} (Referência Hoje: {{today}})
 
 ---
 INVESTIGAÇÃO ANALÍTICA (8 PILARES):
 
-1. PROGRESSO E PROJEÇÃO (PACE):
-   - Calcule o Gap absoluto e percentual para a meta base e meta UP.
-   - Analise o Pace Diário Necessário para bater cada meta nos dias restantes.
+1. PROGRESSO E PROJEÇÃO (RITMO):
+   - Calcule o Gap absoluto e percentual para a meta base, meta UP e meta TOP (quando informada).
+   - Analise o Ritmo Diário Necessário para bater cada meta nos dias restantes.
    - Faça o Run Rate (Projeção de fechamento) baseando-se no 'dailyProgress'.
 
 2. PERFORMANCE INDIVIDUAL (COLABORADORES):
@@ -59,7 +59,8 @@ REGRAS:
 - Seja DIRETO, ANALÍTICO e EXECUTIVO. Use números para fundamentar.
 - Evite elogios genéricos; foque em diagnóstico e diagnósticos de risco.
 - O campo 'recommendations' deve conter ações concretas para o gestor implementar AMANHÃ.
-- A probabilidade (probabilityOfSuccess) deve ser um cálculo frio baseado no pace necessário vs. pace atual.
+- A probabilidade (probabilityOfSuccess) deve ser um cálculo frio baseado no ritmo necessário vs. ritmo atual.
+- Nos textos, use sempre "ritmo" (nunca "pace").
 
 RESPOSTA (JSON OBRIGATÓRIO):
 Retorne o objeto seguindo fielmente o esquema de saída.`,

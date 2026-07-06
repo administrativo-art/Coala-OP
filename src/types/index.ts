@@ -2496,6 +2496,7 @@ export interface GoalClosureSnapshot {
   periodDayCount: number
   dailyTarget: number
   dailyUpTarget: number
+  dailyTopTarget?: number
   employeeDateKeysByGoalId: Record<string, string[]>
   employeeDayCountsByGoalId: Record<string, number>
   employeeDailyTargetsByGoalId: Record<string, number>
@@ -2515,6 +2516,7 @@ export interface GoalTemplate {
   period: GoalPeriod
   targetValue: number
   upValue: number
+  topValue?: number        // metas criadas antes do 3º nível não têm TOP
   productRef?: string      // product_specific: ProductSimulation.id or name
   productLineRef?: string  // product_line: SimulationCategory.id
   productLineName?: string // product_line: display label
@@ -2530,6 +2532,7 @@ export interface GoalPeriodDoc {
   endDate: Timestamp
   targetValue: number
   upValue: number
+  topValue?: number        // metas criadas antes do 3º nível não têm TOP
   currentValue: number
   dailyProgress?: { [date: string]: number }
   distributionMode?: GoalDistributionMode

@@ -122,6 +122,8 @@ function getPeriodContext(period: GoalPeriodDoc) {
 
 function calcMonthlyStats(period: GoalPeriodDoc, distributionSnapshot?: GoalDistributionSnapshot | null) {
   const up = period.upValue ?? period.targetValue * 1.2;
+  // TOP só existe nas metas criadas com o 3º nível; sem fallback para as antigas
+  const top = period.topValue && period.topValue > up ? period.topValue : null;
   const now = new Date();
   const start = period.startDate?.toDate?.() ?? now;
   const end = period.endDate?.toDate?.() ?? now;
@@ -140,10 +142,11 @@ function calcMonthlyStats(period: GoalPeriodDoc, distributionSnapshot?: GoalDist
   const projection = currentPace * totalDays;
   const neededDaily = remainingDays > 0 ? Math.max(period.targetValue - period.currentValue, 0) / remainingDays : 0;
 
-  return { 
-    value: period.currentValue, 
-    alvo: period.targetValue, 
+  return {
+    value: period.currentValue,
+    alvo: period.targetValue,
     up,
+    top,
     elapsedDays,
     totalDays,
     remainingDays,
@@ -234,8 +237,8 @@ function StatItem({ title, value, subLabel, trend, trendColor }: {
   );
 }
 
-function MainGoalProgress({ value, alvo, up, linearMarker }: { 
-  value: number; alvo: number; up: number; linearMarker: number 
+function MainGoalProgress({ value, alvo, up, top, linearMarker }: {
+  value: number; alvo: number; up: number; top?: number | null; linearMarker: number
 }) {
   const p = pct(value, alvo);
   const { bar: color } = getStatusColor(p);
@@ -252,15 +255,23 @@ function MainGoalProgress({ value, alvo, up, linearMarker }: {
       
       <div className="relative h-[8px] bg-slate-300 dark:bg-slate-700 rounded-[4px] overflow-visible mb-6">
         {/* Barra preenchida */}
-        <div className={`absolute left-0 top-0 h-full rounded-[4px] transition-all duration-700 ${color}`} 
+        <div className={`absolute left-0 top-0 h-full rounded-[4px] transition-all duration-700 ${color}`}
              style={{ width: `${Math.min(filled, 100)}%` }} />
-        
+
         {/* Marcador linear (onde deveria estar hoje) */}
-        <div className="absolute top-[-4px] bottom-[-4px] w-[2px] bg-muted-foreground/60 z-10" 
-             style={{ left: `${linearMarker}%` }} />
-        
-        <span className="absolute -bottom-5 text-[10px] text-muted-foreground font-medium" style={{ left: `calc(${linearMarker}% - 30px)` }}>
-          hoje ({linearMarker.toFixed(1)}%)
+        <div className="absolute top-[-4px] bottom-[-4px] w-[2px] bg-muted-foreground/60 z-10"
+             style={{ left: `${Math.min(linearMarker, 100)}%` }} />
+
+        {/* Rótulo do marcador: centralizado no meio da barra, ancorado nas bordas nos extremos */}
+        <span
+          className="absolute -bottom-5 text-[10px] text-muted-foreground font-medium whitespace-nowrap"
+          style={
+            linearMarker >= 85 ? { right: 0 }
+            : linearMarker <= 8 ? { left: 0 }
+            : { left: `${linearMarker}%`, transform: 'translateX(-50%)' }
+          }
+        >
+          hoje ({Math.min(linearMarker, 100).toFixed(1)}%)
         </span>
       </div>
 
@@ -273,12 +284,26 @@ function MainGoalProgress({ value, alvo, up, linearMarker }: {
       {up > alvo && (
         <div className="pt-2 space-y-1.5">
           <div className="relative h-[8px] bg-slate-300 dark:bg-slate-700 rounded-[4px] overflow-visible">
-            <div className="absolute left-0 top-0 h-full rounded-[4px] bg-blue-500/70" 
+            <div className="absolute left-0 top-0 h-full rounded-[4px] bg-blue-500/70"
                  style={{ width: `${Math.min((value / up) * 100, 100)}%` }} />
           </div>
           <div className="flex justify-between items-center text-[10px] text-muted-foreground">
              <span className="font-bold text-foreground">Realizado R$ {fmt(value)}</span>
              <span className="font-bold text-blue-500">Meta UP R$ {fmt(up)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Barra de Meta TOP (só metas com 3º nível) */}
+      {top && top > up && (
+        <div className="pt-2 space-y-1.5">
+          <div className="relative h-[8px] bg-slate-300 dark:bg-slate-700 rounded-[4px] overflow-visible">
+            <div className="absolute left-0 top-0 h-full rounded-[4px] bg-violet-500/70"
+                 style={{ width: `${Math.min((value / top) * 100, 100)}%` }} />
+          </div>
+          <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+             <span className="font-bold text-foreground">Realizado R$ {fmt(value)}</span>
+             <span className="font-bold text-violet-500">Meta TOP R$ {fmt(top)}</span>
           </div>
         </div>
       )}
@@ -723,7 +748,7 @@ export function EmployeeDailyModal({
                 </div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-1 text-[10px] font-semibold text-zinc-500">
-                <span>Pace atual: <span className={paceOk ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>R$ {fmt(currentPace)}/dia</span></span>
+                <span>Ritmo atual: <span className={paceOk ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>R$ {fmt(currentPace)}/dia</span></span>
                 <span>Necessário: R$ {fmt(requiredPace)}/dia</span>
                 <span>Média: R$ {fmt(averagePerElapsedDay)}/dia</span>
               </div>
@@ -1102,7 +1127,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
 
   // Alertas / badges
   const alerts: { label: string; color: string }[] = [];
-  if (paceActual < dailyAlvo) alerts.push({ label: 'Pace insuficiente', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' });
+  if (paceActual < dailyAlvo) alerts.push({ label: 'Ritmo abaixo do necessário', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' });
   empRows.forEach(e => {
     if (e.daysWithSale === 0) alerts.push({ label: `${e.name.split(' ')[0]} sem vendas`, color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' });
   });
@@ -1119,6 +1144,8 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
     target: stats.alvo,
     upTarget: stats.up,
     upPct: pct(stats.value, stats.up),
+    topTarget: stats.top ?? 0,
+    topPct: stats.top ? pct(stats.value, stats.top) : 0,
     projection: stats.projection,
     paceActual,
     paceNeeded,
@@ -1155,7 +1182,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
           <div>
             <DialogTitle className="text-xl font-bold tracking-tight">Situação Geral — {group.monthLabel}</DialogTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              {kioskName} · Meta alvo: R$ {fmt(stats.alvo)} · Meta UP: R$ {fmt(stats.up)} · Meta/dia: R$ {fmt(dailyAlvo)}
+              {kioskName} · Meta alvo: R$ {fmt(stats.alvo)} · Meta UP: R$ {fmt(stats.up)}{stats.top ? ` · Meta TOP: R$ ${fmt(stats.top)}` : ''} · Meta/dia: R$ {fmt(dailyAlvo)}
             </p>
           </div>
           <PdfDownloadButton data={pdfData} fileName={`relatorio-${group.groupKey}.pdf`} />
@@ -1190,7 +1217,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                 </p>
               </div>
               <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 shadow-sm">
-                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Pace Necessário</p>
+                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Ritmo Necessário</p>
                 <p className={`text-xl font-black tabular-nums ${paceActual >= paceNeeded ? 'text-green-500' : 'text-rose-500'}`}>R$ {fmt(paceNeeded)}/dia</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Atual: R$ {fmt(paceActual)}/dia</p>
                 <p className={`text-[10px] font-bold mt-0.5 ${paceActual >= paceNeeded ? 'text-green-600' : 'text-rose-500'}`}>
@@ -1237,6 +1264,20 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                   </div>
                   <div className="flex justify-between text-[9px] text-muted-foreground">
                     <span>R$ 0</span><span>R$ {fmt(stats.up)}</span>
+                  </div>
+                </div>
+              )}
+              {stats.top && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] text-muted-foreground font-bold uppercase">
+                    <span>Meta TOP</span>
+                    <span className="text-violet-500">{pct(stats.value, stats.top).toFixed(1)}%</span>
+                  </div>
+                  <div className="h-2 bg-slate-300 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-violet-500/70 transition-all" style={{ width: `${Math.min(pct(stats.value, stats.top), 100)}%` }} />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-muted-foreground">
+                    <span>R$ 0</span><span>R$ {fmt(stats.top)}</span>
                   </div>
                 </div>
               )}
@@ -1375,7 +1416,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                             <p className="font-bold">{e.daysWithSale} / {e.employeeActiveDateKeys.length}</p>
                           </div>
                           <div>
-                            <p className="text-muted-foreground text-[9px] uppercase font-bold">Pace atual</p>
+                            <p className="text-muted-foreground text-[9px] uppercase font-bold">Ritmo atual</p>
                             <p className={`font-bold ${statusOk ? 'text-green-600' : 'text-rose-500'}`}>R$ {fmt(e.empPace)}/dia</p>
                           </div>
                         </div>
@@ -1389,7 +1430,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                           {e.daysWithSale === 0
                             ? '⚠ Nenhum dia com venda registrada'
                             : statusOk
-                              ? '✓ Pace acima do necessário nos dias trabalhados'
+                              ? '✓ Ritmo acima do necessário nos dias trabalhados'
                               : `Pace abaixo do necessário (R$ ${fmt(e.empPaceNeeded)}/dia)`}
                         </div>
                       </div>
@@ -1542,6 +1583,7 @@ export function GoalsTrackingDashboard() {
         goalType: template?.type || 'revenue',
         targetValue: period.targetValue,
         upValue: period.upValue,
+        topValue: period.topValue ?? 0,
         currentValue: period.currentValue,
         startDate: period.startDate.toDate().toISOString(),
         endDate: period.endDate.toDate().toISOString(),
@@ -1867,7 +1909,7 @@ export function GoalsTrackingDashboard() {
                              </div>
                              <div className="rounded-[22px] border border-white/80 bg-white px-5 py-5 shadow-[0_18px_50px_-44px_rgba(15,23,42,0.45)]">
                                <StatItem 
-                                 title="Pace Atual"
+                                 title="Ritmo Atual"
                                  value={fmt(stats.currentPace)}
                                  subLabel={`Necessário: R$ ${fmt(stats.neededDaily)}`}
                                  trend={stats.currentPace >= stats.neededDaily ? `+${pct(stats.currentPace - stats.neededDaily, stats.neededDaily).toFixed(0)}%` : `-${pct(stats.neededDaily - stats.currentPace, stats.neededDaily).toFixed(0)}%`}
@@ -1899,7 +1941,7 @@ export function GoalsTrackingDashboard() {
                     return (
                       <div key={period.id} className="space-y-8">
                         <Card className="relative overflow-hidden rounded-[24px] border border-white/80 bg-white p-7 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.45)]">
-                          <MainGoalProgress value={stats.value} alvo={stats.alvo} up={stats.up} linearMarker={stats.linearMarker} />
+                          <MainGoalProgress value={stats.value} alvo={stats.alvo} up={stats.up} top={stats.top} linearMarker={stats.linearMarker} />
                           
                           <div 
                             className="group/week mt-10 flex cursor-pointer flex-col items-center justify-between gap-4 rounded-[18px] border border-[#edf1f6] bg-[#f8fafc] p-4 transition-all hover:bg-[#f2f6fb] md:flex-row"

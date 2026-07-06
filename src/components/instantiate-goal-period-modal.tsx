@@ -29,9 +29,13 @@ const step1Schema = z.object({
   month: z.string().min(1, 'Selecione o mês'),
   targetValue: z.number().min(0.01, 'Valor deve ser maior que zero'),
   upValue: z.number().min(0.01, 'Valor deve ser maior que zero'),
+  topValue: z.number().min(0.01, 'Valor deve ser maior que zero'),
 }).refine(d => d.upValue > d.targetValue, {
   message: 'Meta UP deve ser maior que a Meta alvo',
   path: ['upValue'],
+}).refine(d => d.topValue > d.upValue, {
+  message: 'Meta TOP deve ser maior que a Meta UP',
+  path: ['topValue'],
 });
 
 type Step1Values = z.infer<typeof step1Schema>;
@@ -104,6 +108,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
       month: currentMonthValue(),
       targetValue: template?.targetValue ?? 0,
       upValue: template?.upValue ?? 0,
+      topValue: template?.topValue ?? 0,
     },
   });
 
@@ -194,6 +199,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
       endDate: Timestamp.fromDate(end),
       targetValue: data.targetValue,
       upValue: data.upValue,
+      topValue: data.topValue,
       currentValue: 0,
       dailyProgress: {},
       distributionMode: 'scheduled_days',
@@ -281,6 +287,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
       month: currentMonthValue(),
       targetValue: template?.targetValue ?? 0,
       upValue: template?.upValue ?? 0,
+      topValue: template?.topValue ?? 0,
     });
   }
 
@@ -327,7 +334,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
                   )}
                 </FormItem>
               )} />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <FormField control={form.control} name="targetValue" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Meta alvo</FormLabel>
@@ -340,6 +347,15 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
                 <FormField control={form.control} name="upValue" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Meta UP</FormLabel>
+                    <FormControl>
+                      <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0,00" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="topValue" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Meta TOP</FormLabel>
                     <FormControl>
                       <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0,00" />
                     </FormControl>

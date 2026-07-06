@@ -386,6 +386,8 @@ export function buildGoalClosureSnapshot(
     periodDayCount,
     dailyTarget: period.targetValue / periodDayCount,
     dailyUpTarget: (period.upValue ?? period.targetValue * 1.2) / periodDayCount,
+    // Firestore rejeita undefined: só grava o alvo diário TOP quando a meta tem 3º nível
+    ...(period.topValue ? { dailyTopTarget: period.topValue / periodDayCount } : {}),
     employeeDateKeysByGoalId,
     employeeDayCountsByGoalId,
     employeeDailyTargetsByGoalId,

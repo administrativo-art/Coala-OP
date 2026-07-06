@@ -94,7 +94,7 @@ function GoalReportPdf({ data }: { data: any }) {
             </Text>
           </View>
           <View style={S.kpiCard}>
-            <Text style={S.kpiLabel}>Pace Necessário</Text>
+            <Text style={S.kpiLabel}>Ritmo Necessário</Text>
             <Text style={[S.kpiValue, { color: data.paceActual >= data.paceNeeded ? green : red }]}>R$ {fmt(data.paceNeeded)}/dia</Text>
             <Text style={S.kpiSub}>Atual: R$ {fmt(data.paceActual)}/dia</Text>
           </View>
@@ -127,6 +127,17 @@ function GoalReportPdf({ data }: { data: any }) {
             </View>
           </View>
         )}
+        {data.topTarget > data.upTarget && (
+          <View style={S.progressWrap}>
+            <View style={S.progressLabel}>
+              <Text style={{ fontSize: 8, color: '#64748b', fontWeight: 'bold' }}>Meta TOP — R$ {fmt(data.topTarget)}</Text>
+              <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#7c3aed' }}>{data.topPct.toFixed(1)}%</Text>
+            </View>
+            <View style={S.progressTrack}>
+              <View style={[S.progressFill, { width: `${Math.min(data.topPct, 100)}%`, backgroundColor: '#8b5cf6' }]} />
+            </View>
+          </View>
+        )}
 
         {/* ── ALERTAS ── */}
         {data.alerts.length > 0 && (
@@ -145,8 +156,8 @@ function GoalReportPdf({ data }: { data: any }) {
             <Text style={[S.cellBold, { width: '14%' }]}>Realizado</Text>
             <Text style={[S.cellBold, { width: '14%' }]}>Meta</Text>
             <Text style={[S.cellBold, { width: '8%' }]}>%</Text>
-            <Text style={[S.cellBold, { width: '14%' }]}>Pace Atual</Text>
-            <Text style={[S.cellBold, { width: '14%' }]}>Pace Nec.</Text>
+            <Text style={[S.cellBold, { width: '14%' }]}>Ritmo Atual</Text>
+            <Text style={[S.cellBold, { width: '14%' }]}>Ritmo Nec.</Text>
             <Text style={[S.cellBold, { width: '14%' }]}>Consistência</Text>
           </View>
           {data.employees.map((emp: any, i: number) => {
