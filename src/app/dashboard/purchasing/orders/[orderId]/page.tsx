@@ -34,13 +34,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PermissionGuard } from '@/components/permission-guard';
@@ -53,9 +46,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { AccountPlanTreeSelect } from '@/components/purchasing/account-plan-tree-select';
+import { ResultCenterSelect } from '@/components/purchasing/result-center-select';
 import { InstallmentPlanDialog } from '@/components/purchasing/installment-plan-dialog';
 import { ManageOrderItemsModal } from '@/components/purchasing/manage-order-items-modal';
 import { useAuth } from '@/hooks/use-auth';
@@ -82,6 +84,7 @@ import {
   type PurchasePaymentCondition,
 } from '@/types';
 import { purchaseTreatmentSkipsOperationalEntry } from '@/lib/purchasing-item-treatment';
+import { cn } from '@/lib/utils';
 
 const RECEIPT_LABELS: Record<string, string> = {
   future_delivery: 'Entrega futura',
@@ -105,6 +108,13 @@ const PAYMENT_CONDITION_LABELS: Record<PurchasePaymentCondition, string> = {
 
 function getPaymentDateLabel(paymentMethod?: PaymentMethod) {
   return paymentMethod === 'card_credit' || paymentMethod === 'card_debit' ? 'Data da compra' : 'Vencimento';
+}
+
+const PENDING_FIELD_CLASS = 'border-amber-400 dark:border-amber-600';
+const MISSING_VALUE_CLASS = 'inline-flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400';
+
+function RequiredMark() {
+  return <span className="text-destructive"> *</span>;
 }
 
 const FREIGHT_PAYMENT_MODE_LABELS: Record<PurchaseFreightPaymentMode, string> = {
@@ -367,6 +377,20 @@ export default function PurchaseOrderPage() {
     setEditOpen(true);
   };
 
+  const editPendingFields = useMemo(() => {
+    if (!editForm) return [];
+    const pending: string[] = [];
+    if (!editForm.paymentDueDate) pending.push(getPaymentDateLabel(editForm.paymentMethod));
+    if (editForm.paymentCondition === 'installments' && editForm.installmentDueDates.length < 2) {
+      pending.push('Parcelamento');
+    }
+    if (isCardPayment(editForm.paymentMethod) && !editForm.paymentCardKey) pending.push('Cartão da compra');
+    if (!editForm.accountPlanId) pending.push('Plano de contas da mercadoria');
+    if (!editForm.resultCenterId) pending.push('Centro de resultado');
+    if (editForm.deliveryFee > 0 && !editForm.freightAccountPlanId) pending.push('Plano de contas do frete');
+    return pending;
+  }, [editForm]);
+
   const handleSave = async () => {
     if (!order || !editForm) return;
     const selectedAccountPlan = flattenedAccountPlans.find((plan) => plan.id === editForm.accountPlanId);
@@ -538,6 +562,20 @@ export default function PurchaseOrderPage() {
                             : 'Ainda faltam classificações financeiras obrigatórias para confirmar o pedido.'}
                         </p>
                       )}
+                      {!isReadyForConfirmation && canEditOrder && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-1 border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
+                          onClick={() =>
+                            unregisteredStockItems.length > 0 ? setItemsEditOpen(true) : openEdit()
+                          }
+                        >
+                          <Pencil className="mr-2 h-3.5 w-3.5" />
+                          {unregisteredStockItems.length > 0 ? 'Revisar itens' : 'Completar dados'}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -558,11 +596,31 @@ export default function PurchaseOrderPage() {
                 </Button>
               )}
               {canConfirmOrder && (
-                <Button onClick={handleConfirmOrder} disabled={confirming || !isReadyForConfirmation}>
-                  {confirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {!confirming && <CheckCircle2 className="mr-2 h-4 w-4" />}
-                  Confirmar pedido
-                </Button>
+                isReadyForConfirmation ? (
+                  <Button onClick={handleConfirmOrder} disabled={confirming}>
+                    {confirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {!confirming && <CheckCircle2 className="mr-2 h-4 w-4" />}
+                    Confirmar pedido
+                  </Button>
+                ) : (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span tabIndex={0}>
+                          <Button disabled className="pointer-events-none">
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            Confirmar pedido
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        {unregisteredStockItems.length > 0
+                          ? 'Há itens de estoque sem cadastro vinculado.'
+                          : 'Faltam classificações financeiras obrigatórias.'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )
               )}
               {canRegisterPayment && (
                 <Button variant="outline" onClick={handleMarkAsPaid} disabled={markingPaid}>
@@ -654,7 +712,7 @@ export default function PurchaseOrderPage() {
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Situação financeira</p>
               <p className="mt-1 text-lg font-semibold">
-                {financial ? FINANCIAL_STATUS_LABELS[financial.status] : 'Sem título'}
+                {financial ? FINANCIAL_STATUS_LABELS[financial.status] : 'Aguardando confirmação'}
               </p>
             </div>
           </div>
@@ -827,27 +885,56 @@ export default function PurchaseOrderPage() {
             </div>
 
             <div className="rounded-2xl border bg-card p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <Scale className="h-4 w-4 text-muted-foreground" />
-                <h3 className="font-semibold">Classificação</h3>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Scale className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="font-semibold">Classificação</h3>
+                </div>
+                {isCreated && canEditOrder && (
+                  <Button variant="ghost" size="sm" className="-my-1 h-7 px-2 text-xs" onClick={openEdit}>
+                    <Pencil className="mr-1.5 h-3 w-3" />
+                    Definir
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-3 text-sm">
                 <div>
                   <p className="text-muted-foreground">Plano de contas da mercadoria</p>
-                  <p className="font-medium">{order.accountPlanName ?? 'Não definido'}</p>
+                  {order.accountPlanName ? (
+                    <p className="font-medium">{order.accountPlanName}</p>
+                  ) : (
+                    <p className={MISSING_VALUE_CLASS}>
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Não definido
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Centro de resultado</p>
-                  <p className="font-medium">{order.resultCenterName ?? 'Não definido'}</p>
+                  {order.resultCenterName ? (
+                    <p className="font-medium">{order.resultCenterName}</p>
+                  ) : (
+                    <p className={MISSING_VALUE_CLASS}>
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Não definido
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Plano de contas do frete</p>
-                  <p className="font-medium">
-                    {order.deliveryFee && order.deliveryFee > 0
-                      ? order.freightAccountPlanName ?? 'Não definida'
-                      : 'Sem frete'}
-                  </p>
+                  {order.deliveryFee && order.deliveryFee > 0 ? (
+                    order.freightAccountPlanName ? (
+                      <p className="font-medium">{order.freightAccountPlanName}</p>
+                    ) : (
+                      <p className={MISSING_VALUE_CLASS}>
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Não definida
+                      </p>
+                    )
+                  ) : (
+                    <p className="font-medium">Sem frete</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Liquidação do frete</p>
@@ -897,254 +984,292 @@ export default function PurchaseOrderPage() {
         </div>
 
         {editForm && (
-          <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Editar pedido</DialogTitle>
-              </DialogHeader>
+          <Sheet open={editOpen} onOpenChange={setEditOpen}>
+            <SheetContent side="right" className="flex h-full !w-full flex-col gap-0 overflow-hidden p-0 sm:!max-w-[720px]">
+              <SheetHeader className="border-b px-6 py-5">
+                <SheetTitle>Editar pedido</SheetTitle>
+              </SheetHeader>
 
-              <div className="space-y-4 py-2">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Forma de pagamento</Label>
-                    <Select
-                      value={editForm.paymentMethod}
-                      onValueChange={(value) => setEditForm((current) => current && { ...current, paymentMethod: value as PaymentMethod })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_METHODS.map((method) => (
-                          <SelectItem key={method} value={method}>
-                            {PAYMENT_LABELS[method]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Condição de pagamento</Label>
-                    <Select
-                      value={editForm.paymentCondition}
-                      onValueChange={(value) =>
-                        setEditForm((current) =>
-                          current
-                            ? {
-                                ...current,
-                                paymentCondition: value as PurchasePaymentCondition,
-                                installmentsCount:
-                                  value === 'installments' ? Math.max(2, current.installmentsCount) : current.installmentsCount,
-                                installmentDueDates:
-                                  value === 'installments' && current.installmentDueDates.length < 2
-                                    ? buildMonthlyInstallmentDates(
-                                        current.paymentDueDate,
-                                        Math.max(2, current.installmentsCount),
-                                      )
-                                    : current.installmentDueDates,
-                              }
-                            : current,
-                        )
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">À vista</SelectItem>
-                        <SelectItem value="installments">Parcelado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {editForm.paymentCondition === 'installments' ? (
-                    <div className="space-y-1.5">
-                      <Label>Parcelamento</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full justify-start font-normal"
-                        onClick={() => setInstallmentPlanOpen(true)}
-                      >
-                        {editForm.installmentDueDates.length >= 2
-                          ? `${editForm.installmentDueDates.length}x · ${format(parseISO(editForm.installmentDueDates[0]), 'dd/MM/yyyy')} a ${format(parseISO(editForm.installmentDueDates[editForm.installmentDueDates.length - 1]), 'dd/MM/yyyy')}`
-                          : 'Definir parcelas e vencimentos'}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <Label>{getPaymentDateLabel(editForm.paymentMethod)}</Label>
-                      <Input
-                        type="date"
-                        value={editForm.paymentDueDate}
-                        onChange={(event) => setEditForm((current) => current && { ...current, paymentDueDate: event.target.value })}
-                      />
-                    </div>
-                  )}
-
-                  {isCardPayment(editForm.paymentMethod) && (
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label>Cartão da compra</Label>
-                      <Select
-                        value={editForm.paymentCardKey || '__none__'}
-                        onValueChange={(value) => setEditForm((current) => current && { ...current, paymentCardKey: value === '__none__' ? '' : value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o cartão" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Sem cartão vinculado</SelectItem>
-                          {paymentCards.map((card) => (
-                            <SelectItem key={getPaymentCardKey(card.accountId, card.methodId)} value={getPaymentCardKey(card.accountId, card.methodId)}>
-                              {card.methodLabel}{card.lastDigits ? ` final ${card.lastDigits}` : ''} · {card.accountName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {order.receiptMode === 'future_delivery' && (
-                    <div className="space-y-1.5">
-                      <Label>Entrega prevista</Label>
-                      <Input
-                        type="date"
-                        value={editForm.estimatedReceiptDate}
-                        onChange={(event) => setEditForm((current) => current && { ...current, estimatedReceiptDate: event.target.value })}
-                      />
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Plano de contas da mercadoria</Label>
-                    <AccountPlanTreeSelect
-                      value={editForm.accountPlanId}
-                      onChange={(value) => setEditForm((current) => current && { ...current, accountPlanId: value })}
-                      options={accountPlans}
-                      placeholder="Selecione o plano de contas"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Centro de resultado</Label>
-                    <Select
-                      value={editForm.resultCenterId}
-                      onValueChange={(value) => setEditForm((current) => current && { ...current, resultCenterId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o centro de resultado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(resultCenters ?? []).map((center) => (
-                          <SelectItem key={center.id} value={center.id}>
-                            {center.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Frete / entrega</Label>
-                    <CurrencyInput
-                      value={editForm.deliveryFee}
-                      onChange={(value) => setEditForm((current) => current && { ...current, deliveryFee: value })}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Plano de contas do frete</Label>
-                    <AccountPlanTreeSelect
-                      value={editForm.deliveryFee > 0 ? editForm.freightAccountPlanId : '__none__'}
-                      onChange={(value) =>
-                        setEditForm((current) =>
-                          current
-                            ? { ...current, freightAccountPlanId: value === '__none__' ? '' : value }
-                            : current,
-                        )
-                      }
-                      options={accountPlans}
-                      placeholder={editForm.deliveryFee > 0 ? 'Selecione o plano de contas' : 'Sem frete'}
-                      noneLabel="Sem frete"
-                      allowNone
-                      disabled={editForm.deliveryFee <= 0}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Liquidação do frete</Label>
-                    <Select
-                      value={editForm.deliveryFee > 0 ? editForm.freightPaymentMode : 'separate'}
-                      onValueChange={(value) =>
-                        setEditForm((current) =>
-                          current
-                            ? { ...current, freightPaymentMode: value as PurchaseFreightPaymentMode }
-                            : current,
-                        )
-                      }
-                      disabled={editForm.deliveryFee <= 0}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione como o frete será quitado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Use "junto" quando o pagamento cobrir mercadoria e frete no mesmo lançamento bancário.
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                {editPendingFields.length > 0 && (
+                  <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <p className="font-medium">
+                      {editPendingFields.length === 1
+                        ? '1 campo obrigatório pendente'
+                        : `${editPendingFields.length} campos obrigatórios pendentes`}
                     </p>
+                    <p className="mt-0.5 text-amber-800">{editPendingFields.join(' · ')}</p>
                   </div>
+                )}
 
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Informações de rastreio</Label>
-                    <Textarea
-                      rows={3}
-                      placeholder="Código, transportadora, prazo ou link de acompanhamento..."
-                      value={editForm.trackingInfo}
-                      onChange={(event) => setEditForm((current) => current && { ...current, trackingInfo: event.target.value })}
-                    />
-                  </div>
+                <div className="space-y-6">
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pagamento</h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Forma de pagamento</Label>
+                        <Select
+                          value={editForm.paymentMethod}
+                          onValueChange={(value) => setEditForm((current) => current && { ...current, paymentMethod: value as PaymentMethod })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAYMENT_METHODS.map((method) => (
+                              <SelectItem key={method} value={method}>
+                                {PAYMENT_LABELS[method]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Observações</Label>
+                      <div className="space-y-1.5">
+                        <Label>Condição de pagamento</Label>
+                        <Select
+                          value={editForm.paymentCondition}
+                          onValueChange={(value) =>
+                            setEditForm((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    paymentCondition: value as PurchasePaymentCondition,
+                                    installmentsCount:
+                                      value === 'installments' ? Math.max(2, current.installmentsCount) : current.installmentsCount,
+                                    installmentDueDates:
+                                      value === 'installments' && current.installmentDueDates.length < 2
+                                        ? buildMonthlyInstallmentDates(
+                                            current.paymentDueDate,
+                                            Math.max(2, current.installmentsCount),
+                                          )
+                                        : current.installmentDueDates,
+                                  }
+                                : current,
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="cash">À vista</SelectItem>
+                            <SelectItem value="installments">Parcelado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {editForm.paymentCondition === 'installments' ? (
+                        <div className="space-y-1.5">
+                          <Label>Parcelamento<RequiredMark /></Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={cn(
+                              'w-full justify-start font-normal',
+                              editForm.installmentDueDates.length < 2 && PENDING_FIELD_CLASS,
+                            )}
+                            onClick={() => setInstallmentPlanOpen(true)}
+                          >
+                            {editForm.installmentDueDates.length >= 2
+                              ? `${editForm.installmentDueDates.length}x · ${format(parseISO(editForm.installmentDueDates[0]), 'dd/MM/yyyy')} a ${format(parseISO(editForm.installmentDueDates[editForm.installmentDueDates.length - 1]), 'dd/MM/yyyy')}`
+                              : 'Definir parcelas e vencimentos'}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <Label>{getPaymentDateLabel(editForm.paymentMethod)}<RequiredMark /></Label>
+                          <Input
+                            type="date"
+                            className={cn(!editForm.paymentDueDate && PENDING_FIELD_CLASS)}
+                            value={editForm.paymentDueDate}
+                            onChange={(event) => setEditForm((current) => current && { ...current, paymentDueDate: event.target.value })}
+                          />
+                        </div>
+                      )}
+
+                      {isCardPayment(editForm.paymentMethod) && (
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label>Cartão da compra<RequiredMark /></Label>
+                          <Select
+                            value={editForm.paymentCardKey || '__none__'}
+                            onValueChange={(value) => setEditForm((current) => current && { ...current, paymentCardKey: value === '__none__' ? '' : value })}
+                          >
+                            <SelectTrigger className={cn(!editForm.paymentCardKey && PENDING_FIELD_CLASS)}>
+                              <SelectValue placeholder="Selecione o cartão" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Sem cartão vinculado</SelectItem>
+                              {paymentCards.map((card) => (
+                                <SelectItem key={getPaymentCardKey(card.accountId, card.methodId)} value={getPaymentCardKey(card.accountId, card.methodId)}>
+                                  {card.methodLabel}{card.lastDigits ? ` final ${card.lastDigits}` : ''} · {card.accountName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <Separator />
+
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Classificação financeira</h3>
+                    <div className="grid gap-4">
+                      <div className="space-y-1.5">
+                        <Label>Plano de contas da mercadoria<RequiredMark /></Label>
+                        <AccountPlanTreeSelect
+                          value={editForm.accountPlanId}
+                          onChange={(value) => setEditForm((current) => current && { ...current, accountPlanId: value })}
+                          options={accountPlans}
+                          placeholder="Selecione o plano de contas"
+                          triggerClassName={cn(!editForm.accountPlanId && PENDING_FIELD_CLASS)}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Centro de resultado<RequiredMark /></Label>
+                        <ResultCenterSelect
+                          value={editForm.resultCenterId}
+                          onChange={(value) => setEditForm((current) => current && { ...current, resultCenterId: value })}
+                          options={resultCenters ?? []}
+                          placeholder="Selecione o centro de resultado"
+                          triggerClassName={cn(!editForm.resultCenterId && PENDING_FIELD_CLASS)}
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <Separator />
+
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Frete</h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>Frete / entrega</Label>
+                        <CurrencyInput
+                          value={editForm.deliveryFee}
+                          onChange={(value) => setEditForm((current) => current && { ...current, deliveryFee: value })}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          Plano de contas do frete
+                          {editForm.deliveryFee > 0 && <RequiredMark />}
+                        </Label>
+                        <AccountPlanTreeSelect
+                          value={editForm.deliveryFee > 0 ? editForm.freightAccountPlanId : '__none__'}
+                          onChange={(value) =>
+                            setEditForm((current) =>
+                              current
+                                ? { ...current, freightAccountPlanId: value === '__none__' ? '' : value }
+                                : current,
+                            )
+                          }
+                          options={accountPlans}
+                          placeholder={editForm.deliveryFee > 0 ? 'Selecione o plano de contas' : 'Sem frete'}
+                          noneLabel="Sem frete"
+                          allowNone
+                          disabled={editForm.deliveryFee <= 0}
+                          triggerClassName={cn(
+                            editForm.deliveryFee > 0 && !editForm.freightAccountPlanId && PENDING_FIELD_CLASS,
+                          )}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Liquidação do frete</Label>
+                        <Select
+                          value={editForm.deliveryFee > 0 ? editForm.freightPaymentMode : 'separate'}
+                          onValueChange={(value) =>
+                            setEditForm((current) =>
+                              current
+                                ? { ...current, freightPaymentMode: value as PurchaseFreightPaymentMode }
+                                : current,
+                            )
+                          }
+                          disabled={editForm.deliveryFee <= 0}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione como o frete será quitado" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Use "junto" quando o pagamento cobrir mercadoria e frete no mesmo lançamento bancário.
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <Separator />
+
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Entrega e rastreio</h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {order.receiptMode === 'future_delivery' && (
+                        <div className="space-y-1.5">
+                          <Label>Entrega prevista</Label>
+                          <Input
+                            type="date"
+                            value={editForm.estimatedReceiptDate}
+                            onChange={(event) => setEditForm((current) => current && { ...current, estimatedReceiptDate: event.target.value })}
+                          />
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Informações de rastreio</Label>
+                        <Textarea
+                          rows={3}
+                          placeholder="Código, transportadora, prazo ou link de acompanhamento..."
+                          value={editForm.trackingInfo}
+                          onChange={(event) => setEditForm((current) => current && { ...current, trackingInfo: event.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <Separator />
+
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observações</h3>
                     <Textarea
                       rows={4}
                       placeholder="Observações sobre a compra..."
                       value={editForm.notes}
                       onChange={(event) => setEditForm((current) => current && { ...current, notes: event.target.value })}
                     />
-                  </div>
+                  </section>
                 </div>
               </div>
 
-              <DialogFooter>
+              <SheetFooter className="border-t bg-background px-6 py-4 sm:items-center">
+                {editPendingFields.length > 0 && (
+                  <p className="text-xs text-muted-foreground sm:mr-auto">
+                    Preencha os campos obrigatórios (
+                    <span className="text-destructive">*</span>
+                    ) para salvar.
+                  </p>
+                )}
                 <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
                   Cancelar
                 </Button>
-                <Button
-                  onClick={handleSave}
-                  disabled={
-                    saving ||
-                    !editForm.paymentDueDate ||
-                    (editForm.paymentCondition === 'installments' && editForm.installmentDueDates.length < 2) ||
-                    (isCardPayment(editForm.paymentMethod) && !editForm.paymentCardKey) ||
-                    !editForm.accountPlanId ||
-                    !editForm.resultCenterId ||
-                    (editForm.deliveryFee > 0 && !editForm.freightAccountPlanId)
-                  }
-                >
+                <Button onClick={handleSave} disabled={saving || editPendingFields.length > 0}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
         )}
 
         {editForm && (

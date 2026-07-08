@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { buildAccountPlanTree, type AccountPlanOption, type AccountPlanTreeNode } from '@/lib/purchasing-financial-options';
+import { buildAccountPlanSearchText, buildAccountPlanTree, type AccountPlanOption, type AccountPlanTreeNode } from '@/lib/purchasing-financial-options';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -17,6 +17,7 @@ interface Props {
   noneLabel?: string;
   allowNone?: boolean;
   disabled?: boolean;
+  triggerClassName?: string;
 }
 
 function collectParentPath(
@@ -33,6 +34,49 @@ function collectParentPath(
   }
 
   return path;
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function getOptionPath(
+  options: Array<AccountPlanOption & { order?: number }>,
+  targetId: string,
+) {
+  const byId = new Map(options.map((option) => [option.id, option]));
+  const path: string[] = [];
+  let current = byId.get(targetId);
+
+  while (current) {
+    path.unshift(current.name);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+  }
+
+  return path;
+}
+
+function sortOptionsByTreeOrder(
+  options: Array<AccountPlanOption & { order?: number }>,
+  tree: AccountPlanTreeNode[],
+) {
+  const orderById = new Map<string, number>();
+  let index = 0;
+
+  const walk = (nodes: AccountPlanTreeNode[]) => {
+    nodes.forEach((node) => {
+      orderById.set(node.id, index);
+      index += 1;
+      walk(node.children);
+    });
+  };
+
+  walk(tree);
+  return [...options].sort((left, right) => (orderById.get(left.id) ?? 0) - (orderById.get(right.id) ?? 0));
 }
 
 function TreeNodeRow({
@@ -112,12 +156,31 @@ export function AccountPlanTreeSelect({
   noneLabel = 'Sem padrão',
   allowNone = false,
   disabled = false,
+  triggerClassName,
 }: Props) {
   const [open, setOpen] = useState(false);
   const tree = useMemo(() => buildAccountPlanTree(options), [options]);
   const selected = useMemo(() => options.find((option) => option.id === value) ?? null, [options, value]);
   const displayLabel = value === '__none__' ? noneLabel : selected?.name ?? placeholder;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const normalizedSearch = normalizeSearch(search);
+
+  const optionPaths = useMemo(
+    () => new Map(options.map((option) => [option.id, getOptionPath(options, option.id)])),
+    [options],
+  );
+
+  const filteredOptions = useMemo(() => {
+    if (!normalizedSearch) return [];
+
+    const tokens = normalizedSearch.split(/\s+/).filter(Boolean);
+    return sortOptionsByTreeOrder(options, tree).filter((option) => {
+      // Busca por caminho na árvore + palavras-chave cadastradas na conta.
+      const haystack = buildAccountPlanSearchText(option, optionPaths.get(option.id));
+      return tokens.every((token) => haystack.includes(token));
+    });
+  }, [normalizedSearch, optionPaths, options, tree]);
 
   useEffect(() => {
     if (!value || value === '__none__') {
@@ -140,18 +203,25 @@ export function AccountPlanTreeSelect({
   const handleSelect = (id: string) => {
     onChange(id);
     setOpen(false);
+    setSearch('');
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch('');
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           type="button"
           variant="outline"
           disabled={disabled}
-          className="w-full justify-between font-normal"
+          className={cn('w-full justify-between font-normal hover:bg-background hover:text-foreground', triggerClassName)}
         >
-          <span className="truncate">{displayLabel}</span>
+          <span className={cn('truncate', !selected && value !== '__none__' && 'text-muted-foreground')}>{displayLabel}</span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -160,9 +230,18 @@ export function AccountPlanTreeSelect({
         align="start"
         sideOffset={4}
       >
-        <ScrollArea className="h-[min(18rem,var(--radix-popover-content-available-height))] pr-3">
+        <div className="relative mb-2">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar plano de contas..."
+            className="h-9 pl-8"
+          />
+        </div>
+        <div className="max-h-[min(18rem,calc(var(--radix-popover-content-available-height)-4.5rem))] overflow-y-auto pr-1">
           <div className="space-y-0.5">
-            {allowNone && (
+            {allowNone && (!normalizedSearch || normalizeSearch(noneLabel).includes(normalizedSearch)) && (
               <button
                 type="button"
                 className={cn(
@@ -176,19 +255,54 @@ export function AccountPlanTreeSelect({
               </button>
             )}
 
-            {tree.map((node) => (
-              <TreeNodeRow
-                key={node.id}
-                node={node}
-                depth={0}
-                expanded={expanded}
-                selectedId={value}
-                onToggle={toggle}
-                onSelect={handleSelect}
-              />
-            ))}
+            {normalizedSearch ? (
+              filteredOptions.length > 0 ? (
+                filteredOptions.map((option) => {
+                  const path = optionPaths.get(option.id) ?? [option.name];
+                  const isSelected = value === option.id;
+
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={cn(
+                        'flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm hover:bg-muted',
+                        isSelected && 'bg-primary text-primary-foreground hover:bg-primary/90',
+                      )}
+                      onClick={() => handleSelect(option.id)}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate">{option.name}</span>
+                        {path.length > 1 && (
+                          <span className={cn('block truncate text-xs text-muted-foreground', isSelected && 'text-primary-foreground/75')}>
+                            {path.slice(0, -1).join(' / ')}
+                          </span>
+                        )}
+                      </span>
+                      {isSelected && <Check className="h-4 w-4 shrink-0" />}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  Nenhum plano encontrado.
+                </div>
+              )
+            ) : (
+              tree.map((node) => (
+                <TreeNodeRow
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  expanded={expanded}
+                  selectedId={value}
+                  onToggle={toggle}
+                  onSelect={handleSelect}
+                />
+              ))
+            )}
           </div>
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  AlertCircle, ChevronDown, ChevronRight, GripVertical, Loader2, MoreHorizontal, PlusCircle,
+  AlertCircle, ChevronDown, ChevronRight, GripVertical, Loader2, MoreHorizontal, PlusCircle, X,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,6 +81,7 @@ type Account = {
   parentId?: string | null;
   dre_position?: string | null;
   is_dre_account?: boolean;
+  searchTerms?: string[];
   order?: number;
   active?: boolean;
   isGroup?: boolean;
@@ -458,6 +460,27 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
   const includeInDre = form.watch("includeInDre");
   const isPatrimonial = form.watch("isPatrimonial");
 
+  // Palavras-chave de busca (chips), fora do zod — mesmo padrão dos aliases de produto.
+  const [searchTerms, setSearchTerms] = useState<string[]>([]);
+  const [searchTermInput, setSearchTermInput] = useState("");
+
+  const normalizeTerm = (value: string) =>
+    value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+
+  function handleAddSearchTerm() {
+    const term = searchTermInput.trim();
+    if (!term) return;
+    const normalized = normalizeTerm(term);
+    if (!searchTerms.some((existing) => normalizeTerm(existing) === normalized)) {
+      setSearchTerms((prev) => [...prev, term]);
+    }
+    setSearchTermInput("");
+  }
+
+  function handleRemoveSearchTerm(term: string) {
+    setSearchTerms((prev) => prev.filter((entry) => entry !== term));
+  }
+
   const parentOptions = useMemo(() => {
     if (!editingAccount) return accounts;
     const blockedIds = collectDescendantIds(accounts, editingAccount.id);
@@ -468,6 +491,8 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
   function openAdd(parentId: string | null = null) {
     setEditingAccount(null);
     form.reset({ name: "", description: "", parentId, includeInDre: false, dre_position: null, isPatrimonial: false });
+    setSearchTerms([]);
+    setSearchTermInput("");
     setDialogOpen(true);
   }
 
@@ -481,6 +506,8 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
       dre_position: account.dre_position ?? null,
       isPatrimonial: account.is_dre_account === false,
     });
+    setSearchTerms(account.searchTerms ?? []);
+    setSearchTermInput("");
     setDialogOpen(true);
   }
 
@@ -489,6 +516,7 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
     // Regra: patrimonial → false, caso contrário → true (sempre explícito)
     const is_dre_account = values.isPatrimonial ? false : true;
     try {
+      const searchTermsPayload = searchTerms.length > 0 ? searchTerms : null;
       if (editingAccount) {
         await apiRequest("PATCH", {
           id: editingAccount.id,
@@ -497,11 +525,12 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
           parentId: values.parentId ?? null,
           dre_position,
           is_dre_account,
+          searchTerms: searchTermsPayload,
         });
         setAccounts((prev) =>
           prev.map((a) =>
             a.id === editingAccount.id
-              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account }
+              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, searchTerms: searchTermsPayload ?? undefined }
               : a
           )
         );
@@ -515,10 +544,11 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
           dre_position,
           is_dre_account,
           order: siblings.length,
+          searchTerms: searchTermsPayload,
         });
         setAccounts((prev) => [
           ...prev,
-          { id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, order: siblings.length, active: true },
+          { id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, searchTerms: searchTermsPayload ?? undefined, order: siblings.length, active: true },
         ]);
         if (values.parentId) setExpanded((prev) => new Set([...prev, values.parentId!]));
         toast({ title: "Conta criada." });
@@ -652,6 +682,46 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
                   </FormItem>
                 )}
               />
+
+              <div className="space-y-2">
+                <Label>Palavras-chave de busca <span className="text-muted-foreground">(opcional)</span></Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={searchTermInput}
+                    onChange={(event) => setSearchTermInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleAddSearchTerm();
+                      }
+                    }}
+                    placeholder="Ex: uniforme, EPI, fardamento..."
+                  />
+                  <Button type="button" variant="outline" onClick={handleAddSearchTerm} disabled={!searchTermInput.trim()}>
+                    Adicionar
+                  </Button>
+                </div>
+                {searchTerms.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {searchTerms.map((term) => (
+                      <span key={term} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
+                        {term}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSearchTerm(term)}
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label={`Remover ${term}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Termos que direcionam as buscas para esta conta (ex.: &ldquo;uniforme&rdquo; encontra esta conta mesmo que o nome não contenha a palavra).
+                </p>
+              </div>
 
               <FormField
                 control={form.control}

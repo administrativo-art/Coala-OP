@@ -658,7 +658,7 @@ function filterAccountTree(nodes: any[], query: string): any[] {
 
   return nodes.flatMap((node) => {
     const children = filterAccountTree(node.children ?? [], normalizedQuery);
-    const matchesSelf = [node.order, node.name, node.description]
+    const matchesSelf = [node.order, node.name, node.description, ...(node.searchTerms ?? [])]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(normalizedQuery));
 

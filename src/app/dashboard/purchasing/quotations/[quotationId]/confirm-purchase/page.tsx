@@ -28,6 +28,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { AccountPlanTreeSelect } from '@/components/purchasing/account-plan-tree-select';
+import { ResultCenterSelect } from '@/components/purchasing/result-center-select';
 import { PermissionGuard } from '@/components/permission-guard';
 import {
   Select,
@@ -593,16 +594,12 @@ export default function ConfirmPurchasePage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Centro de resultado</Label>
-                <Select value={resultCenterId} onValueChange={setResultCenterId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o centro de resultado" /></SelectTrigger>
-                  <SelectContent>
-                    {(resultCenters ?? []).map((center) => (
-                      <SelectItem key={center.id} value={center.id}>
-                        {center.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ResultCenterSelect
+                  value={resultCenterId}
+                  onChange={setResultCenterId}
+                  options={resultCenters ?? []}
+                  placeholder="Selecione o centro de resultado"
+                />
               </div>
 
               <div className="space-y-1.5">

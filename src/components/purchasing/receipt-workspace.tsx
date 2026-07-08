@@ -9,6 +9,7 @@ import { ptBR } from 'date-fns/locale';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -291,6 +292,14 @@ export function ReceiptWorkspace({ receipt }: Props) {
     divergent: 'Divergente',
     paid: 'Pago',
     cancelled: 'Cancelado',
+  };
+
+  const FINANCIAL_STATUS_BADGE_CLASSES: Record<string, string> = {
+    forecasted: 'border-transparent bg-muted text-muted-foreground',
+    confirmed: 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300',
+    divergent: 'border-transparent bg-destructive/10 text-destructive',
+    paid: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
+    cancelled: 'border-transparent bg-destructive/10 text-destructive',
   };
 
   const PAYMENT_LABELS: Record<string, string> = {
@@ -632,6 +641,58 @@ export function ReceiptWorkspace({ receipt }: Props) {
     });
   const selectedDestinationKiosk = kiosks.find((k) => k.id === destinationKioskId);
 
+  // Etapa aberta por padrão no acompanhamento (as demais ficam recolhidas, mas acessíveis).
+  const currentStepAccordion = isDivergenceTreatment
+    ? 'divergencia'
+    : isInStockEntry
+    ? 'estoque'
+    : isDone
+    ? 'conclusao'
+    : isAwaitingStock
+    ? 'estoque'
+    : 'recebimento';
+
+  // Motivos que bloqueiam a ação principal da etapa atual (espelham canSaveConference/canConfirmStock).
+  const actionPendingReasons = useMemo(() => {
+    const reasons: string[] = [];
+    if (isInConference) {
+      if (!hasAnyReceived) reasons.push('Marque ao menos um item como recebido');
+      const invalidValues = drafts.filter(
+        (d) => !d.lockedFromPreviousReceipt && d.selectedForReceipt && (d.unitPriceConfirmed <= 0 || d.quantityReceived < 0),
+      ).length;
+      if (invalidValues > 0) reasons.push(`${invalidValues} item(ns) com preço ou quantidade inválidos`);
+      const receiveLessIssues = drafts.filter(
+        (d) =>
+          !d.lockedFromPreviousReceipt &&
+          d.selectedForReceipt &&
+          d.receiptDisposition === 'receive_less' &&
+          (d.quantityReceived >= d.quantityRemaining || !d.resolutionNotes.trim()),
+      ).length;
+      if (receiveLessIssues > 0) reasons.push(`${receiveLessIssues} recebimento(s) a menos sem acompanhamento ou quantidade inconsistente`);
+      const receiveMoreIssues = drafts.filter(
+        (d) =>
+          !d.lockedFromPreviousReceipt &&
+          d.selectedForReceipt &&
+          d.receiptDisposition === 'receive_more' &&
+          d.quantityReceived <= d.quantityRemaining,
+      ).length;
+      if (receiveMoreIssues > 0) reasons.push(`${receiveMoreIssues} recebimento(s) a mais com quantidade não superior ao saldo`);
+      return reasons;
+    }
+    if (isInStockEntry) {
+      if (requiresStockDestination && !destinationKioskId) reasons.push('Destino do estoque não definido');
+      if (!hasAnyReceived) reasons.push('Nenhum item com quantidade recebida');
+      const missingLink = drafts.filter(
+        (d) => d.selectedForReceipt && d.quantityReceived > 0 && purchaseTreatmentCreatesStock(d.itemTreatment) && !d.productId,
+      ).length;
+      if (missingLink > 0) reasons.push(`${missingLink} item(ns) sem insumo vinculado`);
+      if (!lotsValid) reasons.push('Lotes não somam a quantidade recebida');
+      if (!immediateValid) reasons.push('Itens com preço ou quantidade inválidos');
+      return reasons;
+    }
+    return reasons;
+  }, [drafts, destinationKioskId, hasAnyReceived, immediateValid, isInConference, isInStockEntry, lotsValid, requiresStockDestination]);
+
   const handleStartConference = async () => {
     setStarting(true);
     try {
@@ -879,9 +940,17 @@ export function ReceiptWorkspace({ receipt }: Props) {
           </div>
           <div className="rounded-xl border bg-muted/30 p-4">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Situação financeira</p>
-            <p className="mt-1 text-lg font-semibold">
-              {financial ? FINANCIAL_STATUS_LABELS[financial.status] || financial.status : 'Aguardando'}
-            </p>
+            <div className="mt-2">
+              <Badge
+                variant="outline"
+                className={cn(
+                  'px-2.5 py-0.5 text-sm font-semibold',
+                  financial ? FINANCIAL_STATUS_BADGE_CLASSES[financial.status] : 'text-muted-foreground',
+                )}
+              >
+                {financial ? FINANCIAL_STATUS_LABELS[financial.status] || financial.status : 'Aguardando'}
+              </Badge>
+            </div>
           </div>
         </div>
       </div>
@@ -898,29 +967,10 @@ export function ReceiptWorkspace({ receipt }: Props) {
               <span className="text-sm text-muted-foreground">{drafts.length} item(ns)</span>
             </div>
 
-            <div className="border-b px-5 py-3">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <div className={cn(
-                  "flex items-center gap-2 rounded-full border px-3 py-1.5",
-                  isInConference ? "border-primary bg-primary/10 text-primary" : "bg-muted/40 text-muted-foreground"
-                )}>
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-background text-xs font-semibold">1</span>
-                  <span className="font-medium">Recebimento</span>
-                </div>
-                <div className="h-px w-8 bg-border" />
-                <div className={cn(
-                  "flex items-center gap-2 rounded-full border px-3 py-1.5",
-                  isInStockEntry ? "border-primary bg-primary/10 text-primary" : "bg-muted/40 text-muted-foreground"
-                )}>
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-background text-xs font-semibold">2</span>
-                  <span className="font-medium">Entrada no estoque</span>
-                </div>
-              </div>
-            </div>
-
             <Accordion
+              key={receipt.status}
               type="multiple"
-              defaultValue={['recebimento', 'divergencia', 'estoque', 'financeiro', 'conclusao']}
+              defaultValue={[currentStepAccordion]}
               className="border-b bg-muted/10 px-5"
             >
               <AccordionItem value="recebimento" className="border-b border-border/70">
@@ -1314,13 +1364,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
                               />
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs">Preço unit. (R$)</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
+                              <Label className="text-xs">Preço unit.</Label>
+                              <CurrencyInput
                                 value={draft.unitPriceConfirmed}
                                 disabled={receiptFieldDisabled}
-                                onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
+                                onChange={(value) => updateDraft(idx, { unitPriceConfirmed: value })}
                               />
                             </div>
                           </div>
@@ -1362,7 +1410,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                 <div>
                                   <h4 className="text-sm font-semibold">Recebimento</h4>
                                   <p className="text-xs text-muted-foreground">
-                                    Etapa concluída. {canEditCompletedReceipt ? 'Editável em desenvolvimento.' : 'Somente leitura.'}
+                                    Etapa concluída. {canEditCompletedReceipt ? 'Valores liberados para ajuste.' : 'Somente leitura.'}
                                   </p>
                                 </div>
                               </div>
@@ -1425,13 +1473,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                 />
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-xs">Preço unit. (R$)</Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
+                                <Label className="text-xs">Preço unit.</Label>
+                                <CurrencyInput
                                   value={draft.unitPriceConfirmed}
                                   disabled={receiptFieldDisabled}
-                                  onChange={(e) => updateDraft(idx, { unitPriceConfirmed: parseFloat(e.target.value) || 0 })}
+                                  onChange={(value) => updateDraft(idx, { unitPriceConfirmed: value })}
                                 />
                               </div>
                             </div>
@@ -1597,7 +1643,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
           </div>
 
           {isDivergenceTreatment && (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5 shadow-sm">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5 shadow-sm dark:border-rose-900 dark:bg-rose-950/20">
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div>
                   <div className="flex items-center gap-2">
@@ -1608,7 +1654,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                     Escolha a ação para cada diferença encontrada. A compra só será concluída quando todas estiverem tratadas.
                   </p>
                 </div>
-                <Badge variant="outline" className="w-fit border-rose-300 bg-white text-rose-700">
+                <Badge variant="outline" className="w-fit border-rose-300 bg-card text-rose-700 dark:border-rose-800 dark:text-rose-300">
                   {divergenceDrafts.length} divergência(s)
                 </Badge>
               </div>
@@ -1627,7 +1673,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                   const chargedTotal = chargedTotalForResolution(draft, resolution);
                   const orderedChargeQuantity = Math.max(Number(draft.quantityOrdered || 0), 0);
                   return (
-                    <div key={draft.receiptItemId} className="rounded-xl border bg-white p-4">
+                    <div key={draft.receiptItemId} className="rounded-xl border bg-card p-4">
                       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
                         <div className="min-w-0">
                           <p className="font-semibold">{displayNameForDraft(draft)}</p>
@@ -1768,7 +1814,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                 })}
               </div>
 
-              <div className="mt-5 flex flex-col gap-3 border-t border-rose-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-5 flex flex-col gap-3 border-t border-rose-100 pt-4 dark:border-rose-900/50 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-muted-foreground">
                   Aceitar com cobrança recalcula o financeiro pela quantidade recebida e pelo valor escolhido para o excedente. Manter saldo pendente devolve a compra para parcial.
                 </p>
@@ -1790,7 +1836,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
               <p className="text-muted-foreground text-sm">
                 Pedido confirmado. Aguarde a entrega, faça a conferência e depois registre a entrada no estoque.
               </p>
-              <Button onClick={handleStartConference} disabled={starting} className="bg-[#E91E63] hover:bg-[#D81B60] text-white px-8 h-12 text-lg rounded-full font-medium">
+              <Button onClick={handleStartConference} disabled={starting} className="px-8 h-12 text-lg rounded-full font-medium">
                 {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Abrir recebimento
               </Button>
@@ -1810,20 +1856,34 @@ export function ReceiptWorkspace({ receipt }: Props) {
           )}
 
           {(isInConference || isInStockEntry) && (
-             <div className="flex justify-end gap-3 pt-4">
-                {isInConference && (
-                  <Button onClick={handleSaveConference} disabled={confirming} className="rounded-full px-8 h-12">
-                    {confirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Concluir conferência
-                  </Button>
+            <div className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-2xl border bg-background/95 px-5 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 text-sm">
+                {actionPendingReasons.length > 0 ? (
+                  <div className="flex items-start gap-2 text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>{actionPendingReasons.join(' · ')}</p>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">
+                    {isInConference
+                      ? `${drafts.filter((d) => d.selectedForReceipt || d.lockedFromPreviousReceipt).length} de ${drafts.length} item(ns) conferidos.`
+                      : 'Tudo pronto para confirmar a entrada no estoque.'}
+                  </p>
                 )}
-                {isInStockEntry && (
-                  <Button onClick={handleConfirmStockEntry} disabled={confirming} className="rounded-full px-8 h-12">
-                    {confirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Confirmar entrada no estoque
-                  </Button>
-                )}
-             </div>
+              </div>
+              {isInConference && (
+                <Button onClick={handleSaveConference} disabled={confirming || !canSaveConference} className="shrink-0 rounded-full px-8 h-12">
+                  {confirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Concluir conferência
+                </Button>
+              )}
+              {isInStockEntry && (
+                <Button onClick={handleConfirmStockEntry} disabled={confirming || !canConfirmStock} className="shrink-0 rounded-full px-8 h-12">
+                  {confirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Confirmar entrada no estoque
+                </Button>
+              )}
+            </div>
           )}
 
           {isDone && (

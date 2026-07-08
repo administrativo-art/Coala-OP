@@ -456,7 +456,15 @@ export function ExpenseForm() {
     const q = accountPlanSearch.trim().toLowerCase();
     if (!q) return groupedAccounts;
     return groupedAccounts
-      .map((g) => ({ ...g, accounts: g.accounts.filter((a: any) => a.name.toLowerCase().includes(q) || (ACCOUNT_GROUP_LABELS[a.group] || "").toLowerCase().includes(q)) }))
+      .map((g) => ({
+        ...g,
+        accounts: g.accounts.filter((a: any) =>
+          a.name.toLowerCase().includes(q) ||
+          (ACCOUNT_GROUP_LABELS[a.group] || "").toLowerCase().includes(q) ||
+          // Palavras-chave cadastradas no plano de contas.
+          (Array.isArray(a.searchTerms) && a.searchTerms.some((term: string) => term.toLowerCase().includes(q)))
+        ),
+      }))
       .filter((g) => g.accounts.length > 0);
   }, [groupedAccounts, accountPlanSearch]);
 
