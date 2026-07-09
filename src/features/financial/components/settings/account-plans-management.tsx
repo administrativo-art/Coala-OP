@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  AlertCircle, ChevronDown, ChevronRight, GripVertical, Loader2, MoreHorizontal, PlusCircle, X,
+  AlertCircle, ChevronDown, ChevronRight, GripVertical, Info, Loader2, MoreHorizontal, PlusCircle, X,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -174,6 +175,53 @@ function DreBadge({ position, isPatrimonial }: { position?: string | null; isPat
   );
 }
 
+function AccountInfoTooltip({ account }: { account: Account }) {
+  const description = account.description?.trim();
+  const searchTerms = (account.searchTerms ?? []).filter((term) => term.trim().length > 0);
+  const hasMetadata = !!description || searchTerms.length > 0;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+            hasMetadata && "text-slate-500"
+          )}
+          aria-label={`Ver descrição e palavras-chave de ${account.name}`}
+        >
+          <Info className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="start" className="max-w-sm p-3">
+        <div className="space-y-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Descrição</p>
+            <p className="mt-1 text-xs leading-relaxed text-foreground">
+              {description || "Sem descrição cadastrada."}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Palavras-chave</p>
+            {searchTerms.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {searchTerms.map((term) => (
+                  <span key={term} className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
+                    {term}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">Sem palavras-chave cadastradas.</p>
+            )}
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 // ── sortable row (any depth) ──────────────────────────────────────────────────
 
 function SortableRow({
@@ -258,9 +306,10 @@ function SortableRow({
         <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{number}</span>
 
         {/* name */}
-        <span className={cn("min-w-0 flex-1 truncate", isRoot && "font-semibold")}>
-          {node.name}
-        </span>
+        <div className={cn("flex min-w-0 flex-1 items-center gap-1.5", isRoot && "font-semibold")}>
+          <span className="min-w-0 truncate">{node.name}</span>
+          <AccountInfoTooltip account={node} />
+        </div>
 
         {/* dre badge */}
         <DreBadge position={node.dre_position} isPatrimonial={node.is_dre_account === false} />
@@ -614,27 +663,29 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
             </div>
           ) : (
             <>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRootDragEnd}>
-                <SortableContext items={rootItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-1">
-                    {rootItems.map((node, index) => (
-                      <SortableRow
-                        key={node.id}
-                        node={node}
-                        number={`${index + 1}`}
-                        depth={0}
-                        topLevelIndex={index}
-                        expanded={expanded}
-                        canManage={canManage}
-                        onToggle={toggleExpand}
-                        onEdit={openEdit}
-                        onDelete={setDeleteTarget}
-                        onAddChild={(parentId) => openAdd(parentId)}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
+              <TooltipProvider delayDuration={150}>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRootDragEnd}>
+                  <SortableContext items={rootItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-1">
+                      {rootItems.map((node, index) => (
+                        <SortableRow
+                          key={node.id}
+                          node={node}
+                          number={`${index + 1}`}
+                          depth={0}
+                          topLevelIndex={index}
+                          expanded={expanded}
+                          canManage={canManage}
+                          onToggle={toggleExpand}
+                          onEdit={openEdit}
+                          onDelete={setDeleteTarget}
+                          onAddChild={(parentId) => openAdd(parentId)}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </TooltipProvider>
 
               {canManage && (
                 <button

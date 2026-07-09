@@ -105,9 +105,12 @@ const ACCOUNT_GROUP_LABELS: Record<string, string> = {
   financeiro: "Financeiro",
   nao_operacional: "Não Operacional",
   ir_csll: "IR / CSLL",
+  patrimonial: "Ativo Imobilizado | Bens Duráveis",
+  investimentos: "Aplicações | Investimentos",
+  outros: "Outros",
 };
 
-const ACCOUNT_GROUP_ORDER = ["fiscal", "insumos", "estoque", "rh", "administrativo", "marketing", "tecnologia", "ocupacao", "financeiro", "nao_operacional", "ir_csll", "receita"];
+const ACCOUNT_GROUP_ORDER = ["fiscal", "insumos", "estoque", "rh", "administrativo", "marketing", "tecnologia", "ocupacao", "financeiro", "patrimonial", "investimentos", "nao_operacional", "ir_csll", "receita", "outros"];
 
 function SectionHeading({
   icon,
@@ -433,10 +436,13 @@ export function ExpenseForm() {
     [kiosks]
   );
 
-  const activeAccounts = useMemo(
-    () => (accounts || []).filter((a: any) => a.active !== false),
-    [accounts]
-  );
+  const activeAccounts = useMemo(() => {
+    const all = accounts || [];
+    // Contas com filhas são nós de grupo: a DRE lê a posição da própria conta,
+    // então o lançamento precisa ir em uma folha.
+    const parentIds = new Set(all.map((a: any) => a.parentId).filter(Boolean));
+    return all.filter((a: any) => a.active !== false && !parentIds.has(a.id));
+  }, [accounts]);
 
   const groupedAccounts = useMemo(() => {
     const groups: Record<string, any[]> = {};
@@ -461,6 +467,7 @@ export function ExpenseForm() {
         accounts: g.accounts.filter((a: any) =>
           a.name.toLowerCase().includes(q) ||
           (ACCOUNT_GROUP_LABELS[a.group] || "").toLowerCase().includes(q) ||
+          (typeof a.description === "string" && a.description.toLowerCase().includes(q)) ||
           // Palavras-chave cadastradas no plano de contas.
           (Array.isArray(a.searchTerms) && a.searchTerms.some((term: string) => term.toLowerCase().includes(q)))
         ),
@@ -509,8 +516,9 @@ export function ExpenseForm() {
   const isApportioned = form.watch("isApportioned");
   const apportionments = form.watch("apportionments");
   const selectedAccountPlan = useMemo(
-    () => activeAccounts.find((a: any) => a.id === accountPlanValue),
-    [accountPlanValue, activeAccounts]
+    // Busca na lista completa: despesas antigas podem apontar para conta-grupo ou inativa.
+    () => (accounts || []).find((a: any) => a.id === accountPlanValue),
+    [accountPlanValue, accounts]
   );
   const activeExpenseDescriptions = useMemo(
     () =>
@@ -1548,7 +1556,12 @@ export function ExpenseForm() {
                                               )}
                                               onClick={() => { field.onChange(account.id); setAccountPlanOpen(false); }}
                                             >
-                                              <span className="truncate">{account.name}</span>
+                                              <span className="min-w-0">
+                                                <span className="block truncate">{account.name}</span>
+                                                {account.description && (
+                                                  <span className="block truncate text-xs text-muted-foreground">{account.description}</span>
+                                                )}
+                                              </span>
                                               {field.value === account.id && <Check className="ml-2 h-4 w-4 shrink-0 text-primary" />}
                                             </button>
                                           ))}

@@ -294,6 +294,29 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
             expenses: { ...permissions.expenses, edit: true, pay: false },
           },
         }),
+        setDoc(doc(db, "users/creator"), {
+          active: true,
+          isDefaultAdmin: false,
+          permissions: {
+            ...permissions,
+            expenses: { ...permissions.expenses, create: true, pay: false },
+          },
+        }),
+        setDoc(doc(db, "accounts/active-leaf"), {
+          name: "Conta ativa",
+          active: true,
+          isGroup: false,
+        }),
+        setDoc(doc(db, "accounts/inactive-leaf"), {
+          name: "Conta inativa",
+          active: false,
+          isGroup: false,
+        }),
+        setDoc(doc(db, "accounts/group-account"), {
+          name: "Grupo",
+          active: true,
+          isGroup: true,
+        }),
         setDoc(doc(db, "expenses/expense-1"), {
           description: "Despesa",
           totalValue: 1000,
@@ -304,6 +327,7 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
 
     const payer = env.authenticatedContext("payer");
     const editor = env.authenticatedContext("editor");
+    const creator = env.authenticatedContext("creator");
     await assertSucceeds(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
       status: "paid",
       paidAt: new Date(),
@@ -313,6 +337,46 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
     }));
     await assertSucceeds(updateDoc(doc(editor.firestore(), "expenses/expense-1"), {
       totalValue: 900,
+    }));
+    await assertSucceeds(setDoc(doc(creator.firestore(), "expenses/valid-account"), {
+      description: "Despesa com conta ativa",
+      totalValue: 100,
+      status: "pending",
+      accountPlan: "active-leaf",
+      accountId: "active-leaf",
+    }));
+    await assertFails(setDoc(doc(creator.firestore(), "expenses/inactive-account"), {
+      description: "Despesa com conta inativa",
+      totalValue: 100,
+      status: "pending",
+      accountPlan: "inactive-leaf",
+      accountId: "inactive-leaf",
+    }));
+    await assertFails(setDoc(doc(creator.firestore(), "expenses/group-account"), {
+      description: "Despesa com grupo",
+      totalValue: 100,
+      status: "pending",
+      accountPlan: "group-account",
+      accountId: "group-account",
+    }));
+    await assertFails(setDoc(doc(creator.firestore(), "expenses/mismatched-account"), {
+      description: "Despesa com conta divergente",
+      totalValue: 100,
+      status: "pending",
+      accountPlan: "active-leaf",
+      accountId: "inactive-leaf",
+    }));
+    await assertFails(updateDoc(doc(editor.firestore(), "expenses/expense-1"), {
+      accountPlan: "group-account",
+      accountId: "group-account",
+    }));
+    await assertFails(updateDoc(doc(editor.firestore(), "expenses/expense-1"), {
+      accountPlan: "inactive-leaf",
+      accountId: "inactive-leaf",
+    }));
+    await assertSucceeds(updateDoc(doc(editor.firestore(), "expenses/expense-1"), {
+      accountPlan: "active-leaf",
+      accountId: "active-leaf",
     }));
   } finally {
     await env.cleanup();

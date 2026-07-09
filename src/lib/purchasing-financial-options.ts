@@ -6,6 +6,8 @@ export type AccountPlanOption = {
   parentId?: string | null;
   /** Palavras-chave cadastradas para direcionar buscas (ex.: "uniforme" → conta de uniformes). */
   searchTerms?: string[];
+  /** Conceito da conta: o que entra e o que não entra (exibido nos seletores). */
+  description?: string;
 };
 
 /**

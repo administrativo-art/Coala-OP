@@ -143,6 +143,24 @@ service cloud.firestore {
         && request.resource.data.status == 'paid';
     }
 
+    function hasConsistentExpenseAccount(data) {
+      return data.accountPlan is string
+        && data.accountPlan.size() > 0
+        && data.get('accountId', data.accountPlan) == data.accountPlan;
+    }
+
+    function hasValidExpenseAccount(data) {
+      return hasConsistentExpenseAccount(data)
+        && exists(/databases/$(database)/documents/accounts/$(data.accountPlan))
+        && get(/databases/$(database)/documents/accounts/$(data.accountPlan)).data.active == true
+        && get(/databases/$(database)/documents/accounts/$(data.accountPlan)).data.isGroup != true;
+    }
+
+    function expenseAccountChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['accountPlan', 'accountId']);
+    }
+
     match /users/{userId} {
       allow get: if hasFinancialAccess() && request.auth.uid == userId;
       allow list: if isFinancialAdmin();
@@ -182,8 +200,9 @@ service cloud.firestore {
 
     match /expenses/{expenseId} {
       allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre();
-      allow create: if canCreateExpenses();
-      allow update: if canEditExpenses() || isPaymentStatusUpdate();
+      allow create: if canCreateExpenses() && hasValidExpenseAccount(request.resource.data);
+      allow update: if (canEditExpenses() && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data)))
+        || isPaymentStatusUpdate();
       allow delete: if canDeleteExpenses();
     }
 

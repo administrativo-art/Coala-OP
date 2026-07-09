@@ -79,8 +79,14 @@ export async function POST(request: NextRequest) {
       active: true,
       is_dre_account: typeof is_dre_account === "boolean" ? is_dre_account : true,
       searchTerms: sanitizeSearchTerms(body.searchTerms),
+      // isGroup é mantido pelo servidor: as Rules do financeiro o usam para
+      // barrar despesa classificada em conta-grupo.
+      isGroup: false,
       createdAt: FieldValue.serverTimestamp(),
     });
+    if (parentId) {
+      await financialDbAdmin.collection("accounts").doc(parentId).update({ isGroup: true });
+    }
 
     return NextResponse.json({ id: ref.id });
   } catch (error) {
@@ -126,7 +132,28 @@ export async function PATCH(request: NextRequest) {
     if (Object.keys(update).length === 0)
       return NextResponse.json({ error: "Nenhum campo para atualizar." }, { status: 400 });
 
+    const previousParentId = "parentId" in update
+      ? ((await financialDbAdmin.collection("accounts").doc(id).get()).data()?.parentId ?? null)
+      : null;
+
     await financialDbAdmin.collection("accounts").doc(id).update(update);
+
+    if ("parentId" in update && update.parentId !== previousParentId) {
+      if (update.parentId) {
+        await financialDbAdmin.collection("accounts").doc(update.parentId as string).update({ isGroup: true });
+      }
+      if (previousParentId) {
+        const remaining = await financialDbAdmin
+          .collection("accounts")
+          .where("parentId", "==", previousParentId)
+          .limit(1)
+          .get();
+        await financialDbAdmin
+          .collection("accounts")
+          .doc(previousParentId)
+          .update({ isGroup: !remaining.empty });
+      }
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(
@@ -147,7 +174,43 @@ export async function DELETE(request: NextRequest) {
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID obrigatório." }, { status: 400 });
 
+    // Deletar conta com filhas ou com lançamentos deixa referências órfãs
+    // (despesas/pedidos apontando para ID inexistente). Nesses casos, inativar.
+    const children = await financialDbAdmin
+      .collection("accounts")
+      .where("parentId", "==", id)
+      .limit(1)
+      .get();
+    if (!children.empty) {
+      return NextResponse.json(
+        { error: "Conta possui subcontas. Mova ou exclua as subcontas primeiro, ou inative a conta." },
+        { status: 400 }
+      );
+    }
+    for (const field of ["accountPlan", "accountId"]) {
+      const refs = await financialDbAdmin
+        .collection("expenses")
+        .where(field, "==", id)
+        .limit(1)
+        .get();
+      if (!refs.empty) {
+        return NextResponse.json(
+          { error: "Conta possui despesas vinculadas. Inative a conta em vez de excluir." },
+          { status: 400 }
+        );
+      }
+    }
+
+    const parentId = (await financialDbAdmin.collection("accounts").doc(id).get()).data()?.parentId ?? null;
     await financialDbAdmin.collection("accounts").doc(id).delete();
+    if (parentId) {
+      const remaining = await financialDbAdmin
+        .collection("accounts")
+        .where("parentId", "==", parentId)
+        .limit(1)
+        .get();
+      await financialDbAdmin.collection("accounts").doc(parentId).update({ isGroup: !remaining.empty });
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(
