@@ -2,11 +2,12 @@
  * Script de migração: Coala-DP → Coala-OP (módulo Departamento Pessoal)
  *
  * CONFIGURAÇÃO:
- *   Coloque os arquivos JSON das service accounts em:
- *     scripts/sa-op.json   → Coala-OP  (smart-converter-752gf)
- *     scripts/sa-dp.json   → Coala-DP  (studio-7671525955-67ff0)
+ *   Guarde os arquivos JSON das service accounts fora do repositório
+ *   (ex.: ~/.config/coala/keys/) e informe por variável de ambiente:
+ *     FIREBASE_SERVICE_ACCOUNT_PATH       → Coala-OP  (smart-converter-752gf)
+ *     DP_FIREBASE_SERVICE_ACCOUNT_PATH    → Coala-DP  (studio-7671525955-67ff0)
  *
- *   Ou passe os caminhos como argumentos:
+ *   Ou passe os caminhos explicitamente:
  *     node scripts/migrate-dp.mjs phase1 --op=caminho/op.json --dp=caminho/dp.json
  *
  * USO:
@@ -27,11 +28,11 @@ function resolveArg(name) {
   return arg ? arg.split('=')[1] : null;
 }
 
-const dpPath = resolveArg('dp') ?? 'scripts/sa-dp.json';
-const opPath = resolveArg('op') ?? null; // opcional — usa ADC se não informado
+const dpPath = resolveArg('dp') ?? process.env.DP_FIREBASE_SERVICE_ACCOUNT_PATH ?? null;
+const opPath = resolveArg('op') ?? process.env.FIREBASE_SERVICE_ACCOUNT_PATH ?? null; // opcional — usa ADC se não informado
 
-if (!existsSync(dpPath)) {
-  console.error(`❌ Service account do Coala-DP não encontrado em: ${dpPath}`);
+if (!dpPath || !existsSync(dpPath)) {
+  console.error(`❌ Service account do Coala-DP não encontrado. Informe --dp=... ou DP_FIREBASE_SERVICE_ACCOUNT_PATH.`);
   process.exit(1);
 }
 

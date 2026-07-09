@@ -8,10 +8,10 @@
  *   --rollback Desativa todas as flags de forms (emergência)
  *
  * Uso:
- *   npx tsx scripts/activate-forms-flags.ts --pilot  --service-account=scripts/sa.json
- *   npx tsx scripts/activate-forms-flags.ts --full   --service-account=scripts/sa.json
- *   npx tsx scripts/activate-forms-flags.ts --finalize --service-account=scripts/sa.json
- *   npx tsx scripts/activate-forms-flags.ts --rollback --service-account=scripts/sa.json
+ *   npx tsx scripts/activate-forms-flags.ts --pilot    --service-account=$FIREBASE_SERVICE_ACCOUNT_PATH
+ *   npx tsx scripts/activate-forms-flags.ts --full     --service-account=$FIREBASE_SERVICE_ACCOUNT_PATH
+ *   npx tsx scripts/activate-forms-flags.ts --finalize --service-account=$FIREBASE_SERVICE_ACCOUNT_PATH
+ *   npx tsx scripts/activate-forms-flags.ts --rollback --service-account=$FIREBASE_SERVICE_ACCOUNT_PATH
  */
 
 import { cert, getApps, initializeApp } from "firebase-admin/app";

@@ -157,7 +157,7 @@ COMPANY_LOOKUP_USER_AGENT="Coala-OP/1.0 (email@dominio.com)"
 ## Testes basicos
 
 ```bash
-npx tsx scripts/test-company-cnpj.ts
+npm run test:unit
 npm run typecheck
 ```
 

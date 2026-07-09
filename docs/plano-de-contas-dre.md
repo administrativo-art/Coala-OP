@@ -1,6 +1,6 @@
 # Vinculação do Plano de Contas com a DRE
 
-> Estado após a migração de 2026-07-08 (`scripts/migrate-plano-contas-final-20260708.mjs`), banco Firestore `coala-financeiro` (94 contas). Snapshot pré-migração em `backups/plano-contas-20260708/`.
+> Estado após a migração de 2026-07-08, banco Firestore `coala-financeiro` (94 contas). A migração one-shot foi removida de `scripts/` após confirmação em produção; o histórico permanece no Git. Snapshot pré-migração em `backups/plano-contas-20260708/`.
 
 ## Como funciona
 
