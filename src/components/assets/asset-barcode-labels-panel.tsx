@@ -34,8 +34,8 @@ import {
 const DEFAULT_GENERATED_UNTIL = 1000;
 const GENERATE_INCREMENT = 100;
 const LABELS_PER_PRINT_PAGE = 50;
-const LABELS_PER_SCREEN_PAGE = 500;
 const SCREEN_BATCH_SIZE = 100;
+const LABELS_PER_SCREEN_PAGE = SCREEN_BATCH_SIZE;
 
 type BarcodeSettings = {
   generatedUntil: number;
@@ -588,7 +588,7 @@ export function AssetBarcodeLabelsPanel() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            A visualização abaixo mostra 500 etiquetas por página, agrupadas em lotes de 100. No PDF físico, cada etiqueta sai em 45x15mm e o navegador monta 50 etiquetas por página.
+            A visualização abaixo mostra um lote de 100 etiquetas por página. No PDF físico, cada etiqueta sai em 45x15mm e o navegador monta 50 etiquetas por página.
           </p>
         </CardContent>
       </Card>
