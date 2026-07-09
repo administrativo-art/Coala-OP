@@ -119,12 +119,23 @@ function TreeNodeRow({
           )}
         </button>
 
+        {/* Nó com filhas é grupo: lançamento só em folha, clicar expande/recolhe. */}
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
-          onClick={() => onSelect(node.id)}
+          className={cn(
+            'flex min-w-0 flex-1 items-center justify-between gap-3 text-left',
+            hasChildren && 'font-medium text-muted-foreground',
+          )}
+          onClick={() => (hasChildren ? onToggle(node.id) : onSelect(node.id))}
         >
-          <span className="truncate">{node.name}</span>
+          <span className="min-w-0">
+            <span className="block truncate">{node.name}</span>
+            {!hasChildren && node.description && (
+              <span className={cn('block truncate text-xs text-muted-foreground', isSelected && 'text-primary-foreground/75')}>
+                {node.description}
+              </span>
+            )}
+          </span>
           {isSelected && <Check className="h-4 w-4 shrink-0" />}
         </button>
       </div>
@@ -171,16 +182,23 @@ export function AccountPlanTreeSelect({
     [options],
   );
 
+  const groupIds = useMemo(
+    () => new Set(options.map((option) => option.parentId).filter(Boolean)),
+    [options],
+  );
+
   const filteredOptions = useMemo(() => {
     if (!normalizedSearch) return [];
 
     const tokens = normalizedSearch.split(/\s+/).filter(Boolean);
     return sortOptionsByTreeOrder(options, tree).filter((option) => {
+      // Grupos não recebem lançamento; a busca só retorna folhas.
+      if (groupIds.has(option.id)) return false;
       // Busca por caminho na árvore + palavras-chave cadastradas na conta.
       const haystack = buildAccountPlanSearchText(option, optionPaths.get(option.id));
       return tokens.every((token) => haystack.includes(token));
     });
-  }, [normalizedSearch, optionPaths, options, tree]);
+  }, [groupIds, normalizedSearch, optionPaths, options, tree]);
 
   useEffect(() => {
     if (!value || value === '__none__') {
@@ -276,6 +294,11 @@ export function AccountPlanTreeSelect({
                         {path.length > 1 && (
                           <span className={cn('block truncate text-xs text-muted-foreground', isSelected && 'text-primary-foreground/75')}>
                             {path.slice(0, -1).join(' / ')}
+                          </span>
+                        )}
+                        {option.description && (
+                          <span className={cn('block truncate text-xs text-muted-foreground', isSelected && 'text-primary-foreground/75')}>
+                            {option.description}
                           </span>
                         )}
                       </span>

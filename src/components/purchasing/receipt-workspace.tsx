@@ -286,6 +286,16 @@ export function ReceiptWorkspace({ receipt }: Props) {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
+  const fmtUnit = (value?: number | null) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) return '—';
+    return value.toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 3,
+    });
+  };
+
   const FINANCIAL_STATUS_LABELS: Record<string, string> = {
     forecasted: 'Previsto',
     confirmed: 'Confirmado',
@@ -1268,7 +1278,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                           <div className="min-w-0">
                             <p className="font-semibold text-lg">{displayName}</p>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmt(draft.unitPriceConfirmed)}</span>
+                              <span>Pedido: {draft.quantityOrdered} {draft.purchaseUnitLabel} × {fmtUnit(draft.unitPriceConfirmed)}</span>
                               {draft.quantityPreviouslyReceived > 0 && (
                                 <>
                                   <span>•</span>
@@ -1367,6 +1377,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                               <Label className="text-xs">Preço unit.</Label>
                               <CurrencyInput
                                 value={draft.unitPriceConfirmed}
+                                decimalPlaces={3}
                                 disabled={receiptFieldDisabled}
                                 onChange={(value) => updateDraft(idx, { unitPriceConfirmed: value })}
                               />
@@ -1476,6 +1487,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                                 <Label className="text-xs">Preço unit.</Label>
                                 <CurrencyInput
                                   value={draft.unitPriceConfirmed}
+                                  decimalPlaces={3}
                                   disabled={receiptFieldDisabled}
                                   onChange={(value) => updateDraft(idx, { unitPriceConfirmed: value })}
                                 />
@@ -1678,7 +1690,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                         <div className="min-w-0">
                           <p className="font-semibold">{displayNameForDraft(draft)}</p>
                           <p className="mt-1 text-sm text-muted-foreground">
-                            Pedido: {fmtQty(draft.quantityOrdered)} {draft.purchaseUnitLabel} · Recebido: {fmtQty(confirmedQuantity)} {draft.purchaseUnitLabel} · Preço: {fmt(draft.unitPriceConfirmed)}
+                            Pedido: {fmtQty(draft.quantityOrdered)} {draft.purchaseUnitLabel} · Recebido: {fmtQty(confirmedQuantity)} {draft.purchaseUnitLabel} · Preço: {fmtUnit(draft.unitPriceConfirmed)}
                           </p>
                           {reasons.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1692,7 +1704,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
                           {resolution.action === 'accept_charged' && excessQuantity > 0 && (
                             <div className="mt-3 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                               <span className="font-semibold text-foreground">Cálculo do item: </span>
-                              {fmtQty(orderedChargeQuantity)} × {fmt(draft.unitPriceConfirmed)}
+                              {fmtQty(orderedChargeQuantity)} × {fmtUnit(draft.unitPriceConfirmed)}
                               {' + '}
                               {fmtQty(excessQuantity)} excedente × {fmt(excessUnitPrice)}
                               {' = '}

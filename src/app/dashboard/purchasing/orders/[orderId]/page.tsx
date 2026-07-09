@@ -152,6 +152,32 @@ function fmt(value?: number | null) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function fmtUnit(value?: number | null) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '—';
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
+  });
+}
+
+function lineGrossTotal(item: Pick<PurchaseOrderItem, 'quantityOrdered' | 'unitPriceOrdered'>) {
+  return Number(item.quantityOrdered ?? 0) * Number(item.unitPriceOrdered ?? 0);
+}
+
+function lineEffectiveUnitPrice(
+  item: Pick<PurchaseOrderItem, 'quantityOrdered' | 'unitPriceOrdered' | 'discountOrdered' | 'totalOrdered'>,
+) {
+  const quantity = Number(item.quantityOrdered ?? 0);
+  if (!(quantity > 0)) return Number(item.unitPriceOrdered ?? 0);
+  const total =
+    item.totalOrdered != null
+      ? Number(item.totalOrdered ?? 0)
+      : Math.max(lineGrossTotal(item) - Number(item.discountOrdered ?? 0), 0);
+  return Number((total / quantity).toFixed(6));
+}
+
 function isCardPayment(paymentMethod?: PaymentMethod) {
   return paymentMethod === 'card_credit' || paymentMethod === 'card_debit';
 }
@@ -280,14 +306,24 @@ export default function PurchaseOrderPage() {
           : undefined;
         const fallbackDiscount = Number(quotationItem?.discount ?? 0);
         const effectiveDiscount = Number(item.discountOrdered ?? fallbackDiscount);
+        const grossTotal = lineGrossTotal(item);
         const effectiveTotal =
           item.discountOrdered == null && fallbackDiscount > 0
-            ? Math.max(Number(item.unitPriceOrdered ?? 0) * Number(item.quantityOrdered ?? 0) - fallbackDiscount, 0)
+            ? Math.max(grossTotal - fallbackDiscount, 0)
             : Number(item.totalOrdered ?? 0);
+        const effectiveUnitPrice = lineEffectiveUnitPrice({
+          ...item,
+          discountOrdered: effectiveDiscount,
+          totalOrdered: effectiveTotal,
+        });
+        const hasLineDiscount = effectiveDiscount > 0 && Math.abs(grossTotal - effectiveTotal) > 0.005;
 
         return {
           ...item,
+          effectiveUnitPrice,
           discountOrdered: effectiveDiscount,
+          grossTotal,
+          hasLineDiscount,
           totalOrdered: effectiveTotal,
         };
       }),
@@ -300,11 +336,12 @@ export default function PurchaseOrderPage() {
   );
   const goodsGrossSubtotal = useMemo(
     () =>
-      displayItems.reduce(
-        (sum, item) => sum + Number(item.quantityOrdered ?? 0) * Number(item.unitPriceOrdered ?? 0),
-        0,
-      ),
+      displayItems.reduce((sum, item) => sum + Number(item.grossTotal ?? 0), 0),
     [displayItems],
+  );
+  const goodsDiscountTotal = useMemo(
+    () => Math.max(goodsGrossSubtotal - goodsSubtotal, 0),
+    [goodsGrossSubtotal, goodsSubtotal],
   );
   const effectiveOrderTotal = useMemo(
     () => goodsSubtotal + Number(order?.deliveryFee ?? 0),
@@ -699,7 +736,12 @@ export default function PurchaseOrderPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Mercadorias</p>
-              <p className="mt-1 text-2xl font-semibold">{fmt(goodsGrossSubtotal)}</p>
+              <p className="mt-1 text-2xl font-semibold">{fmt(goodsSubtotal)}</p>
+              {goodsDiscountTotal > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Bruto {fmt(goodsGrossSubtotal)} - desconto {fmt(goodsDiscountTotal)}
+                </p>
+              )}
             </div>
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Frete</p>
@@ -769,8 +811,16 @@ export default function PurchaseOrderPage() {
                             <div className="min-w-0">
                               <p className="font-semibold truncate">{displayName}</p>
                               <p className="text-sm text-muted-foreground">
-                                {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} x {fmt(item.unitPriceOrdered)}
+                                {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} x{' '}
+                                {fmtUnit(item.hasLineDiscount ? item.effectiveUnitPrice : item.unitPriceOrdered)}
+                                {item.hasLineDiscount ? ' líquido' : ''}
                               </p>
+                              {item.hasLineDiscount && (
+                                <p className="text-xs text-muted-foreground">
+                                  Bruto: {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} x{' '}
+                                  {fmtUnit(item.unitPriceOrdered)} = {fmt(item.grossTotal)}
+                                </p>
+                              )}
                               {base && base.name !== displayName && (
                                 <p className="text-xs text-muted-foreground">Insumo base: {base.name}</p>
                               )}

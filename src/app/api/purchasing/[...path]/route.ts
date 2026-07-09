@@ -49,6 +49,22 @@ function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
+// Lançamento só é válido em conta folha e ativa: a DRE lê a posição da própria
+// conta, então grupo/inativa geraria classificação perdida.
+async function validateAccountPlanForPosting(accountPlanId: unknown): Promise<string | null> {
+  if (!accountPlanId || typeof accountPlanId !== 'string') return null;
+  const doc = await financialDbAdmin.collection('accounts').doc(accountPlanId).get();
+  if (!doc.exists) return 'Plano de contas informado não existe.';
+  if (doc.data()?.active === false) return 'Plano de contas informado está inativo.';
+  const children = await financialDbAdmin
+    .collection('accounts')
+    .where('parentId', '==', accountPlanId)
+    .limit(1)
+    .get();
+  if (!children.empty) return 'Selecione uma conta específica do plano de contas, não um grupo.';
+  return null;
+}
+
 async function getUserContext(request: NextRequest) {
   try {
     return await requireUser(request);
@@ -148,6 +164,25 @@ function normalizeFreightPaymentMode(
 ): 'included_with_goods' | 'separate' | null {
   if (!(deliveryFee > 0)) return null;
   return rawValue === 'included_with_goods' ? 'included_with_goods' : 'separate';
+}
+
+function purchaseLineNetTotal(item: Record<string, any>) {
+  const quantity = Number(item.quantityOrdered ?? 0);
+  const unitPrice = Number(item.unitPriceOrdered ?? 0);
+  const discount = Number(item.discountOrdered ?? 0);
+  return Math.max(quantity * unitPrice - discount, 0);
+}
+
+function purchaseLineEffectiveUnitPrice(item: Record<string, any>) {
+  const quantity = Number(item.quantityOrdered ?? 0);
+  if (!(quantity > 0)) return Number(item.unitPriceOrdered ?? 0);
+
+  const total =
+    item.totalOrdered != null
+      ? Math.max(Number(item.totalOrdered ?? 0), 0)
+      : purchaseLineNetTotal(item);
+
+  return Number((total / quantity).toFixed(6));
 }
 
 function normalizePurchaseStockEntryType(value: unknown): PurchaseStockEntryType {
@@ -620,9 +655,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   }
 
   if (resource === 'orders' && !id) {
+    for (const accountField of [body.accountPlanId, body.freightAccountPlanId]) {
+      const accountError = await validateAccountPlanForPosting(accountField);
+      if (accountError) return jsonError(accountError);
+    }
     const ref = dbAdmin.collection('purchase_orders').doc();
     const items = Array.isArray(body.items) ? body.items : [];
-    const itemsTotal = items.reduce((sum: number, item: any) => sum + (Number(item.quantityOrdered || 0) * Number(item.unitPriceOrdered || 0)), 0);
+    const itemsTotal = items.reduce((sum: number, item: any) => sum + purchaseLineNetTotal(item), 0);
     const deliveryFee = Number(body.deliveryFee ?? 0);
     const totalEstimated = Number(body.totalEstimated ?? (itemsTotal + deliveryFee));
 
@@ -682,6 +721,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const q = Number(item.quantityOrdered || 0);
         const p = Number(item.unitPriceOrdered || 0);
         const d = Number(item.discountOrdered || 0);
+        const totalOrdered = purchaseLineNetTotal({ quantityOrdered: q, unitPriceOrdered: p, discountOrdered: d });
+        const netUnitPriceOrdered = purchaseLineEffectiveUnitPrice({
+          quantityOrdered: q,
+          unitPriceOrdered: p,
+          discountOrdered: d,
+          totalOrdered,
+        });
         const treatmentFields = purchaseItemTreatmentFields(item);
         const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         batch.set(itemRef, {
@@ -697,8 +743,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
           quantityOrdered: q,
           unitPriceOrdered: p,
+          netUnitPriceOrdered,
           discountOrdered: d,
-          totalOrdered: Math.max((q * p) - d, 0),
+          totalOrdered,
           quotationItemId: item.quotationItemId ?? null,
           entryType: itemDestination,
           ...treatmentFields,
@@ -762,6 +809,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       const receiptItemRef = receiptRef.collection('items').doc();
       const treatmentFields = purchaseItemTreatmentFields(item);
       const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
+      const effectiveUnitPriceOrdered = purchaseLineEffectiveUnitPrice(item);
       batch.set(receiptItemRef, {
         purchaseReceiptId: receiptRef.id,
         purchaseOrderItemId: itemDoc.id,
@@ -775,7 +823,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         purchaseUnitType: item.purchaseUnitType || 'content',
         purchaseUnitLabel: item.purchaseUnitLabel || item.unit,
         quantityOrdered: item.quantityOrdered,
-        unitPriceOrdered: item.unitPriceOrdered,
+        unitPriceOrdered: effectiveUnitPriceOrdered,
+        grossUnitPriceOrdered: item.unitPriceOrdered ?? effectiveUnitPriceOrdered,
+        discountOrdered: Number(item.discountOrdered ?? 0),
+        totalOrdered: item.totalOrdered ?? purchaseLineNetTotal(item),
         quantityReceived: 0,
         unitPriceConfirmed: 0,
         status: 'pending',
@@ -871,7 +922,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     for (const itemDoc of receiptItemsSnap.docs) {
       const item = itemDoc.data();
       const quantityReceived = Number(item.quantityOrdered ?? 0);
-      const unitPriceConfirmed = Number(item.unitPriceOrdered ?? 0);
+      const unitPriceConfirmed = purchaseLineEffectiveUnitPrice(item);
       const totalItemConfirmed = quantityReceived * unitPriceConfirmed;
       totalConfirmed += totalItemConfirmed;
 
@@ -1197,7 +1248,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const treatmentFields = purchaseItemTreatmentFields({ ...(orderItem ?? {}), ...item });
         const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         const quantityOrdered = Number(orderItem?.quantityOrdered ?? item.quantityReceived);
-        const unitPriceOrdered = Number(orderItem?.unitPriceOrdered ?? item.unitPriceConfirmed);
+        const unitPriceOrdered = purchaseLineEffectiveUnitPrice(
+          orderItem ?? existingReceiptItem ?? { quantityOrdered, unitPriceOrdered: item.unitPriceConfirmed },
+        );
         const disposition = item.receiptDisposition ?? 'receive';
         const previousReceived = Number(existingReceiptItem?.quantityReceived ?? 0);
         const currentReceived =
@@ -1392,7 +1445,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           orderItem?.unit ??
           '';
 
-        const confirmedUnitPrice = existingReceiptItem?.unitPriceConfirmed ?? orderItem?.unitPriceOrdered ?? 0;
+        const orderedUnitPrice = purchaseLineEffectiveUnitPrice(orderItem ?? existingReceiptItem ?? {});
+        const confirmedUnitPrice = Number(existingReceiptItem?.unitPriceConfirmed || orderedUnitPrice || 0);
         const previousReceived = Number(existingReceiptItem?.quantityReceived ?? 0);
         const pendingStockEntryRaw = existingReceiptItem?.quantityPendingStockEntry;
         const pendingStockEntry = Number(pendingStockEntryRaw ?? 0);
@@ -1411,7 +1465,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
             cumulativeReceived,
             quantityOrdered,
             confirmedUnitPrice,
-            Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
+            orderedUnitPrice || confirmedUnitPrice,
             existingReceiptItem?.divergenceReason,
           );
           if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
@@ -1477,7 +1531,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
             cumulativeReceived,
             quantityOrdered,
             confirmedUnitPrice,
-            Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
+            orderedUnitPrice || confirmedUnitPrice,
             existingReceiptItem?.divergenceReason,
           );
           if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
@@ -1567,7 +1621,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           cumulativeReceived,
           quantityOrdered,
           confirmedUnitPrice,
-          Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
+          orderedUnitPrice || confirmedUnitPrice,
           existingReceiptItem?.divergenceReason,
         );
 
@@ -1889,13 +1943,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     const currentOrder = orderSnap.data()!;
 
     const { items, ...rest } = body;
+    for (const accountField of [rest.accountPlanId, rest.freightAccountPlanId]) {
+      const accountError = await validateAccountPlanForPosting(accountField);
+      if (accountError) return jsonError(accountError);
+    }
     const batch = dbAdmin.batch();
 
     // If items are provided, we need to recalculate the totalEstimated
     if (Array.isArray(items)) {
       const itemsTotal = items.reduce(
         (sum: number, item: any) =>
-          sum + (Number(item.quantityOrdered || 0) * Number(item.unitPriceOrdered || 0)) - Number(item.discountOrdered || 0),
+          sum + purchaseLineNetTotal(item),
         0,
       );
       const deliveryFee = Number(rest.deliveryFee ?? currentOrder.deliveryFee ?? 0);
@@ -1913,6 +1971,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
         const q = Number(item.quantityOrdered || 0);
         const p = Number(item.unitPriceOrdered || 0);
         const d = Number(item.discountOrdered || 0);
+        const totalOrdered = purchaseLineNetTotal({ quantityOrdered: q, unitPriceOrdered: p, discountOrdered: d });
+        const netUnitPriceOrdered = purchaseLineEffectiveUnitPrice({
+          quantityOrdered: q,
+          unitPriceOrdered: p,
+          discountOrdered: d,
+          totalOrdered,
+        });
         const treatmentFields = purchaseItemTreatmentFields(item);
         const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         batch.set(itemRef, {
@@ -1928,8 +1993,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
           purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
           quantityOrdered: q,
           unitPriceOrdered: p,
+          netUnitPriceOrdered,
           discountOrdered: d,
-          totalOrdered: Math.max((q * p) - d, 0),
+          totalOrdered,
           quotationItemId: item.quotationItemId ?? null,
           entryType: itemDestination,
           ...treatmentFields,
