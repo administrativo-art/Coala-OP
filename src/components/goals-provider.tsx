@@ -186,6 +186,7 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
     periodEmployeeGoals: EmployeeGoal[],
     kioskNameById?: Record<string, string>
   ) => {
+    if (period.version === 2) return;
     if (periodEmployeeGoals.length === 0) return;
 
     try {

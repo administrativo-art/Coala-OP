@@ -610,6 +610,11 @@ service cloud.firestore {
     }
 
     // Metas
+    match /goalMethodConfigs/{id} {
+      allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+      allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+    }
+
     match /goalTemplates/{id} {
       allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
       allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);

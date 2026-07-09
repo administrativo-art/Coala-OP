@@ -47,6 +47,7 @@ export async function rebalanceGoalsForSchedule(scheduleId: string) {
       const type = template?.type ?? 'revenue';
       return (
         type === 'revenue' &&
+        period.version !== 2 &&
         period.kioskId === matchingKiosk.id &&
         periodOverlapsSchedule(period, schedule.year!, schedule.month!)
       );

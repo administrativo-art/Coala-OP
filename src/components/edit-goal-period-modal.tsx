@@ -36,7 +36,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
   const [newEmp, setNewEmp] = useState<Record<string, string>>({});
   const [newPct, setNewPct] = useState<Record<string, string>>({});
 
-  const hasShifts = (period?.shifts?.length ?? 0) > 0;
+  const hasShifts = (period?.shifts?.length ?? 0) > 0 && period?.version !== 2;
 
   const periodEmployeeGoals = useMemo(() =>
     employeeGoals.filter(eg => eg.periodId === period?.id),
@@ -52,6 +52,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
 
   async function rebalanceWith(nextGoals: EmployeeGoal[], nextPeriod = period) {
     if (!nextPeriod) return;
+    if (nextPeriod.version === 2) return;
     const kioskName = kiosks.find(kiosk => kiosk.id === nextPeriod.kioskId)?.name;
     await rebalancePeriodEmployeeGoals(
       nextPeriod,
@@ -150,9 +151,9 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
 
   async function handleAddLegacy() {
     if (!period || !selectedEmployee || !fraction) return;
-    const fractionNum = parseFloat(fraction);
+    const fractionNum = parseFloat(fraction) / 100;
     if (isNaN(fractionNum) || fractionNum <= 0 || fractionNum > 1) {
-      toast({ title: 'Fração inválida', variant: 'destructive' });
+      toast({ title: 'Porcentagem inválida', description: 'Deve ser entre 1 e 100.', variant: 'destructive' });
       return;
     }
     setEgLoading(true);
@@ -285,8 +286,11 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
                       <SelectTrigger className="flex-1"><SelectValue placeholder="Colaborador" /></SelectTrigger>
                       <SelectContent>{availableUsersLegacy.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Input className="w-24" type="number" step="0.01" min="0.01" max="1" placeholder="0.50"
-                      value={fraction} onChange={e => setFraction(e.target.value)} />
+                    <div className="relative w-24">
+                      <Input className="h-10 pr-7" type="number" min="1" max="100" placeholder="50"
+                        value={fraction} onChange={e => setFraction(e.target.value)} />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                    </div>
                     <Button onClick={handleAddLegacy} disabled={!selectedEmployee || !fraction || egLoading}>
                       <Plus className="h-4 w-4" />
                     </Button>

@@ -2489,6 +2489,70 @@ export type GoalType = 'revenue' | 'ticket' | 'product_line' | 'product_specific
 export type GoalPeriod = 'daily' | 'weekly' | 'monthly'
 export type GoalStatus = 'active' | 'closed' | 'cancelled'
 export type GoalDistributionMode = 'calendar_days' | 'scheduled_days'
+export type GoalMethod = 'manual' | 'tiered_unit_bonus' | 'historical_average' | 'growth_rate' | 'custom'
+export type GoalParticipantSource = 'schedule' | 'manual'
+export type GoalParticipantRole = 'fixed' | 'relief' | 'leader'
+export type GoalBonusSplitMode = 'equal' | 'weighted_by_presence' | 'manual'
+export type GoalReliefWorkerSplitMode = 'proportional_by_covered_shifts'
+export type GoalIncentiveTone = 'info' | 'warning' | 'success'
+export type GoalIncentiveTriggerType = 'distance_to_next_tier_percent' | 'distance_to_next_tier_amount' | 'tier_reached'
+
+export interface GoalBonusTierConfig {
+  id: string
+  label: string
+  fromAmount: number
+  toAmount: number | null
+  displayTargetAmount?: number
+  fixedBonusAmount: number
+  excessPercent: number
+  description?: string
+}
+
+export interface GoalIncentiveMessageRule {
+  id: string
+  label: string
+  triggerType: GoalIncentiveTriggerType
+  thresholdPercent?: number
+  thresholdAmount?: number
+  tierId?: string
+  message: string
+  tone: GoalIncentiveTone
+}
+
+export interface GoalMethodConfig {
+  id: string
+  name: string
+  type: GoalMethod
+  active: boolean
+  description?: string
+  unitProfile?: string
+  targetPeriod: GoalPeriod
+  referenceRevenue: number
+  tiers: GoalBonusTierConfig[]
+  teamBonus: {
+    enabled: boolean
+    splitMode: GoalBonusSplitMode
+    eligibleCollaboratorRule: 'all_goal_participants' | 'manual_eligible'
+    prorateByAttendance: boolean
+    reliefWorker?: {
+      enabled: boolean
+      splitMode: GoalReliefWorkerSplitMode
+      turnsPerDay: number
+      fixedCollaboratorRule: 'remaining_equal_split'
+      description?: string
+    }
+  }
+  leadershipBonus: {
+    enabled: boolean
+    factorNumerator: number
+    factorDenominator: number
+  }
+  incentiveMessages: GoalIncentiveMessageRule[]
+  createdAt?: Timestamp
+  updatedAt?: Timestamp
+}
+
+export type GoalMethodSnapshot = Omit<GoalMethodConfig, 'createdAt' | 'updatedAt'>
 
 export interface GoalClosureSnapshot {
   distributionMode: GoalDistributionMode
@@ -2509,11 +2573,27 @@ export interface GoalShift {
   fraction: number
 }
 
+export type GoalLeadershipRecipientSource =
+  | 'unit_group_responsible'
+  | 'unit_organization_responsible'
+  | 'responsible_unit_ids'
+
+export interface GoalLeadershipRecipient {
+  userId: string
+  userName: string
+  source: GoalLeadershipRecipientSource
+  sourceLabel: string
+}
+
 export interface GoalTemplate {
   id: string
   kioskId: string
   type: GoalType
   period: GoalPeriod
+  version?: number
+  method?: GoalMethod
+  goalMethodConfigId?: string
+  goalMethodSnapshot?: GoalMethodSnapshot
   targetValue: number
   upValue: number
   topValue?: number        // metas criadas antes do 3º nível não têm TOP
@@ -2528,6 +2608,11 @@ export interface GoalPeriodDoc {
   id: string
   templateId: string
   kioskId: string
+  templateType?: GoalType
+  version?: number
+  method?: GoalMethod
+  goalMethodConfigId?: string
+  goalMethodSnapshot?: GoalMethodSnapshot
   startDate: Timestamp
   endDate: Timestamp
   targetValue: number
@@ -2537,6 +2622,7 @@ export interface GoalPeriodDoc {
   dailyProgress?: { [date: string]: number }
   distributionMode?: GoalDistributionMode
   shifts?: GoalShift[]
+  leadershipRecipients?: GoalLeadershipRecipient[]
   status: GoalStatus
   closedAt?: Timestamp
   closedBy?: string
@@ -2552,6 +2638,10 @@ export interface EmployeeGoal {
   employeeId: string
   kioskId: string
   shiftId?: string
+  participantSource?: GoalParticipantSource
+  participantRole?: GoalParticipantRole
+  scheduledDays?: number
+  scheduledTurnCount?: number
   fraction: number
   targetValue: number
   currentValue: number

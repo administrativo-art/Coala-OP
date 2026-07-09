@@ -90,6 +90,7 @@ export async function GET(request: NextRequest) {
       : allGoals.filter((goal) => assignedKioskIds.has(String(goal.kioskId)));
     const visiblePeriodIds = new Set(visibleGoals.map((goal) => goal.periodId));
     const visiblePeriods = activePeriods.filter((period) => visiblePeriodIds.has(period.id));
+    const visibleTeamGoals = allGoals.filter((goal) => visiblePeriodIds.has(goal.periodId));
 
     const periodDateSetsById = new Map<string, Set<string>>();
     const employeeDateSetsByGoalId = new Map<string, Set<string>>();
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       shifts: serializeValue(visibleShifts),
       goalPeriods: serializeValue(visiblePeriods),
-      employeeGoals: serializeValue(visibleGoals),
+      employeeGoals: serializeValue(visibleTeamGoals),
       distributionSnapshot: {
         periodDateKeysById: Object.fromEntries(
           Array.from(periodDateSetsById.entries()).map(([id, dates]) => [id, Array.from(dates).sort()])

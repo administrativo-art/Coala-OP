@@ -195,6 +195,7 @@ export function InstantiateGoalPeriodModal({ open, onOpenChange, template, onPer
     const periodData = {
       templateId: template.id,
       kioskId: template.kioskId,
+      templateType: template.type,
       startDate: Timestamp.fromDate(start),
       endDate: Timestamp.fromDate(end),
       targetValue: data.targetValue,

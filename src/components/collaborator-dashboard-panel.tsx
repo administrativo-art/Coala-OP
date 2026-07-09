@@ -50,6 +50,7 @@ import {
   loadGoalDistributionSnapshot,
   type GoalDistributionSnapshot,
 } from "@/lib/goals-distribution";
+import { calculateTieredGoalBonus, formatCurrencyBRL } from "@/lib/goal-methods";
 import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from "@/lib/stock-expiry-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -270,6 +271,134 @@ function goalRecortes(goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] }, p
     today: { value: todayValue, target: todayTarget, pct: percent(todayValue, todayTarget) },
     semana: { value: weekValue, target: weekTarget, pct: percent(weekValue, weekTarget) },
     mes: { value: goal.currentValue, target: goal.targetValue, pct: percent(goal.currentValue, goal.targetValue) },
+  };
+}
+
+function activePeriodTier(period: GoalPeriodDoc) {
+  const up = period.upValue && period.upValue > period.targetValue ? period.upValue : period.targetValue;
+  const top = period.topValue && period.topValue > up ? period.topValue : null;
+
+  if (period.currentValue < period.targetValue) {
+    return { label: "Meta Alvo", amount: period.targetValue };
+  }
+
+  if (period.currentValue < up) {
+    return { label: "Meta UP", amount: up };
+  }
+
+  if (top && period.currentValue < top) {
+    return { label: "Meta TOP", amount: top };
+  }
+
+  return top ? { label: "Meta TOP", amount: top } : { label: "Meta UP", amount: up };
+}
+
+function teamGoalRecortes(period: GoalPeriodDoc) {
+  const periodStart = asDate(period.startDate);
+  const periodEnd = asDate(period.endDate);
+  const allDays = eachDayOfInterval({ start: periodStart, end: periodEnd });
+  const today = new Date();
+  const activeTier = activePeriodTier(period);
+  const targetPerDay = activeTier.amount / Math.max(allDays.length, 1);
+  const todayKey = dateKey(today);
+  const todayValue = period.dailyProgress?.[todayKey] ?? 0;
+
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+  const weekDays = allDays.filter((day) => isWithinInterval(day, { start: weekStart, end: weekEnd }));
+  const weekValue = weekDays
+    .filter((day) => day <= today)
+    .reduce((acc, day) => acc + (period.dailyProgress?.[dateKey(day)] ?? 0), 0);
+
+  return {
+    tier: activeTier,
+    today: { value: todayValue, target: targetPerDay, pct: percent(todayValue, targetPerDay) },
+    semana: { value: weekValue, target: targetPerDay * weekDays.length, pct: percent(weekValue, targetPerDay * weekDays.length) },
+    mes: { value: period.currentValue, target: activeTier.amount, pct: percent(period.currentValue, activeTier.amount) },
+  };
+}
+
+function getPeriodDateKeys(period: GoalPeriodDoc) {
+  const periodStart = asDate(period.startDate);
+  const periodEnd = asDate(period.endDate);
+  return eachDayOfInterval({ start: periodStart, end: periodEnd }).map(dateKey);
+}
+
+function getGoalRole(goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] }) {
+  const roles = goal.originalGoals?.map((item) => item.participantRole).filter(Boolean) ?? [];
+  if (roles.includes("leader")) return "leader";
+  if (roles.includes("relief")) return "relief";
+  return goal.participantRole ?? "fixed";
+}
+
+function getGoalCoveredTurns(goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] }) {
+  if (goal.originalGoals?.length) {
+    return goal.originalGoals.reduce((sum, item) => sum + (item.scheduledTurnCount ?? 0), 0);
+  }
+  return goal.scheduledTurnCount ?? 0;
+}
+
+function getGoalBonusContext(
+  goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] },
+  period: GoalPeriodDoc,
+  periodGoals: EmployeeGoal[]
+) {
+  const methodSnapshot = period.goalMethodSnapshot;
+  if (!methodSnapshot) return null;
+
+  const teamGoals = periodGoals.filter((item) => item.periodId === period.id && item.kioskId === goal.kioskId);
+  const bonusParticipants = teamGoals.filter((item) => item.participantRole !== "leader");
+  const fixedGoals = bonusParticipants.filter((item) => item.participantRole !== "relief");
+  const reliefGoals = bonusParticipants.filter((item) => item.participantRole === "relief");
+  const periodShiftCount = Math.max(period.shifts?.length ?? 1, 1);
+  const totalPeriodTurns = getPeriodDateKeys(period).length * periodShiftCount;
+  const preview = calculateTieredGoalBonus(
+    methodSnapshot,
+    period.currentValue ?? goal.currentValue,
+    bonusParticipants.length,
+    {
+      fixedCollaboratorCount: fixedGoals.length,
+      reliefWorkerCount: reliefGoals.length,
+      reliefWorkerCoveredTurnsByPerson: reliefGoals.map((item) => item.scheduledTurnCount ?? 0),
+      totalPeriodTurns,
+    }
+  );
+
+  if (!preview) return null;
+
+  const role = getGoalRole(goal);
+  const ownCoveredTurns = getGoalCoveredTurns(goal);
+  let individualBonus = preview.perCollaboratorBonus;
+  let roleLabel = "Colaborador fixo";
+
+  if (role === "leader") {
+    individualBonus = preview.leadershipBonus;
+    roleLabel = "Liderança";
+  } else if (role === "relief") {
+    roleLabel = "Folguista";
+    if (preview.reliefWorkerSplit) {
+      individualBonus = totalPeriodTurns > 0
+        ? (ownCoveredTurns / totalPeriodTurns) * preview.totalTeamBonus
+        : preview.reliefWorkerSplit.reliefWorkerBonus;
+    }
+  } else if (preview.reliefWorkerSplit) {
+    individualBonus = preview.reliefWorkerSplit.perFixedCollaboratorBonus;
+  }
+
+  const roundedIndividualBonus = Math.round(individualBonus * 100) / 100;
+  const rawMessage = preview.incentiveMessage?.message ?? null;
+  const collaboratorMessage = rawMessage
+    ? rawMessage
+        .replace("por colaborador", "para você")
+        .replace(`R$ ${formatCurrencyBRL(preview.perCollaboratorBonus)}`, `R$ ${formatCurrencyBRL(roundedIndividualBonus)}`)
+    : null;
+
+  return {
+    preview,
+    individualBonus: roundedIndividualBonus,
+    role,
+    roleLabel,
+    collaboratorMessage,
   };
 }
 
@@ -749,17 +878,20 @@ function GoalProgressRow({
   goal,
   period,
   unitName,
+  periodGoals,
   distributionSnapshot,
 }: {
   goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] };
   period: GoalPeriodDoc;
   unitName?: string;
+  periodGoals: EmployeeGoal[];
   distributionSnapshot?: GoalDistributionSnapshot | null;
 }) {
   const pct = percent(goal.currentValue, goal.targetValue);
   const upTarget = goal.targetValue * 1.2;
   const upPct = percent(goal.currentValue, upTarget);
   const recortes = goalRecortes(goal, period, distributionSnapshot);
+  const bonusContext = getGoalBonusContext(goal, period, periodGoals);
   const { periodStart, periodEnd, days, dailyTarget, dailyTargets } = recortes;
   const today = new Date();
   const elapsedDays = days.filter((day) => day <= today);
@@ -803,6 +935,39 @@ function GoalProgressRow({
           <p className="mt-1 text-xs text-muted-foreground">alvo diário atingido</p>
         </div>
       </div>
+
+      {bonusContext ? (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Bonificação estimada</p>
+              <p className="mt-1 text-sm font-semibold text-emerald-950">
+                {period.goalMethodSnapshot?.name ?? "Forma de meta"} · {bonusContext.roleLabel}
+              </p>
+              {bonusContext.collaboratorMessage ? (
+                <p className="mt-2 rounded-lg bg-white/75 px-3 py-2 text-sm font-semibold text-emerald-800">
+                  {bonusContext.collaboratorMessage}
+                </p>
+              ) : null}
+            </div>
+            <div className="rounded-xl bg-white px-4 py-3 text-right">
+              <p className="text-xs text-emerald-700/80">Sua bonificação estimada</p>
+              <p className="mt-1 text-2xl font-black text-emerald-950">R$ {formatCurrencyBRL(bonusContext.individualBonus)}</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-emerald-800 md:grid-cols-3">
+            <div className="rounded-lg bg-white/70 px-3 py-2">
+              Equipe: R$ {formatCurrencyBRL(bonusContext.preview.totalTeamBonus)}
+            </div>
+            <div className="rounded-lg bg-white/70 px-3 py-2">
+              Realizado: R$ {formatCurrencyBRL(bonusContext.preview.revenue)}
+            </div>
+            <div className="rounded-lg bg-white/70 px-3 py-2">
+              Papel: {bonusContext.roleLabel}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-2 rounded-xl border bg-muted/20 p-4">
         <div className="flex justify-between text-xs font-semibold text-muted-foreground">
@@ -902,6 +1067,12 @@ function SidebarEscala({
       .slice(0, 5);
   }, [shifts, todayKey]);
 
+  const mockShifts = [
+    { day: "Hoje", label: "Tarde", time: "15:45-22:00", tone: "border-indigo-100 bg-indigo-50 text-indigo-700" },
+    { day: "Amanhã", label: "Manhã", time: "10:00-16:15", tone: "border-emerald-100 bg-emerald-50 text-emerald-700" },
+    { day: "Sábado", label: "Descanso", time: "folga", tone: "border-zinc-100 bg-zinc-50 text-zinc-500" },
+  ];
+
   return (
     <SidebarCard
       icon={<CalendarDays className="h-4 w-4" />}
@@ -929,7 +1100,25 @@ function SidebarEscala({
           Carregando...
         </div>
       ) : upcoming.length === 0 ? (
-        <p className="py-2 text-xs text-muted-foreground">Nenhum turno próximo.</p>
+        <div className="space-y-2">
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-indigo-600">Mockup visual</p>
+            <p className="mt-0.5 text-xs font-semibold text-indigo-900">Como a escala aparecerá quando houver turnos.</p>
+          </div>
+          <div className="space-y-1.5">
+            {mockShifts.map((shift) => (
+              <div key={`${shift.day}-${shift.label}`} className={`flex items-center justify-between rounded-xl border px-3 py-2 ${shift.tone}`}>
+                <div className="min-w-0">
+                  <p className="text-xs font-black">{shift.day}</p>
+                  <p className="truncate text-[11px] font-semibold opacity-80">{shift.label}</p>
+                </div>
+                <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums">
+                  {shift.time}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="space-y-1">
           {upcoming.map((shift) => {
@@ -958,15 +1147,135 @@ function SidebarEscala({
   );
 }
 
+function MockGoalMiniCard() {
+  const mockRows = [
+    { label: "Hoje", teamValue: 479.5, ownValue: 0, target: 935.48 },
+    { label: "Semana", teamValue: 6354.5, ownValue: 1958, target: 6548.39 },
+    { label: "Mês", teamValue: 12639.5, ownValue: 1958, target: 29000 },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-pink-100 bg-pink-50/70 px-3 py-2.5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-600">Mockup visual</p>
+            <p className="mt-0.5 text-xs font-semibold text-pink-800">Meta do quiosque</p>
+          </div>
+          <Badge variant="outline" className="rounded-full border-pink-200 bg-white text-[10px] font-black text-pink-600">
+            Meta Alvo ativa
+          </Badge>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Bonificação estimada</p>
+            <p className="mt-0.5 text-xs text-emerald-800">Quiosque médio por faixas</p>
+          </div>
+          <p className="text-base font-black text-emerald-950">R$ 0,00</p>
+        </div>
+      </div>
+
+      {mockRows.map((row) => {
+        const pctValue = percent(row.teamValue, row.target);
+        const ownShare = percent(row.ownValue, row.teamValue);
+        return (
+          <div key={row.label} className="rounded-xl border border-zinc-100 bg-white/80 px-3 py-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-black uppercase tracking-[0.12em] text-zinc-500">{row.label}</span>
+              <span className="rounded-full bg-pink-50 px-2 py-0.5 text-[10px] font-black text-pink-600">
+                Meta Alvo · {pctValue.toFixed(0)}%
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-pink-500" style={{ width: `${Math.min(pctValue, 100)}%` }} />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <p className="font-bold text-zinc-400">Equipe</p>
+                <p className="font-black text-zinc-800">{money(row.teamValue)}</p>
+                <p className="font-medium text-zinc-400">de {money(row.target)}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-blue-500">Você</p>
+                <p className="font-black text-blue-600">{money(row.ownValue)}</p>
+                <p className="font-medium text-blue-500">{ownShare.toFixed(1)}% do faturado</p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MockGoalDetail() {
+  const days = [
+    { label: "Seg 06/07", total: 1776.5, own: 1074.5, status: "Com venda" },
+    { label: "Ter 07/07", total: 2062.5, own: 1102, status: "Com venda" },
+    { label: "Qua 08/07", total: 1887, own: 960.5, status: "Com venda" },
+    { label: "Qui 09/07", total: 479.5, own: 0, status: "Sem turno" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-pink-100 bg-pink-50/70 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <Badge variant="outline" className="rounded-full border-pink-200 bg-white text-pink-600">Mockup visual</Badge>
+            <h3 className="mt-3 text-lg font-black tracking-tight">Meta do quiosque</h3>
+            <p className="text-sm text-muted-foreground">Exemplo de como a meta aparecerá quando houver dados reais.</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">Faixa ativa</p>
+            <p className="text-base font-black text-pink-600">Meta Alvo</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {[
+            { label: "Hoje", value: 479.5, target: 935.48 },
+            { label: "Semana", value: 6354.5, target: 6548.39 },
+            { label: "Mês", value: 12639.5, target: 29000 },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl bg-white px-3 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400">{item.label}</p>
+              <p className="mt-1 text-base font-black">{money(item.value)}</p>
+              <p className="text-xs font-semibold text-pink-600">{percent(item.value, item.target).toFixed(1)}% da Meta Alvo</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border p-4">
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Sua contribuição diária</p>
+        <div className="mt-3 overflow-hidden rounded-xl border">
+          {days.map((day) => (
+            <div key={day.label} className="grid grid-cols-[1fr_1fr_1fr_90px] items-center gap-3 border-b px-3 py-2.5 text-xs last:border-b-0">
+              <span className="font-bold">{day.label}</span>
+              <span className="text-right text-muted-foreground">Unidade {money(day.total)}</span>
+              <span className="text-right font-black text-blue-600">Você {money(day.own)}</span>
+              <span className="text-right font-semibold text-zinc-500">{day.status}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SidebarMetas({
   loading,
   goals,
   periods,
+  allGoals,
   distributionSnapshot,
 }: {
   loading: boolean;
   goals: Array<EmployeeGoal & { originalGoals?: EmployeeGoal[] }>;
   periods: GoalPeriodDoc[];
+  allGoals: EmployeeGoal[];
   distributionSnapshot?: GoalDistributionSnapshot | null;
 }) {
   const { kiosks } = useKiosks();
@@ -982,6 +1291,7 @@ function SidebarMetas({
 
   const primary = goalUnits[0] ?? null;
   const recortes = primary ? goalRecortes(primary.goal, primary.period, distributionSnapshot) : null;
+  const primaryBonusContext = primary ? getGoalBonusContext(primary.goal, primary.period, allGoals) : null;
   const rows = recortes
     ? [
         { label: "Hoje", ...recortes.today },
@@ -1012,7 +1322,7 @@ function SidebarMetas({
                 Carregando...
               </div>
             ) : rows.length === 0 ? (
-              <p className="py-2 text-xs text-muted-foreground">Nenhuma meta individual cadastrada.</p>
+              <MockGoalMiniCard />
             ) : (
               <div className="space-y-3">
                 {goalUnits.length > 1 ? (
@@ -1020,6 +1330,24 @@ function SidebarMetas({
                     {kioskName(primary!.goal.kioskId)}
                     <span className="text-muted-foreground/60"> · +{goalUnits.length - 1} unidade(s)</span>
                   </p>
+                ) : null}
+                {primaryBonusContext ? (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Sua bonificação estimada</p>
+                        <p className="mt-0.5 text-xs text-emerald-800">{primaryBonusContext.roleLabel}</p>
+                      </div>
+                      <p className="text-base font-black text-emerald-950">
+                        R$ {formatCurrencyBRL(primaryBonusContext.individualBonus)}
+                      </p>
+                    </div>
+                    {primaryBonusContext.collaboratorMessage ? (
+                      <p className="mt-2 text-xs font-semibold text-emerald-800">
+                        {primaryBonusContext.collaboratorMessage}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 {rows.map((row) => (
                   <div key={row.label} className="space-y-1">
@@ -1053,14 +1381,13 @@ function SidebarMetas({
             Carregando metas...
           </div>
         ) : goalUnits.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-            Nenhuma meta individual cadastrada para este colaborador no período.
-          </div>
+          <MockGoalDetail />
         ) : goalUnits.length === 1 ? (
           <GoalProgressRow
             goal={goalUnits[0].goal}
             period={goalUnits[0].period}
             unitName={kioskName(goalUnits[0].goal.kioskId)}
+            periodGoals={allGoals}
             distributionSnapshot={distributionSnapshot}
           />
         ) : (
@@ -1078,6 +1405,7 @@ function SidebarMetas({
                   goal={entry.goal}
                   period={entry.period}
                   unitName={kioskName(entry.goal.kioskId)}
+                  periodGoals={allGoals}
                   distributionSnapshot={distributionSnapshot}
                 />
               </TabsContent>
@@ -1103,10 +1431,30 @@ function SidebarComunicados() {
     <SidebarCard
       icon={<Bell className="h-4 w-4" />}
       title="Comunicados"
-      action={<span className="text-xs font-medium text-muted-foreground/60">Em breve</span>}
+      action={<span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">Mockup</span>}
     >
-      <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
-        Os comunicados da operação aparecerão aqui.
+      <div className="space-y-2">
+        <div className="rounded-xl border border-pink-100 bg-pink-50/70 px-3 py-2.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-600">Operação</p>
+              <p className="mt-0.5 truncate text-xs font-black text-pink-950">Novo padrão de fechamento</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-pink-800">Conferir dinheiro líquido e anexar evidência no fim do turno.</p>
+            </div>
+            <Badge variant="outline" className="shrink-0 rounded-full border-pink-200 bg-white text-[10px] text-pink-600">
+              Hoje
+            </Badge>
+          </div>
+        </div>
+        <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold text-zinc-900">Checklist de atendimento atualizado</p>
+              <p className="text-[11px] text-muted-foreground">Leitura rápida · 2 min</p>
+            </div>
+          </div>
+        </div>
       </div>
     </SidebarCard>
   );
@@ -1606,7 +1954,7 @@ function CollaboratorDashboardPanelInner() {
 
   const visibleGoals = useMemo(() => {
     // Apenas a meta INDIVIDUAL do colaborador. Sem fallback para a meta do
-    // quiosque: quem não tem meta individual cadastrada vê o estado "sem meta".
+    // quiosque: quem não tem meta vinculada vê o estado "sem meta".
     const ownGoals = effectiveEmployeeGoals.filter(
       (goal) => currentUserIds.includes(goal.employeeId) && activePeriods.some((period) => period.id === goal.periodId)
     );
@@ -1708,6 +2056,7 @@ function CollaboratorDashboardPanelInner() {
             loading={loadingCollaboratorData && apiEmployeeGoals === null ? goalsLoading : false}
             goals={visibleGoals}
             periods={activePeriods}
+            allGoals={effectiveEmployeeGoals}
             distributionSnapshot={distributionSnapshot}
           />
           <SidebarComunicados />
